@@ -1,0 +1,20 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "fvXphTT14fQAKrxrTqCAT"
+uri = "file://artifacts/gdna-arena/public/images/neon-racer.png"
+type = "image"
+title = "Neon Racer game cover"
+
+[[generated]]
+id = "GIbtZEVn7MTzhSeWw8-5U"
+uri = "file://artifacts/gdna-arena/public/images/crypto-clash.png"
+type = "image"
+title = "Crypto Clash game cover"
+
+[[generated]]
+id = "asljoRf8EH8KIq0UXLQSK"
+uri = "file://artifacts/gdna-arena/public/images/arena-strike.png"
+type = "image"
+title = "Arena Strike game cover"
