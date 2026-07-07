@@ -5,7 +5,6 @@ import { db, usersTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-
 const SALT_ROUNDS = 10;
 
 declare module "express-session" {
@@ -14,9 +13,32 @@ declare module "express-session" {
   }
 }
 
+function canClaimDaily(lastDailyReward: Date | null): boolean {
+  if (!lastDailyReward) return true;
+  const now = new Date();
+  const last = new Date(lastDailyReward);
+  return (
+    now.getUTCFullYear() !== last.getUTCFullYear() ||
+    now.getUTCMonth() !== last.getUTCMonth() ||
+    now.getUTCDate() !== last.getUTCDate()
+  );
+}
+
+function serializeUser(user: typeof usersTable.$inferSelect) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    balance: user.balance,
+    xp: user.xp,
+    gamesPlayed: user.gamesPlayed,
+    wins: user.wins,
+    canClaimDaily: canClaimDaily(user.lastDailyReward),
+  };
+}
+
 router.post("/auth/register", async (req, res): Promise<void> => {
   const { username, email, password } = req.body;
-
   if (!username || !email || !password) {
     res.status(400).json({ error: "Username, email, and password are required" });
     return;
@@ -42,29 +64,18 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
   const [user] = await db
     .insert(usersTable)
     .values({ username, email, passwordHash })
     .returning();
 
   req.session.userId = user.id;
-
   req.log.info({ userId: user.id }, "User registered");
-  res.status(201).json({
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    balance: user.balance,
-    xp: user.xp,
-    gamesPlayed: user.gamesPlayed,
-    wins: user.wins,
-  });
+  res.status(201).json(serializeUser(user));
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   const { email, password } = req.body;
-
   if (!email || !password) {
     res.status(400).json({ error: "Email and password are required" });
     return;
@@ -88,24 +99,13 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
 
   req.session.userId = user.id;
-
   req.log.info({ userId: user.id }, "User logged in");
-  res.json({
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    balance: user.balance,
-    xp: user.xp,
-    gamesPlayed: user.gamesPlayed,
-    wins: user.wins,
-  });
+  res.json(serializeUser(user));
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {
   req.session.destroy((err) => {
-    if (err) {
-      logger.error(err, "Session destroy error");
-    }
+    if (err) logger.error(err, "Session destroy error");
   });
   res.json({ message: "Logged out" });
 });
@@ -129,15 +129,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    balance: user.balance,
-    xp: user.xp,
-    gamesPlayed: user.gamesPlayed,
-    wins: user.wins,
-  });
+  res.json(serializeUser(user));
 });
 
 export default router;

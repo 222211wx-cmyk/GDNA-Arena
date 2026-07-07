@@ -2,28 +2,28 @@ import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Coins, LogOut, Swords, Trophy, Activity, Target } from "lucide-react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 function getRank(xp: number): { label: string; next: number; color: string } {
-  if (xp < 500) return { label: "Bronze I", next: 500, color: "#cd7f32" };
-  if (xp < 1000) return { label: "Bronze II", next: 1000, color: "#cd7f32" };
-  if (xp < 2000) return { label: "Silver I", next: 2000, color: "#aaa9ad" };
-  if (xp < 3500) return { label: "Silver II", next: 3500, color: "#aaa9ad" };
-  if (xp < 5000) return { label: "Gold I", next: 5000, color: "#ffd700" };
-  if (xp < 7500) return { label: "Gold II", next: 7500, color: "#ffd700" };
+  if (xp < 500)  return { label: "Bronze I",  next: 500,   color: "#cd7f32" };
+  if (xp < 1000) return { label: "Bronze II", next: 1000,  color: "#cd7f32" };
+  if (xp < 2000) return { label: "Silver I",  next: 2000,  color: "#aaa9ad" };
+  if (xp < 3500) return { label: "Silver II", next: 3500,  color: "#aaa9ad" };
+  if (xp < 5000) return { label: "Gold I",    next: 5000,  color: "#ffd700" };
+  if (xp < 7500) return { label: "Gold II",   next: 7500,  color: "#ffd700" };
   return { label: "Diamond", next: 10000, color: "#00d4ff" };
 }
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { user, logout, loading } = useAuth();
+  const { user, logout, loading, refreshUser } = useAuth();
+  const [claimingDaily, setClaimingDaily] = useState(false);
+  const [dailyMsg, setDailyMsg] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) {
-      setLocation("/login");
-    }
+    if (!loading && !user) setLocation("/login");
   }, [user, loading, setLocation]);
 
   if (loading) {
@@ -33,7 +33,6 @@ export default function Dashboard() {
       </div>
     );
   }
-
   if (!user) return null;
 
   const rank = getRank(user.xp);
@@ -45,8 +44,31 @@ export default function Dashboard() {
     setLocation("/");
   };
 
+  const handleDailyReward = async () => {
+    setClaimingDaily(true);
+    setDailyMsg("");
+    try {
+      const res = await fetch("/api/rewards/daily", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDailyMsg(data.error ?? "Already claimed today!");
+      } else {
+        setDailyMsg(`+${data.coinsEarned} coins claimed!`);
+        await refreshUser();
+      }
+    } catch {
+      setDailyMsg("Failed to claim reward");
+    } finally {
+      setClaimingDaily(false);
+    }
+  };
+
   return (
     <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -61,24 +83,67 @@ export default function Dashboard() {
             Status: Online
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={handleLogout}
-          className="border-primary/50 text-primary hover:bg-primary/10 hover:text-primary transition-colors"
-          data-testid="button-logout"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Logout
-        </Button>
+        <div className="flex items-center gap-3">
+          <Link href="/wallet">
+            <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary/10">
+              <Wallet className="w-4 h-4 mr-2" />
+              Wallet
+            </Button>
+          </Link>
+          <Button variant="outline" onClick={handleLogout} className="border-red-500/50 text-red-400 hover:bg-red-500/10" data-testid="button-logout">
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
+        </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Daily Reward Banner */}
+      {user.canClaimDaily && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1 }}
-          className="md:col-span-2"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-green-500/10 border border-green-500/40 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4"
         >
+          <div className="flex items-center gap-3">
+            <Gift className="w-8 h-8 text-green-400 shrink-0" />
+            <div>
+              <p className="font-bold text-green-400 uppercase tracking-wider">Daily Reward Available!</p>
+              <p className="text-sm text-muted-foreground">Claim your 100 free coins for today</p>
+            </div>
+          </div>
+          <Button
+            onClick={handleDailyReward}
+            disabled={claimingDaily}
+            className="bg-green-500 hover:bg-green-400 text-black font-bold uppercase tracking-wider shrink-0"
+            data-testid="button-daily-reward"
+          >
+            <Gift className="w-4 h-4 mr-2" />
+            {claimingDaily ? "Claiming..." : "Claim +100 Coins"}
+          </Button>
+        </motion.div>
+      )}
+
+      {!user.canClaimDaily && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-card/30 border border-primary/10 rounded-xl p-3 flex items-center gap-3 text-sm text-muted-foreground"
+        >
+          <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+          Daily reward claimed — come back tomorrow for more coins!
+        </motion.div>
+      )}
+
+      {dailyMsg && (
+        <p className={`text-center font-bold text-sm ${dailyMsg.includes("+") ? "text-green-400" : "text-orange-400"}`}>
+          {dailyMsg}
+        </p>
+      )}
+
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Balance */}
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }} className="md:col-span-2">
           <Card className="bg-card/50 border-primary/30 h-full relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             <CardContent className="p-8 flex flex-col justify-center items-center text-center h-full relative z-10">
@@ -97,12 +162,8 @@ export default function Dashboard() {
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 }}
-          className="space-y-6"
-        >
+        {/* Side cards */}
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }} className="space-y-6">
           <Card className="bg-card/50 border-primary/20">
             <CardContent className="p-6">
               <div className="flex items-center gap-4 mb-4">
@@ -116,8 +177,8 @@ export default function Dashboard() {
               </div>
               <div className="w-full bg-background rounded-full h-2 mt-4 border border-primary/20">
                 <div
-                  className="h-full rounded-full shadow-[0_0_10px_rgba(0,212,255,0.8)] transition-all duration-1000"
-                  style={{ width: `${xpProgress}%`, backgroundColor: rank.color }}
+                  className="h-full rounded-full transition-all duration-1000"
+                  style={{ width: `${xpProgress}%`, backgroundColor: rank.color, boxShadow: `0 0 10px ${rank.color}` }}
                 />
               </div>
               <p className="text-xs text-right mt-2 text-muted-foreground">{user.xp} / {rank.next} XP</p>

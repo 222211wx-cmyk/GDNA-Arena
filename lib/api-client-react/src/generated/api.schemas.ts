@@ -41,6 +41,7 @@ export interface AuthUser {
   xp: number;
   gamesPlayed: number;
   wins: number;
+  canClaimDaily: boolean;
 }
 
 export interface LeaderboardPlayer {
@@ -54,5 +55,33 @@ export interface LeaderboardPlayer {
 
 export interface LeaderboardResponse {
   players: LeaderboardPlayer[];
+}
+
+export interface PlayResult {
+  win: boolean;
+  coinsEarned: number;
+  xpEarned: number;
+  newBalance: number;
+  newXp: number;
+  message: string;
+}
+
+export interface DailyRewardResult {
+  coinsEarned: number;
+  newBalance: number;
+  message: string;
+}
+
+export interface TransactionItem {
+  id: number;
+  amount: number;
+  type: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface TransactionsResponse {
+  transactions: TransactionItem[];
+  balance: number;
 }
 

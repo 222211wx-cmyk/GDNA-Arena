@@ -7,10 +7,14 @@
  */
 
 export * from './authUser';
+export * from './dailyRewardResult';
 export * from './errorResponse';
 export * from './healthStatus';
 export * from './leaderboardPlayer';
 export * from './leaderboardResponse';
 export * from './loginBody';
+export * from './playResult';
 export * from './registerBody';
 export * from './successResponse';
+export * from './transactionItem';
+export * from './transactionsResponse';

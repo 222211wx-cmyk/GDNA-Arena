@@ -14,6 +14,7 @@ import Games from "@/pages/games";
 import NewsPage from "@/pages/news";
 import Leaderboard from "@/pages/leaderboard";
 import ChatPage from "@/pages/chat";
+import Wallet from "@/pages/wallet";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ function Router() {
           <Route path="/news" component={NewsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />
+          <Route path="/wallet" component={Wallet} />
           <Route component={NotFound} />
         </Switch>
       </main>

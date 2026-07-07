@@ -39,7 +39,8 @@ export const RegisterResponse = zod.object({
   "balance": zod.number(),
   "xp": zod.number(),
   "gamesPlayed": zod.number(),
-  "wins": zod.number()
+  "wins": zod.number(),
+  "canClaimDaily": zod.boolean()
 })
 
 
@@ -58,7 +59,8 @@ export const LoginResponse = zod.object({
   "balance": zod.number(),
   "xp": zod.number(),
   "gamesPlayed": zod.number(),
-  "wins": zod.number()
+  "wins": zod.number(),
+  "canClaimDaily": zod.boolean()
 })
 
 
@@ -71,7 +73,7 @@ export const LogoutResponse = zod.object({
 
 
 /**
- * @summary Get current logged-in user
+ * @summary Get current user
  */
 export const GetMeResponse = zod.object({
   "id": zod.number(),
@@ -80,7 +82,8 @@ export const GetMeResponse = zod.object({
   "balance": zod.number(),
   "xp": zod.number(),
   "gamesPlayed": zod.number(),
-  "wins": zod.number()
+  "wins": zod.number(),
+  "canClaimDaily": zod.boolean()
 })
 
 
@@ -96,6 +99,48 @@ export const GetLeaderboardResponse = zod.object({
   "gamesPlayed": zod.number(),
   "xp": zod.number()
 }))
+})
+
+
+/**
+ * @summary Play a game and earn coins
+ */
+export const PlayGameParams = zod.object({
+  "gameId": zod.coerce.string()
+})
+
+export const PlayGameResponse = zod.object({
+  "win": zod.boolean(),
+  "coinsEarned": zod.number(),
+  "xpEarned": zod.number(),
+  "newBalance": zod.number(),
+  "newXp": zod.number(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Claim daily login reward
+ */
+export const ClaimDailyRewardResponse = zod.object({
+  "coinsEarned": zod.number(),
+  "newBalance": zod.number(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Get user transaction history
+ */
+export const GetTransactionsResponse = zod.object({
+  "transactions": zod.array(zod.object({
+  "id": zod.number(),
+  "amount": zod.number(),
+  "type": zod.string(),
+  "description": zod.string(),
+  "createdAt": zod.string()
+})),
+  "balance": zod.number()
 })
 
 

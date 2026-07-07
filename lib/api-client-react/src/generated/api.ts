@@ -21,12 +21,15 @@ import type {
 
 import type {
   AuthUser,
+  DailyRewardResult,
   ErrorResponse,
   HealthStatus,
   LeaderboardResponse,
   LoginBody,
+  PlayResult,
   RegisterBody,
-  SuccessResponse
+  SuccessResponse,
+  TransactionsResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -352,7 +355,7 @@ export const getGetMeUrl = () => {
 }
 
 /**
- * @summary Get current logged-in user
+ * @summary Get current user
  */
 export const getMe = async ( options?: RequestInit): Promise<AuthUser> => {
 
@@ -399,7 +402,7 @@ export type GetMeQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary Get current logged-in user
+ * @summary Get current user
  */
 
 export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<ErrorResponse>>(
@@ -485,6 +488,223 @@ export function useGetLeaderboard<TData = Awaited<ReturnType<typeof getLeaderboa
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLeaderboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPlayGameUrl = (gameId: string,) => {
+
+
+
+
+  return `/api/games/${gameId}/play`
+}
+
+/**
+ * @summary Play a game and earn coins
+ */
+export const playGame = async (gameId: string, options?: RequestInit): Promise<PlayResult> => {
+
+  return customFetch<PlayResult>(getPlayGameUrl(gameId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getPlayGameMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof playGame>>, TError,{gameId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof playGame>>, TError,{gameId: string}, TContext> => {
+
+const mutationKey = ['playGame'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof playGame>>, {gameId: string}> = (props) => {
+          const {gameId} = props ?? {};
+
+          return  playGame(gameId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PlayGameMutationResult = NonNullable<Awaited<ReturnType<typeof playGame>>>
+
+    export type PlayGameMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Play a game and earn coins
+ */
+export const usePlayGame = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof playGame>>, TError,{gameId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof playGame>>,
+        TError,
+        {gameId: string},
+        TContext
+      > => {
+      return useMutation(getPlayGameMutationOptions(options));
+    }
+
+export const getClaimDailyRewardUrl = () => {
+
+
+
+
+  return `/api/rewards/daily`
+}
+
+/**
+ * @summary Claim daily login reward
+ */
+export const claimDailyReward = async ( options?: RequestInit): Promise<DailyRewardResult> => {
+
+  return customFetch<DailyRewardResult>(getClaimDailyRewardUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getClaimDailyRewardMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimDailyReward>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimDailyReward>>, TError,void, TContext> => {
+
+const mutationKey = ['claimDailyReward'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimDailyReward>>, void> = () => {
+
+
+          return  claimDailyReward(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimDailyRewardMutationResult = NonNullable<Awaited<ReturnType<typeof claimDailyReward>>>
+
+    export type ClaimDailyRewardMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Claim daily login reward
+ */
+export const useClaimDailyReward = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimDailyReward>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimDailyReward>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getClaimDailyRewardMutationOptions(options));
+    }
+
+export const getGetTransactionsUrl = () => {
+
+
+
+
+  return `/api/wallet/transactions`
+}
+
+/**
+ * @summary Get user transaction history
+ */
+export const getTransactions = async ( options?: RequestInit): Promise<TransactionsResponse> => {
+
+  return customFetch<TransactionsResponse>(getGetTransactionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTransactionsQueryKey = () => {
+    return [
+    `/api/wallet/transactions`
+    ] as const;
+    }
+
+
+export const getGetTransactionsQueryOptions = <TData = Awaited<ReturnType<typeof getTransactions>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTransactionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTransactions>>> = ({ signal }) => getTransactions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTransactions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof getTransactions>>>
+export type GetTransactionsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get user transaction history
+ */
+
+export function useGetTransactions<TData = Awaited<ReturnType<typeof getTransactions>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTransactions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTransactionsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

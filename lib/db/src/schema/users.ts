@@ -11,6 +11,7 @@ export const usersTable = pgTable("users", {
   xp: integer("xp").notNull().default(0),
   gamesPlayed: integer("games_played").notNull().default(0),
   wins: integer("wins").notNull().default(0),
+  lastDailyReward: timestamp("last_daily_reward", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

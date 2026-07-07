@@ -8,6 +8,7 @@ export interface AuthUser {
   xp: number;
   gamesPlayed: number;
   wins: number;
+  canClaimDaily: boolean;
 }
 
 interface AuthContextType {
