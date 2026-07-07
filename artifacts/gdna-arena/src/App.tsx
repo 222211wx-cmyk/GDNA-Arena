@@ -9,6 +9,7 @@ import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Games from "@/pages/games";
+import NewsPage from "@/pages/news";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ function Router() {
           <Route path="/login" component={Login} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/games" component={Games} />
+          <Route path="/news" component={NewsPage} />
           <Route component={NotFound} />
         </Switch>
       </main>
