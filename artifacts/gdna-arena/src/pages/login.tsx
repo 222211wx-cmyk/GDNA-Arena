@@ -1,24 +1,33 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Lock, Mail } from "lucide-react";
+import { Lock, Mail, AlertCircle } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const { login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     setIsLoading(true);
-    // Simulate auth
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await login(email, password);
       setLocation("/dashboard");
-    }, 800);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -40,39 +49,58 @@ export default function Login() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {error}
+                </div>
+              )}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs uppercase tracking-widest text-muted-foreground">Email Vector</Label>
+                <Label htmlFor="email" className="text-xs uppercase tracking-widest text-muted-foreground">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
-                  <Input 
-                    id="email" 
-                    type="email" 
-                    placeholder="player@gdna.network" 
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="player@gdna.network"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
                     required
+                    data-testid="input-email"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-xs uppercase tracking-widest text-muted-foreground">Security Key</Label>
+                <Label htmlFor="password" className="text-xs uppercase tracking-widest text-muted-foreground">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    placeholder="••••••••" 
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
                     required
+                    data-testid="input-password"
                   />
                 </div>
               </div>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full h-12 text-lg font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground neon-glow transition-all duration-300"
                 disabled={isLoading}
+                data-testid="button-login"
               >
                 {isLoading ? "Authenticating..." : "Login"}
               </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                No account?{" "}
+                <Link href="/register" className="text-primary hover:underline font-semibold">
+                  Register here
+                </Link>
+              </p>
             </form>
           </CardContent>
         </Card>

@@ -4,12 +4,15 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useEffect } from "react";
 
+import { AuthProvider } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/layout/navbar";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
 import Games from "@/pages/games";
 import NewsPage from "@/pages/news";
+import Leaderboard from "@/pages/leaderboard";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -22,9 +25,11 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/login" component={Login} />
+          <Route path="/register" component={Register} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/games" component={Games} />
           <Route path="/news" component={NewsPage} />
+          <Route path="/leaderboard" component={Leaderboard} />
           <Route component={NotFound} />
         </Switch>
       </main>
@@ -33,18 +38,19 @@ function Router() {
 }
 
 function App() {
-  // Force dark mode always for this app
   useEffect(() => {
-    document.documentElement.classList.add('dark');
+    document.documentElement.classList.add("dark");
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <AuthProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
