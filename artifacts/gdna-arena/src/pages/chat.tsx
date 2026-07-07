@@ -4,30 +4,40 @@ import { Send, Bot, User, Loader2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { useLang } from "@/contexts/LangContext";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
 
-const SUGGESTED = [
-  "شنو هي GDNA Arena؟",
-  "كيفاش نربح كوينز؟",
-  "شرح ليا play-to-earn",
-  "أفضل استراتيجية فالألعاب؟",
-];
+const SUGGESTED: Record<string, string[]> = {
+  en: ["What is GDNA Arena?", "How do I earn coins?", "Explain play-to-earn", "Best strategy for games?"],
+  ar: ["ما هي GDNA Arena؟", "كيف أربح عملات؟", "اشرح play-to-earn", "أفضل استراتيجية للألعاب؟"],
+  fr: ["C'est quoi GDNA Arena?", "Comment gagner des pièces?", "Explique le play-to-earn", "Meilleure stratégie?"],
+  dz: ["شنو هي GDNA Arena؟", "كيفاش نربح كوينز؟", "شرح ليا play-to-earn", "أفضل استراتيجية؟"],
+};
+
+const WELCOME: Record<string, string> = {
+  en: "Greetings, warrior! I am GDN-AI — the legendary genie of GDNA Arena 🔥 Ask me anything, in any language!",
+  ar: "أهلاً يا محارب! أنا GDN-AI — الجني الأسطوري لـ GDNA Arena 🔥 اسألني أي شيء، بأي لغة!",
+  fr: "Salutations, guerrier! Je suis GDN-AI — le génie légendaire de GDNA Arena 🔥 Demandez-moi n'importe quoi, dans n'importe quelle langue!",
+  dz: "السلام، يا مجاهد! أنا GDN-AI — الجني الخارق ديال GDNA Arena 🔥 سولني على أي حاجة، بأي لغة!",
+};
 
 export default function ChatPage() {
+  const { t, lang } = useLang();
   const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "السلام عليكم! أنا GDN-AI، مساعدك الرسمي فـ GDNA Arena 🎮 كيفاش نقدر نعاونك اليوم؟",
-    },
+    { role: "assistant", content: WELCOME[lang] ?? WELCOME.en },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMessages([{ role: "assistant", content: WELCOME[lang] ?? WELCOME.en }]);
+  }, [lang]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -61,7 +71,7 @@ export default function ChatPage() {
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "فشل الاتصال، عاود مرة أخرى");
+      setError(err instanceof Error ? err.message : "Connection failed");
     } finally {
       setLoading(false);
     }
@@ -74,9 +84,10 @@ export default function ChatPage() {
     }
   };
 
+  const suggested = SUGGESTED[lang] ?? SUGGESTED.en;
+
   return (
     <div className="min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto p-4 md:p-8">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -87,18 +98,17 @@ export default function ChatPage() {
             <Bot className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl md:text-4xl font-black uppercase tracking-wider neon-text-glow">
-            GDN-AI
+            {t("chat_title")}
           </h1>
           <span className="flex items-center gap-1 text-xs text-green-400 bg-green-400/10 border border-green-400/30 px-2 py-1 rounded-full">
             <Zap className="w-3 h-3" /> ONLINE
           </span>
         </div>
         <p className="text-muted-foreground text-sm uppercase tracking-widest">
-          مساعدك الذكي بالدارجة المغربية
+          {t("chat_sub")}
         </p>
       </motion.div>
 
-      {/* Chat window */}
       <Card className="flex-1 bg-card/30 border-primary/20 p-4 overflow-y-auto mb-4 space-y-4 min-h-[400px] max-h-[55vh]">
         <AnimatePresence initial={false}>
           {messages.map((msg, i) => (
@@ -144,7 +154,7 @@ export default function ChatPage() {
               </div>
               <div className="bg-card border border-primary/20 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-2">
                 <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                <span className="text-muted-foreground text-sm">GDN-AI كيفكر...</span>
+                <span className="text-muted-foreground text-sm">GDN-AI ...</span>
               </div>
             </motion.div>
           )}
@@ -156,15 +166,14 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </Card>
 
-      {/* Suggested questions */}
       {messages.length <= 1 && (
         <div className="flex flex-wrap gap-2 mb-3">
-          {SUGGESTED.map((q) => (
+          {suggested.map((q) => (
             <button
               key={q}
               onClick={() => sendMessage(q)}
               className="text-xs px-3 py-2 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
-              dir="rtl"
+              dir="auto"
             >
               {q}
             </button>
@@ -172,13 +181,12 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Input */}
       <div className="flex gap-2">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="اكتب سؤالك بالدارجة..."
+          placeholder={t("chat_placeholder")}
           className="flex-1 h-12 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary"
           disabled={loading}
           dir="auto"

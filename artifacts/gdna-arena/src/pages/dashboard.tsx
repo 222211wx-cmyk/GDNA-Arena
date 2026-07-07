@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
 
 function getRank(xp: number): { label: string; next: number; color: string } {
@@ -19,6 +20,7 @@ function getRank(xp: number): { label: string; next: number; color: string } {
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { user, logout, loading, refreshUser } = useAuth();
+  const { t } = useLang();
   const [claimingDaily, setClaimingDaily] = useState(false);
   const [dailyMsg, setDailyMsg] = useState("");
 

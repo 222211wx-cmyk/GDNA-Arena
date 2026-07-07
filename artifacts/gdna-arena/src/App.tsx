@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useEffect } from "react";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import { LangProvider } from "@/contexts/LangContext";
 import { Navbar } from "@/components/layout/navbar";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
@@ -49,12 +50,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </AuthProvider>
+        <LangProvider>
+          <AuthProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </AuthProvider>
+        </LangProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

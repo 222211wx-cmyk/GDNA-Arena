@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Coins, TrendingUp, TrendingDown, Trophy, Gift, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLang } from "@/contexts/LangContext";
 import { useLocation } from "wouter";
 
 interface Transaction {
@@ -35,6 +36,7 @@ function timeAgo(iso: string) {
 
 export default function Wallet() {
   const { user } = useAuth();
+  const { t } = useLang();
   const [, setLocation] = useLocation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balance, setBalance] = useState(0);

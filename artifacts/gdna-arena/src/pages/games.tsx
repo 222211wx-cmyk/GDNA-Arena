@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Play, Trophy, X, Coins, Zap, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLang } from "@/contexts/LangContext";
 import { useLocation } from "wouter";
 
 const GAMES = [
@@ -50,6 +51,7 @@ interface PlayResult {
 
 export default function Games() {
   const { user, refreshUser } = useAuth();
+  const { t } = useLang();
   const [, setLocation] = useLocation();
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [result, setResult] = useState<(PlayResult & { gameTitle: string }) | null>(null);
@@ -84,7 +86,7 @@ export default function Games() {
           animate={{ opacity: 1, y: 0 }}
           className="text-4xl md:text-6xl font-black uppercase tracking-wider neon-text-glow"
         >
-          Select Arena
+          {t("select_arena")}
         </motion.h1>
         <motion.p
           initial={{ opacity: 0 }}
@@ -92,7 +94,7 @@ export default function Games() {
           transition={{ delay: 0.2 }}
           className="text-muted-foreground uppercase tracking-widest"
         >
-          Compete. Win. Earn Crypto.
+          {t("compete")}
         </motion.p>
       </div>
 
@@ -132,12 +134,12 @@ export default function Games() {
                 <div className="space-y-4">
                   <div className="flex justify-between text-xs uppercase tracking-widest border-t border-border/50 pt-4">
                     <span className="text-muted-foreground flex items-center gap-1">
-                      <Coins className="w-3 h-3" /> Reward
+                      <Coins className="w-3 h-3" /> {t("reward")}
                     </span>
-                    <span className="text-primary font-bold">{game.minReward}–{game.maxReward} coins</span>
+                    <span className="text-primary font-bold">{game.minReward}–{game.maxReward} {t("coins")}</span>
                   </div>
                   <div className="flex justify-between text-xs uppercase tracking-widest">
-                    <span className="text-muted-foreground">Win Chance</span>
+                    <span className="text-muted-foreground">{t("win_chance")}</span>
                     <span className="text-green-400 font-bold">{game.winChance}</span>
                   </div>
 
