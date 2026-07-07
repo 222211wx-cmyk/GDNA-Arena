@@ -13,6 +13,7 @@ import Dashboard from "@/pages/dashboard";
 import Games from "@/pages/games";
 import NewsPage from "@/pages/news";
 import Leaderboard from "@/pages/leaderboard";
+import ChatPage from "@/pages/chat";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ function Router() {
           <Route path="/games" component={Games} />
           <Route path="/news" component={NewsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
+          <Route path="/chat" component={ChatPage} />
           <Route component={NotFound} />
         </Switch>
       </main>

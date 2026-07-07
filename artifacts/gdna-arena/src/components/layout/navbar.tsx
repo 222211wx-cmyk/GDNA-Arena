@@ -13,6 +13,7 @@ export function Navbar() {
     { name: "Games", path: "/games" },
     { name: "News", path: "/news" },
     { name: "Leaderboard", path: "/leaderboard" },
+    { name: "GDN-AI", path: "/chat" },
   ];
 
   const authLinks = user
