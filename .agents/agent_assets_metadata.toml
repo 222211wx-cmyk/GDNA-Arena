@@ -1,5 +1,4 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "fvXphTT14fQAKrxrTqCAT"
@@ -18,3 +17,9 @@ id = "asljoRf8EH8KIq0UXLQSK"
 uri = "file://artifacts/gdna-arena/public/images/arena-strike.png"
 type = "image"
 title = "Arena Strike game cover"
+
+[[outputs]]
+id = "lP-Z_p31gOP-te3XRQZzK"
+uri = "file://exports/gdna-arena-source.zip"
+type = "unspecified"
+title = "GDNA Arena - Source Code"
