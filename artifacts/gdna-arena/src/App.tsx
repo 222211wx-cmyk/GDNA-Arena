@@ -17,6 +17,7 @@ import Leaderboard from "@/pages/leaderboard";
 import ChatPage from "@/pages/chat";
 import Wallet from "@/pages/wallet";
 import NotFound from "@/pages/not-found";
+import { GdnAiFloating } from "@/components/GdnAiTerminal";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ function Router() {
           <Route component={NotFound} />
         </Switch>
       </main>
+      <GdnAiFloating />
     </div>
   );
 }
