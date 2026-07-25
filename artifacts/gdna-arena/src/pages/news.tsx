@@ -31,7 +31,7 @@ const FEATURED_ARTICLE: Article = {
   title: "The Great Migration: How Top AAA Studios Are Quietly Building The Next Generation Of On-Chain Economies",
   summary: "Behind closed doors, industry veterans from Blizzard, EA, and Riot are establishing a new paradigm for player-owned assets that doesn't sacrifice gameplay.",
   readTime: "8 min read",
-  date: "Oct 24, 2023"
+  date: "Jul 25, 2026"
 };
 
 const ARTICLES: Article[] = [
@@ -41,7 +41,7 @@ const ARTICLES: Article[] = [
     title: "Epic Games Announces $50M Web3 Gaming Fund for Indie Developers",
     summary: "New grant program aims to lower the barrier to entry for studios integrating blockchain mechanics into Unreal Engine 5 projects.",
     readTime: "3 min read",
-    date: "Oct 24, 2023"
+    date: "Jul 24, 2026"
   },
   {
     id: 2,
@@ -49,7 +49,7 @@ const ARTICLES: Article[] = [
     title: "Ethereum Layer 2 Cuts Gaming Transaction Fees by 94% — What It Means for Play-to-Earn",
     summary: "The latest rollup upgrade finally makes micro-transactions viable for high-frequency trading in blockchain economies.",
     readTime: "5 min read",
-    date: "Oct 23, 2023"
+    date: "Jul 23, 2026"
   },
   {
     id: 3,
@@ -57,7 +57,7 @@ const ARTICLES: Article[] = [
     title: "GDNA Arena Season 2 Tournament: $100,000 Prize Pool Opens Registration",
     summary: "The highly anticipated second season brings new maps, balanced character rosters, and a massive prize pool.",
     readTime: "2 min read",
-    date: "Oct 22, 2023"
+    date: "Jul 22, 2026"
   },
   {
     id: 4,
@@ -65,7 +65,7 @@ const ARTICLES: Article[] = [
     title: "Axie Infinity 2.0 Beta Launches with Full PvP Economy Overhaul",
     summary: "Sky Mavis responds to community feedback with a redesigned combat system that emphasizes skill over pay-to-win mechanics.",
     readTime: "4 min read",
-    date: "Oct 21, 2023"
+    date: "Jul 21, 2026"
   },
   {
     id: 5,
@@ -73,7 +73,7 @@ const ARTICLES: Article[] = [
     title: "Bitcoin Gaming Wallets Cross 10 Million Users for First Time",
     summary: "Lightning network adoption in casual mobile games drives unprecedented growth in non-custodial gaming wallets.",
     readTime: "3 min read",
-    date: "Oct 20, 2023"
+    date: "Jul 20, 2026"
   },
   {
     id: 6,
@@ -81,7 +81,7 @@ const ARTICLES: Article[] = [
     title: "Unreal Engine 6 Preview Showcases Real-Time Ray Tracing for Mobile",
     summary: "Epic's next engine iteration promises to bridge the visual gap between mobile and console gaming.",
     readTime: "6 min read",
-    date: "Oct 19, 2023"
+    date: "Jul 19, 2026"
   },
   {
     id: 7,
@@ -89,7 +89,7 @@ const ARTICLES: Article[] = [
     title: "South Korea Tops Global Esports Rankings; GDNA Teams in Top 20",
     summary: "Following dominant performances in regional qualifiers, South Korean orgs solidify their position at the pinnacle of competitive gaming.",
     readTime: "2 min read",
-    date: "Oct 18, 2023"
+    date: "Jul 18, 2026"
   },
   {
     id: 8,
@@ -97,7 +97,7 @@ const ARTICLES: Article[] = [
     title: "NFT Gaming Items Now Tradeable Across 15 Platforms Via New Protocol",
     summary: "Cross-chain interoperability takes a major step forward as leading marketplaces adopt a unified standard for in-game assets.",
     readTime: "4 min read",
-    date: "Oct 17, 2023"
+    date: "Jul 17, 2026"
   }
 ];
 

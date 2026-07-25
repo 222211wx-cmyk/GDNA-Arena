@@ -1,0 +1,21 @@
+{
+  "name": "GDNA Arena",
+  "short_name": "GDNA",
+  "description": "Play. Win. Earn Crypto. — The sovereign play-to-earn gaming platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00d4ff",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "entertainment", "finance"],
+  "lang": "en",
+  "dir": "auto"
+}

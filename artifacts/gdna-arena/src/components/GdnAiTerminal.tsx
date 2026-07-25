@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, Loader2, Zap, Sparkles, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,20 +8,21 @@ import { useLang } from "@/contexts/LangContext";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  streaming?: boolean;
 }
 
 const SUGGESTED: Record<string, string[]> = {
-  en: ["What is GDNA Arena?", "How do I earn coins?", "Best strategy?", "Tell me about play-to-earn"],
-  ar: ["ما هي GDNA Arena؟", "كيف أربح عملات؟", "أفضل استراتيجية؟", "اشرح play-to-earn"],
-  fr: ["C'est quoi GDNA Arena?", "Comment gagner?", "Meilleure stratégie?", "Explique le play-to-earn"],
-  dz: ["شنو هي GDNA Arena؟", "كيفاش نربح؟", "أفضل استراتيجية؟", "شرح ليا play-to-earn"],
+  en: ["What is GDNA Arena?", "Best strategy to earn coins?", "Tell me about Arena Strike", "How does XP work?"],
+  ar: ["ما هي GDNA Arena؟", "أفضل استراتيجية لكسب العملات؟", "أخبرني عن Arena Strike", "كيف يعمل XP؟"],
+  fr: ["C'est quoi GDNA Arena?", "Meilleure stratégie pour gagner?", "Parle-moi d'Arena Strike", "Comment fonctionne l'XP?"],
+  dz: ["شنو هي GDNA Arena؟", "أفضل طريقة باش نربح كوينز؟", "حدثني على Arena Strike", "كيفاش كيخدم XP؟"],
 };
 
 const WELCOME: Record<string, string> = {
-  en: "Greetings, warrior! I am GDN-AI — the legendary genie of GDNA Arena 🔥 Ask me anything!",
-  ar: "أهلاً يا محارب! أنا GDN-AI — الجني الأسطوري لـ GDNA Arena 🔥 اسألني أي شيء!",
-  fr: "Salutations, guerrier! Je suis GDN-AI 🔥 Demandez-moi n'importe quoi!",
-  dz: "السلام، يا مجاهد! أنا GDN-AI — الجني الخارق ديال GDNA Arena 🔥 سولني على أي حاجة!",
+  en: "Neural grid online. I am GDN-AI — sovereign intelligence of GDNA Arena. All languages. All strategies. Ask anything.",
+  ar: "الشبكة العصبية متصلة. أنا GDN-AI — الذكاء السيادي لـ GDNA Arena. كل اللغات. كل الاستراتيجيات. اسأل أي شيء.",
+  fr: "Grille neurale en ligne. Je suis GDN-AI — intelligence souveraine de GDNA Arena. Toutes les langues. Toutes les stratégies.",
+  dz: "الشبكة العصبية متصلة. أنا GDN-AI — الذكاء الأقوى ديال GDNA Arena. بجميع اللغات. سول على أي حاجة.",
 };
 
 interface GdnAiTerminalProps {
@@ -38,6 +39,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
   const [error, setError] = useState("");
   const [showSuggested, setShowSuggested] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setMessages([{ role: "assistant", content: WELCOME[lang] ?? WELCOME.en }]);
@@ -46,52 +48,125 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages]);
 
-  const sendMessage = async (text?: string) => {
+  const sendMessage = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
 
-    const userMessage: Message = { role: "user", content: msg };
-    const history = messages.slice(1);
+    const history = messages
+      .filter((m) => !m.streaming)
+      .slice(1)
+      .map(({ role, content }) => ({ role, content }));
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, { role: "user", content: msg }]);
     setInput("");
     setLoading(true);
     setError("");
     setShowSuggested(false);
 
+    // Add empty streaming assistant message
+    setMessages((prev) => [...prev, { role: "assistant", content: "", streaming: true }]);
+
+    abortRef.current = new AbortController();
+
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: abortRef.current.signal,
         body: JSON.stringify({ message: msg, history }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error ?? "Server error");
+      if (!res.ok || !res.body) {
+        throw new Error("Stream unavailable");
       }
 
-      const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(raw) as { delta?: string; error?: string };
+            if (parsed.error) {
+              setError(parsed.error);
+              break;
+            }
+            if (parsed.delta) {
+              setMessages((prev) => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last?.streaming) {
+                  next[next.length - 1] = { ...last, content: last.content + parsed.delta };
+                }
+                return next;
+              });
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Connection failed");
+      if (err instanceof Error && err.name === "AbortError") return;
+      // Fallback to non-streaming
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ message: msg, history }),
+        });
+        const data = await res.json() as { reply?: string; error?: string };
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.streaming) {
+            next[next.length - 1] = { ...last, content: data.reply ?? "Neural error — try again.", streaming: false };
+          }
+          return next;
+        });
+        return;
+      } catch {
+        setError("Neural grid disruption — try again.");
+      }
     } finally {
+      // Mark streaming done
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.streaming) {
+          next[next.length - 1] = { ...last, streaming: false };
+        }
+        return next;
+      });
       setLoading(false);
     }
-  };
+  }, [input, loading, messages]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      void sendMessage();
     }
   };
 
   const suggested = SUGGESTED[lang] ?? SUGGESTED.en;
-  const chatHeight = compact ? "max-h-[280px]" : "max-h-[380px]";
+  const chatHeight = compact ? "max-h-[280px]" : "max-h-[400px]";
 
   return (
     <div className="flex flex-col h-full">
@@ -105,10 +180,10 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
         <div className="flex-1 flex items-center justify-center gap-2">
           <Sparkles className="w-3 h-3 text-primary animate-pulse" />
           <span className="text-xs font-mono text-primary/80 tracking-widest uppercase">
-            GDN-AI Terminal v2.0
+            GDN-AI · Neural Grid v3.0
           </span>
           <span className="flex items-center gap-1 text-[10px] text-green-400 bg-green-400/10 border border-green-400/30 px-2 py-0.5 rounded-full">
-            <Zap className="w-2.5 h-2.5" /> LIVE
+            <Zap className="w-2.5 h-2.5" /> GPT-4o
           </span>
         </div>
       </div>
@@ -140,9 +215,12 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
                 dir="auto"
               >
                 {msg.role === "assistant" && (
-                  <span className="text-primary/60 text-xs font-mono mr-1">&gt;</span>
+                  <span className="text-primary/50 text-xs font-mono mr-1">&gt;</span>
                 )}
                 {msg.content}
+                {msg.streaming && msg.content.length > 0 && (
+                  <span className="inline-block w-1.5 h-4 bg-primary/80 ml-0.5 animate-pulse align-middle" />
+                )}
               </div>
               {msg.role === "user" && (
                 <div className="shrink-0 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center border border-primary/50 mt-0.5">
@@ -152,7 +230,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
             </motion.div>
           ))}
 
-          {loading && (
+          {loading && messages[messages.length - 1]?.content === "" && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -163,7 +241,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
               </div>
               <div className="bg-black/40 border border-primary/20 px-3 py-2 rounded-xl rounded-bl-sm flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
-                <span className="text-muted-foreground text-xs font-mono">GDN-AI thinking...</span>
+                <span className="text-muted-foreground text-xs font-mono">Neural grid processing...</span>
               </div>
             </motion.div>
           )}
@@ -187,7 +265,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
             {suggested.map((q) => (
               <button
                 key={q}
-                onClick={() => sendMessage(q)}
+                onClick={() => void sendMessage(q)}
                 className="text-[11px] px-2.5 py-1.5 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors font-mono"
                 dir="auto"
               >
@@ -211,7 +289,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
           dir="auto"
         />
         <Button
-          onClick={() => sendMessage()}
+          onClick={() => void sendMessage()}
           disabled={!input.trim() || loading}
           size="sm"
           className="h-10 px-4 bg-primary hover:bg-primary/90 text-black font-bold neon-glow transition-all"
@@ -236,7 +314,7 @@ export function GdnAiFloating() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.85, y: 20 }}
             transition={{ type: "spring", damping: 20, stiffness: 300 }}
-            className="mb-3 w-[360px] rounded-xl border border-primary/30 bg-card/95 backdrop-blur shadow-2xl shadow-primary/20"
+            className="mb-3 w-[370px] rounded-xl border border-primary/30 bg-card/95 backdrop-blur shadow-2xl shadow-primary/20"
           >
             <GdnAiTerminal compact />
           </motion.div>
@@ -272,7 +350,6 @@ export function GdnAiFloating() {
             </motion.span>
           )}
         </AnimatePresence>
-        {/* Pulse dot */}
         <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 border-2 border-background animate-pulse" />
       </motion.button>
     </div>
