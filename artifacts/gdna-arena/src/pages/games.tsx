@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Trophy, X, Coins, Zap, Loader2 } from "lucide-react";
+import { Play, Trophy, X, Coins, Zap, Loader2, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { useLocation } from "wouter";
@@ -17,6 +17,7 @@ const GAMES = [
     minReward: 20,
     maxReward: 80,
     winChance: "60%",
+    isExternal: false,
   },
   {
     id: "crypto-clash",
@@ -27,6 +28,7 @@ const GAMES = [
     minReward: 30,
     maxReward: 120,
     winChance: "50%",
+    isExternal: false,
   },
   {
     id: "arena-strike",
@@ -37,6 +39,18 @@ const GAMES = [
     minReward: 50,
     maxReward: 200,
     winChance: "45%",
+    isExternal: false,
+  },
+  {
+    id: "globalstar",
+    title: "GlobalStar",
+    description: "منصة التصويت الذكية — Vote for global icons across 10 domains. AI-moderated, real-time rankings.",
+    image: "/images/globalstar.png",
+    genre: "Voting",
+    minReward: 10,
+    maxReward: 50,
+    winChance: "100%",
+    isExternal: true,
   },
 ];
 
@@ -56,7 +70,11 @@ export default function Games() {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [result, setResult] = useState<(PlayResult & { gameTitle: string }) | null>(null);
 
-  const handlePlay = async (gameId: string, gameTitle: string) => {
+  const handlePlay = async (gameId: string, gameTitle: string, isExternal: boolean) => {
+    if (isExternal) {
+      setLocation(`/games/${gameId}`);
+      return;
+    }
     if (!user) {
       setLocation("/login");
       return;
@@ -145,14 +163,19 @@ export default function Games() {
 
                   <Button
                     className="w-full h-12 font-bold uppercase tracking-wider group-hover:neon-glow bg-primary/20 text-primary border border-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300"
-                    onClick={() => handlePlay(game.id, game.title)}
+                    onClick={() => handlePlay(game.id, game.title, game.isExternal)}
                     disabled={playingId === game.id}
                     data-testid={`button-play-${game.id}`}
                   >
                     {playingId === game.id ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Playing...
+                        Loading...
+                      </>
+                    ) : game.isExternal ? (
+                      <>
+                        <Star className="w-4 h-4 mr-2" />
+                        Enter
                       </>
                     ) : (
                       <>
