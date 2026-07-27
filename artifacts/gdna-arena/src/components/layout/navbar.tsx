@@ -4,7 +4,7 @@ import {
   Menu, X, Gamepad2, Trophy, LogOut, Globe,
   ChevronDown, LayoutDashboard, Wallet,
   Vote, Newspaper, BrainCircuit, Crown,
-  Clock, Scale, Landmark, Swords, Radio
+  Clock, Scale, Radio, Brain
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
@@ -15,8 +15,8 @@ const NAV_GROUPS = [
     key: "nav_group_platform",
     items: [
       { key: "hub_title",     path: "/hub",       icon: Radio,        color: "text-primary" },
-      { key: "chrono_past",   path: "/chronicle", icon: Clock,        color: "text-yellow-400",
-        labelKey: "nav_chronicle" },
+      { key: "chrono_past",   path: "/chronicle", icon: Clock,        color: "text-yellow-400", labelKey: "nav_chronicle" },
+      { key: "nlp_nav",       path: "/growth",    icon: Brain,        color: "text-purple-400", labelKey: "nlp_nav" },
       { key: "empire_title",  path: "/empire",    icon: Crown,        color: "text-yellow-400" },
       { key: "legal_title",   path: "/legal",     icon: Scale,        color: "text-blue-400" },
     ],

@@ -22,6 +22,8 @@ import Hub from "@/pages/hub";
 import Empire from "@/pages/empire";
 import Legal from "@/pages/legal";
 import Chronicle from "@/pages/chronicle";
+import Welcome from "@/pages/welcome";
+import Growth from "@/pages/growth";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 
@@ -42,6 +44,8 @@ function Router() {
           <Route path="/legal" component={Legal} />
           <Route path="/legal/:tab" component={Legal} />
           <Route path="/chronicle" component={Chronicle} />
+          <Route path="/welcome" component={Welcome} />
+          <Route path="/growth" component={Growth} />
           <Route path="/games" component={Games} />
           <Route path="/games/globalstar" component={GlobalStarApp} />
           <Route path="/games/globalstar/:rest*" component={GlobalStarApp} />
