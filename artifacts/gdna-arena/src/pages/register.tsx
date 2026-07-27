@@ -23,7 +23,7 @@ export default function Register() {
     setIsLoading(true);
     try {
       await register(username, email, password);
-      setLocation("/dashboard");
+      setLocation("/welcome");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {

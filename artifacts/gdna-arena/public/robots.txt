@@ -1,2 +1,7 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://gdna-arena.replit.app/gdna-arena/sitemap.xml
+
+# GDNA Arena — Sovereign Digital Empire
+# Play-to-earn gaming · GlobalStar voting · GDN-AI intelligence

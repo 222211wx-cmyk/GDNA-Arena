@@ -120,6 +120,18 @@ function getRank(xp: number) {
 // ── Affirmation rotator ───────────────────────────────────────────────────────
 const AFF_KEYS = ["nlp_aff_1","nlp_aff_2","nlp_aff_3","nlp_aff_4","nlp_aff_5"];
 
+interface AiAnalysis {
+  nlp_archetype?: string;
+  archetype_desc?: string;
+  strength?: string;
+  blind_spot?: string;
+  "30_day_prediction"?: string;
+  "90_day_prediction"?: string;
+  "1_year_vision"?: string;
+  daily_affirmation?: string;
+  growth_action?: string;
+}
+
 export default function Growth() {
   const { user } = useAuth();
   const { t, lang } = useLang();
@@ -129,12 +141,39 @@ export default function Growth() {
   const [breathCount, setBreathCount] = useState(0);
   const [affIdx, setAffIdx] = useState(0);
   const breathTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   // Rotate affirmations
   useEffect(() => {
     const id = setInterval(() => setAffIdx(i => (i + 1) % AFF_KEYS.length), 5000);
     return () => clearInterval(id);
   }, []);
+
+  // Fetch AI trajectory when user is available
+  useEffect(() => {
+    if (!user) return;
+    setAiLoading(true);
+    fetch(`${BASE}/api/growth/trajectory`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        xp: user.xp,
+        wins: user.wins,
+        gamesPlayed: user.gamesPlayed,
+        balance: user.balance,
+        username: user.username,
+        lang,
+      }),
+    })
+      .then(r => r.json())
+      .then(d => setAiAnalysis(d.analysis ?? null))
+      .catch(() => setAiError("AI unavailable"))
+      .finally(() => setAiLoading(false));
+  }, [user?.username, lang]);
 
   // Breathing engine
   useEffect(() => {
@@ -412,74 +451,113 @@ export default function Growth() {
         </div>
       </section>
 
-      {/* ── AI Future Trajectory ─────────────────────────────────── */}
+      {/* ── AI Future Trajectory (real OpenAI) ──────────────────── */}
       <section className="space-y-4">
         <div className="flex items-center gap-3">
-          <Cpu className="w-6 h-6 text-primary animate-pulse" />
+          <Cpu className={`w-6 h-6 text-primary ${aiLoading ? "animate-spin" : "animate-pulse"}`} />
           <h2 className="text-xl font-black uppercase tracking-wider">{t("nlp_traj_title")}</h2>
-          <Badge className="ml-auto bg-primary/10 text-primary border border-primary/30 font-mono text-xs">AI · 30 {t("nlp_days")}</Badge>
+          <Badge className="ml-auto bg-primary/10 text-primary border border-primary/30 font-mono text-xs">
+            {aiLoading ? "GPT-4o-mini…" : "GPT-4o-mini · Live"}
+          </Badge>
         </div>
-        <Card className="bg-gradient-to-br from-primary/8 to-purple-500/5 border-primary/20">
-          <CardContent className="p-6 md:p-8 space-y-6">
-            <p className="text-sm text-muted-foreground">{t("nlp_traj_sub")}</p>
-            <div className="grid md:grid-cols-3 gap-4">
-              {trajectory.map((t2, i) => (
-                <motion.div key={t2.key}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.1 + i * 0.1 }}
-                >
-                  <Card className="bg-card/30 border-border/50 text-center">
-                    <CardContent className="p-5 space-y-3">
-                      <t2.icon className={`w-6 h-6 mx-auto ${t2.color}`} />
-                      <p className={`text-xs font-black uppercase tracking-wider ${t2.color}`}>{t(t2.key)}</p>
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="text-sm text-muted-foreground font-mono">{t2.current}</span>
-                        <ArrowRight className={`w-3.5 h-3.5 ${t2.color}`} />
-                        <span className={`text-lg font-black font-mono ${t2.color}`}>{t2.predicted}</span>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">{t("nlp_confidence")}</span>
-                          <span className={`font-black font-mono ${t2.color}`}>{t2.confidence}%</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-border/40 overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${t2.confidence}%` }}
-                            transition={{ duration: 1.2, delay: 0.4 + i * 0.12 }}
-                            className={`h-full rounded-full bg-current`}
-                            style={{ color: t2.color.replace("text-","") === "primary" ? "hsl(var(--primary))" : undefined }}
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
 
-            {/* Growth roadmap */}
-            <div className="pt-4 border-t border-border/30 space-y-3">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{t("nlp_roadmap_title")}</p>
-              <div className="grid md:grid-cols-3 gap-3">
-                {[
-                  { phase: "30 " + t("nlp_days"), key: "nlp_road_30", icon: Rocket, color: "text-primary" },
-                  { phase: "90 " + t("nlp_days"), key: "nlp_road_90", icon: Star,   color: "text-yellow-400" },
-                  { phase: "1 " + t("nlp_year"),  key: "nlp_road_1y", icon: Crown,  color: "text-purple-400" },
-                ].map((r, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-background/40 border border-border/30">
-                    <r.icon className={`w-4 h-4 ${r.color} mt-0.5 shrink-0`} />
-                    <div>
-                      <p className={`text-xs font-black ${r.color}`}>{r.phase}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{t(r.key)}</p>
-                    </div>
+        {aiLoading && (
+          <Card className="bg-gradient-to-br from-primary/8 to-purple-500/5 border-primary/20">
+            <CardContent className="p-12 text-center space-y-3">
+              <BrainCircuit className="w-10 h-10 text-primary mx-auto animate-pulse" />
+              <p className="text-sm text-muted-foreground uppercase tracking-widest">{t("nlp_traj_sub")}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {aiError && !aiLoading && (
+          <Card className="bg-destructive/5 border-destructive/30">
+            <CardContent className="p-6 text-center text-destructive text-sm">{aiError}</CardContent>
+          </Card>
+        )}
+
+        {aiAnalysis && !aiLoading && (
+          <Card className="bg-gradient-to-br from-primary/8 to-purple-500/5 border-primary/20">
+            <CardContent className="p-6 md:p-8 space-y-6">
+
+              {/* Archetype */}
+              {aiAnalysis.nlp_archetype && (
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 pb-4 border-b border-primary/10">
+                  <div className="w-14 h-14 rounded-2xl bg-primary/20 border border-primary/40 flex items-center justify-center shrink-0">
+                    <Crown className="w-7 h-7 text-primary" />
                   </div>
-                ))}
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-primary">{t("nlp_archetype_label")}</p>
+                    <h3 className="text-2xl font-black neon-text-glow">{aiAnalysis.nlp_archetype}</h3>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{aiAnalysis.archetype_desc}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Strength + Blind Spot */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {aiAnalysis.strength && (
+                  <div className="p-4 rounded-xl bg-green-400/5 border border-green-400/20 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-green-400" />
+                      <span className="text-xs font-black uppercase tracking-wider text-green-400">{t("nlp_ai_strength")}</span>
+                    </div>
+                    <p className="text-xs text-foreground/80 leading-relaxed">{aiAnalysis.strength}</p>
+                  </div>
+                )}
+                {aiAnalysis.blind_spot && (
+                  <div className="p-4 rounded-xl bg-orange-400/5 border border-orange-400/20 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-orange-400" />
+                      <span className="text-xs font-black uppercase tracking-wider text-orange-400">{t("nlp_ai_blindspot")}</span>
+                    </div>
+                    <p className="text-xs text-foreground/80 leading-relaxed">{aiAnalysis.blind_spot}</p>
+                  </div>
+                )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              {/* Timeline predictions */}
+              <div className="space-y-3">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{t("nlp_roadmap_title")}</p>
+                <div className="grid md:grid-cols-3 gap-3">
+                  {[
+                    { phase: "30 " + t("nlp_days"), text: aiAnalysis["30_day_prediction"], icon: Rocket, color: "text-primary", border: "border-primary/20", bg: "bg-primary/5" },
+                    { phase: "90 " + t("nlp_days"), text: aiAnalysis["90_day_prediction"], icon: Star,   color: "text-yellow-400", border: "border-yellow-400/20", bg: "bg-yellow-400/5" },
+                    { phase: "1 " + t("nlp_year"),  text: aiAnalysis["1_year_vision"],     icon: Crown,  color: "text-purple-400", border: "border-purple-400/20", bg: "bg-purple-400/5" },
+                  ].map((r, i) => r.text ? (
+                    <div key={i} className={`p-4 rounded-xl ${r.bg} border ${r.border} space-y-2`}>
+                      <div className="flex items-center gap-2">
+                        <r.icon className={`w-4 h-4 ${r.color} shrink-0`} />
+                        <span className={`text-xs font-black ${r.color}`}>{r.phase}</span>
+                      </div>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{r.text}</p>
+                    </div>
+                  ) : null)}
+                </div>
+              </div>
+
+              {/* Daily affirmation from AI */}
+              {aiAnalysis.daily_affirmation && (
+                <div className="p-4 rounded-xl bg-purple-400/5 border border-purple-400/20 text-center space-y-2">
+                  <Sparkles className="w-5 h-5 text-purple-400 mx-auto" />
+                  <p className="text-sm font-bold italic text-foreground/90">"{aiAnalysis.daily_affirmation}"</p>
+                </div>
+              )}
+
+              {/* Growth action */}
+              {aiAnalysis.growth_action && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-green-400/5 border border-green-400/30">
+                  <Zap className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wider text-green-400">{t("nlp_ai_action")}</p>
+                    <p className="text-xs text-foreground/80 mt-1 leading-relaxed">{aiAnalysis.growth_action}</p>
+                  </div>
+                </div>
+              )}
+
+            </CardContent>
+          </Card>
+        )}
       </section>
 
       {/* ── CTA ──────────────────────────────────────────────────── */}

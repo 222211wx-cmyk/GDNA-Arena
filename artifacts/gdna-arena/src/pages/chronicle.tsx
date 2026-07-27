@@ -18,13 +18,13 @@ import {
   Eye, Flame, Crown
 } from "lucide-react";
 
-// ── AI Future Predictions ────────────────────────────────────────────────────
-const AI_PREDICTIONS = [
-  { confidence: 94, key: "chrono_pred_1", icon: Vote,        color: "text-primary",    bar: "bg-primary" },
-  { confidence: 87, key: "chrono_pred_2", icon: Gamepad2,    color: "text-yellow-400", bar: "bg-yellow-400" },
-  { confidence: 91, key: "chrono_pred_3", icon: TrendingUp,  color: "text-green-400",  bar: "bg-green-400" },
-  { confidence: 78, key: "chrono_pred_4", icon: Globe,       color: "text-purple-400", bar: "bg-purple-400" },
-  { confidence: 96, key: "chrono_pred_5", icon: BrainCircuit,color: "text-orange-400", bar: "bg-orange-400" },
+// ── AI Future Predictions (static fallback only — real data fetched in component) ──
+const PRED_META = [
+  { icon: Vote,        color: "text-primary",    bar: "bg-primary" },
+  { icon: Gamepad2,    color: "text-yellow-400", bar: "bg-yellow-400" },
+  { icon: TrendingUp,  color: "text-green-400",  bar: "bg-green-400" },
+  { icon: Globe,       color: "text-purple-400", bar: "bg-purple-400" },
+  { icon: BrainCircuit,color: "text-orange-400", bar: "bg-orange-400" },
 ];
 
 // ── Animated counter hook ─────────────────────────────────────────────────────
@@ -60,9 +60,21 @@ function EraDivider({ label, icon: Icon, color }: { label: string; icon: typeof 
   );
 }
 
+interface ChronicleAiPredictions {
+  q3_2026?: string;
+  q4_2026?: string;
+  q1_2027?: string;
+  q2_2027?: string;
+  oracle_quote?: string;
+  confidence_score?: string;
+}
+
 export default function Chronicle() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [tick, setTick] = useState(0);
+  const [aiPredictions, setAiPredictions] = useState<ChronicleAiPredictions | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   const { data: traditions, isLoading: tradLoading } = useGetGsTraditions();
   const { data: ranking } = useGetGsRanking();
@@ -78,6 +90,20 @@ export default function Chronicle() {
     const id = setInterval(() => setTick(n => n + 1), 2000);
     return () => clearInterval(id);
   }, []);
+
+  // Fetch real AI predictions
+  useEffect(() => {
+    setAiLoading(true);
+    fetch(`${BASE}/api/chronicle/predictions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lang }),
+    })
+      .then(r => r.json())
+      .then(d => setAiPredictions(d.predictions ?? null))
+      .catch(() => {})
+      .finally(() => setAiLoading(false));
+  }, [lang]);
 
   const topDomain  = ranking?.ranking?.[0];
   const topFigures = figures?.figures?.slice(0, 3) ?? [];
@@ -401,78 +427,105 @@ export default function Chronicle() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  {AI_PREDICTIONS.map((pred, i) => (
-                    <motion.div
-                      key={pred.key}
-                      initial={{ opacity: 0, x: 20 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.1 }}
-                      className="space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <pred.icon className={`w-4 h-4 ${pred.color} shrink-0`} />
-                          <p className={`text-sm font-medium ${pred.color}`}>{t(pred.key)}</p>
+                {aiLoading && (
+                  <div className="flex items-center justify-center py-8 gap-3">
+                    <Cpu className="w-5 h-5 text-purple-400 animate-spin" />
+                    <span className="text-xs text-purple-400 uppercase tracking-widest font-mono">{t("chrono_ai_running")}</span>
+                  </div>
+                )}
+
+                {aiPredictions && !aiLoading && (
+                  <div className="space-y-4">
+                    {[
+                      { quarter: "Q3 2026", text: aiPredictions.q3_2026, meta: PRED_META[0] },
+                      { quarter: "Q4 2026", text: aiPredictions.q4_2026, meta: PRED_META[1] },
+                      { quarter: "Q1 2027", text: aiPredictions.q1_2027, meta: PRED_META[2] },
+                      { quarter: "Q2 2027", text: aiPredictions.q2_2027, meta: PRED_META[3] },
+                    ].filter(p => p.text).map((pred, i) => (
+                      <motion.div
+                        key={pred.quarter}
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: i * 0.1 }}
+                        className="space-y-1.5"
+                      >
+                        <div className="flex items-start gap-3">
+                          <pred.meta.icon className={`w-4 h-4 ${pred.meta.color} shrink-0 mt-0.5`} />
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className={`text-xs font-black font-mono ${pred.meta.color}`}>{pred.quarter}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-xs font-black font-mono ${pred.meta.color}`}>
+                                  {aiPredictions.confidence_score ?? "92"}%
+                                </span>
+                                <Badge className={`text-xs px-1.5 py-0 ${pred.meta.color} bg-current/10 border-current/30`}>
+                                  {t("chrono_confidence")}
+                                </Badge>
+                              </div>
+                            </div>
+                            <p className={`text-sm ${pred.meta.color} font-medium leading-relaxed`}>{pred.text}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-black font-mono ${pred.color}`}>{pred.confidence}%</span>
-                          <Badge className={`text-xs px-1.5 py-0 ${pred.color} bg-current/10 border-current/30`}>
-                            {t("chrono_confidence")}
-                          </Badge>
+                        <div className="h-1.5 rounded-full bg-border/40 overflow-hidden ml-7">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            whileInView={{ width: `${aiPredictions.confidence_score ?? 92}%` }}
+                            viewport={{ once: true }}
+                            transition={{ duration: 1.2, delay: 0.2 + i * 0.12, ease: "easeOut" }}
+                            className={`h-full rounded-full ${pred.meta.bar} opacity-80`}
+                          />
                         </div>
+                      </motion.div>
+                    ))}
+
+                    {aiPredictions.oracle_quote && (
+                      <div className="mt-4 pt-4 border-t border-purple-400/20 text-center">
+                        <p className="text-xs text-purple-400/70 uppercase tracking-widest font-mono mb-2">{t("chrono_oracle")}</p>
+                        <p className="text-sm italic text-purple-400 font-bold">"{aiPredictions.oracle_quote}"</p>
                       </div>
-                      <div className="h-2 rounded-full bg-border/40 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          whileInView={{ width: `${pred.confidence}%` }}
-                          viewport={{ once: true }}
-                          transition={{ duration: 1.2, delay: 0.2 + i * 0.12, ease: "easeOut" }}
-                          className={`h-full rounded-full ${pred.bar} opacity-80`}
-                        />
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Future Roadmap */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="grid md:grid-cols-3 gap-4"
-          >
-            {[
-              { icon: Gamepad2, phase: "Q3 2026", key: "chrono_future_1", color: "text-primary",    bg: "bg-primary/10",    border: "border-primary/30" },
-              { icon: Globe,    phase: "Q4 2026", key: "chrono_future_2", color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/30" },
-              { icon: Star,     phase: "Q1 2027", key: "chrono_future_3", color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30" },
-            ].map((item, i) => (
-              <motion.div
-                key={item.key}
-                initial={{ opacity: 0, y: 15 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.12 }}
-              >
-                <Card className={`${item.border} border h-full`}>
-                  <CardContent className={`p-5 ${item.bg} h-full space-y-3`}>
-                    <div className="flex items-center justify-between">
-                      <item.icon className={`w-6 h-6 ${item.color}`} />
-                      <span className={`text-xs font-black font-mono ${item.color} px-2 py-0.5 rounded border border-current/30 bg-current/10`}>
-                        {item.phase}
-                      </span>
-                    </div>
-                    <p className={`font-bold uppercase tracking-wider text-sm ${item.color}`}>{t(item.key)}</p>
-                    <p className="text-xs text-muted-foreground">{t(item.key + "_desc")}</p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </motion.div>
+          {/* Future Roadmap — driven by AI predictions */}
+          {aiPredictions && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="grid md:grid-cols-3 gap-4"
+            >
+              {[
+                { icon: Gamepad2, phase: "Q3 2026", text: aiPredictions.q3_2026 ?? t("chrono_future_1"), color: "text-primary",    bg: "bg-primary/10",    border: "border-primary/30" },
+                { icon: Globe,    phase: "Q4 2026", text: aiPredictions.q4_2026 ?? t("chrono_future_2"), color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/30" },
+                { icon: Star,     phase: "Q1 2027", text: aiPredictions.q1_2027 ?? t("chrono_future_3"), color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30" },
+              ].map((item, i) => (
+                <motion.div
+                  key={item.phase}
+                  initial={{ opacity: 0, y: 15 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.12 }}
+                >
+                  <Card className={`${item.border} border h-full`}>
+                    <CardContent className={`p-5 ${item.bg} h-full space-y-3`}>
+                      <div className="flex items-center justify-between">
+                        <item.icon className={`w-6 h-6 ${item.color}`} />
+                        <span className={`text-xs font-black font-mono ${item.color} px-2 py-0.5 rounded border border-current/30 bg-current/10`}>
+                          {item.phase}
+                        </span>
+                      </div>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{item.text}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
 
           {/* AI Vision Statement */}
           <motion.div
