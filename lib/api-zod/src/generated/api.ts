@@ -130,6 +130,164 @@ export const ClaimDailyRewardResponse = zod.object({
 
 
 /**
+ * @summary Get all domains
+ */
+export const GetGsDomainsResponse = zod.object({
+  "domains": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "icon": zod.string(),
+  "figureCount": zod.number(),
+  "totalVotes": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get public figures (optionally filtered by domain)
+ */
+export const GetGsFiguresQueryParams = zod.object({
+  "domain": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetGsFiguresResponse = zod.object({
+  "figures": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "domainLabel": zod.string(),
+  "nationality": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "votes": zod.number(),
+  "rank": zod.number(),
+  "bio": zod.string()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get a single figure with full stats
+ */
+export const GetGsFigureParams = zod.object({
+  "figureId": zod.coerce.number()
+})
+
+export const GetGsFigureResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "domainLabel": zod.string(),
+  "nationality": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "votes": zod.number(),
+  "rank": zod.number(),
+  "bio": zod.string(),
+  "recentVotes": zod.number(),
+  "voteTrend": zod.number()
+})
+
+
+/**
+ * @summary Vote for a figure (like / support)
+ */
+export const VoteGsFigureParams = zod.object({
+  "figureId": zod.coerce.number()
+})
+
+export const VoteGsFigureResponse = zod.object({
+  "figureId": zod.number(),
+  "newVotes": zod.number(),
+  "newRank": zod.number(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Global ranking — top figures per domain
+ */
+export const GetGsRankingResponse = zod.object({
+  "ranking": zod.array(zod.object({
+  "domain": zod.string(),
+  "domainLabel": zod.string(),
+  "icon": zod.string(),
+  "figures": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "domain": zod.string(),
+  "domainLabel": zod.string(),
+  "nationality": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "votes": zod.number(),
+  "rank": zod.number(),
+  "bio": zod.string()
+}))
+})),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Get news articles (optionally filtered by domain)
+ */
+export const GetGsNewsQueryParams = zod.object({
+  "domain": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetGsNewsResponse = zod.object({
+  "articles": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "domain": zod.string(),
+  "domainLabel": zod.string(),
+  "source": zod.string(),
+  "publishedAt": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "isBreaking": zod.boolean()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get traditions and archaeological sites
+ */
+export const GetGsTraditionsQueryParams = zod.object({
+  "category": zod.coerce.string().optional()
+})
+
+export const GetGsTraditionsResponse = zod.object({
+  "traditions": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "country": zod.string(),
+  "category": zod.string(),
+  "description": zod.string(),
+  "imageUrl": zod.string().nullable(),
+  "period": zod.string(),
+  "isArchaeological": zod.boolean()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get breaking news ticker items
+ */
+export const GetGsTickerResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "text": zod.string(),
+  "domain": zod.string(),
+  "isBreaking": zod.boolean()
+}))
+})
+
+
+/**
  * @summary Get user transaction history
  */
 export const GetTransactionsResponse = zod.object({

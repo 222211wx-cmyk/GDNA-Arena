@@ -1,0 +1,1 @@
+- [GlobalStar Platform](globalstar-platform.md) — voting/ranking platform at /globalstar/; router paths must be relative, AI moderation live via OpenAI.

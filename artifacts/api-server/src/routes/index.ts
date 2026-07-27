@@ -6,6 +6,7 @@ import chatRouter from "./chat";
 import gamesRouter from "./games";
 import rewardsRouter from "./rewards";
 import walletRouter from "./wallet";
+import globalstarRouter from "./globalstar";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(chatRouter);
 router.use(gamesRouter);
 router.use(rewardsRouter);
 router.use(walletRouter);
+router.use(globalstarRouter);
 
 export default router;

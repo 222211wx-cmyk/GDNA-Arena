@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/globalstar/"
+title = "GlobalStar — منصة التصويت الذكية"
+version = "1.0.0"
+id = "artifacts/globalstar"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/globalstar/" ]
+localPort = 23159
+
+[services.development]
+run = "pnpm --filter @workspace/globalstar run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/globalstar", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/globalstar/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23159"
+BASE_PATH = "/globalstar/"

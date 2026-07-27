@@ -13,6 +13,7 @@ tags:
   - name: games
   - name: rewards
   - name: wallet
+  - name: globalstar
 paths:
   /healthz:
     get:
@@ -178,6 +179,162 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /gs/domains:
+    get:
+      operationId: getGsDomains
+      tags: [globalstar]
+      summary: Get all domains
+      responses:
+        "200":
+          description: Domain list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsDomainsResponse"
+
+  /gs/figures:
+    get:
+      operationId: getGsFigures
+      tags: [globalstar]
+      summary: Get public figures (optionally filtered by domain)
+      parameters:
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Figure list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsFiguresResponse"
+
+  /gs/figures/{figureId}:
+    get:
+      operationId: getGsFigure
+      tags: [globalstar]
+      summary: Get a single figure with full stats
+      parameters:
+        - name: figureId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Figure detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsFigureDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gs/figures/{figureId}/vote:
+    post:
+      operationId: voteGsFigure
+      tags: [globalstar]
+      summary: Vote for a figure (like / support)
+      parameters:
+        - name: figureId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Vote recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsVoteResult"
+        "404":
+          description: Figure not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gs/ranking:
+    get:
+      operationId: getGsRanking
+      tags: [globalstar]
+      summary: Global ranking — top figures per domain
+      responses:
+        "200":
+          description: Ranking by domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsRankingResponse"
+
+  /gs/news:
+    get:
+      operationId: getGsNews
+      tags: [globalstar]
+      summary: Get news articles (optionally filtered by domain)
+      parameters:
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: News list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsNewsResponse"
+
+  /gs/traditions:
+    get:
+      operationId: getGsTraditions
+      tags: [globalstar]
+      summary: Get traditions and archaeological sites
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Traditions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsTraditionsResponse"
+
+  /gs/ticker:
+    get:
+      operationId: getGsTicker
+      tags: [globalstar]
+      summary: Get breaking news ticker items
+      responses:
+        "200":
+          description: Ticker items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GsTickerResponse"
+
   /wallet/transactions:
     get:
       operationId: getTransactions
@@ -334,6 +491,218 @@ components:
         createdAt:
           type: string
       required: [id, amount, type, description, createdAt]
+
+    GsDomain:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        icon:
+          type: string
+        figureCount:
+          type: integer
+        totalVotes:
+          type: integer
+      required: [id, label, icon, figureCount, totalVotes]
+
+    GsDomainsResponse:
+      type: object
+      properties:
+        domains:
+          type: array
+          items:
+            $ref: "#/components/schemas/GsDomain"
+      required: [domains]
+
+    GsFigure:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        domain:
+          type: string
+        domainLabel:
+          type: string
+        nationality:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        votes:
+          type: integer
+        rank:
+          type: integer
+        bio:
+          type: string
+      required: [id, name, domain, domainLabel, nationality, imageUrl, votes, rank, bio]
+
+    GsFigureDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        domain:
+          type: string
+        domainLabel:
+          type: string
+        nationality:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        votes:
+          type: integer
+        rank:
+          type: integer
+        bio:
+          type: string
+        recentVotes:
+          type: integer
+        voteTrend:
+          type: number
+      required: [id, name, domain, domainLabel, nationality, imageUrl, votes, rank, bio, recentVotes, voteTrend]
+
+    GsFiguresResponse:
+      type: object
+      properties:
+        figures:
+          type: array
+          items:
+            $ref: "#/components/schemas/GsFigure"
+        total:
+          type: integer
+      required: [figures, total]
+
+    GsVoteResult:
+      type: object
+      properties:
+        figureId:
+          type: integer
+        newVotes:
+          type: integer
+        newRank:
+          type: integer
+        message:
+          type: string
+      required: [figureId, newVotes, newRank, message]
+
+    GsDomainRanking:
+      type: object
+      properties:
+        domain:
+          type: string
+        domainLabel:
+          type: string
+        icon:
+          type: string
+        figures:
+          type: array
+          items:
+            $ref: "#/components/schemas/GsFigure"
+      required: [domain, domainLabel, icon, figures]
+
+    GsRankingResponse:
+      type: object
+      properties:
+        ranking:
+          type: array
+          items:
+            $ref: "#/components/schemas/GsDomainRanking"
+        updatedAt:
+          type: string
+      required: [ranking, updatedAt]
+
+    GsNewsArticle:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        summary:
+          type: string
+        domain:
+          type: string
+        domainLabel:
+          type: string
+        source:
+          type: string
+        publishedAt:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        isBreaking:
+          type: boolean
+      required: [id, title, summary, domain, domainLabel, source, publishedAt, imageUrl, isBreaking]
+
+    GsNewsResponse:
+      type: object
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/GsNewsArticle"
+        total:
+          type: integer
+      required: [articles, total]
+
+    GsTradition:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        country:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        period:
+          type: string
+        isArchaeological:
+          type: boolean
+      required: [id, name, country, category, description, imageUrl, period, isArchaeological]
+
+    GsTraditionsResponse:
+      type: object
+      properties:
+        traditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/GsTradition"
+        total:
+          type: integer
+      required: [traditions, total]
+
+    GsTickerItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        domain:
+          type: string
+        isBreaking:
+          type: boolean
+      required: [id, text, domain, isBreaking]
+
+    GsTickerResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GsTickerItem"
+      required: [items]
 
     TransactionsResponse:
       type: object

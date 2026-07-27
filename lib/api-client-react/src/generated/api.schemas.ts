@@ -80,8 +80,132 @@ export interface TransactionItem {
   createdAt: string;
 }
 
+export interface GsDomain {
+  id: string;
+  label: string;
+  icon: string;
+  figureCount: number;
+  totalVotes: number;
+}
+
+export interface GsDomainsResponse {
+  domains: GsDomain[];
+}
+
+export interface GsFigure {
+  id: number;
+  name: string;
+  domain: string;
+  domainLabel: string;
+  nationality: string;
+  /** @nullable */
+  imageUrl: string | null;
+  votes: number;
+  rank: number;
+  bio: string;
+}
+
+export interface GsFigureDetail {
+  id: number;
+  name: string;
+  domain: string;
+  domainLabel: string;
+  nationality: string;
+  /** @nullable */
+  imageUrl: string | null;
+  votes: number;
+  rank: number;
+  bio: string;
+  recentVotes: number;
+  voteTrend: number;
+}
+
+export interface GsFiguresResponse {
+  figures: GsFigure[];
+  total: number;
+}
+
+export interface GsVoteResult {
+  figureId: number;
+  newVotes: number;
+  newRank: number;
+  message: string;
+}
+
+export interface GsDomainRanking {
+  domain: string;
+  domainLabel: string;
+  icon: string;
+  figures: GsFigure[];
+}
+
+export interface GsRankingResponse {
+  ranking: GsDomainRanking[];
+  updatedAt: string;
+}
+
+export interface GsNewsArticle {
+  id: number;
+  title: string;
+  summary: string;
+  domain: string;
+  domainLabel: string;
+  source: string;
+  publishedAt: string;
+  /** @nullable */
+  imageUrl: string | null;
+  isBreaking: boolean;
+}
+
+export interface GsNewsResponse {
+  articles: GsNewsArticle[];
+  total: number;
+}
+
+export interface GsTradition {
+  id: number;
+  name: string;
+  country: string;
+  category: string;
+  description: string;
+  /** @nullable */
+  imageUrl: string | null;
+  period: string;
+  isArchaeological: boolean;
+}
+
+export interface GsTraditionsResponse {
+  traditions: GsTradition[];
+  total: number;
+}
+
+export interface GsTickerItem {
+  id: number;
+  text: string;
+  domain: string;
+  isBreaking: boolean;
+}
+
+export interface GsTickerResponse {
+  items: GsTickerItem[];
+}
+
 export interface TransactionsResponse {
   transactions: TransactionItem[];
   balance: number;
 }
+
+export type GetGsFiguresParams = {
+domain?: string;
+limit?: number;
+};
+
+export type GetGsNewsParams = {
+domain?: string;
+limit?: number;
+};
+
+export type GetGsTraditionsParams = {
+category?: string;
+};
 

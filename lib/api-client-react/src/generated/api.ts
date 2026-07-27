@@ -23,6 +23,17 @@ import type {
   AuthUser,
   DailyRewardResult,
   ErrorResponse,
+  GetGsFiguresParams,
+  GetGsNewsParams,
+  GetGsTraditionsParams,
+  GsDomainsResponse,
+  GsFigureDetail,
+  GsFiguresResponse,
+  GsNewsResponse,
+  GsRankingResponse,
+  GsTickerResponse,
+  GsTraditionsResponse,
+  GsVoteResult,
   HealthStatus,
   LeaderboardResponse,
   LoginBody,
@@ -639,6 +650,636 @@ export const useClaimDailyReward = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getClaimDailyRewardMutationOptions(options));
     }
+
+export const getGetGsDomainsUrl = () => {
+
+
+
+
+  return `/api/gs/domains`
+}
+
+/**
+ * @summary Get all domains
+ */
+export const getGsDomains = async ( options?: RequestInit): Promise<GsDomainsResponse> => {
+
+  return customFetch<GsDomainsResponse>(getGetGsDomainsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGsDomainsQueryKey = () => {
+    return [
+    `/api/gs/domains`
+    ] as const;
+    }
+
+
+export const getGetGsDomainsQueryOptions = <TData = Awaited<ReturnType<typeof getGsDomains>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsDomains>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGsDomainsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGsDomains>>> = ({ signal }) => getGsDomains({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGsDomains>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGsDomainsQueryResult = NonNullable<Awaited<ReturnType<typeof getGsDomains>>>
+export type GetGsDomainsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get all domains
+ */
+
+export function useGetGsDomains<TData = Awaited<ReturnType<typeof getGsDomains>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsDomains>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGsDomainsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGsFiguresUrl = (params?: GetGsFiguresParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gs/figures?${stringifiedParams}` : `/api/gs/figures`
+}
+
+/**
+ * @summary Get public figures (optionally filtered by domain)
+ */
+export const getGsFigures = async (params?: GetGsFiguresParams, options?: RequestInit): Promise<GsFiguresResponse> => {
+
+  return customFetch<GsFiguresResponse>(getGetGsFiguresUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGsFiguresQueryKey = (params?: GetGsFiguresParams,) => {
+    return [
+    `/api/gs/figures`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetGsFiguresQueryOptions = <TData = Awaited<ReturnType<typeof getGsFigures>>, TError = ErrorType<unknown>>(params?: GetGsFiguresParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsFigures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGsFiguresQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGsFigures>>> = ({ signal }) => getGsFigures(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGsFigures>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGsFiguresQueryResult = NonNullable<Awaited<ReturnType<typeof getGsFigures>>>
+export type GetGsFiguresQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get public figures (optionally filtered by domain)
+ */
+
+export function useGetGsFigures<TData = Awaited<ReturnType<typeof getGsFigures>>, TError = ErrorType<unknown>>(
+ params?: GetGsFiguresParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsFigures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGsFiguresQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGsFigureUrl = (figureId: number,) => {
+
+
+
+
+  return `/api/gs/figures/${figureId}`
+}
+
+/**
+ * @summary Get a single figure with full stats
+ */
+export const getGsFigure = async (figureId: number, options?: RequestInit): Promise<GsFigureDetail> => {
+
+  return customFetch<GsFigureDetail>(getGetGsFigureUrl(figureId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGsFigureQueryKey = (figureId: number,) => {
+    return [
+    `/api/gs/figures/${figureId}`
+    ] as const;
+    }
+
+
+export const getGetGsFigureQueryOptions = <TData = Awaited<ReturnType<typeof getGsFigure>>, TError = ErrorType<ErrorResponse>>(figureId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsFigure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGsFigureQueryKey(figureId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGsFigure>>> = ({ signal }) => getGsFigure(figureId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: figureId !== null && figureId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGsFigure>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGsFigureQueryResult = NonNullable<Awaited<ReturnType<typeof getGsFigure>>>
+export type GetGsFigureQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a single figure with full stats
+ */
+
+export function useGetGsFigure<TData = Awaited<ReturnType<typeof getGsFigure>>, TError = ErrorType<ErrorResponse>>(
+ figureId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsFigure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGsFigureQueryOptions(figureId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getVoteGsFigureUrl = (figureId: number,) => {
+
+
+
+
+  return `/api/gs/figures/${figureId}/vote`
+}
+
+/**
+ * @summary Vote for a figure (like / support)
+ */
+export const voteGsFigure = async (figureId: number, options?: RequestInit): Promise<GsVoteResult> => {
+
+  return customFetch<GsVoteResult>(getVoteGsFigureUrl(figureId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getVoteGsFigureMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof voteGsFigure>>, TError,{figureId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof voteGsFigure>>, TError,{figureId: number}, TContext> => {
+
+const mutationKey = ['voteGsFigure'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof voteGsFigure>>, {figureId: number}> = (props) => {
+          const {figureId} = props ?? {};
+
+          return  voteGsFigure(figureId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VoteGsFigureMutationResult = NonNullable<Awaited<ReturnType<typeof voteGsFigure>>>
+
+    export type VoteGsFigureMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Vote for a figure (like / support)
+ */
+export const useVoteGsFigure = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof voteGsFigure>>, TError,{figureId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof voteGsFigure>>,
+        TError,
+        {figureId: number},
+        TContext
+      > => {
+      return useMutation(getVoteGsFigureMutationOptions(options));
+    }
+
+export const getGetGsRankingUrl = () => {
+
+
+
+
+  return `/api/gs/ranking`
+}
+
+/**
+ * @summary Global ranking — top figures per domain
+ */
+export const getGsRanking = async ( options?: RequestInit): Promise<GsRankingResponse> => {
+
+  return customFetch<GsRankingResponse>(getGetGsRankingUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGsRankingQueryKey = () => {
+    return [
+    `/api/gs/ranking`
+    ] as const;
+    }
+
+
+export const getGetGsRankingQueryOptions = <TData = Awaited<ReturnType<typeof getGsRanking>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsRanking>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGsRankingQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGsRanking>>> = ({ signal }) => getGsRanking({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGsRanking>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGsRankingQueryResult = NonNullable<Awaited<ReturnType<typeof getGsRanking>>>
+export type GetGsRankingQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Global ranking — top figures per domain
+ */
+
+export function useGetGsRanking<TData = Awaited<ReturnType<typeof getGsRanking>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsRanking>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGsRankingQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGsNewsUrl = (params?: GetGsNewsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gs/news?${stringifiedParams}` : `/api/gs/news`
+}
+
+/**
+ * @summary Get news articles (optionally filtered by domain)
+ */
+export const getGsNews = async (params?: GetGsNewsParams, options?: RequestInit): Promise<GsNewsResponse> => {
+
+  return customFetch<GsNewsResponse>(getGetGsNewsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGsNewsQueryKey = (params?: GetGsNewsParams,) => {
+    return [
+    `/api/gs/news`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetGsNewsQueryOptions = <TData = Awaited<ReturnType<typeof getGsNews>>, TError = ErrorType<unknown>>(params?: GetGsNewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGsNewsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGsNews>>> = ({ signal }) => getGsNews(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGsNews>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGsNewsQueryResult = NonNullable<Awaited<ReturnType<typeof getGsNews>>>
+export type GetGsNewsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get news articles (optionally filtered by domain)
+ */
+
+export function useGetGsNews<TData = Awaited<ReturnType<typeof getGsNews>>, TError = ErrorType<unknown>>(
+ params?: GetGsNewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGsNewsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGsTraditionsUrl = (params?: GetGsTraditionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gs/traditions?${stringifiedParams}` : `/api/gs/traditions`
+}
+
+/**
+ * @summary Get traditions and archaeological sites
+ */
+export const getGsTraditions = async (params?: GetGsTraditionsParams, options?: RequestInit): Promise<GsTraditionsResponse> => {
+
+  return customFetch<GsTraditionsResponse>(getGetGsTraditionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGsTraditionsQueryKey = (params?: GetGsTraditionsParams,) => {
+    return [
+    `/api/gs/traditions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetGsTraditionsQueryOptions = <TData = Awaited<ReturnType<typeof getGsTraditions>>, TError = ErrorType<unknown>>(params?: GetGsTraditionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsTraditions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGsTraditionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGsTraditions>>> = ({ signal }) => getGsTraditions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGsTraditions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGsTraditionsQueryResult = NonNullable<Awaited<ReturnType<typeof getGsTraditions>>>
+export type GetGsTraditionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get traditions and archaeological sites
+ */
+
+export function useGetGsTraditions<TData = Awaited<ReturnType<typeof getGsTraditions>>, TError = ErrorType<unknown>>(
+ params?: GetGsTraditionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsTraditions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGsTraditionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGsTickerUrl = () => {
+
+
+
+
+  return `/api/gs/ticker`
+}
+
+/**
+ * @summary Get breaking news ticker items
+ */
+export const getGsTicker = async ( options?: RequestInit): Promise<GsTickerResponse> => {
+
+  return customFetch<GsTickerResponse>(getGetGsTickerUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGsTickerQueryKey = () => {
+    return [
+    `/api/gs/ticker`
+    ] as const;
+    }
+
+
+export const getGetGsTickerQueryOptions = <TData = Awaited<ReturnType<typeof getGsTicker>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsTicker>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGsTickerQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGsTicker>>> = ({ signal }) => getGsTicker({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGsTicker>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGsTickerQueryResult = NonNullable<Awaited<ReturnType<typeof getGsTicker>>>
+export type GetGsTickerQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get breaking news ticker items
+ */
+
+export function useGetGsTicker<TData = Awaited<ReturnType<typeof getGsTicker>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGsTicker>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGsTickerQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetTransactionsUrl = () => {
 
