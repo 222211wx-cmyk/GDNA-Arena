@@ -18,6 +18,11 @@ import ChatPage from "@/pages/chat";
 import Wallet from "@/pages/wallet";
 import NotFound from "@/pages/not-found";
 import GlobalStarApp from "@/pages/globalstar-app";
+import Hub from "@/pages/hub";
+import Empire from "@/pages/empire";
+import Legal from "@/pages/legal";
+import Chronicle from "@/pages/chronicle";
+import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 
 const queryClient = new QueryClient();
@@ -32,6 +37,11 @@ function Router() {
           <Route path="/login" component={Login} />
           <Route path="/register" component={Register} />
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/hub" component={Hub} />
+          <Route path="/empire" component={Empire} />
+          <Route path="/legal" component={Legal} />
+          <Route path="/legal/:tab" component={Legal} />
+          <Route path="/chronicle" component={Chronicle} />
           <Route path="/games" component={Games} />
           <Route path="/games/globalstar" component={GlobalStarApp} />
           <Route path="/games/globalstar/:rest*" component={GlobalStarApp} />
@@ -42,6 +52,7 @@ function Router() {
           <Route component={NotFound} />
         </Switch>
       </main>
+      <Footer />
       <GdnAiFloating />
     </div>
   );
