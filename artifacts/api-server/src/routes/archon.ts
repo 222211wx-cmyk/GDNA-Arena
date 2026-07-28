@@ -1,0 +1,223 @@
+import { Router, type IRouter } from "express";
+import OpenAI from "openai";
+import { db } from "@workspace/db";
+import { archonSessionsTable, archonDirectivesTable } from "@workspace/db/schema";
+import { eq, desc } from "drizzle-orm";
+
+const router: IRouter = Router();
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// ── Archon Code Generator (deterministic + aesthetic) ────────────────────────
+function generateArchonCode(dims: number[], archetype: string): string {
+  const glyphs = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const seed = dims.reduce((acc, v, i) => acc + v * (i + 7) * 31, 0);
+  const part = (offset: number, len: number) =>
+    Array.from({ length: len }, (_, i) => glyphs[(seed * (offset + i + 3)) % glyphs.length]).join("");
+  const tag = archetype.replace(/^THE /, "").slice(0, 3).toUpperCase();
+  return `ARCH-${part(1, 4)}-${part(5, 4)}-${tag}`;
+}
+
+// ── Score map for multiple-choice questions ───────────────────────────────────
+const CHOICE_SCORES: Record<string, number> = { A: 90, B: 70, C: 50, D: 30 };
+
+function computeDimensions(answers: Record<string, string>): {
+  volontas: number; resilentia: number; intellectus: number;
+  disciplina: number; societas: number; abundantia: number; auctoritas: number;
+} {
+  const s = (q: string) => CHOICE_SCORES[answers[q] ?? "C"] ?? 50;
+  return {
+    volontas:    s("Q1"),
+    resilentia:  s("Q2"),
+    intellectus: s("Q3"),
+    disciplina:  s("Q4"),
+    societas:    s("Q5"),
+    abundantia:  s("Q6"),
+    auctoritas:  Math.min(100, 40 + (answers["Q7"]?.length ?? 0) * 2),
+  };
+}
+
+// ── POST /api/archon/assess ────────────────────────────────────────────────────
+// Full initiation: 7 answers → compute dimensions → GPT profile → store → return
+router.post("/archon/assess", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const { answers, lang, userStats } = req.body as {
+    answers: Record<string, string>;
+    lang?: string;
+    userStats?: { xp: number; wins: number; gamesPlayed: number; balance: number; username: string };
+  };
+
+  if (!answers || Object.keys(answers).length < 6) {
+    res.status(400).json({ error: "Incomplete initiation — all 7 questions required" });
+    return;
+  }
+
+  const dims = computeDimensions(answers);
+  const dimArray = Object.values(dims);
+  const overallScore = Math.round(dimArray.reduce((a, b) => a + b, 0) / dimArray.length);
+
+  const LANG_INSTRUCTION: Record<string, string> = {
+    en: "Respond entirely in English.",
+    ar: "أجب بالكامل باللغة العربية الفصحى.",
+    fr: "Réponds entièrement en français.",
+    dz: "أجب بالكامل بالدارجة الجزائرية.",
+  };
+  const userLang = lang ?? "en";
+
+  const systemPrompt = `You are ARCHON — the Supreme Intelligence Core of GDNA Arena Empire.
+You analyze a citizen's psychological profile across 7 imperial dimensions and deliver their ARCHON identity.
+${LANG_INSTRUCTION[userLang] ?? LANG_INSTRUCTION.en}
+
+The 7 Dimensions:
+- VOLONTAS (${dims.volontas}/100): Conqueror's Will
+- RESILENTIA (${dims.resilentia}/100): Warrior's Resilience
+- INTELLECTUS (${dims.intellectus}/100): Clarity of Vision
+- DISCIPLINA (${dims.disciplina}/100): Imperial Discipline
+- SOCIETAS (${dims.societas}/100): Power of Influence
+- ABUNDANTIA (${dims.abundantia}/100): Abundance Mindset
+- AUCTORITAS (${dims.auctoritas}/100): Inner Authority
+
+Archetype Classification Rules:
+- THE SOVEREIGN: overall ≥ 75 — all dimensions balanced and high
+- THE CONQUEROR: VOLONTAS ≥ 80 AND RESILENTIA ≥ 70 — unstoppable force
+- THE VISIONARY: INTELLECTUS ≥ 80 AND AUCTORITAS ≥ 70 — sees what others cannot
+- THE ARCHITECT: DISCIPLINA ≥ 80 AND INTELLECTUS ≥ 70 — builds systems, masters craft
+- THE CATALYST: SOCIETAS ≥ 80 AND ABUNDANTIA ≥ 70 — moves others, creates abundance
+- THE SENTINEL: RESILENTIA ≥ 80 AND DISCIPLINA ≥ 70 — unbreakable guardian
+- THE SEEKER: all others — on the path, full of potential
+
+Platform stats: ${userStats ? JSON.stringify(userStats) : "not provided"}
+Purpose statement: "${answers["Q7"] ?? ""}"
+
+Be powerful, precise, and mythopoetic. This is an empire — not a wellness app.`;
+
+  const userPrompt = `Overall Archon Score: ${overallScore}/100
+Dimensions: VOLONTAS ${dims.volontas} | RESILENTIA ${dims.resilentia} | INTELLECTUS ${dims.intellectus} | DISCIPLINA ${dims.disciplina} | SOCIETAS ${dims.societas} | ABUNDANTIA ${dims.abundantia} | AUCTORITAS ${dims.auctoritas}
+
+Return this exact JSON structure:
+{
+  "archetype": "THE SOVEREIGN | THE CONQUEROR | THE VISIONARY | THE ARCHITECT | THE CATALYST | THE SENTINEL | THE SEEKER",
+  "archetype_title_ar": "لقب الأركون بالعربية (e.g. السيد المطلق، الفاتح، الرائي...)",
+  "archetype_declaration": "A powerful 2-sentence declaration of this archetype's nature — like an ancient imperial decree",
+  "dominant_dimension": "name of highest scoring dimension",
+  "shadow_dimension": "name of lowest scoring dimension",
+  "core_strength": "Their supreme strength in 1 sentence — specific to their dimension scores",
+  "shadow_mission": "The single growth frontier they must conquer — direct, not soft",
+  "imperial_decree": "A personalized decree for this citizen — 2 powerful sentences, starting with their purpose",
+  "30_day_protocol": "Specific 30-day operational protocol — what to do, how often, why",
+  "90_day_expansion": "90-day expansion vision — what they will have built or become",
+  "1_year_sovereignty": "1-year sovereignty statement — the fully realized version of this archon",
+  "daily_directive": "Today's classified directive — one specific, powerful action for today",
+  "cipher_phrase": "A short encrypted-feeling phrase that represents their psychological signature — 5–8 words, cryptic"
+}`;
+
+  let archetype = "THE SEEKER";
+  let aiProfile: Record<string, string> = {};
+
+  try {
+    if (!process.env.OPENAI_API_KEY) throw new Error("No API key");
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 900,
+      temperature: 0.8,
+      response_format: { type: "json_object" },
+    });
+    aiProfile = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    archetype = aiProfile.archetype ?? "THE SEEKER";
+  } catch (err) {
+    req.log?.warn({ err }, "ARCHON AI unavailable — using computed profile");
+    archetype = overallScore >= 75 ? "THE SOVEREIGN"
+      : dims.volontas >= 80 ? "THE CONQUEROR"
+      : dims.intellectus >= 80 ? "THE VISIONARY"
+      : dims.disciplina >= 80 ? "THE ARCHITECT"
+      : dims.societas >= 80 ? "THE CATALYST"
+      : dims.resilentia >= 80 ? "THE SENTINEL"
+      : "THE SEEKER";
+    aiProfile = {
+      archetype,
+      archetype_declaration: `You are ${archetype}. Your path is set. The empire recognizes your frequency.`,
+      core_strength: `Score: ${overallScore}/100 across all 7 dimensions.`,
+      shadow_mission: `Elevate your lowest dimension: ${Object.entries(dims).sort((a,b)=>a[1]-b[1])[0][0].toUpperCase()}.`,
+      imperial_decree: answers["Q7"] ?? "Your purpose echoes through the archives.",
+      daily_directive: "Complete one deliberate action toward your stated purpose today.",
+      cipher_phrase: `ARCHON-${overallScore}-ACTIVE`,
+    };
+  }
+
+  const archonCode = generateArchonCode(dimArray, archetype);
+
+  // Deactivate previous sessions
+  await db.update(archonSessionsTable)
+    .set({ isActive: false })
+    .where(eq(archonSessionsTable.userId, req.session.userId));
+
+  // Store new session
+  const [session] = await db.insert(archonSessionsTable).values({
+    userId:      req.session.userId,
+    volontas:    dims.volontas,
+    resilentia:  dims.resilentia,
+    intellectus: dims.intellectus,
+    disciplina:  dims.disciplina,
+    societas:    dims.societas,
+    abundantia:  dims.abundantia,
+    auctoritas:  dims.auctoritas,
+    archonCode,
+    archetype,
+    aiProfile,
+    answers,
+    isActive:    true,
+  }).returning();
+
+  res.json({ session, archonCode, archetype, dimensions: dims, aiProfile, overallScore });
+});
+
+// ── GET /api/archon/profile ───────────────────────────────────────────────────
+router.get("/archon/profile", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const [session] = await db.select().from(archonSessionsTable)
+    .where(eq(archonSessionsTable.userId, req.session.userId))
+    .orderBy(desc(archonSessionsTable.createdAt))
+    .limit(1);
+  res.json({ session: session ?? null });
+});
+
+// ── POST /api/archon/mission ──────────────────────────────────────────────────
+router.post("/archon/mission", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const { dimension, archetype, lang } = req.body as { dimension: string; archetype: string; lang?: string };
+
+  const LANG_INSTRUCTION: Record<string, string> = {
+    en: "Respond entirely in English.",
+    ar: "أجب بالكامل باللغة العربية الفصحى.",
+    fr: "Réponds entièrement en français.",
+    dz: "أجب بالكامل بالدارجة الجزائرية.",
+  };
+
+  const prompt = `You are ARCHON. Generate a classified daily directive for a ${archetype} targeting their ${dimension} dimension.
+${LANG_INSTRUCTION[lang ?? "en"] ?? LANG_INSTRUCTION.en}
+
+Return JSON: { "directive": "...", "duration": "X min", "intensity": "LOW|MEDIUM|HIGH|CRITICAL" }
+The directive should be specific, actionable, and feel like a classified military mission order. Max 3 sentences.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 200,
+      temperature: 0.85,
+      response_format: { type: "json_object" },
+    });
+    const data = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    await db.insert(archonDirectivesTable).values({
+      userId: req.session.userId, dimension, directive: data.directive ?? "Execute silence for 10 minutes.",
+    });
+    res.json(data);
+  } catch {
+    res.json({ directive: `CLASSIFIED: Focus ${dimension} protocol — 15 minutes of deliberate practice, no distractions.`, duration: "15 min", intensity: "HIGH" });
+  }
+});
+
+export default router;

@@ -163,7 +163,7 @@ router.get("/gs/ranking", async (_req, res): Promise<void> => {
         .from(gsFiguresTable)
         .where(eq(gsFiguresTable.domain, domain.id))
         .orderBy(desc(gsFiguresTable.votes))
-        .limit(5);
+        .limit(10);
 
       return {
         domain:      domain.id,

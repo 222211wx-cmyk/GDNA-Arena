@@ -1,585 +1,966 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Brain, Zap, Target, TrendingUp, Sparkles, Star,
-  Eye, Heart, Shield, Flame, Clock, CheckCircle2,
-  ChevronRight, Trophy, Gamepad2, Vote, RotateCcw,
-  Lightbulb, Waves, Moon, Sun, ArrowRight, Crown,
-  BrainCircuit, Cpu, BarChart3, Rocket
-} from "lucide-react";
 
-// ── NLP Personality dimensions derived from platform behavior ─────────────────
-function getNlpProfile(xp: number, wins: number, gamesPlayed: number, balance: number) {
-  const winRate = gamesPlayed > 0 ? wins / gamesPlayed : 0;
-  return [
-    {
-      key: "nlp_dim_action",
-      score: Math.min(100, Math.round((gamesPlayed / 50) * 100)),
-      color: "text-primary", bar: "bg-primary",
-      icon: Zap, desc: "nlp_dim_action_desc",
-    },
-    {
-      key: "nlp_dim_resilience",
-      score: Math.min(100, Math.round(winRate * 100)),
-      color: "text-green-400", bar: "bg-green-400",
-      icon: Shield, desc: "nlp_dim_resilience_desc",
-    },
-    {
-      key: "nlp_dim_growth",
-      score: Math.min(100, Math.round((xp / 7500) * 100)),
-      color: "text-yellow-400", bar: "bg-yellow-400",
-      icon: TrendingUp, desc: "nlp_dim_growth_desc",
-    },
-    {
-      key: "nlp_dim_abundance",
-      score: Math.min(100, Math.round((balance / 5000) * 100)),
-      color: "text-purple-400", bar: "bg-purple-400",
-      icon: Sparkles, desc: "nlp_dim_abundance_desc",
-    },
-    {
-      key: "nlp_dim_vision",
-      score: Math.min(100, Math.round(((xp + gamesPlayed * 10) / 8000) * 100)),
-      color: "text-orange-400", bar: "bg-orange-400",
-      icon: Eye, desc: "nlp_dim_vision_desc",
-    },
-  ];
+const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface ArchonDimensions {
+  volontas: number; resilentia: number; intellectus: number;
+  disciplina: number; societas: number; abundantia: number; auctoritas: number;
+}
+interface ArchonProfile {
+  archonCode: string; archetype: string; dimensions: ArchonDimensions;
+  overallScore: number; aiProfile: Record<string, string>;
+  session?: { createdAt: string };
 }
 
-// ── Daily NLP Programs ────────────────────────────────────────────────────────
-const NLP_PROGRAMS = [
+// ── The 7 Archon Dimensions ────────────────────────────────────────────────────
+const DIMENSIONS = [
+  { key: "volontas",    latin: "VOLONTAS",    ar: "إرادة الفاتح",     color: "#C9A84C", glyph: "⚔" },
+  { key: "resilentia",  latin: "RESILENTIA",  ar: "صمود المحارب",    color: "#E8C97A", glyph: "🛡" },
+  { key: "intellectus", latin: "INTELLECTUS", ar: "وضوح الرؤية",     color: "#A8E6CF", glyph: "👁" },
+  { key: "disciplina",  latin: "DISCIPLINA",  ar: "انضباط الإمبراطور", color: "#DDA0DD", glyph: "⚙" },
+  { key: "societas",    latin: "SOCIETAS",    ar: "قوة التأثير",      color: "#87CEEB", glyph: "◈" },
+  { key: "abundantia",  latin: "ABUNDANTIA",  ar: "عقلية الوفرة",    color: "#98FB98", glyph: "∞" },
+  { key: "auctoritas",  latin: "AUCTORITAS",  ar: "السلطة الداخلية",  color: "#FFB6C1", glyph: "♔" },
+] as const;
+
+// ── The 7 Initiation Questions ─────────────────────────────────────────────────
+const QUESTIONS = [
   {
-    key: "nlp_prog_anchor", icon: Waves,  color: "text-primary",  bg: "bg-primary/10",
-    duration: "5 min", type: "nlp_type_anchor",
-    steps: ["nlp_prog_anchor_1","nlp_prog_anchor_2","nlp_prog_anchor_3"],
+    dim: "VOLONTAS", ar: "إرادة الفاتح", glyph: "⚔",
+    q: { en: "When confronted with an obstacle:", ar: "عند مواجهة عقبة:", fr: "Face à un obstacle :", dz: "كي تلقى عقبة:" },
+    choices: {
+      A: { en: "I strike directly — obstacles exist to be broken", ar: "أضرب مباشرة — العقبات وُجدت لتُكسر" },
+      B: { en: "I map the terrain first — strategy before force", ar: "أرسم المشهد أولاً — الاستراتيجية قبل القوة" },
+      C: { en: "I wait for the optimal moment — timing is power", ar: "أنتظر اللحظة المثلى — التوقيت هو القوة" },
+      D: { en: "I seek counsel — wisdom comes from others", ar: "أطلب المشورة — الحكمة تأتي من الآخرين" },
+    },
   },
   {
-    key: "nlp_prog_vision", icon: Eye,    color: "text-purple-400", bg: "bg-purple-400/10",
-    duration: "7 min", type: "nlp_type_visual",
-    steps: ["nlp_prog_vision_1","nlp_prog_vision_2","nlp_prog_vision_3"],
+    dim: "RESILENTIA", ar: "صمود المحارب", glyph: "🛡",
+    q: { en: "After a defeat:", ar: "بعد الهزيمة:", fr: "Après une défaite :", dz: "بعد هزيمة:" },
+    choices: {
+      A: { en: "I rise immediately — failure is information", ar: "أنهض فوراً — الفشل معلومة لا أكثر" },
+      B: { en: "I analyze deeply, then rebuild stronger", ar: "أحلل عميقاً ثم أبني أقوى" },
+      C: { en: "I need time to process before returning", ar: "أحتاج وقتاً لأستوعب قبل العودة" },
+      D: { en: "I question my direction entirely", ar: "أشكك في مساري بالكامل" },
+    },
   },
   {
-    key: "nlp_prog_reframe", icon: RotateCcw, color: "text-green-400", bg: "bg-green-400/10",
-    duration: "3 min", type: "nlp_type_cognitive",
-    steps: ["nlp_prog_reframe_1","nlp_prog_reframe_2","nlp_prog_reframe_3"],
+    dim: "INTELLECTUS", ar: "وضوح الرؤية", glyph: "👁",
+    q: { en: "Your sharpest clarity comes:", ar: "وضوحك الأقوى يأتي:", fr: "Ta clarté vient :", dz: "وضوحك الأقوى يجي:" },
+    choices: {
+      A: { en: "Under maximum pressure — fire forges steel", ar: "تحت الضغط الأقصى — النار تصنع الفولاذ" },
+      B: { en: "In deep solitary focus — silence reveals truth", ar: "في التركيز العميق المنفرد — الصمت يكشف الحقيقة" },
+      C: { en: "In physical movement — the body unlocks the mind", ar: "في الحركة الجسدية — الجسد يفتح العقل" },
+      D: { en: "In dialogue with others — minds multiply", ar: "في الحوار مع الآخرين — العقول تتضاعف" },
+    },
   },
   {
-    key: "nlp_prog_peak", icon: Flame, color: "text-orange-400", bg: "bg-orange-400/10",
-    duration: "10 min", type: "nlp_type_peak",
-    steps: ["nlp_prog_peak_1","nlp_prog_peak_2","nlp_prog_peak_3"],
+    dim: "DISCIPLINA", ar: "انضباط الإمبراطور", glyph: "⚙",
+    q: { en: "Your daily structure:", ar: "هيكلك اليومي:", fr: "Ta structure quotidienne :", dz: "هيكلك اليومي:" },
+    choices: {
+      A: { en: "Precise and non-negotiable — the schedule IS the discipline", ar: "دقيق وغير قابل للتفاوض — الجدول هو الانضباط" },
+      B: { en: "Structured with calculated flexibility — plan, adapt, execute", ar: "منظم مع مرونة محسوبة — خطط، تكيف، نفذ" },
+      C: { en: "Intuitive and flow-based — energy guides the day", ar: "حدسي يعتمد التدفق — الطاقة تقود اليوم" },
+      D: { en: "Responsive to circumstance — agility over routine", ar: "استجابي للظروف — الرشاقة على الروتين" },
+    },
+  },
+  {
+    dim: "SOCIETAS", ar: "قوة التأثير", glyph: "◈",
+    q: { en: "In a collective:", ar: "داخل الجماعة:", fr: "Dans un collectif :", dz: "في الجماعة:" },
+    choices: {
+      A: { en: "I command — leadership is my natural frequency", ar: "أقود — القيادة هي تردد طبيعي" },
+      B: { en: "I inspire from within — influence without title", ar: "أُلهم من الداخل — تأثير بلا لقب" },
+      C: { en: "I strengthen the foundation — power behind the throne", ar: "أقوي الأساس — القوة خلف العرش" },
+      D: { en: "I operate independently — my work speaks alone", ar: "أعمل منفرداً — عملي يتكلم وحده" },
+    },
+  },
+  {
+    dim: "ABUNDANTIA", ar: "عقلية الوفرة", glyph: "∞",
+    q: { en: "Your relationship with power and resources:", ar: "علاقتك بالقوة والموارد:", fr: "Ta relation avec le pouvoir :", dz: "علاقتك بالقوة والموارد:" },
+    choices: {
+      A: { en: "Infinite — the universe is abundant, I claim my share", ar: "لا نهائية — الكون واسع، أطالب بحصتي" },
+      B: { en: "Earned — what I build, I own; what I own, I multiply", ar: "مكتسبة — ما بنيت أملك، ما أملك أضاعف" },
+      C: { en: "Cautious — secure what you have before expanding", ar: "حذر — أمّن ما لديك قبل التوسع" },
+      D: { en: "Scarce — there is never enough, vigilance is survival", ar: "شحيحة — لا يكفي أبداً، اليقظة هي البقاء" },
+    },
+  },
+  {
+    dim: "AUCTORITAS", ar: "السلطة الداخلية", glyph: "♔",
+    q: { en: "In one sentence — declare your purpose. Why do you exist?", ar: "في جملة واحدة — أعلن هدفك. لماذا توجد؟", fr: "En une phrase — déclare ton but :", dz: "في جملة — قول هدفك:" },
+    choices: null, // free text
   },
 ];
 
-// ── Breathing Exercise ────────────────────────────────────────────────────────
-const BREATH_PHASES = ["inhale","hold","exhale","rest"] as const;
+// ── Archon Archetypes ──────────────────────────────────────────────────────────
+const ARCHETYPES: Record<string, { color: string; symbol: string; ar: string }> = {
+  "THE SOVEREIGN":   { color: "#C9A84C", symbol: "♔", ar: "السيد المطلق" },
+  "THE CONQUEROR":   { color: "#FF6B35", symbol: "⚔", ar: "الفاتح" },
+  "THE VISIONARY":   { color: "#A8E6CF", symbol: "👁", ar: "الرائي" },
+  "THE ARCHITECT":   { color: "#DDA0DD", symbol: "⚙", ar: "المعماري" },
+  "THE CATALYST":    { color: "#87CEEB", symbol: "◈", ar: "المحرك" },
+  "THE SENTINEL":    { color: "#98FB98", symbol: "🛡", ar: "الحارس" },
+  "THE SEEKER":      { color: "#E8C97A", symbol: "◉", ar: "الباحث" },
+};
+
+// ── Cipher Animation Characters ────────────────────────────────────────────────
+const CIPHER_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789♔⚔◈∞⚙▲▼◆◇█▓░";
+
+function useCipherText(target: string, active: boolean, speed = 40) {
+  const [display, setDisplay] = useState("");
+  const frame = useRef(0);
+  useEffect(() => {
+    if (!active || !target) return;
+    frame.current = 0;
+    const id = setInterval(() => {
+      frame.current++;
+      if (frame.current >= target.length * 3) { setDisplay(target); clearInterval(id); return; }
+      setDisplay(
+        target.split("").map((ch, i) =>
+          i < Math.floor(frame.current / 3)
+            ? ch
+            : /[A-Z0-9]/.test(ch)
+              ? CIPHER_CHARS[Math.floor(Math.random() * CIPHER_CHARS.length)]
+              : ch
+        ).join("")
+      );
+    }, speed);
+    return () => clearInterval(id);
+  }, [target, active]);
+  return display;
+}
+
+// ── Breathing engine ───────────────────────────────────────────────────────────
+const BREATH_PHASES = ["inhale", "hold", "exhale", "rest"] as const;
 const BREATH_TIMING = { inhale: 4, hold: 4, exhale: 6, rest: 2 };
 
-// ── AI Trajectory Predictions ─────────────────────────────────────────────────
-function getTrajectory(xp: number, wins: number, gamesPlayed: number) {
-  const velocity = gamesPlayed > 0 ? (xp / Math.max(gamesPlayed, 1)) * 2 : 20;
-  return [
-    {
-      key: "nlp_traj_rank", icon: Trophy,
-      current: getRank(xp).label,
-      predicted: getRank(xp + Math.round(velocity * 30)).label,
-      days: 30, color: "text-yellow-400",
-      confidence: 88,
-    },
-    {
-      key: "nlp_traj_xp", icon: Star,
-      current: xp,
-      predicted: xp + Math.round(velocity * 30),
-      days: 30, color: "text-purple-400",
-      confidence: 92,
-    },
-    {
-      key: "nlp_traj_wins", icon: Gamepad2,
-      current: wins,
-      predicted: wins + Math.round(gamesPlayed * 0.12),
-      days: 30, color: "text-primary",
-      confidence: 79,
-    },
-  ];
-}
-
-function getRank(xp: number) {
-  if (xp < 500)  return { label: "Bronze I",  color: "#cd7f32", next: 500 };
-  if (xp < 1000) return { label: "Bronze II", color: "#cd7f32", next: 1000 };
-  if (xp < 2000) return { label: "Silver I",  color: "#aaa9ad", next: 2000 };
-  if (xp < 3500) return { label: "Silver II", color: "#aaa9ad", next: 3500 };
-  if (xp < 5000) return { label: "Gold I",    color: "#ffd700", next: 5000 };
-  if (xp < 7500) return { label: "Gold II",   color: "#ffd700", next: 7500 };
-  return { label: "Diamond", color: "#00d4ff", next: 10000 };
-}
-
-// ── Affirmation rotator ───────────────────────────────────────────────────────
-const AFF_KEYS = ["nlp_aff_1","nlp_aff_2","nlp_aff_3","nlp_aff_4","nlp_aff_5"];
-
-interface AiAnalysis {
-  nlp_archetype?: string;
-  archetype_desc?: string;
-  strength?: string;
-  blind_spot?: string;
-  "30_day_prediction"?: string;
-  "90_day_prediction"?: string;
-  "1_year_vision"?: string;
-  daily_affirmation?: string;
-  growth_action?: string;
-}
-
+// ══════════════════════════════════════════════════════════════════════════════
 export default function Growth() {
   const { user } = useAuth();
-  const { t, lang } = useLang();
-  const [activeProgram, setActiveProgram] = useState<number | null>(null);
+  const { lang } = useLang();
+
+  // ── Phases: "boot" | "initiation" | "encoding" | "profile" ──────────────
+  const [phase, setPhase] = useState<"boot" | "initiation" | "encoding" | "profile">("boot");
+  const [bootLines, setBootLines] = useState<string[]>([]);
+  const [bootDone, setBootDone] = useState(false);
+
+  // ── Initiation state ─────────────────────────────────────────────────────
+  const [qIndex, setQIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [freeText, setFreeText] = useState("");
+
+  // ── Encoding state ───────────────────────────────────────────────────────
+  const [encodingLines, setEncodingLines] = useState<string[]>([]);
+  const [encodingDone, setEncodingDone] = useState(false);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+
+  // ── Profile state ────────────────────────────────────────────────────────
+  const [archonProfile, setArchonProfile] = useState<ArchonProfile | null>(null);
+  const [existingProfile, setExistingProfile] = useState<ArchonProfile | null>(null);
+  const [missionLoading, setMissionLoading] = useState(false);
+  const [missionResult, setMissionResult] = useState<Record<string, string> | null>(null);
+  const [missionDim, setMissionDim] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"profile" | "oracle" | "calibration">("profile");
   const [breathPhase, setBreathPhase] = useState<typeof BREATH_PHASES[number]>("inhale");
-  const [breathing, setBrething] = useState(false);
+  const [breathing, setBreathing] = useState(false);
   const [breathCount, setBreathCount] = useState(0);
-  const [affIdx, setAffIdx] = useState(0);
   const breathTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState("");
-  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-  // Rotate affirmations
-  useEffect(() => {
-    const id = setInterval(() => setAffIdx(i => (i + 1) % AFF_KEYS.length), 5000);
-    return () => clearInterval(id);
-  }, []);
+  const t = useCallback((key: string) => key, []); // Fallback — uses keys from i18n
 
-  // Fetch AI trajectory when user is available
+  // ── Load existing profile ─────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
-    setAiLoading(true);
-    fetch(`${BASE}/api/growth/trajectory`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        xp: user.xp,
-        wins: user.wins,
-        gamesPlayed: user.gamesPlayed,
-        balance: user.balance,
-        username: user.username,
-        lang,
-      }),
-    })
+    fetch(`${BASE()}/api/archon/profile`, { credentials: "include" })
       .then(r => r.json())
-      .then(d => setAiAnalysis(d.analysis ?? null))
-      .catch(() => setAiError("AI unavailable"))
-      .finally(() => setAiLoading(false));
-  }, [user?.username, lang]);
+      .then(d => {
+        if (d.session) {
+          const s = d.session;
+          setExistingProfile({
+            archonCode: s.archonCode,
+            archetype: s.archetype ?? "THE SEEKER",
+            dimensions: {
+              volontas: s.volontas, resilentia: s.resilentia, intellectus: s.intellectus,
+              disciplina: s.disciplina, societas: s.societas, abundantia: s.abundantia, auctoritas: s.auctoritas,
+            },
+            overallScore: Math.round([s.volontas, s.resilentia, s.intellectus, s.disciplina, s.societas, s.abundantia, s.auctoritas].reduce((a: number, b: number) => a + b, 0) / 7),
+            aiProfile: (s.aiProfile as Record<string, string>) ?? {},
+            session: s,
+          });
+          setPhase("profile");
+        }
+      })
+      .catch(() => {});
+  }, [user]);
 
-  // Breathing engine
+  // ── Boot sequence ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (phase !== "boot" || !user) return;
+    const lines = [
+      "ARCHON SYSTEM v4.2 — INITIALIZING...",
+      "SCANNING NEURAL SIGNATURE...",
+      "LOADING 7 DIMENSION ENGINE...",
+      "EMPIRE INTELLIGENCE GRID: CONNECTED",
+      "ENCRYPTION LAYER: ACTIVE",
+      "CITIZEN VERIFIED — CLEARANCE LEVEL: OMEGA",
+      ">>> ARCHON READY <<<",
+    ];
+    let i = 0;
+    const id = setInterval(() => {
+      if (i >= lines.length) { clearInterval(id); setBootDone(true); return; }
+      setBootLines(prev => [...prev, lines[i]]);
+      i++;
+    }, 380);
+    return () => clearInterval(id);
+  }, [phase, user]);
+
+  // ── Breathing engine ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!breathing) { if (breathTimer.current) clearInterval(breathTimer.current); return; }
-    let phase = 0;
+    let ph = 0;
     const cycle = () => {
-      const current = BREATH_PHASES[phase % 4];
-      setBreathPhase(current);
-      if (current === "inhale") setBreathCount(c => c + 1);
-      const dur = BREATH_TIMING[current];
-      setTimeout(() => { phase++; if (breathTimer.current) {} }, dur * 1000);
+      const cur = BREATH_PHASES[ph % 4];
+      setBreathPhase(cur);
+      if (cur === "inhale") setBreathCount(c => c + 1);
+      ph++;
     };
     cycle();
-    breathTimer.current = setInterval(cycle, 16000); // full cycle ~16s
+    breathTimer.current = setInterval(cycle, 4000);
     return () => { if (breathTimer.current) clearInterval(breathTimer.current); };
   }, [breathing]);
 
+  // ── Submit initiation ─────────────────────────────────────────────────────
+  async function submitInitiation() {
+    const allAnswers = { ...answers, Q7: freeText || "To grow beyond my limits." };
+    setPhase("encoding");
+    setApiLoading(true);
+    setApiError("");
+
+    // Encoding animation
+    const encLines = [
+      "TRANSMITTING PSYCHOGRAPHIC DATA...",
+      "VOLONTAS VECTOR: COMPUTING...",
+      "RESILENTIA MATRIX: COMPILING...",
+      "INTELLECTUS FREQUENCY: MAPPING...",
+      "DISCIPLINA CORE: CALIBRATING...",
+      "SOCIETAS FIELD: ANALYZING...",
+      "ABUNDANTIA INDEX: PROCESSING...",
+      "AUCTORITAS SIGNATURE: ENCODING...",
+      "RUNNING ARCHON CLASSIFICATION ALGORITHM...",
+      "GENERATING ENCRYPTED IDENTITY CODE...",
+    ];
+    let i = 0;
+    const animId = setInterval(() => {
+      if (i >= encLines.length) { clearInterval(animId); setEncodingDone(true); return; }
+      setEncodingLines(prev => [...prev, encLines[i]]);
+      i++;
+    }, 320);
+
+    try {
+      const res = await fetch(`${BASE()}/api/archon/assess`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          answers: allAnswers, lang,
+          userStats: user ? { xp: user.xp, wins: user.wins, gamesPlayed: user.gamesPlayed, balance: user.balance, username: user.username } : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "ARCHON GRID DISRUPTED");
+      setArchonProfile({
+        archonCode: data.archonCode,
+        archetype: data.archetype,
+        dimensions: data.dimensions,
+        overallScore: data.overallScore,
+        aiProfile: data.aiProfile ?? {},
+      });
+      setTimeout(() => setPhase("profile"), 3200);
+    } catch (err: unknown) {
+      clearInterval(animId);
+      setApiError(err instanceof Error ? err.message : "ARCHON GRID DISRUPTED");
+    } finally {
+      setApiLoading(false);
+    }
+  }
+
+  // ── Generate daily mission ────────────────────────────────────────────────
+  async function generateMission(dimKey: string) {
+    const profile = archonProfile ?? existingProfile;
+    if (!profile) return;
+    setMissionLoading(true);
+    setMissionDim(dimKey);
+    setMissionResult(null);
+    try {
+      const res = await fetch(`${BASE()}/api/archon/mission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ dimension: dimKey.toUpperCase(), archetype: profile.archetype, lang }),
+      });
+      const data = await res.json();
+      setMissionResult(data);
+    } catch {
+      setMissionResult({ directive: "CLASSIFIED: Execute 15 minutes of deliberate focus on this dimension. No distractions.", duration: "15 min", intensity: "HIGH" });
+    } finally {
+      setMissionLoading(false);
+    }
+  }
+
+  const activeProfile = archonProfile ?? existingProfile;
+  const archInfo = activeProfile ? (ARCHETYPES[activeProfile.archetype] ?? ARCHETYPES["THE SEEKER"]) : null;
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // NOT LOGGED IN
+  // ──────────────────────────────────────────────────────────────────────────
   if (!user) return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-      <div className="text-center space-y-4">
-        <Brain className="w-16 h-16 text-primary mx-auto animate-pulse" />
-        <p className="text-muted-foreground uppercase tracking-widest text-sm">{t("nlp_login_required")}</p>
-        <Link href="/login"><Button className="bg-primary/20 text-primary border border-primary">{t("login")}</Button></Link>
+    <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden">
+      <div className="absolute inset-0">
+        {Array.from({ length: 30 }).map((_, i) => (
+          <div key={i} className="absolute w-px bg-yellow-400/10 animate-pulse"
+            style={{ left: `${Math.random() * 100}%`, top: 0, bottom: 0, animationDelay: `${Math.random() * 3}s` }} />
+        ))}
+      </div>
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+        className="relative z-10 text-center space-y-8 p-12 border border-yellow-400/30 bg-black/90">
+        <div className="text-yellow-400 font-mono text-xs tracking-[0.4em] uppercase">ARCHON SYSTEM v4.2</div>
+        <div className="text-6xl font-black text-red-500 font-mono">ACCESS DENIED</div>
+        <div className="text-yellow-400/60 font-mono text-sm tracking-widest">
+          CITIZEN AUTHENTICATION REQUIRED<br/>TO ACCESS IMPERIAL MIND FORGE
+        </div>
+        <div className="border-t border-yellow-400/20 pt-6 space-y-3">
+          <p className="text-yellow-400/40 font-mono text-xs">CLEARANCE LEVEL: OMEGA — INITIATES ONLY</p>
+          <Link href="/login">
+            <button className="px-8 py-3 border border-yellow-400 text-yellow-400 font-mono font-black text-sm tracking-[0.3em] uppercase hover:bg-yellow-400 hover:text-black transition-all">
+              ⚡ AUTHENTICATE IDENTITY
+            </button>
+          </Link>
+        </div>
+      </motion.div>
+    </div>
+  );
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // BOOT SEQUENCE
+  // ──────────────────────────────────────────────────────────────────────────
+  if (phase === "boot") return (
+    <div className="min-h-screen bg-black flex items-center justify-center p-8">
+      <div className="w-full max-w-2xl font-mono">
+        <div className="border border-yellow-400/40 p-8 space-y-2">
+          <div className="text-yellow-400/60 text-xs tracking-widest mb-6">
+            ╔══════════════════════════════════════════╗<br/>
+            ║         ARCHON INTELLIGENCE CORE         ║<br/>
+            ║       GDNA EMPIRE — CLASSIFIED           ║<br/>
+            ╚══════════════════════════════════════════╝
+          </div>
+          {bootLines.map((line, i) => (
+            <motion.div key={i} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+              className={`text-sm tracking-wider ${line.startsWith(">>>") ? "text-yellow-400 font-black text-base" : "text-green-400/80"}`}>
+              {line.startsWith(">>>") ? line : `> ${line}`}
+            </motion.div>
+          ))}
+          {bootLines.length < 7 && (
+            <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.6 }}
+              className="text-green-400 text-sm">█</motion.span>
+          )}
+          {bootDone && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="pt-6 space-y-4">
+              <div className="border-t border-yellow-400/30 pt-4">
+                <p className="text-yellow-400/60 text-xs tracking-widest mb-4">SELECT OPERATION:</p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => { setPhase("initiation"); setQIndex(0); setAnswers({}); setFreeText(""); }}
+                    className="w-full text-left px-4 py-3 border border-yellow-400/40 text-yellow-400 font-mono text-sm tracking-wider hover:bg-yellow-400/10 hover:border-yellow-400 transition-all"
+                  >
+                    ⚡ [1] INITIATE NEW ARCHON ASSESSMENT
+                    <span className="text-yellow-400/40 ml-2 text-xs">— Unlock your psychological DNA</span>
+                  </button>
+                  {existingProfile && (
+                    <button
+                      onClick={() => setPhase("profile")}
+                      className="w-full text-left px-4 py-3 border border-yellow-400/20 text-yellow-400/60 font-mono text-sm tracking-wider hover:bg-yellow-400/5 hover:border-yellow-400/40 transition-all"
+                    >
+                      ♔ [2] ACCESS EXISTING ARCHON PROFILE
+                      <span className="text-yellow-400/40 ml-2 text-xs">— {existingProfile.archetype} · {existingProfile.archonCode}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
       </div>
     </div>
   );
 
-  const profile = getNlpProfile(user.xp, user.wins, user.gamesPlayed, user.balance);
-  const trajectory = getTrajectory(user.xp, user.wins, user.gamesPlayed);
-  const rank = getRank(user.xp);
-  const overallScore = Math.round(profile.reduce((s, d) => s + d.score, 0) / profile.length);
+  // ──────────────────────────────────────────────────────────────────────────
+  // INITIATION — 7 QUESTIONS
+  // ──────────────────────────────────────────────────────────────────────────
+  if (phase === "initiation") {
+    const q = QUESTIONS[qIndex];
+    const isRTL = ["ar", "dz"].includes(lang);
+    const qText = (q.q as Record<string, string>)[lang] ?? q.q.en;
+    const progress = ((qIndex) / QUESTIONS.length) * 100;
 
-  return (
-    <div className="min-h-[calc(100vh-4rem)] max-w-6xl mx-auto px-4 py-10 space-y-12">
-
-      {/* ── Hero ─────────────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center space-y-4 relative">
-        <div className="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
-          <div className="absolute top-0 left-1/3 w-80 h-60 bg-purple-500/8 rounded-full blur-[100px]" />
-          <div className="absolute top-0 right-1/3 w-80 h-60 bg-primary/6 rounded-full blur-[100px]" />
-        </div>
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-purple-400/30 bg-purple-400/5">
-          <Brain className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-          <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-widest">{t("nlp_badge")}</span>
-        </div>
-        <h1 className="text-5xl md:text-7xl font-black uppercase tracking-tighter">
-          <span className="text-purple-400" style={{ textShadow: "0 0 40px rgba(168,85,247,0.4)" }}>{t("nlp_title_1")}</span>
-          <br />
-          <span className="neon-text-glow">{t("nlp_title_2")}</span>
-        </h1>
-        <p className="text-muted-foreground text-sm uppercase tracking-widest max-w-xl mx-auto">{t("nlp_sub")}</p>
-      </motion.div>
-
-      {/* ── NLP Mental Profile ────────────────────────────────────── */}
-      <section className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Brain className="w-6 h-6 text-purple-400" />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("nlp_profile_title")}</h2>
-          <Badge className="ml-auto bg-purple-400/10 text-purple-400 border border-purple-400/30 font-mono">
-            {t("nlp_score")}: {overallScore}%
-          </Badge>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          {/* Radar-style score card */}
-          <Card className="bg-gradient-to-br from-purple-500/10 to-primary/5 border-purple-400/20">
-            <CardContent className="p-6 space-y-4">
-              <div className="text-center space-y-2 pb-3 border-b border-purple-400/10">
-                <div className="w-20 h-20 mx-auto rounded-full border-4 flex items-center justify-center relative"
-                  style={{ borderColor: rank.color, boxShadow: `0 0 30px ${rank.color}40` }}>
-                  <span className="text-2xl font-black" style={{ color: rank.color }}>{overallScore}</span>
-                  <span className="absolute -bottom-1 text-xs font-bold text-muted-foreground">%</span>
-                </div>
-                <p className="font-black text-sm uppercase tracking-wider" style={{ color: rank.color }}>
-                  {user.username} · {rank.label}
-                </p>
-                <p className="text-xs text-muted-foreground">{t("nlp_profile_sub")}</p>
-              </div>
-              {profile.map((dim, i) => (
-                <motion.div key={dim.key}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.08 }}
-                  className="space-y-1"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <dim.icon className={`w-3.5 h-3.5 ${dim.color}`} />
-                      <span className={`font-bold ${dim.color}`}>{t(dim.key)}</span>
-                    </div>
-                    <span className={`font-black font-mono ${dim.color}`}>{dim.score}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-border/40 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${dim.score}%` }}
-                      transition={{ duration: 1.2, delay: 0.3 + i * 0.1, ease: "easeOut" }}
-                      className={`h-full rounded-full ${dim.bar}`}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">{t(dim.desc)}</p>
-                </motion.div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Affirmation feed */}
-          <div className="space-y-4">
-            <Card className="bg-card/30 border-primary/20 h-40 flex items-center justify-center overflow-hidden">
-              <CardContent className="p-6 text-center">
-                <Lightbulb className="w-6 h-6 text-yellow-400 mx-auto mb-3" />
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={affIdx}
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -15 }}
-                    transition={{ duration: 0.4 }}
-                    className="text-base font-bold text-foreground/90 leading-relaxed"
-                    dir={["ar","dz"].includes(lang) ? "rtl" : "ltr"}
-                  >
-                    "{t(AFF_KEYS[affIdx])}"
-                  </motion.p>
-                </AnimatePresence>
-                <div className="flex justify-center gap-1 mt-3">
-                  {AFF_KEYS.map((_, i) => (
-                    <button key={i} onClick={() => setAffIdx(i)}
-                      className={`w-1.5 h-1.5 rounded-full transition-colors ${i === affIdx ? "bg-primary" : "bg-border"}`} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick stats mapped to growth */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { icon: Gamepad2, val: user.gamesPlayed, label: t("nlp_stat_action"), color: "text-primary" },
-                { icon: Trophy,   val: user.wins,         label: t("nlp_stat_wins"),   color: "text-yellow-400" },
-                { icon: Star,     val: user.xp,           label: "XP",                 color: "text-purple-400" },
-              ].map((s, i) => (
-                <Card key={i} className="bg-card/30 border-border/50 text-center">
-                  <CardContent className="p-3">
-                    <s.icon className={`w-4 h-4 mx-auto mb-1 ${s.color}`} />
-                    <p className={`text-lg font-black font-mono ${s.color}`}>{s.val}</p>
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {/* NLP tip of the day */}
-            <Card className="bg-yellow-400/5 border-yellow-400/20">
-              <CardContent className="p-4 flex items-start gap-3">
-                <Sun className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-yellow-400">{t("nlp_tip_title")}</p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("nlp_tip_body")}</p>
-                </div>
-              </CardContent>
-            </Card>
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6">
+        {/* Header */}
+        <div className="w-full max-w-2xl mb-6">
+          <div className="flex items-center justify-between font-mono text-xs text-yellow-400/40 tracking-widest mb-2">
+            <span>ARCHON INITIATION PROTOCOL</span>
+            <span>QUESTION {qIndex + 1} / {QUESTIONS.length}</span>
+          </div>
+          <div className="h-px bg-yellow-400/10 w-full relative">
+            <motion.div className="h-px bg-yellow-400 absolute left-0 top-0"
+              animate={{ width: `${progress}%` }} transition={{ duration: 0.5 }} />
+          </div>
+          <div className="mt-2 flex gap-1">
+            {QUESTIONS.map((_, i) => (
+              <div key={i} className={`flex-1 h-0.5 transition-colors ${i < qIndex ? "bg-yellow-400" : i === qIndex ? "bg-yellow-400/60" : "bg-yellow-400/15"}`} />
+            ))}
           </div>
         </div>
-      </section>
 
-      {/* ── Breathing Engine ─────────────────────────────────────── */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Waves className="w-6 h-6 text-primary" />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("nlp_breath_title")}</h2>
-        </div>
-        <Card className="bg-card/30 border-primary/20 overflow-hidden">
-          <CardContent className="p-8 flex flex-col md:flex-row items-center gap-8">
-            {/* Breathing orb */}
-            <div className="relative flex items-center justify-center shrink-0">
-              <motion.div
-                animate={breathPhase === "inhale" ? { scale: 1.5, opacity: 0.9 }
-                  : breathPhase === "hold"   ? { scale: 1.5, opacity: 0.7 }
-                  : breathPhase === "exhale" ? { scale: 1.0, opacity: 0.5 }
-                  : { scale: 1.0, opacity: 0.4 }}
-                transition={{ duration: breathPhase === "inhale" ? 4 : breathPhase === "exhale" ? 6 : 0.3, ease: "easeInOut" }}
-                className="w-28 h-28 rounded-full bg-gradient-to-br from-primary/40 to-purple-500/30 border border-primary/40"
-                style={{ boxShadow: breathing ? "0 0 40px rgba(0,212,255,0.3)" : "none" }}
-              />
-              <div className="absolute text-center">
-                <p className={`text-xs font-black uppercase tracking-widest ${breathing ? "text-primary" : "text-muted-foreground"}`}>
-                  {breathing ? t(`nlp_breath_${breathPhase}`) : t("nlp_breath_ready")}
-                </p>
-                {breathing && breathCount > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1 font-mono">{breathCount} {t("nlp_breath_cycles")}</p>
-                )}
+        {/* Question card */}
+        <AnimatePresence mode="wait">
+          <motion.div key={qIndex}
+            initial={{ opacity: 0, y: 30, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -30, scale: 0.97 }}
+            transition={{ duration: 0.35 }}
+            className="w-full max-w-2xl border border-yellow-400/30 bg-black p-8 space-y-6"
+          >
+            {/* Dimension badge */}
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{q.glyph}</span>
+              <div>
+                <div className="font-mono text-yellow-400 text-xs tracking-[0.4em] uppercase">{q.dim}</div>
+                <div className="text-yellow-400/50 font-mono text-xs" dir="rtl">{q.ar}</div>
+              </div>
+              <div className="ml-auto font-mono text-yellow-400/30 text-xs">
+                DIMENSION {qIndex + 1}
               </div>
             </div>
 
-            <div className="flex-1 space-y-4">
-              <div>
-                <p className="font-bold text-sm uppercase tracking-wider mb-1">{t("nlp_breath_sub")}</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{t("nlp_breath_desc")}</p>
+            {/* Question text */}
+            <div className="border-l-2 border-yellow-400/40 pl-4">
+              <p className={`text-white font-bold text-lg leading-relaxed ${isRTL ? "text-right" : ""}`} dir={isRTL ? "rtl" : "ltr"}>
+                {qText}
+              </p>
+            </div>
+
+            {/* Choices or free text */}
+            {q.choices ? (
+              <div className="space-y-2">
+                {(Object.entries(q.choices) as [string, Record<string, string>][]).map(([letter, texts]) => {
+                  const selected = answers[`Q${qIndex + 1}`] === letter;
+                  const txt = texts[lang] ?? texts.en;
+                  return (
+                    <motion.button key={letter}
+                      whileHover={{ x: 4 }}
+                      onClick={() => {
+                        setAnswers(prev => ({ ...prev, [`Q${qIndex + 1}`]: letter }));
+                        setTimeout(() => {
+                          if (qIndex < QUESTIONS.length - 1) setQIndex(i => i + 1);
+                          else submitInitiation();
+                        }, 220);
+                      }}
+                      className={`w-full text-left px-5 py-3 border font-mono text-sm tracking-wide transition-all flex items-center gap-4 ${
+                        selected
+                          ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
+                          : "border-yellow-400/20 text-yellow-400/60 hover:border-yellow-400/50 hover:text-yellow-400/90 hover:bg-yellow-400/5"
+                      }`}
+                      dir={isRTL ? "rtl" : "ltr"}
+                    >
+                      <span className={`font-black text-lg shrink-0 ${selected ? "text-yellow-400" : "text-yellow-400/30"}`}>{letter}</span>
+                      <span>{txt}</span>
+                    </motion.button>
+                  );
+                })}
               </div>
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                {(["inhale","hold","exhale","rest"] as const).map(p => (
-                  <div key={p} className={`px-2 py-1.5 rounded-lg border transition-colors ${
-                    breathPhase === p && breathing ? "border-primary bg-primary/15 text-primary font-black" : "border-border/40 text-muted-foreground"
-                  }`}>
-                    <p className="font-bold capitalize">{t(`nlp_breath_${p}`)}</p>
-                    <p className="font-mono text-xs">{BREATH_TIMING[p]}s</p>
-                  </div>
+            ) : (
+              // Free text Q7
+              <div className="space-y-3">
+                <textarea
+                  value={freeText}
+                  onChange={e => setFreeText(e.target.value)}
+                  placeholder={isRTL ? "اكتب هنا..." : "Type your declaration..."}
+                  dir={isRTL ? "rtl" : "ltr"}
+                  maxLength={200}
+                  rows={3}
+                  className="w-full bg-transparent border border-yellow-400/30 text-yellow-400 font-mono text-sm p-4 placeholder:text-yellow-400/20 focus:outline-none focus:border-yellow-400/60 resize-none"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-yellow-400/30 font-mono text-xs">{freeText.length}/200</span>
+                  <button
+                    onClick={() => submitInitiation()}
+                    disabled={!freeText.trim()}
+                    className="px-6 py-2 border border-yellow-400 text-yellow-400 font-mono font-black text-sm tracking-widest uppercase hover:bg-yellow-400 hover:text-black transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    TRANSMIT ▶
+                  </button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Back */}
+        {qIndex > 0 && (
+          <button onClick={() => setQIndex(i => i - 1)}
+            className="mt-4 text-yellow-400/30 font-mono text-xs hover:text-yellow-400/60 transition-colors">
+            ← PREVIOUS DIMENSION
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // ENCODING — Matrix encryption animation
+  // ──────────────────────────────────────────────────────────────────────────
+  if (phase === "encoding") {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-8">
+        <div className="w-full max-w-2xl font-mono space-y-0">
+          <div className="border border-yellow-400/30 p-8">
+            <div className="text-yellow-400/50 text-xs tracking-widest mb-6">
+              ║ ARCHON ENCODING SEQUENCE — CLASSIFIED OPERATION ║
+            </div>
+            {encodingLines.map((line, i) => (
+              <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2 }}
+                className="text-green-400/80 text-sm tracking-wider py-0.5">
+                <span className="text-yellow-400/40 mr-2">[{String(i + 1).padStart(2, "0")}]</span>
+                {line}
+                {i === encodingLines.length - 1 && !encodingDone && (
+                  <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.5 }} className="ml-1">▋</motion.span>
+                )}
+                {i === encodingLines.length - 1 && (
+                  <span className="text-green-400 ml-2">{encodingDone && i < encodingLines.length - 1 ? "✓" : i < encodingLines.length - 1 ? "✓" : ""}</span>
+                )}
+              </motion.div>
+            ))}
+
+            {apiError && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 text-red-400 border border-red-400/30 p-4">
+                ERROR: {apiError}
+                <button onClick={() => { setPhase("boot"); setEncodingLines([]); setEncodingDone(false); }}
+                  className="block mt-2 text-yellow-400 text-xs hover:underline">← RESTART PROTOCOL</button>
+              </motion.div>
+            )}
+
+            {encodingDone && !apiLoading && !apiError && archonProfile && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+                className="mt-6 border-t border-yellow-400/30 pt-6 space-y-3">
+                <div className="text-yellow-400 font-black text-lg tracking-widest">ARCHON CODE GENERATED</div>
+                <div className="text-3xl font-black text-yellow-400 tracking-[0.2em] font-mono"
+                  style={{ textShadow: "0 0 20px #C9A84C80" }}>
+                  {archonProfile.archonCode}
+                </div>
+                <div className="text-green-400/60 text-xs tracking-wider">
+                  ARCHETYPE CLASSIFIED: <span className="text-green-400 font-black">{archonProfile.archetype}</span>
+                </div>
+                <div className="text-yellow-400/40 text-xs">LOADING ARCHON PROFILE INTERFACE...</div>
+              </motion.div>
+            )}
+
+            {(apiLoading || (!encodingDone && !apiError)) && (
+              <div className="mt-4 flex gap-1">
+                {[0, 1, 2].map(i => (
+                  <motion.div key={i} className="w-1.5 h-1.5 bg-yellow-400 rounded-full"
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} />
                 ))}
               </div>
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => { setBrething(!breathing); if (breathing) { setBreathCount(0); setBreathPhase("inhale"); } }}
-                  className={`gap-2 font-bold uppercase tracking-wider ${breathing ? "bg-destructive/20 text-destructive border border-destructive/40 hover:bg-destructive/30" : "bg-primary/20 text-primary border border-primary/40 hover:bg-primary hover:text-black"}`}
-                >
-                  {breathing ? <><Clock className="w-4 h-4" />{t("nlp_breath_stop")}</> : <><Waves className="w-4 h-4" />{t("nlp_breath_start")}</>}
-                </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // ARCHON PROFILE
+  // ──────────────────────────────────────────────────────────────────────────
+  if (phase === "profile" && activeProfile) {
+    const ai = activeProfile.aiProfile ?? {};
+    const archInfo2 = ARCHETYPES[activeProfile.archetype] ?? ARCHETYPES["THE SEEKER"];
+    const dimVals = activeProfile.dimensions;
+    const dimEntries = DIMENSIONS.map(d => ({ ...d, score: (dimVals as Record<string, number>)[d.key] ?? 0 }));
+
+    return (
+      <div className="min-h-screen bg-black text-white">
+        {/* ── Imperial Header ─────────────────────────────────────────── */}
+        <div className="border-b border-yellow-400/20 bg-black sticky top-0 z-30">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+            <div className="font-mono text-yellow-400 text-xs tracking-[0.3em]">ARCHON SYSTEM</div>
+            <div className="h-4 w-px bg-yellow-400/20" />
+            <div className="font-mono text-yellow-400/60 text-xs tracking-widest">{activeProfile.archonCode}</div>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-2xl">{archInfo2.symbol}</span>
+              <span className="font-mono font-black text-xs tracking-widest" style={{ color: archInfo2.color }}>
+                {activeProfile.archetype}
+              </span>
+              <span className="text-yellow-400/30 font-mono text-xs">· {activeProfile.overallScore}/100</span>
+            </div>
+          </div>
+          {/* Tabs */}
+          <div className="max-w-6xl mx-auto px-4 flex gap-0 border-t border-yellow-400/10">
+            {([
+              { id: "profile", label: "DIMENSIONAL PROFILE", symbol: "◈" },
+              { id: "oracle", label: "ORACLE INTELLIGENCE", symbol: "👁" },
+              { id: "calibration", label: "BREATH CALIBRATION", symbol: "∿" },
+            ] as const).map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`px-5 py-2.5 font-mono text-xs tracking-widest border-b-2 transition-all ${
+                  activeTab === tab.id
+                    ? "border-yellow-400 text-yellow-400"
+                    : "border-transparent text-yellow-400/30 hover:text-yellow-400/60"
+                }`}>
+                {tab.symbol} {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          {/* ── Re-assess CTA ───────────────────────────────────────────── */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+              CITIZEN: {user?.username?.toUpperCase()} · CLEARANCE: OMEGA
+            </div>
+            <button
+              onClick={() => { setPhase("boot"); setArchonProfile(null); setQIndex(0); setAnswers({}); setFreeText(""); setBootLines([]); setBootDone(false); setEncodingLines([]); setEncodingDone(false); }}
+              className="px-4 py-1.5 border border-yellow-400/30 text-yellow-400/50 font-mono text-xs tracking-widest hover:border-yellow-400/60 hover:text-yellow-400/80 transition-all"
+            >
+              ↺ RE-INITIATE PROTOCOL
+            </button>
+          </div>
+
+          {/* ════════════════════════════════════════════════════════════ */}
+          {/* TAB: DIMENSIONAL PROFILE                                    */}
+          {/* ════════════════════════════════════════════════════════════ */}
+          {activeTab === "profile" && (
+            <div className="space-y-8">
+              {/* Archetype hero */}
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                className="border p-8 text-center space-y-4 relative overflow-hidden"
+                style={{ borderColor: `${archInfo2.color}40` }}>
+                <div className="absolute inset-0 opacity-5"
+                  style={{ background: `radial-gradient(circle at 50% 50%, ${archInfo2.color}, transparent 70%)` }} />
+                <div className="text-5xl mb-2">{archInfo2.symbol}</div>
+                <div className="font-mono text-xs tracking-[0.5em] text-yellow-400/40">ARCHON CLASSIFICATION</div>
+                <div className="text-5xl font-black font-mono tracking-widest" style={{ color: archInfo2.color, textShadow: `0 0 40px ${archInfo2.color}60` }}>
+                  {activeProfile.archetype}
+                </div>
+                {archInfo2.ar && (
+                  <div className="font-mono text-lg text-yellow-400/60" dir="rtl">{archInfo2.ar}</div>
+                )}
+                {ai.archetype_declaration && (
+                  <p className="text-sm text-white/60 max-w-2xl mx-auto leading-relaxed font-mono border-t border-yellow-400/10 pt-4 mt-4">
+                    "{ai.archetype_declaration}"
+                  </p>
+                )}
+                <div className="inline-block px-6 py-2 border font-mono font-black text-sm tracking-[0.3em]"
+                  style={{ borderColor: `${archInfo2.color}60`, color: archInfo2.color }}>
+                  {activeProfile.archonCode}
+                </div>
+                {ai.cipher_phrase && (
+                  <div className="font-mono text-xs text-yellow-400/30 tracking-[0.4em] uppercase">{ai.cipher_phrase}</div>
+                )}
+              </motion.div>
+
+              {/* 7 Dimensions grid */}
+              <div>
+                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em] mb-4">◈ 7-DIMENSION NEURAL MAP</div>
+                <div className="grid gap-3">
+                  {dimEntries.map((dim, i) => (
+                    <motion.div key={dim.key}
+                      initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
+                      className="border border-yellow-400/10 p-4 hover:border-yellow-400/30 transition-all group relative overflow-hidden"
+                    >
+                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{ background: `linear-gradient(90deg, ${dim.color}08 0%, transparent 100%)` }} />
+                      <div className="relative flex items-center gap-4">
+                        <span className="text-xl shrink-0">{dim.glyph}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-sm tracking-widest" style={{ color: dim.color }}>{dim.latin}</span>
+                              <span className="font-mono text-xs text-white/30" dir="rtl">{dim.ar}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono font-black text-sm" style={{ color: dim.color }}>{dim.score}</span>
+                              <span className="font-mono text-xs text-white/20">/100</span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 bg-white/5 relative overflow-hidden">
+                            <motion.div className="h-full absolute left-0 top-0"
+                              style={{ background: `linear-gradient(90deg, ${dim.color}90, ${dim.color})` }}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${dim.score}%` }}
+                              transition={{ duration: 1.2, delay: 0.3 + i * 0.08, ease: "easeOut" }} />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => generateMission(dim.key)}
+                          disabled={missionLoading && missionDim === dim.key}
+                          className="shrink-0 px-3 py-1 border font-mono text-xs tracking-widest transition-all opacity-40 group-hover:opacity-100"
+                          style={{ borderColor: `${dim.color}50`, color: dim.color }}
+                        >
+                          {missionLoading && missionDim === dim.key ? "LOADING..." : "DIRECTIVE ▶"}
+                        </button>
+                      </div>
+                      {/* Mission result inline */}
+                      <AnimatePresence>
+                        {missionResult && missionDim === dim.key && (
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                            <div className="mt-3 pt-3 border-t font-mono" style={{ borderColor: `${dim.color}20` }}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs tracking-widest" style={{ color: dim.color }}>CLASSIFIED DIRECTIVE</span>
+                                <span className="text-xs text-white/30">· {missionResult.duration} · {missionResult.intensity}</span>
+                              </div>
+                              <p className="text-sm text-white/70 leading-relaxed">{missionResult.directive}</p>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Strength + Shadow */}
+              {(ai.core_strength || ai.shadow_mission) && (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {ai.core_strength && (
+                    <div className="border border-green-400/20 p-5 space-y-2">
+                      <div className="font-mono text-green-400 text-xs tracking-[0.4em]">▲ CORE STRENGTH</div>
+                      <p className="text-sm text-white/70 leading-relaxed font-mono">{ai.core_strength}</p>
+                    </div>
+                  )}
+                  {ai.shadow_mission && (
+                    <div className="border border-red-400/20 p-5 space-y-2">
+                      <div className="font-mono text-red-400 text-xs tracking-[0.4em]">▼ SHADOW MISSION</div>
+                      <p className="text-sm text-white/70 leading-relaxed font-mono">{ai.shadow_mission}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Imperial decree */}
+              {ai.imperial_decree && (
+                <div className="border border-yellow-400/30 p-6 text-center space-y-3">
+                  <div className="font-mono text-yellow-400/50 text-xs tracking-[0.5em]">♔ IMPERIAL DECREE</div>
+                  <p className="text-base text-yellow-400/80 font-mono leading-relaxed italic">"{ai.imperial_decree}"</p>
+                </div>
+              )}
+
+              {/* Daily directive */}
+              {ai.daily_directive && (
+                <div className="border border-yellow-400 p-5 flex items-start gap-4"
+                  style={{ boxShadow: "0 0 20px #C9A84C15" }}>
+                  <span className="text-2xl shrink-0">⚡</span>
+                  <div>
+                    <div className="font-mono text-yellow-400 text-xs tracking-[0.4em] mb-2">TODAY'S CLASSIFIED DIRECTIVE</div>
+                    <p className="text-sm text-white/80 font-mono leading-relaxed">{ai.daily_directive}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════ */}
+          {/* TAB: ORACLE INTELLIGENCE                                    */}
+          {/* ════════════════════════════════════════════════════════════ */}
+          {activeTab === "oracle" && (
+            <div className="space-y-6">
+              <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em] mb-2">
+                👁 ARCHON TEMPORAL INTELLIGENCE — CLASSIFIED PROJECTIONS
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-4">
+                {[
+                  { phase: "30-DAY PROTOCOL",    key: "30_day_protocol",    color: "#C9A84C",  sym: "▶" },
+                  { phase: "90-DAY EXPANSION",   key: "90_day_expansion",   color: "#A8E6CF",  sym: "▷▶" },
+                  { phase: "1-YEAR SOVEREIGNTY", key: "1_year_sovereignty", color: "#DDA0DD",  sym: "♔" },
+                ].map((r, i) => (
+                  <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.12 }}
+                    className="border p-5 space-y-3" style={{ borderColor: `${r.color}30` }}>
+                    <div className="font-mono font-black text-xs tracking-[0.3em]" style={{ color: r.color }}>
+                      {r.sym} {r.phase}
+                    </div>
+                    <p className="text-sm text-white/70 font-mono leading-relaxed">
+                      {ai[r.key] ?? "ORACLE PROCESSING..."}
+                    </p>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Archetype deep dive */}
+              <div className="border border-yellow-400/20 p-6 space-y-4">
+                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em]">◈ DOMINANT + SHADOW DIMENSIONS</div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {ai.dominant_dimension && (
+                    <div className="space-y-1">
+                      <div className="font-mono text-green-400 text-xs tracking-widest">DOMINANT FORCE</div>
+                      <div className="font-mono font-black text-xl text-green-400">{ai.dominant_dimension}</div>
+                      <div className="text-xs text-white/40 font-mono">Your supreme instrument. Sharpen it.</div>
+                    </div>
+                  )}
+                  {ai.shadow_dimension && (
+                    <div className="space-y-1">
+                      <div className="font-mono text-red-400/80 text-xs tracking-widest">SHADOW FRONTIER</div>
+                      <div className="font-mono font-black text-xl text-red-400/80">{ai.shadow_dimension}</div>
+                      <div className="text-xs text-white/40 font-mono">Your next conquest. Face it.</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Historical score bars in oracle */}
+              <div className="border border-yellow-400/10 p-6">
+                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em] mb-4">◉ DIMENSIONAL RADAR</div>
+                <div className="space-y-3">
+                  {dimEntries.sort((a, b) => b.score - a.score).map((dim, i) => (
+                    <div key={dim.key} className="flex items-center gap-3 font-mono text-xs">
+                      <span className="w-4 text-white/30">{i + 1}</span>
+                      <span className="w-28 tracking-widest" style={{ color: dim.color }}>{dim.latin}</span>
+                      <div className="flex-1 h-1 bg-white/5 relative overflow-hidden">
+                        <motion.div className="h-full absolute left-0"
+                          style={{ background: dim.color }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${dim.score}%` }}
+                          transition={{ duration: 1, delay: i * 0.07 }} />
+                      </div>
+                      <span className="w-8 text-right" style={{ color: dim.color }}>{dim.score}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </section>
+          )}
 
-      {/* ── NLP Programs ─────────────────────────────────────────── */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <BrainCircuit className="w-6 h-6 text-purple-400" />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("nlp_programs_title")}</h2>
-        </div>
-        <div className="grid md:grid-cols-2 gap-4">
-          {NLP_PROGRAMS.map((prog, i) => (
-            <motion.div key={prog.key} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.09 }}>
-              <Card
-                className={`border cursor-pointer transition-all duration-200 ${
-                  activeProgram === i ? "border-primary/60 bg-primary/5" : "border-border/50 bg-card/30 hover:border-primary/30"
-                }`}
-                onClick={() => setActiveProgram(activeProgram === i ? null : i)}
-              >
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl ${prog.bg} border border-current/20 flex items-center justify-center`}>
-                        <prog.icon className={`w-5 h-5 ${prog.color}`} />
-                      </div>
-                      <div>
-                        <p className={`font-black text-sm uppercase tracking-wider ${prog.color}`}>{t(prog.key)}</p>
-                        <p className="text-xs text-muted-foreground">{t(prog.type)} · {prog.duration}</p>
-                      </div>
-                    </div>
-                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${activeProgram === i ? "rotate-90" : ""}`} />
-                  </div>
-                  <AnimatePresence>
-                    {activeProgram === i && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="pt-3 border-t border-border/40 space-y-2">
-                          {prog.steps.map((step, j) => (
-                            <div key={step} className="flex items-start gap-2">
-                              <div className={`w-5 h-5 rounded-full ${prog.bg} border border-current/30 flex items-center justify-center shrink-0 mt-0.5`}>
-                                <span className={`text-xs font-black ${prog.color}`}>{j + 1}</span>
-                              </div>
-                              <p className="text-xs text-foreground/80 leading-relaxed">{t(step)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </motion.div>
+          {/* ════════════════════════════════════════════════════════════ */}
+          {/* TAB: BREATH CALIBRATION                                     */}
+          {/* ════════════════════════════════════════════════════════════ */}
+          {activeTab === "calibration" && (
+            <div className="space-y-6">
+              <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em] mb-2">
+                ∿ ARCHON BREATH CALIBRATION PROTOCOL
+              </div>
+
+              <div className="border border-yellow-400/20 p-8 flex flex-col md:flex-row items-center gap-10">
+                {/* The orb */}
+                <div className="relative flex items-center justify-center shrink-0">
+                  <motion.div
+                    animate={
+                      breathPhase === "inhale" ? { scale: 1.6, opacity: 0.9 } :
+                      breathPhase === "hold"   ? { scale: 1.6, opacity: 0.7 } :
+                      breathPhase === "exhale" ? { scale: 1.0, opacity: 0.5 } :
+                      { scale: 1.0, opacity: 0.3 }
+                    }
+                    transition={{ duration: breathPhase === "inhale" ? 4 : breathPhase === "exhale" ? 6 : 0.3, ease: "easeInOut" }}
+                    className="w-36 h-36 rounded-full border"
+                    style={{
+                      borderColor: breathing ? "#C9A84C" : "#C9A84C30",
+                      background: breathing ? "radial-gradient(circle, #C9A84C20, transparent)" : "transparent",
+                      boxShadow: breathing ? "0 0 60px #C9A84C30" : "none",
+                    }}
+                  />
+                  <div className="absolute text-center">
+                    <p className={`text-xs font-mono font-black uppercase tracking-widest ${breathing ? "text-yellow-400" : "text-yellow-400/30"}`}>
+                      {breathing ? breathPhase.toUpperCase() : "STANDBY"}
+                    </p>
+                    {breathing && breathCount > 0 && (
+                      <p className="text-yellow-400/40 font-mono text-xs mt-1">CYCLE {breathCount}</p>
                     )}
-                  </AnimatePresence>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── AI Future Trajectory (real OpenAI) ──────────────────── */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Cpu className={`w-6 h-6 text-primary ${aiLoading ? "animate-spin" : "animate-pulse"}`} />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("nlp_traj_title")}</h2>
-          <Badge className="ml-auto bg-primary/10 text-primary border border-primary/30 font-mono text-xs">
-            {aiLoading ? "GPT-4o-mini…" : "GPT-4o-mini · Live"}
-          </Badge>
-        </div>
-
-        {aiLoading && (
-          <Card className="bg-gradient-to-br from-primary/8 to-purple-500/5 border-primary/20">
-            <CardContent className="p-12 text-center space-y-3">
-              <BrainCircuit className="w-10 h-10 text-primary mx-auto animate-pulse" />
-              <p className="text-sm text-muted-foreground uppercase tracking-widest">{t("nlp_traj_sub")}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {aiError && !aiLoading && (
-          <Card className="bg-destructive/5 border-destructive/30">
-            <CardContent className="p-6 text-center text-destructive text-sm">{aiError}</CardContent>
-          </Card>
-        )}
-
-        {aiAnalysis && !aiLoading && (
-          <Card className="bg-gradient-to-br from-primary/8 to-purple-500/5 border-primary/20">
-            <CardContent className="p-6 md:p-8 space-y-6">
-
-              {/* Archetype */}
-              {aiAnalysis.nlp_archetype && (
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 pb-4 border-b border-primary/10">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/20 border border-primary/40 flex items-center justify-center shrink-0">
-                    <Crown className="w-7 h-7 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-widest text-primary">{t("nlp_archetype_label")}</p>
-                    <h3 className="text-2xl font-black neon-text-glow">{aiAnalysis.nlp_archetype}</h3>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{aiAnalysis.archetype_desc}</p>
                   </div>
                 </div>
-              )}
 
-              {/* Strength + Blind Spot */}
-              <div className="grid md:grid-cols-2 gap-4">
-                {aiAnalysis.strength && (
-                  <div className="p-4 rounded-xl bg-green-400/5 border border-green-400/20 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-green-400" />
-                      <span className="text-xs font-black uppercase tracking-wider text-green-400">{t("nlp_ai_strength")}</span>
-                    </div>
-                    <p className="text-xs text-foreground/80 leading-relaxed">{aiAnalysis.strength}</p>
+                <div className="flex-1 space-y-5">
+                  <div className="font-mono text-sm text-white/60 leading-relaxed border-l border-yellow-400/30 pl-4">
+                    The Archon Breath Protocol synchronizes your neural oscillations with the 4-4-6-2 imperial rhythm.
+                    <br />Used by elite commanders before critical decisions.
                   </div>
-                )}
-                {aiAnalysis.blind_spot && (
-                  <div className="p-4 rounded-xl bg-orange-400/5 border border-orange-400/20 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-orange-400" />
-                      <span className="text-xs font-black uppercase tracking-wider text-orange-400">{t("nlp_ai_blindspot")}</span>
-                    </div>
-                    <p className="text-xs text-foreground/80 leading-relaxed">{aiAnalysis.blind_spot}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Timeline predictions */}
-              <div className="space-y-3">
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{t("nlp_roadmap_title")}</p>
-                <div className="grid md:grid-cols-3 gap-3">
-                  {[
-                    { phase: "30 " + t("nlp_days"), text: aiAnalysis["30_day_prediction"], icon: Rocket, color: "text-primary", border: "border-primary/20", bg: "bg-primary/5" },
-                    { phase: "90 " + t("nlp_days"), text: aiAnalysis["90_day_prediction"], icon: Star,   color: "text-yellow-400", border: "border-yellow-400/20", bg: "bg-yellow-400/5" },
-                    { phase: "1 " + t("nlp_year"),  text: aiAnalysis["1_year_vision"],     icon: Crown,  color: "text-purple-400", border: "border-purple-400/20", bg: "bg-purple-400/5" },
-                  ].map((r, i) => r.text ? (
-                    <div key={i} className={`p-4 rounded-xl ${r.bg} border ${r.border} space-y-2`}>
-                      <div className="flex items-center gap-2">
-                        <r.icon className={`w-4 h-4 ${r.color} shrink-0`} />
-                        <span className={`text-xs font-black ${r.color}`}>{r.phase}</span>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {(["inhale","hold","exhale","rest"] as const).map(p => (
+                      <div key={p} className={`px-2 py-2 border font-mono text-xs transition-all ${
+                        breathPhase === p && breathing
+                          ? "border-yellow-400 bg-yellow-400/10 text-yellow-400 font-black"
+                          : "border-yellow-400/10 text-yellow-400/30"
+                      }`}>
+                        <p className="uppercase tracking-wider">{p}</p>
+                        <p className="text-xs mt-0.5 font-black">{BREATH_TIMING[p]}s</p>
                       </div>
-                      <p className="text-xs text-foreground/80 leading-relaxed">{r.text}</p>
-                    </div>
-                  ) : null)}
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setBreathing(!breathing);
+                      if (breathing) { setBreathCount(0); setBreathPhase("inhale"); }
+                    }}
+                    className={`px-8 py-3 border font-mono font-black text-sm tracking-[0.3em] uppercase transition-all ${
+                      breathing
+                        ? "border-red-400/40 text-red-400 hover:bg-red-400/10"
+                        : "border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                    }`}
+                  >
+                    {breathing ? "⏹ DISENGAGE" : "⚡ ENGAGE PROTOCOL"}
+                  </button>
                 </div>
               </div>
 
-              {/* Daily affirmation from AI */}
-              {aiAnalysis.daily_affirmation && (
-                <div className="p-4 rounded-xl bg-purple-400/5 border border-purple-400/20 text-center space-y-2">
-                  <Sparkles className="w-5 h-5 text-purple-400 mx-auto" />
-                  <p className="text-sm font-bold italic text-foreground/90">"{aiAnalysis.daily_affirmation}"</p>
+              {/* NLP programs */}
+              <div className="border border-yellow-400/10 p-6 space-y-4">
+                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em]">◈ IMPERIAL MIND PROTOCOLS</div>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {[
+                    { name: "ANCHOR PROTOCOL", desc: "Link peak states to a physical trigger. Fire it under pressure.", dur: "5 min", color: "#C9A84C" },
+                    { name: "VISION IMPRINT",  desc: "Project your 1-year sovereignty state with full sensory detail.", dur: "7 min", color: "#A8E6CF" },
+                    { name: "REFRAME SEQUENCE",desc: "Decode a limiting belief and install its opposite as a command.", dur: "3 min", color: "#98FB98" },
+                    { name: "PEAK IGNITION",   desc: "Physiological + mental activation sequence. Full power in 10 min.", dur: "10 min", color: "#DDA0DD" },
+                  ].map((prog, i) => (
+                    <div key={i} className="border border-white/5 p-4 space-y-2 hover:border-yellow-400/20 transition-all cursor-pointer">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-black text-xs tracking-wider" style={{ color: prog.color }}>{prog.name}</span>
+                        <span className="font-mono text-xs text-white/30">{prog.dur}</span>
+                      </div>
+                      <p className="text-xs text-white/50 font-mono leading-relaxed">{prog.desc}</p>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
+            </div>
+          )}
 
-              {/* Growth action */}
-              {aiAnalysis.growth_action && (
-                <div className="flex items-start gap-3 p-4 rounded-xl bg-green-400/5 border border-green-400/30">
-                  <Zap className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-wider text-green-400">{t("nlp_ai_action")}</p>
-                    <p className="text-xs text-foreground/80 mt-1 leading-relaxed">{aiAnalysis.growth_action}</p>
-                  </div>
-                </div>
-              )}
+          {/* Footer */}
+          <div className="mt-12 pt-6 border-t border-yellow-400/10 flex items-center justify-between font-mono text-xs text-yellow-400/20">
+            <span>ARCHON SYSTEM v4.2 · GDNA EMPIRE · CLASSIFIED</span>
+            <div className="flex gap-4">
+              <Link href="/games"><span className="hover:text-yellow-400/50 cursor-pointer transition-colors">BATTLE ARENA</span></Link>
+              <Link href="/games/globalstar"><span className="hover:text-yellow-400/50 cursor-pointer transition-colors">GLOBALSTAR</span></Link>
+              <Link href="/chronicle"><span className="hover:text-yellow-400/50 cursor-pointer transition-colors">CHRONICLES</span></Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-            </CardContent>
-          </Card>
-        )}
-      </section>
-
-      {/* ── CTA ──────────────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
-        className="flex flex-wrap gap-3 justify-center pb-4">
-        <Link href="/games">
-          <Button className="bg-primary/20 text-primary border border-primary hover:bg-primary hover:text-black gap-2 font-bold uppercase tracking-wider">
-            <Gamepad2 className="w-4 h-4" />{t("nlp_cta_games")}
-          </Button>
-        </Link>
-        <Link href="/chat">
-          <Button variant="outline" className="border-purple-400/40 text-purple-400 hover:bg-purple-400/10 gap-2">
-            <BrainCircuit className="w-4 h-4" />{t("nlp_cta_ai")}
-          </Button>
-        </Link>
-        <Link href="/chronicle">
-          <Button variant="outline" className="border-yellow-400/40 text-yellow-400 hover:bg-yellow-400/10 gap-2">
-            <Clock className="w-4 h-4" />{t("nlp_cta_chronicle")}
-          </Button>
-        </Link>
-      </motion.div>
-
+  // Fallback for encoding phase without profile yet
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="font-mono text-yellow-400 animate-pulse tracking-widest">ARCHON PROCESSING...</div>
     </div>
   );
 }

@@ -9,6 +9,8 @@ import walletRouter from "./wallet";
 import globalstarRouter from "./globalstar";
 import growthRouter from "./growth";
 import chronicleRouter from "./chronicle";
+import mediaRouter from "./media";
+import archonRouter from "./archon";
 
 const router: IRouter = Router();
 
@@ -22,5 +24,7 @@ router.use(walletRouter);
 router.use(globalstarRouter);
 router.use(growthRouter);
 router.use(chronicleRouter);
+router.use(mediaRouter);
+router.use(archonRouter);
 
 export default router;

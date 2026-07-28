@@ -237,6 +237,61 @@
   text-shadow: 0 0 10px hsl(var(--primary) / 0.7), 0 0 20px hsl(var(--primary) / 0.5);
 }
 
+/* ── Imperial CSS ─────────────────────────────────────────────────────────── */
+.imperial-gold {
+  background: linear-gradient(135deg, #C9A84C 0%, #FFE066 40%, #C9A84C 60%, #A67C2E 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% auto;
+  animation: imperial-shimmer 4s linear infinite;
+}
+
+@keyframes imperial-shimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50%       { opacity: 0.9;  transform: scale(1.4); }
+}
+
+@keyframes throne-pulse {
+  0%, 100% { box-shadow: 0 0 8px 0px #C9A84C30, inset 0 0 8px 0px #C9A84C10; }
+  50%       { box-shadow: 0 0 24px 4px #C9A84C60, inset 0 0 16px 0px #C9A84C20; }
+}
+
+@keyframes empire-rise {
+  0%   { opacity: 0; transform: translateY(32px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+@keyframes oracle-scan {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateX(100%);  opacity: 0; }
+}
+
+.imperial-border {
+  border: 1px solid #C9A84C50;
+  box-shadow: 0 0 12px #C9A84C20;
+  animation: throne-pulse 3s ease-in-out infinite;
+}
+
+.imperial-decree {
+  background: linear-gradient(90deg, transparent, #C9A84C18, transparent);
+  border-top: 1px solid #C9A84C30;
+  border-bottom: 1px solid #C9A84C30;
+}
+
+.territory-card:hover {
+  border-color: #C9A84C80 !important;
+  box-shadow: 0 0 20px #C9A84C20;
+  transform: translateY(-2px);
+}
+
 @keyframes ticker {
   0% { transform: translateX(0); }
   100% { transform: translateX(-33.33%); }

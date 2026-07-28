@@ -41,3 +41,18 @@ export const gsTraditionsTable = pgTable("gs_traditions", {
   isArchaeological: boolean("is_archaeological").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ── Media: stories / videos / audio attached to figures ──────────────────────
+export const gsMediaTable = pgTable("gs_media", {
+  id: serial("id").primaryKey(),
+  figureId: integer("figure_id").notNull(),
+  domain: text("domain").notNull(),
+  type: text("type").notNull(),          // 'story' | 'video' | 'audio'
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),  // story text OR embed URL/ID
+  thumbnailUrl: text("thumbnail_url"),
+  durationSec: integer("duration_sec"),
+  platform: text("platform"),            // 'youtube' | 'soundcloud' | 'internal'
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

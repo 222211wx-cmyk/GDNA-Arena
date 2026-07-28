@@ -1,1 +1,2 @@
 - [GlobalStar Platform](globalstar-platform.md) — voting/ranking platform at /globalstar/; router paths must be relative, AI moderation live via OpenAI.
+- [Archon System](archon-system.md) — encrypted self-development system at /growth; 7 dimensions, 3-phase flow (boot→initiation→encoding→profile); DB tables archon_sessions + archon_directives; API at /api/archon/assess|profile|mission.
