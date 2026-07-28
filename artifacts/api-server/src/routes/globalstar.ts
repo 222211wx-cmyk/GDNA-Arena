@@ -1,11 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, gsFiguresTable, gsVotesTable, gsNewsTable, gsTraditionsTable } from "@workspace/db";
 import { desc, eq, and, gte, sql } from "drizzle-orm";
-import OpenAI from "openai";
+import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 
 const router: IRouter = Router();
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export const GS_DOMAINS = [
   { id: "sport",       label: "Sport",            icon: "⚽", labelAr: "رياضة",      labelFr: "Sport" },
@@ -22,24 +20,6 @@ export const GS_DOMAINS = [
 
 function domainLabel(id: string): string {
   return GS_DOMAINS.find((d) => d.id === id)?.label ?? id;
-}
-
-// ─── AI moderation helper ─────────────────────────────────────────────────────
-async function moderateText(text: string): Promise<{ ok: boolean; reason?: string }> {
-  try {
-    const resp = await openai.moderations.create({ input: text });
-    const result = resp.results[0];
-    if (result.flagged) {
-      const cats = Object.entries(result.categories)
-        .filter(([, v]) => v)
-        .map(([k]) => k)
-        .join(", ");
-      return { ok: false, reason: `Content flagged: ${cats}` };
-    }
-    return { ok: true };
-  } catch {
-    return { ok: true }; // fail open so votes still work if OpenAI is down
-  }
 }
 
 // ─── GET /gs/domains ─────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import OpenAI from "openai";
+import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 
 const router: IRouter = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -80,6 +81,17 @@ router.post("/chat/stream", async (req, res): Promise<void> => {
     return;
   }
 
+  // ── Content filter ────────────────────────────────────────────────────────
+  if (hasBlockedKeyword(message)) {
+    res.status(400).json({ error: "Message contains prohibited content." });
+    return;
+  }
+  const mod = await moderateText(message);
+  if (!mod.ok) {
+    res.status(400).json({ error: `Message blocked by content filter (${mod.reason}).` });
+    return;
+  }
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     ...(Array.isArray(history) ? history.slice(-14) : []),
@@ -132,6 +144,17 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   if (!process.env.OPENAI_API_KEY) {
     res.status(500).json({ error: "OpenAI API key not configured" });
+    return;
+  }
+
+  // ── Content filter ────────────────────────────────────────────────────────
+  if (hasBlockedKeyword(message)) {
+    res.status(400).json({ error: "Message contains prohibited content." });
+    return;
+  }
+  const mod = await moderateText(message);
+  if (!mod.ok) {
+    res.status(400).json({ error: `Message blocked by content filter (${mod.reason}).` });
     return;
   }
 

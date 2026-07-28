@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { eq, or } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 
 const router: IRouter = Router();
 const SALT_ROUNDS = 10;
@@ -49,6 +50,17 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
   if (password.length < 6) {
     res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+
+  // ── Username content filter ───────────────────────────────────────────────
+  if (hasBlockedKeyword(username)) {
+    res.status(400).json({ error: "Username contains prohibited content." });
+    return;
+  }
+  const usernameMod = await moderateText(username);
+  if (!usernameMod.ok) {
+    res.status(400).json({ error: "Username rejected by content filter." });
     return;
   }
 
