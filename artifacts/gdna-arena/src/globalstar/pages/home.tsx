@@ -277,9 +277,9 @@ export default function GlobalStarHome() {
             ) : null}
 
             {/* Domain selector dots */}
-            {domainsData?.domains?.length > 0 && (
+            {(domainsData?.domains?.length ?? 0) > 0 && (
               <div className="flex justify-center gap-2 mt-10">
-                {domainsData.domains.map((domain: any, idx: number) => (
+                {domainsData?.domains?.map((domain: any, idx: number) => (
                   <button
                     key={domain.id}
                     onClick={() => setActiveDomainIndex(idx)}

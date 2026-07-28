@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
 
 export const gsFiguresTable = pgTable("gs_figures", {
   id: serial("id").primaryKey(),
@@ -39,6 +39,30 @@ export const gsTraditionsTable = pgTable("gs_traditions", {
   imageUrl: text("image_url"),
   period: text("period").notNull(),
   isArchaeological: boolean("is_archaeological").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Tournament Matches ────────────────────────────────────────────────────────
+export const gsMatchesTable = pgTable("gs_matches", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id"),                          // null = guest
+  placement: integer("placement").notNull(),           // 1-100
+  totalPlayers: integer("total_players").notNull().default(100),
+  coinsEarned: integer("coins_earned").notNull().default(0),
+  xpEarned: integer("xp_earned").notNull().default(0),
+  tier: text("tier").notNull().default("citizen"),     // champion|elite|legend|citizen
+  isWin: boolean("is_win").notNull().default(false),
+  playedAt: timestamp("played_at").notNull().defaultNow(),
+});
+
+// ── Tournament Players (snapshot of participants per match) ───────────────────
+export const gsPlayersTable = pgTable("gs_players", {
+  id: serial("id").primaryKey(),
+  matchId: integer("match_id").notNull(),
+  username: text("username").notNull(),
+  isUser: boolean("is_user").notNull().default(false), // true = real user, false = bot
+  score: real("score").notNull().default(0),
+  placement: integer("placement"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

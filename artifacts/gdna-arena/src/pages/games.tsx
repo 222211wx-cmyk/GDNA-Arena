@@ -106,8 +106,9 @@ function TournamentModal({
 
   // Phase machine
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+
     if (phase === "entering") {
-      // Count up 0→100
       let c = 0;
       const id = setInterval(() => {
         c += Math.floor(Math.random() * 5) + 3;
@@ -115,22 +116,17 @@ function TournamentModal({
         setEnterCount(c);
         if (c >= 100) setTimeout(() => setPhase("simulating"), 400);
       }, 60);
-      return () => clearInterval(id);
-    }
-    if (phase === "simulating") {
-      // Call API while showing animation
-      fetch(`${BASE}/api/games/globalstar/tournament`, {
-        method: "POST", credentials: "include",
-      })
+      cleanup = () => clearInterval(id);
+
+    } else if (phase === "simulating") {
+      fetch(`${BASE}/api/games/globalstar/tournament`, { method: "POST", credentials: "include" })
         .then(r => r.json())
         .then(d => { resultRef.current = d; })
         .catch(() => { setError("TOURNAMENT GRID DISRUPTED — TRY AGAIN"); setPhase("idle"); });
 
-      // Simulate racing scores
       const names = [...players];
       const scores = names.map(() => Math.floor(Math.random() * 9000) + 1000);
-      const rows = names.map((n, i) => ({ name: n, score: scores[i] }));
-      setSimulLines(rows.sort(() => Math.random() - 0.5).slice(0, 12));
+      setSimulLines(names.map((n, i) => ({ name: n, score: scores[i] })).sort(() => Math.random() - 0.5).slice(0, 12));
 
       const id = setInterval(() => {
         setSimulLines(prev => prev.map(r => ({
@@ -138,15 +134,14 @@ function TournamentModal({
         })).sort((a, b) => b.score - a.score));
       }, 180);
       setTimeout(() => { clearInterval(id); setPhase("filtering"); }, 3000);
-      return () => clearInterval(id);
-    }
-    if (phase === "filtering") {
-      // Eliminate down to top entries
+      cleanup = () => clearInterval(id);
+
+    } else if (phase === "filtering") {
       const top = [...players].sort(() => Math.random() - 0.5).slice(0, 10);
       setSurviving(top);
       setTimeout(() => setPhase("revealing"), 2200);
-    }
-    if (phase === "revealing") {
+
+    } else if (phase === "revealing") {
       setTimeout(() => {
         if (resultRef.current) { setResult(resultRef.current); setPhase("done"); }
         else setTimeout(() => {
@@ -155,6 +150,8 @@ function TournamentModal({
         }, 2000);
       }, 800);
     }
+
+    return cleanup;
   }, [phase, players]);
 
   const tierConfig: Record<string, { color: string; icon: typeof Crown; label: string; label_ar: string }> = {

@@ -336,12 +336,12 @@ export default function Chronicle() {
                       <div className="flex-1 space-y-1">
                         <div className="flex justify-between text-xs">
                           <span className="font-medium">{domain.domainLabel}</span>
-                          <span className="text-primary font-mono">{domain.totalVotes?.toLocaleString()}</span>
+                          <span className="text-primary font-mono">{(domain as any).totalVotes?.toLocaleString()}</span>
                         </div>
                         <div className="h-1.5 rounded-full bg-border/50 overflow-hidden">
                           <motion.div
                             initial={{ width: 0 }}
-                            whileInView={{ width: `${Math.min(100, (domain.totalVotes ?? 0) / 10000)}%` }}
+                            whileInView={{ width: `${Math.min(100, ((domain as any).totalVotes ?? 0) / 10000)}%` }}
                             viewport={{ once: true }}
                             transition={{ duration: 1, delay: i * 0.1 }}
                             className="h-full bg-primary rounded-full"

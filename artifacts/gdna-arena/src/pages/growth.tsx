@@ -593,7 +593,7 @@ export default function Growth() {
     const ai = activeProfile.aiProfile ?? {};
     const archInfo2 = ARCHETYPES[activeProfile.archetype] ?? ARCHETYPES["THE SEEKER"];
     const dimVals = activeProfile.dimensions;
-    const dimEntries = DIMENSIONS.map(d => ({ ...d, score: (dimVals as Record<string, number>)[d.key] ?? 0 }));
+    const dimEntries = DIMENSIONS.map(d => ({ ...d, score: (dimVals as unknown as Record<string, number>)[d.key] ?? 0 }));
 
     return (
       <div className="min-h-screen bg-black text-white">
