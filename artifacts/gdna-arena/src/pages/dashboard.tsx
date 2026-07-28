@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle } from "lucide-react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
@@ -23,6 +23,16 @@ export default function Dashboard() {
   const { t } = useLang();
   const [claimingDaily, setClaimingDaily] = useState(false);
   const [dailyMsg, setDailyMsg] = useState("");
+  const [recentMatches, setRecentMatches] = useState<
+    { game: string; win: boolean; coins: number; xp: number; time: string }[]
+  >([]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("gdna_recent_matches") ?? "[]");
+      setRecentMatches(stored.slice(0, 8));
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) setLocation("/login");
@@ -211,6 +221,60 @@ export default function Dashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* ── Recent Matches ──────────────────────────────────────────── */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+        <Card className="bg-card/50 border-primary/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <Clock className="w-5 h-5 text-primary" />
+              <h3 className="text-sm uppercase tracking-widest text-muted-foreground">Recent Matches</h3>
+            </div>
+            {recentMatches.length === 0 ? (
+              <div className="text-center py-8">
+                <Swords className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">No matches yet — <Link href="/games" className="text-primary hover:underline">play your first game!</Link></p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentMatches.map((m, i) => {
+                  const ago = (() => {
+                    const diff = Date.now() - new Date(m.time).getTime();
+                    const mins = Math.floor(diff / 60000);
+                    if (mins < 1) return "just now";
+                    if (mins < 60) return `${mins}m ago`;
+                    const hrs = Math.floor(mins / 60);
+                    if (hrs < 24) return `${hrs}h ago`;
+                    return `${Math.floor(hrs / 24)}d ago`;
+                  })();
+                  return (
+                    <div key={i} className={`flex items-center justify-between p-3 rounded-lg border ${
+                      m.win ? "border-primary/20 bg-primary/5" : "border-white/5 bg-white/2"
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${m.win ? "bg-primary" : "bg-red-500/60"}`} />
+                        <div>
+                          <p className="text-sm font-semibold">{m.game}</p>
+                          <p className="text-xs text-muted-foreground">{ago}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-right">
+                        <div>
+                          <p className="text-xs text-primary font-bold">+{m.coins} <span className="text-muted-foreground font-normal">coins</span></p>
+                          <p className="text-xs text-purple-400">+{m.xp} XP</p>
+                        </div>
+                        <span className={`text-xs font-bold uppercase tracking-wider ${m.win ? "text-primary" : "text-red-400/70"}`}>
+                          {m.win ? "WIN" : "LOSS"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

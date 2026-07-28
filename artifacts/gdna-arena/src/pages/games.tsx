@@ -85,7 +85,7 @@ type TournamentPhase = "idle" | "entering" | "simulating" | "filtering" | "revea
 // ── Tournament Modal ───────────────────────────────────────────────────────────
 function TournamentModal({
   user, onClose, onComplete,
-}: { user: { username: string; balance: number; xp: number } | null; onClose: () => void; onComplete: () => void; }) {
+}: { user: { username: string; balance: number; xp: number } | null; onClose: () => void; onComplete: (coins?: number, xp?: number, placement?: number, game?: string) => void; }) {
   const [phase, setPhase] = useState<TournamentPhase>("entering");
   const [enterCount, setEnterCount] = useState(0);
   const [players, setPlayers] = useState<string[]>([]);
@@ -366,7 +366,7 @@ function TournamentModal({
                 {/* Actions */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 }}
                   className="flex gap-3">
-                  <Button onClick={() => { onComplete(); onClose(); }}
+                  <Button onClick={() => { onComplete(result.coinsEarned, result.xpEarned, result.placement, "GlobalStar"); onClose(); }}
                     className="flex-1 font-mono font-black text-xs tracking-[0.3em] uppercase border border-yellow-400 text-yellow-400 bg-transparent hover:bg-yellow-400 hover:text-black h-10">
                     ↺ ENTER AGAIN
                   </Button>
@@ -403,8 +403,18 @@ export default function Games() {
   const [result, setResult]         = useState<(PlayResult) | null>(null);
   const [showTournament, setShowTournament] = useState(false);
 
+  // Save a match to localStorage for Recent Matches on Dashboard
+  const saveRecentMatch = (entry: {
+    game: string; win: boolean; coins: number; xp: number; time: string;
+  }) => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("gdna_recent_matches") ?? "[]");
+      const updated = [entry, ...stored].slice(0, 20);
+      localStorage.setItem("gdna_recent_matches", JSON.stringify(updated));
+    } catch { /* ignore */ }
+  };
+
   const handlePlay = async (gameId: string, gameTitle: string, isTournament: boolean) => {
-    if (!user) { setLocation("/login"); return; }
     if (isTournament) { setShowTournament(true); return; }
 
     setPlayingId(gameId);
@@ -415,7 +425,14 @@ export default function Games() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");
       setResult({ ...data, gameTitle });
-      await refreshUser();
+      saveRecentMatch({
+        game: gameTitle,
+        win: data.win,
+        coins: data.coinsEarned,
+        xp: data.xpEarned,
+        time: new Date().toISOString(),
+      });
+      if (user) await refreshUser();
     } catch {
       // silently fail
     } finally {
@@ -423,8 +440,17 @@ export default function Games() {
     }
   };
 
-  const handleTournamentComplete = async () => {
-    await refreshUser();
+  const handleTournamentComplete = async (tournamentCoins?: number, tournamentXp?: number, placement?: number, gameTitle?: string) => {
+    if (tournamentCoins !== undefined) {
+      saveRecentMatch({
+        game: gameTitle ?? "GlobalStar",
+        win: (placement ?? 999) <= 10,
+        coins: tournamentCoins,
+        xp: tournamentXp ?? 0,
+        time: new Date().toISOString(),
+      });
+    }
+    if (user) await refreshUser();
     setShowTournament(false);
   };
 
