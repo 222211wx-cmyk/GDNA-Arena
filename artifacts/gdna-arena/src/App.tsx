@@ -18,12 +18,25 @@ import ChatPage from "@/pages/chat";
 import Wallet from "@/pages/wallet";
 import NotFound from "@/pages/not-found";
 import GlobalStarApp from "@/pages/globalstar-app";
+import LegendsPage from "@/pages/legends";
+import LegendHubPage from "@/pages/legend-hub";
+import PulsePage from "@/pages/pulse";
+import CitizensPage from "@/pages/citizens";
+import CitizenPage from "@/pages/citizen";
+import EmpireEternalPage from "@/pages/empire-eternal";
+import LearnPage from "@/pages/learn";
+import StoriesPage from "@/pages/stories";
+import EventsPage from "@/pages/events";
+import MessagesPage from "@/pages/messages";
+import CelebrationsPage from "@/pages/celebrations";
 import Hub from "@/pages/hub";
 import Empire from "@/pages/empire";
 import Legal from "@/pages/legal";
 import Chronicle from "@/pages/chronicle";
 import Welcome from "@/pages/welcome";
 import Growth from "@/pages/growth";
+import PressPage from "@/pages/press";
+import EarningsPage from "@/globalstar/pages/earnings";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 
@@ -49,6 +62,19 @@ function Router() {
           <Route path="/games" component={Games} />
           <Route path="/games/globalstar" component={GlobalStarApp} />
           <Route path="/games/globalstar/:rest*" component={GlobalStarApp} />
+          <Route path="/legends" component={LegendsPage} />
+          <Route path="/legends/:id" component={LegendHubPage} />
+          <Route path="/pulse" component={PulsePage} />
+          <Route path="/citizens" component={CitizensPage} />
+          <Route path="/citizen/:username" component={CitizenPage} />
+          <Route path="/empire-eternal" component={EmpireEternalPage} />
+          <Route path="/learn" component={LearnPage} />
+          <Route path="/stories" component={StoriesPage} />
+          <Route path="/events" component={EventsPage} />
+          <Route path="/messages" component={MessagesPage} />
+          <Route path="/celebrations" component={CelebrationsPage} />
+          <Route path="/press" component={PressPage} />
+          <Route path="/earnings" component={EarningsPage} />
           <Route path="/news" component={NewsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />

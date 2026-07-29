@@ -3,11 +3,12 @@ import { Link, useLocation } from "wouter";
 import {
   Menu, X, Gamepad2, Trophy, LogOut, Globe,
   ChevronDown, LayoutDashboard, Wallet,
-  Vote, Newspaper, BrainCircuit, Crown,
-  Clock, Scale, Radio, Brain
+  Vote, Newspaper, BrainCircuit, Crown, Users, Infinity, GraduationCap, BookOpen,
+  Clock, Scale, Radio, Brain, MessageSquare, PartyPopper, Mic2
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
+import { NotificationBell } from "@/components/NotificationBell";
 
 // ── Dropdown groups ────────────────────────────────────────────────────────────
 const NAV_GROUPS = [
@@ -24,16 +25,25 @@ const NAV_GROUPS = [
   {
     key: "nav_group_play",
     items: [
+      { key: "pulse",         path: "/pulse",     icon: Radio,        color: "text-red-400" },
+      { key: "citizens",      path: "/citizens",  icon: Users,        color: "text-cyan-400" },
       { key: "games",         path: "/games",     icon: Gamepad2,     color: "text-primary" },
       { key: "globalstar",    path: "/games/globalstar", icon: Vote,  color: "text-green-400" },
+      { key: "legends",       path: "/legends",   icon: Crown,        color: "text-yellow-400" },
       { key: "leaderboard",   path: "/leaderboard", icon: Trophy,     color: "text-yellow-400" },
     ],
   },
   {
     key: "nav_group_discover",
     items: [
-      { key: "news",          path: "/news",      icon: Newspaper,    color: "text-orange-400" },
-      { key: "ai",            path: "/chat",      icon: BrainCircuit, color: "text-purple-400" },
+      { key: "empire_eternal",  path: "/empire-eternal",  icon: Infinity,      color: "text-green-400" },
+      { key: "messages",        path: "/messages",        icon: MessageSquare, color: "text-cyan-400" },
+      { key: "celebrations",    path: "/celebrations",    icon: PartyPopper,   color: "text-yellow-400" },
+      { key: "learn",           path: "/learn",           icon: GraduationCap, color: "text-green-300" },
+      { key: "stories",         path: "/stories",         icon: BookOpen,      color: "text-green-400" },
+      { key: "events",          path: "/events",          icon: Globe,         color: "text-cyan-400" },
+      { key: "news",            path: "/news",            icon: Newspaper,     color: "text-orange-400" },
+      { key: "ai",              path: "/chat",            icon: BrainCircuit,  color: "text-purple-400" },
     ],
   },
 ];
@@ -147,6 +157,23 @@ export function Navbar() {
           {NAV_GROUPS.map((g) => (
             <NavDropdown key={g.key} group={g} location={location} t={t} />
           ))}
+
+          {/* Press — standalone gold tab */}
+          <Link
+            href="/press"
+            className={`flex items-center gap-1.5 text-sm font-bold transition-all px-3 py-1.5 rounded-lg ${
+              location === "/press"
+                ? "text-black neon-glow"
+                : "border hover:scale-105"
+            }`}
+            style={location === "/press"
+              ? { background: "#FFD700", boxShadow: "0 0 20px rgba(255,215,0,0.4)" }
+              : { borderColor: "rgba(255,215,0,0.4)", color: "#FFD700", background: "rgba(255,215,0,0.08)" }
+            }
+          >
+            <Mic2 className="w-3.5 h-3.5" />
+            {t("press")}
+          </Link>
         </div>
 
         {/* Right side: lang + user */}
@@ -178,6 +205,8 @@ export function Navbar() {
               </div>
             )}
           </div>
+
+          <NotificationBell />
 
           {/* User zone */}
           {user ? (
@@ -225,6 +254,16 @@ export function Navbar() {
           <Link href="/" onClick={() => setIsOpen(false)}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-medium transition-colors ${location === "/" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary"}`}>
             <Gamepad2 className="w-4 h-4 text-primary" /> {t("home")}
+          </Link>
+
+          {/* Press — gold standalone link for mobile */}
+          <Link href="/press" onClick={() => setIsOpen(false)}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-base font-bold transition-colors"
+            style={location === "/press"
+              ? { background: "rgba(255,215,0,0.15)", color: "#FFD700" }
+              : { color: "#FFD700" }}>
+            <Mic2 className="w-4 h-4" style={{ color: "#FFD700" }} />
+            الصحافة العالمية
           </Link>
 
           {NAV_GROUPS.map((g) => (

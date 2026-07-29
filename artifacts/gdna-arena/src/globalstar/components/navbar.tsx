@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'wouter';
 import { useLanguage } from '@/globalstar/contexts/language-context';
-import { Trophy, BarChart3, Newspaper, Landmark, Info } from 'lucide-react';
+import { Trophy, BarChart3, Newspaper, Landmark, Info, Coins } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -19,6 +19,7 @@ export function Navbar() {
     { path: '/news', label: t('news'), icon: Newspaper },
     { path: '/traditions', label: t('traditions'), icon: Landmark },
     { path: '/about', label: t('about'), icon: Info },
+    { path: '/earnings', label: 'أرباحي', icon: Coins },
   ];
 
   const languages = [
@@ -32,7 +33,7 @@ export function Navbar() {
     <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50" data-testid="navbar">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          <Link href="/globalstar/" className="flex items-center gap-2" data-testid="logo-link">
+          <Link href="/" className="flex items-center gap-2" data-testid="logo-link">
             <Trophy className="w-6 h-6 text-primary" />
             <span className="text-xl font-bold">GlobalStar</span>
           </Link>

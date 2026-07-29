@@ -7,6 +7,7 @@ import { NewsTicker } from '@/globalstar/components/news-ticker';
 import { FigureAvatar } from '@/globalstar/components/figure-avatar';
 import { RankBadge } from '@/globalstar/components/rank-badge';
 import { VoteButton } from '@/globalstar/components/vote-button';
+import { EmpireMediaPopup, type EmpireUpload } from '@/globalstar/components/empire-media-popup';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Minus, Activity,
   BookOpen, Play, Headphones, ChevronLeft, ChevronRight,
-  X, Volume2, Crown, Medal, ArrowLeft,
+  X, Crown, Medal, ArrowLeft, Video, Music, Eye, Coins, Upload,
 } from 'lucide-react';
 
 interface MediaItem {
@@ -60,7 +61,9 @@ function StoryViewer({ stories, onClose }: { stories: MediaItem[]; onClose: () =
             </div>
           ))}
         </div>
-        <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white"><X className="w-5 h-5" /></button>
+        <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
         <div className="px-6 py-8 min-h-72 flex flex-col justify-center space-y-4">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-primary" />
@@ -85,52 +88,35 @@ function StoryViewer({ stories, onClose }: { stories: MediaItem[]; onClose: () =
   );
 }
 
-// ── Video Modal ───────────────────────────────────────────────────────────────
-function VideoModal({ video, onClose }: { video: MediaItem; onClose: () => void }) {
-  const url = video.platform === 'youtube'
-    ? `https://www.youtube.com/embed/${video.content}?autoplay=1&rel=0`
-    : video.content;
+// ─── Sovereign Upload Card ────────────────────────────────────────────────────
+function UploadCard({ upload, onClick }: { upload: EmpireUpload; onClick: () => void }) {
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4" onClick={onClose}>
-      <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-        className="relative w-full max-w-3xl bg-black rounded-2xl overflow-hidden border border-white/10"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <Play className="w-4 h-4 text-red-400" />
-            <span className="font-bold text-sm text-white">{video.title}</span>
-          </div>
-          <button onClick={onClose} className="text-white/50 hover:text-white"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="aspect-video">
-          <iframe src={url} className="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen />
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// ── Audio Bar ─────────────────────────────────────────────────────────────────
-function AudioBar({ audio, onClose }: { audio: MediaItem; onClose: () => void }) {
-  const url = audio.platform === 'youtube'
-    ? `https://www.youtube.com/embed/${audio.content}?autoplay=1&rel=0`
-    : audio.content;
-  return (
-    <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4">
-      <div className="bg-gray-900 border border-primary/30 rounded-2xl p-4 shadow-2xl">
-        <div className="flex items-center gap-3 mb-2">
-          <Volume2 className="w-5 h-5 text-primary animate-pulse" />
-          <p className="font-bold text-sm text-white flex-1 truncate">{audio.title}</p>
-          <button onClick={onClose} className="text-white/50 hover:text-white"><X className="w-4 h-4" /></button>
-        </div>
-        <div style={{ height: 60 }} className="rounded-xl overflow-hidden opacity-0 pointer-events-none">
-          <iframe src={url} className="w-full h-full" allow="autoplay" />
-        </div>
-        <p className="text-xs text-primary/60 font-mono text-center mt-1">▶ Now Playing</p>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.01 }}
+      onClick={onClick}
+      className="cursor-pointer rounded-xl p-4 flex items-center gap-4 transition-all"
+      style={{ background: 'rgba(10,8,0,0.9)', border: '1.5px solid rgba(255,215,0,0.2)' }}
+    >
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+        style={{ background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.3)' }}>
+        {upload.type === 'video'
+          ? <Video className="w-5 h-5" style={{ color: '#FFD700' }} />
+          : <Music className="w-5 h-5" style={{ color: '#FFD700' }} />}
+      </div>
+      <div className="flex-1 min-w-0 text-right" dir="rtl">
+        <p className="font-black text-sm text-white truncate">{upload.title}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,215,0,0.5)' }}>{upload.uploader_name}</p>
+      </div>
+      <div className="shrink-0 flex items-center gap-1.5 mr-2">
+        <Eye className="w-3 h-3" style={{ color: 'rgba(255,215,0,0.5)' }} />
+        <span className="text-xs text-white font-mono">{upload.views.toLocaleString()}</span>
+      </div>
+      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+        style={{ background: '#FFD700' }}>
+        {upload.type === 'video'
+          ? <Play className="w-3.5 h-3.5 fill-black text-black" />
+          : <Headphones className="w-3.5 h-3.5 text-black" />}
       </div>
     </motion.div>
   );
@@ -144,8 +130,8 @@ export default function FigureDetail() {
   const { data: figure, isLoading } = useGetGsFigure(figureId);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [activeStory, setActiveStory] = useState(false);
-  const [activeVideo, setActiveVideo] = useState<MediaItem | null>(null);
-  const [activeAudio, setActiveAudio] = useState<MediaItem | null>(null);
+  const [uploads, setUploads] = useState<EmpireUpload[]>([]);
+  const [activeUpload, setActiveUpload] = useState<EmpireUpload | null>(null);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   useEffect(() => {
@@ -156,9 +142,19 @@ export default function FigureDetail() {
       .catch(() => {});
   }, [figureId]);
 
+  useEffect(() => {
+    if (!figure?.domain) return;
+    const cat = figure.domain === 'music' || figure.domain === 'cinema' ? 'art'
+      : figure.domain === 'tech' || figure.domain === 'science' ? 'knowledge'
+      : figure.domain === 'politics' ? 'press'
+      : 'sport';
+    fetch(`${BASE}/api/gs/uploads?category=${cat}&limit=10`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setUploads(d.uploads ?? []))
+      .catch(() => {});
+  }, [figure?.domain]);
+
   const stories = media.filter(m => m.type === 'story');
-  const videos  = media.filter(m => m.type === 'video');
-  const audios  = media.filter(m => m.type === 'audio');
 
   const getTrendIcon = () => {
     if (!figure) return null;
@@ -191,12 +187,10 @@ export default function FigureDetail() {
 
       <AnimatePresence>
         {activeStory && stories.length > 0 && <StoryViewer stories={stories} onClose={() => setActiveStory(false)} />}
-        {activeVideo && <VideoModal video={activeVideo} onClose={() => setActiveVideo(null)} />}
-        {activeAudio && <AudioBar audio={activeAudio} onClose={() => setActiveAudio(null)} />}
       </AnimatePresence>
+      <EmpireMediaPopup upload={activeUpload} onClose={() => setActiveUpload(null)} />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Back */}
         <Link href="/ranking">
           <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Rankings
@@ -226,28 +220,11 @@ export default function FigureDetail() {
                     </div>
                     <VoteButton figureId={figure.id} currentVotes={figure.votes} size="lg" />
                   </div>
-                  {/* Media action buttons */}
-                  {(stories.length > 0 || videos.length > 0 || audios.length > 0) && (
-                    <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                      {stories.length > 0 && (
-                        <Button onClick={() => setActiveStory(true)} variant="outline"
-                          className="border-purple-400/40 text-purple-400 hover:bg-purple-400/10 gap-2 font-bold">
-                          <BookOpen className="w-4 h-4" /> {stories.length} Stories
-                        </Button>
-                      )}
-                      {videos.map(v => (
-                        <Button key={v.id} onClick={() => setActiveVideo(v)} variant="outline"
-                          className="border-red-400/40 text-red-400 hover:bg-red-400/10 gap-2 font-bold">
-                          <Play className="w-4 h-4" /> Watch
-                        </Button>
-                      ))}
-                      {audios.map(a => (
-                        <Button key={a.id} onClick={() => setActiveAudio(a)} variant="outline"
-                          className="border-green-400/40 text-green-400 hover:bg-green-400/10 gap-2 font-bold">
-                          <Headphones className="w-4 h-4" /> Listen
-                        </Button>
-                      ))}
-                    </div>
+                  {stories.length > 0 && (
+                    <Button onClick={() => setActiveStory(true)} variant="outline"
+                      className="border-purple-400/40 text-purple-400 hover:bg-purple-400/10 gap-2 font-bold">
+                      <BookOpen className="w-4 h-4" /> {stories.length} Stories
+                    </Button>
                   )}
                 </div>
               </div>
@@ -296,7 +273,7 @@ export default function FigureDetail() {
           </Card>
         )}
 
-        {/* Stories preview cards */}
+        {/* Stories */}
         {stories.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
             <div className="flex items-center justify-between mb-3">
@@ -330,45 +307,44 @@ export default function FigureDetail() {
           </motion.div>
         )}
 
-        {/* Video + Audio cards */}
-        {(videos.length > 0 || audios.length > 0) && (
-          <div className="grid md:grid-cols-2 gap-4">
-            {videos.map(v => (
-              <motion.div key={v.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                <Card onClick={() => setActiveVideo(v)}
-                  className="border-red-400/20 bg-red-400/5 hover:border-red-400/50 transition-colors cursor-pointer">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-red-400/20 border border-red-400/30 flex items-center justify-center shrink-0">
-                      <Play className="w-5 h-5 text-red-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-mono text-red-400 uppercase tracking-widest mb-1">Watch</p>
-                      <p className="font-black text-sm">{v.title}</p>
-                      {v.platform === 'youtube' && <p className="text-xs text-muted-foreground mt-0.5">YouTube · Click to play</p>}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-            {audios.map(a => (
-              <motion.div key={a.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                <Card onClick={() => setActiveAudio(a)}
-                  className="border-green-400/20 bg-green-400/5 hover:border-green-400/50 transition-colors cursor-pointer">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-green-400/20 border border-green-400/30 flex items-center justify-center shrink-0">
-                      <Headphones className="w-5 h-5 text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-mono text-green-400 uppercase tracking-widest mb-1">Listen</p>
-                      <p className="font-black text-sm">{a.title}</p>
-                      {a.platform === 'youtube' && <p className="text-xs text-muted-foreground mt-0.5">Audio · Click to play</p>}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+        {/* Sovereign Uploads */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.3)' }}>
+                <Upload className="w-3.5 h-3.5" style={{ color: '#FFD700' }} />
+              </div>
+              <div dir="rtl">
+                <p className="font-black text-sm text-white">المحتوى السيادي</p>
+                <p className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>محتوى المواطنين · من خوادم GDNA</p>
+              </div>
+            </div>
+            <Link href="/earnings">
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
+                style={{ border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700', background: 'rgba(255,215,0,0.06)' }}>
+                <Coins className="w-3 h-3" /> أرباحي
+              </button>
+            </Link>
           </div>
-        )}
+
+          {uploads.length === 0 ? (
+            <div className="rounded-2xl p-8 text-center"
+              style={{ background: 'rgba(255,215,0,0.03)', border: '1.5px dashed rgba(255,215,0,0.15)' }}>
+              <Upload className="w-8 h-8 mx-auto mb-2" style={{ color: 'rgba(255,215,0,0.2)' }} />
+              <p className="text-sm" style={{ color: 'rgba(255,215,0,0.4)' }}>لا يوجد محتوى سيادي بعد في هذا التصنيف</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {uploads.map((u, i) => (
+                <motion.div key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}>
+                  <UploadCard upload={u} onClick={() => setActiveUpload(u)} />
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </main>
     </div>
   );

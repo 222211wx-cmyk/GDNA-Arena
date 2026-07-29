@@ -11,6 +11,16 @@ import growthRouter from "./growth";
 import chronicleRouter from "./chronicle";
 import mediaRouter from "./media";
 import archonRouter from "./archon";
+import legendsRouter from "./legends";
+import pulseRouter from "./pulse";
+import citizensRouter from "./citizens";
+import learnRouter from "./learn";
+import storiesRouter from "./stories";
+import messagesRouter from "./messages";
+import notificationsRouter from "./notifications";
+import celebrationsRouter from "./celebrations";
+import pressRouter from "./press";
+import empireMediaRouter from "./empire-media";
 
 const router: IRouter = Router();
 
@@ -26,5 +36,15 @@ router.use(growthRouter);
 router.use(chronicleRouter);
 router.use(mediaRouter);
 router.use(archonRouter);
+router.use(legendsRouter);
+router.use(pulseRouter);
+router.use(citizensRouter);
+router.use(learnRouter);
+router.use(storiesRouter);
+router.use(messagesRouter);
+router.use(notificationsRouter);
+router.use(celebrationsRouter);
+router.use(pressRouter);
+router.use(empireMediaRouter);
 
 export default router;
