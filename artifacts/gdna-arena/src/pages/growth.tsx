@@ -615,6 +615,7 @@ export default function Growth() {
           <div className="max-w-6xl mx-auto px-4 flex gap-0 border-t border-yellow-400/10">
             {([
               { id: "profile", label: "DIMENSIONAL PROFILE", symbol: "◈" },
+              { id: "pillars", label: "FOUR PILLARS", symbol: "▓" },
               { id: "oracle", label: "ORACLE INTELLIGENCE", symbol: "👁" },
               { id: "calibration", label: "BREATH CALIBRATION", symbol: "∿" },
             ] as const).map(tab => (
@@ -777,6 +778,275 @@ export default function Growth() {
               )}
             </div>
           )}
+
+          {/* ════════════════════════════════════════════════════════════ */}
+          {/* TAB: FOUR PILLARS                                           */}
+          {/* ════════════════════════════════════════════════════════════ */}
+          {activeTab === "pillars" && (() => {
+            const d = activeProfile.dimensions;
+            // Compute the 4 pillar scores from 7 dimensions
+            const pillars = [
+              {
+                id: "mens",
+                latin: "MENS",
+                ar: "العقل الإمبراطوري",
+                sub: "الوضوح · الرؤية · السلطة الداخلية",
+                symbol: "🧠",
+                color: "#A8E6CF",
+                score: Math.round((d.intellectus + d.auctoritas) / 2),
+                dims: [
+                  { label: "INTELLECTUS", value: d.intellectus },
+                  { label: "AUCTORITAS", value: d.auctoritas },
+                ],
+                challenge: "اكتب قرارك الأكثر أهمية هذا الأسبوع — بدون تردد — في جملة واحدة. ثم نفذه الآن.",
+                power: "الإمبراطور الحقيقي يعرف بالضبط ما يريد — وهذا وحده يسبق أي قوة أخرى.",
+              },
+              {
+                id: "vis",
+                latin: "VIS",
+                ar: "قوة التنفيذ",
+                sub: "الإرادة · الانضباط · الفعل",
+                symbol: "⚔️",
+                color: "#C9A84C",
+                score: Math.round((d.volontas + d.disciplina) / 2),
+                dims: [
+                  { label: "VOLONTAS", value: d.volontas },
+                  { label: "DISCIPLINA", value: d.disciplina },
+                ],
+                challenge: "حدد 3 مهام غير قابلة للتفاوض لليوم. أنجزها قبل الغروب — بلا استثناء.",
+                power: "الإرادة بدون انضباط حلم. الانضباط بدون إرادة سجن. كلاهما معاً: إمبراطورية.",
+              },
+              {
+                id: "anima",
+                latin: "ANIMA",
+                ar: "روح المحارب",
+                sub: "الصمود · التأثير · الاتصال",
+                symbol: "🔥",
+                color: "#FF8C42",
+                score: Math.round((d.resilentia + d.societas) / 2),
+                dims: [
+                  { label: "RESILENTIA", value: d.resilentia },
+                  { label: "SOCIETAS", value: d.societas },
+                ],
+                challenge: "تواصل مع شخص واحد ذي قيمة حقيقية في حياتك اليوم — ليس رسالة عادية، بل لقاء حقيقي.",
+                power: "الروح التي لا تُكسر تُعدي المحيطين بها. تأثيرك هو امتداد روحك الداخلية.",
+              },
+              {
+                id: "legatum",
+                latin: "LEGATUM",
+                ar: "الإرث الأبدي",
+                sub: "الوفرة · التوازن · النمو الدائم",
+                symbol: "👑",
+                color: "#DDA0DD",
+                score: Math.round(
+                  (d.abundantia * 0.5) +
+                  (activeProfile.overallScore * 0.3) +
+                  (Math.min(...Object.values(d)) * 0.2)
+                ),
+                dims: [
+                  { label: "ABUNDANTIA", value: d.abundantia },
+                  { label: "BALANCE", value: Math.round(100 - (Math.max(...Object.values(d)) - Math.min(...Object.values(d)))) },
+                ],
+                challenge: "اسأل نفسك: ما الذي ستتركه بعدك؟ اكتب جملة واحدة عن إرثك. الصياغة هي البداية.",
+                power: "الإمبراطوريات لا تُبنى في يوم. لكنها تبدأ بقرار واحد لا يتراجع عنه صاحبه.",
+              },
+            ];
+
+            const engineScore = Math.round(pillars.reduce((s, p) => s + p.score, 0) / 4);
+            const weakestPillar = pillars.reduce((a, b) => a.score < b.score ? a : b);
+            const strongestPillar = pillars.reduce((a, b) => a.score > b.score ? a : b);
+            const growthState =
+              engineScore >= 80 ? { label: "SOVEREIGN GROWTH", color: "#C9A84C", desc: "الإمبراطورية في ذروة توسعها" } :
+              engineScore >= 60 ? { label: "ACCELERATING",     color: "#A8E6CF", desc: "النمو في تصاعد مستمر" } :
+              engineScore >= 40 ? { label: "BUILDING",         color: "#87CEEB", desc: "الأساس يتشكل، الطريق واضح" } :
+                                  { label: "AWAKENING",        color: "#FF8C42", desc: "المحارب يستيقظ — البداية الأشد قوة" };
+
+            return (
+              <div className="space-y-8">
+                <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em]">
+                  ▓ THE FOUR PILLARS — PERPETUAL EMPIRE GROWTH ENGINE
+                </div>
+
+                {/* Growth Engine Score */}
+                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  className="border p-6 relative overflow-hidden"
+                  style={{ borderColor: `${growthState.color}50` }}>
+                  <div className="absolute inset-0"
+                    style={{ background: `radial-gradient(ellipse at 50% 0%, ${growthState.color}08, transparent 60%)` }} />
+                  <div className="relative">
+                    <div className="font-mono text-xs tracking-[0.5em] mb-3"
+                      style={{ color: `${growthState.color}80` }}>
+                      ⚡ PERPETUAL GROWTH ENGINE
+                    </div>
+                    <div className="flex items-end gap-6 mb-4">
+                      <div className="text-7xl font-black font-mono leading-none"
+                        style={{ color: growthState.color, textShadow: `0 0 60px ${growthState.color}40` }}>
+                        {engineScore}
+                      </div>
+                      <div className="pb-2">
+                        <div className="font-mono font-black text-lg tracking-widest" style={{ color: growthState.color }}>
+                          {growthState.label}
+                        </div>
+                        <div className="font-mono text-xs text-white/40 mt-0.5" dir="rtl">{growthState.desc}</div>
+                      </div>
+                    </div>
+                    {/* Engine bar */}
+                    <div className="h-2 bg-white/5 relative overflow-hidden mb-3">
+                      <motion.div className="h-full absolute left-0"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${engineScore}%` }}
+                        transition={{ duration: 1.5, ease: "easeOut" }}
+                        style={{ background: `linear-gradient(90deg, ${growthState.color}60, ${growthState.color})` }} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 font-mono text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-400">▲ DOMINANT:</span>
+                        <span style={{ color: strongestPillar.color }}>{strongestPillar.latin} ({strongestPillar.score})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400/70">▼ FRONTIER:</span>
+                        <span style={{ color: weakestPillar.color }}>{weakestPillar.latin} ({weakestPillar.score})</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* The Four Pillars — visual column display */}
+                <div>
+                  <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em] mb-4">
+                    ◈ THE FOUR PILLARS — STRUCTURAL ANALYSIS
+                  </div>
+
+                  {/* Pillar columns visual */}
+                  <div className="flex items-end gap-3 h-32 mb-1 px-2">
+                    {pillars.map((p, i) => (
+                      <motion.div key={p.id}
+                        className="flex-1 flex flex-col items-center justify-end gap-1"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.1 }}>
+                        <span className="text-xs font-mono font-black" style={{ color: p.color }}>{p.score}</span>
+                        <div className="w-full relative overflow-hidden" style={{ height: 80 }}>
+                          <div className="absolute bottom-0 w-full"
+                            style={{ background: `${p.color}10`, border: `1px solid ${p.color}20`, height: '100%' }} />
+                          <motion.div
+                            className="absolute bottom-0 w-full"
+                            initial={{ height: 0 }}
+                            animate={{ height: `${p.score}%` }}
+                            transition={{ duration: 1.2, delay: 0.3 + i * 0.12, ease: "easeOut" }}
+                            style={{
+                              background: `linear-gradient(to top, ${p.color}80, ${p.color}30)`,
+                              borderTop: `2px solid ${p.color}`,
+                            }} />
+                        </div>
+                        <span className="text-xs font-mono tracking-widest" style={{ color: `${p.color}80` }}>{p.latin}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pillar cards */}
+                <div className="space-y-4">
+                  {pillars.map((p, i) => (
+                    <motion.div key={p.id}
+                      initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.08 }}
+                      className="border p-5 space-y-4 relative overflow-hidden"
+                      style={{ borderColor: `${p.color}25` }}>
+                      <div className="absolute right-0 top-0 bottom-0 w-1"
+                        style={{ background: `linear-gradient(to bottom, ${p.color}60, ${p.color}10)` }} />
+
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{p.symbol}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-sm tracking-widest" style={{ color: p.color }}>
+                                {p.latin}
+                              </span>
+                              <span className="font-mono text-xs text-white/30" dir="rtl">{p.ar}</span>
+                            </div>
+                            <div className="font-mono text-xs text-white/20 tracking-widest mt-0.5" dir="rtl">{p.sub}</div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-mono font-black text-2xl leading-none" style={{ color: p.color }}>{p.score}</div>
+                          <div className="font-mono text-xs text-white/20">/100</div>
+                        </div>
+                      </div>
+
+                      {/* Score bar */}
+                      <div className="h-1.5 bg-white/5 relative overflow-hidden">
+                        <motion.div className="h-full absolute left-0"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${p.score}%` }}
+                          transition={{ duration: 1.2, delay: 0.4 + i * 0.1, ease: "easeOut" }}
+                          style={{ background: `linear-gradient(90deg, ${p.color}50, ${p.color})` }} />
+                      </div>
+
+                      {/* Dimension breakdown */}
+                      <div className="flex gap-4">
+                        {p.dims.map((dim, j) => (
+                          <div key={j} className="flex items-center gap-2 font-mono text-xs">
+                            <span className="text-white/20">{dim.label}</span>
+                            <span style={{ color: p.color }}>{dim.value}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Power statement */}
+                      <div className="border-l-2 pl-3 font-mono text-xs text-white/40 leading-relaxed italic"
+                        style={{ borderColor: `${p.color}40` }} dir="rtl">
+                        "{p.power}"
+                      </div>
+
+                      {/* Daily challenge */}
+                      <div className="border p-3 space-y-1.5" style={{ borderColor: `${p.color}20`, background: `${p.color}05` }}>
+                        <div className="font-mono text-xs tracking-widest" style={{ color: p.color }}>
+                          ⚡ DAILY PILLAR CHALLENGE
+                        </div>
+                        <p className="font-mono text-xs text-white/60 leading-relaxed" dir="rtl">{p.challenge}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Four Pillars growth law */}
+                <div className="border border-yellow-400/30 p-6 space-y-3 text-center"
+                  style={{ background: "rgba(201,168,76,0.03)" }}>
+                  <div className="font-mono text-yellow-400/40 text-xs tracking-[0.5em]">♔ IMPERIAL GROWTH LAW</div>
+                  <p className="font-mono text-sm text-yellow-400/70 leading-relaxed" dir="rtl">
+                    "الإمبراطورية التي تنمو بلا أعمدة تسقط. الإمبراطورية التي تبني أعمدتها الأربع تحكم إلى الأبد."
+                  </p>
+                  <div className="flex items-center justify-center gap-6 pt-2">
+                    {pillars.map(p => (
+                      <div key={p.id} className="text-center">
+                        <div className="text-lg">{p.symbol}</div>
+                        <div className="font-mono text-xs font-black" style={{ color: p.color }}>{p.latin}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Weakest pillar focus directive */}
+                <div className="border p-5 flex items-start gap-4"
+                  style={{ borderColor: `${weakestPillar.color}50`, boxShadow: `0 0 20px ${weakestPillar.color}10` }}>
+                  <span className="text-2xl shrink-0">{weakestPillar.symbol}</span>
+                  <div>
+                    <div className="font-mono text-xs tracking-[0.4em] mb-2" style={{ color: weakestPillar.color }}>
+                      ▼ PRIORITY FRONTIER — {weakestPillar.latin} ({weakestPillar.ar})
+                    </div>
+                    <p className="font-mono text-xs text-white/60 leading-relaxed" dir="rtl">
+                      {weakestPillar.challenge}
+                    </p>
+                    <div className="mt-2 font-mono text-xs text-white/30">
+                      SCORE: {weakestPillar.score}/100 — هذا العمود يحتاج أولوية تركيزك اليوم.
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            );
+          })()}
 
           {/* ════════════════════════════════════════════════════════════ */}
           {/* TAB: ORACLE INTELLIGENCE                                    */}

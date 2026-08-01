@@ -66,7 +66,7 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
   const { username } = req.params;
 
   const { rows: userRows } = await pool.query(
-    `SELECT id, username, xp, balance, games_played, wins, created_at, honor_count, is_muted
+    `SELECT id, username, xp, balance, games_played, wins, created_at, honor_count, is_muted, is_trending
      FROM "users" WHERE username = $1 LIMIT 1`,
     [username]
   );
@@ -142,6 +142,7 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
       id: user.id, username: user.username, xp: user.xp, balance: user.balance,
       gamesPlayed: user.games_played, wins: user.wins, createdAt: user.created_at,
       honorCount: user.honorCount, isMuted: user.is_muted,
+      isTrending: user.is_trending ?? false,
       rank: getRank(user.xp),
       honorInfo: getHonorTitle(user.honorCount),
       specialty, totalDebates, uniqueLegends, totalWatches, recentHonors,

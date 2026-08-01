@@ -36,7 +36,7 @@ import Chronicle from "@/pages/chronicle";
 import Welcome from "@/pages/welcome";
 import Growth from "@/pages/growth";
 import PressPage from "@/pages/press";
-import EarningsPage from "@/globalstar/pages/earnings";
+import SportPage from "@/pages/sport";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 
@@ -59,8 +59,10 @@ function Router() {
           <Route path="/chronicle" component={Chronicle} />
           <Route path="/welcome" component={Welcome} />
           <Route path="/growth" component={Growth} />
+          <Route path="/sport" component={SportPage} />
           <Route path="/games" component={Games} />
           <Route path="/games/globalstar" component={GlobalStarApp} />
+          <Route path="/games/globalstar/figures/:id" component={GlobalStarApp} />
           <Route path="/games/globalstar/:rest*" component={GlobalStarApp} />
           <Route path="/legends" component={LegendsPage} />
           <Route path="/legends/:id" component={LegendHubPage} />
@@ -74,7 +76,6 @@ function Router() {
           <Route path="/messages" component={MessagesPage} />
           <Route path="/celebrations" component={CelebrationsPage} />
           <Route path="/press" component={PressPage} />
-          <Route path="/earnings" component={EarningsPage} />
           <Route path="/news" component={NewsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />

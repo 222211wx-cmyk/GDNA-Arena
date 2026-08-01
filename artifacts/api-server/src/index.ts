@@ -1,6 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
+import { startHonorAlertJob } from "./jobs/honor-alert.js";
+import { startWelcomeBroadcastJob, runWelcomeBroadcast } from "./jobs/welcome-broadcast.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -647,6 +649,8 @@ async function ensureTables() {
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_count" integer NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_muted" boolean NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_title" text NOT NULL DEFAULT 'Citizen'`);
+    await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_trending" boolean NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_alert_sent" boolean NOT NULL DEFAULT false`);
     console.log("[HONOR] Citizen Honor System tables ready");
 
     // Seed starter group rooms if empty
@@ -815,6 +819,27 @@ async function ensureTables() {
       )
     `);
 
+    // Add figure_tag column if missing (safe ALTER)
+    await pool.query(`
+      ALTER TABLE gs_uploads ADD COLUMN IF NOT EXISTS figure_tag TEXT
+    `);
+
+    // Withdrawal requests
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS gs_withdrawals (
+        id             SERIAL PRIMARY KEY,
+        uploader_name  TEXT NOT NULL,
+        amount_coins   DECIMAL(10,4) NOT NULL,
+        amount_mad     DECIMAL(10,2) NOT NULL,
+        amount_usd     DECIMAL(10,2) NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending','approved','paid','rejected')),
+        notes          TEXT,
+        requested_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        paid_at        TIMESTAMPTZ
+      )
+    `);
+
     console.log("[SOVEREIGN] Media tables verified");
     console.log("[NEURAL] Tables verified");
   } catch (err) {
@@ -822,7 +847,78 @@ async function ensureTables() {
   }
 }
 
+// ── Admin / Utility routes ────────────────────────────────────────
+import express from "express";
+import bcryptAdmin from "bcrypt";
+const adminRouter = express.Router();
+
+// POST /api/admin/broadcast-welcome — بث يدوي في أي وقت
+adminRouter.post("/admin/broadcast-welcome", async (req, res): Promise<void> => {
+  try {
+    const { minXp = 0, limit = 0, force = false } = req.body ?? {};
+    const result = await runWelcomeBroadcast({ minXp, limit, force });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+// GET /api/seed — يعمّر 3 مستخدمين تجريبيين مرة واحدة
+adminRouter.get("/seed", async (req, res): Promise<void> => {
+  try {
+    const seeds = [
+      { username: "CR7_Test",   email: "cr7@gdna-test.com",   password: "empire123" },
+      { username: "ElQaisy",    email: "qaisy@gdna-test.com",  password: "empire123" },
+      { username: "GDNANews",   email: "news@gdna-test.com",   password: "empire123" },
+    ];
+
+    const created: string[] = [];
+
+    for (const s of seeds) {
+      // تخطى إذا كان موجوداً
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM users WHERE email=$1 OR username=$2 LIMIT 1`,
+        [s.email, s.username]
+      );
+      if (existing.length > 0) { created.push(`${s.username} (موجود)`); continue; }
+
+      const hash = await bcryptAdmin.hash(s.password, 10);
+      const { rows } = await pool.query<{ id: number }>(
+        `INSERT INTO users (username, email, password_hash, xp, balance, honor_count)
+         VALUES ($1,$2,$3, 500, 100, 3)
+         RETURNING id`,
+        [s.username, s.email, hash]
+      );
+      const userId = rows[0].id;
+
+      // رسالة ترحيب فورية
+      const WELCOME_POOL = [
+        { icon: "👑", title: "⚡ المملكة تستدعيك — EMPIRE ETERNAL", body: "أنت الآن جزء من الإمبراطورية الأكبر في تاريخ المحتوى الرقمي. استكشف الـ Legends، صوّت في GlobalStar، وشارك في Pulse — مكانك هنا يستحق أن يُرى." },
+        { icon: "🔥", title: "🔥 الإمبراطورية تنتظر مواطناً مثلك", body: "الأبطال لا يُنتظرون — يتقدمون. زُر GlobalStar وصوّت لمن يستحق، أو أدخل الميدان في PLAY وأثبت من أنت. الأسطورة تبدأ الآن." },
+        { icon: "🏆", title: "🏆 البطل لا يحتاج دعوة — هو يدخل", body: "منصة GDNA Arena جاهزة لك: Legends من كل الحضارات، GlobalStar لأفضل المواهب، ألعاب ومعارك وشرف. أين ستبدأ رحلتك؟" },
+      ];
+      const msg = WELCOME_POOL[userId % WELCOME_POOL.length];
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, title, body, icon, link_path)
+         VALUES ($1,'welcome_broadcast',$2,$3,$4,'/games')`,
+        [userId, msg.title, msg.body, msg.icon]
+      );
+
+      console.log(`[SEED] ✅ Created → ${s.username} (id:${userId})`);
+      created.push(s.username);
+    }
+
+    res.json({ ok: true, created });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+app.use("/api", adminRouter);
+
 ensureTables().then(() => {
+  startHonorAlertJob();
+  startWelcomeBroadcastJob();
   app.listen(port, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`[SERVER] Listening on port ${port}`);

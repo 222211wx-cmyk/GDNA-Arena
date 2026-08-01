@@ -10,6 +10,7 @@ import FigureDetail from '@/globalstar/pages/figure-detail';
 import News from '@/globalstar/pages/news';
 import Traditions from '@/globalstar/pages/traditions';
 import About from '@/globalstar/pages/about';
+import EarningsPage from '@/globalstar/pages/earnings';
 
 const gsQueryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +35,7 @@ export default function GlobalStarApp() {
               <Route path="/news" component={News} />
               <Route path="/traditions" component={Traditions} />
               <Route path="/about" component={About} />
+              <Route path="/earnings" component={EarningsPage} />
             </Switch>
           </WouterRouter>
           <Toaster />

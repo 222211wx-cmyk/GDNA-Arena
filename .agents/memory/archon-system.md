@@ -9,7 +9,7 @@ description: Encrypted internal self-development system — the foundation of th
 1. `boot` — terminal boot animation (7 typewriter lines), menu to start or load existing profile
 2. `initiation` — 7 questions one at a time (Q1–Q6 = A/B/C/D choices, Q7 = free text)
 3. `encoding` — Matrix-style encryption animation while API call processes
-4. `profile` — Full profile with 3 tabs: DIMENSIONAL PROFILE / ORACLE INTELLIGENCE / BREATH CALIBRATION
+4. `profile` — Full profile with 4 tabs: DIMENSIONAL PROFILE / FOUR PILLARS / ORACLE INTELLIGENCE / BREATH CALIBRATION
 
 **The 7 Archon Dimensions:**
 - VOLONTAS — إرادة الفاتح (Q1 answer)
@@ -40,6 +40,14 @@ Generated deterministically from dimension values + archetype.
 - `POST /api/archon/assess` — full initiation, calls GPT-4o-mini, stores session, returns profile
 - `GET /api/archon/profile` — latest active session for authenticated user
 - `POST /api/archon/mission` — generate classified daily directive for a specific dimension
+
+**The Four Pillars (FOUR PILLARS tab — pure frontend, no new API):**
+Computed from the 7 dimensions and displayed as a Growth Engine dashboard:
+- 🧠 MENS (العقل) = avg(INTELLECTUS, AUCTORITAS)
+- ⚔️ VIS (القوة) = avg(VOLONTAS, DISCIPLINA)
+- 🔥 ANIMA (الروح) = avg(RESILENTIA, SOCIETAS)
+- 👑 LEGATUM (الإرث) = ABUNDANTIA*0.5 + overallScore*0.3 + minDim*0.2
+Engine score = avg of 4 pillars. Shows animated column chart, per-pillar daily challenges (Arabic), growth state label, weakest pillar spotlight.
 
 **Why:**
 The user wanted a "complex encrypted internal system" (نظام داخلي معقد مشفر) as the foundation of the empire. Terminal aesthetic, cipher animations, imperial language — not a wellness app, an intelligence system.

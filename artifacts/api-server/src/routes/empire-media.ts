@@ -33,7 +33,7 @@ const router = Router();
 router.post("/gs/uploads", upload.single("file"), async (req, res): Promise<void> => {
   try {
     if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
-    const { title, category, uploaderName } = req.body;
+    const { title, category, uploaderName, figureTag } = req.body;
     const type = req.file.mimetype.startsWith("video/") ? "video" : "audio";
     const { rows } = await pool.query(
       `INSERT INTO gs_uploads (uploader_name, title, type, category, file_path, file_name, file_size, mime_type)
@@ -49,6 +49,11 @@ router.post("/gs/uploads", upload.single("file"), async (req, res): Promise<void
         req.file.mimetype,
       ]
     );
+    // Store figure_tag if provided
+    if (figureTag && rows[0]) {
+      await pool.query(`UPDATE gs_uploads SET figure_tag=$1 WHERE id=$2`, [figureTag, rows[0].id]);
+      rows[0].figure_tag = figureTag;
+    }
     res.json({ upload: rows[0] });
   } catch (err) {
     console.error("[EMPIRE-MEDIA] Upload error:", err);
@@ -208,6 +213,59 @@ router.get("/gs/earnings", async (req, res): Promise<void> => {
     const totalViews    = rows.reduce((s, r) => s + r.views, 0);
 
     res.json({ uploads: rows, totalEarnings, totalViews, uploaderName: name });
+  } catch {
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// ─── POST /gs/withdrawals ─────────────────────────────────────────────────────
+router.post("/gs/withdrawals", async (req, res): Promise<void> => {
+  try {
+    const { uploaderName, amountCoins } = req.body;
+    if (!uploaderName || !amountCoins) {
+      res.status(400).json({ error: "uploaderName and amountCoins required" }); return;
+    }
+    const coins = parseFloat(amountCoins);
+    if (isNaN(coins) || coins <= 0) {
+      res.status(400).json({ error: "Invalid amount" }); return;
+    }
+    // Check available earnings
+    const { rows: earnRows } = await pool.query(
+      `SELECT COALESCE(SUM(earnings),0) as total FROM gs_uploads WHERE uploader_name=$1`,
+      [uploaderName]
+    );
+    const { rows: wdRows } = await pool.query(
+      `SELECT COALESCE(SUM(amount_coins),0) as total FROM gs_withdrawals
+       WHERE uploader_name=$1 AND status IN ('pending','approved','paid')`,
+      [uploaderName]
+    );
+    const available = parseFloat(earnRows[0].total) - parseFloat(wdRows[0].total);
+    if (coins > available) {
+      res.status(400).json({ error: "Insufficient balance", available }); return;
+    }
+    const mad = Math.round(coins * 100) / 100; // 1 coin = 1 MAD
+    const usd = Math.round(coins * 10) / 100;  // 1 MAD ≈ 0.10 USD
+    const { rows } = await pool.query(
+      `INSERT INTO gs_withdrawals (uploader_name, amount_coins, amount_mad, amount_usd)
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [uploaderName, coins, mad, usd]
+    );
+    res.json({ withdrawal: rows[0] });
+  } catch {
+    res.status(500).json({ error: "Failed to request withdrawal" });
+  }
+});
+
+// ─── GET /gs/withdrawals ──────────────────────────────────────────────────────
+router.get("/gs/withdrawals", async (req, res): Promise<void> => {
+  try {
+    const name = req.query.name as string;
+    if (!name) { res.status(400).json({ error: "name required" }); return; }
+    const { rows } = await pool.query(
+      `SELECT * FROM gs_withdrawals WHERE uploader_name=$1 ORDER BY requested_at DESC`,
+      [name]
+    );
+    res.json({ withdrawals: rows });
   } catch {
     res.status(500).json({ error: "Failed" });
   }

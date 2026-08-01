@@ -15,7 +15,7 @@ interface Rank { label: string; tier: number; color: string; icon: string }
 interface Citizen {
   id: number; username: string; xp: number; balance: number;
   gamesPlayed: number; wins: number; createdAt: string;
-  honorCount: number; isMuted: boolean;
+  honorCount: number; isMuted: boolean; isTrending: boolean;
   rank: Rank; honorInfo: HonorInfo;
   specialty: string; totalDebates: number;
   uniqueLegends: number; totalWatches: number;
@@ -196,6 +196,9 @@ export default function CitizenPage() {
               <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center text-sm border-2 border-background bg-card">
                 {citizen.rank.icon}
               </div>
+              {citizen.isTrending && (
+                <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-yellow-400 border-2 border-black flex items-center justify-center text-xs animate-pulse" title="Trending on GDNA">🔥</div>
+              )}
               {citizen.isMuted && (
                 <div className="absolute -top-2 -left-2 w-7 h-7 rounded-full bg-red-900 border border-red-500 flex items-center justify-center text-xs" title="Muted">🔇</div>
               )}

@@ -8,6 +8,7 @@ import { FigureAvatar } from '@/globalstar/components/figure-avatar';
 import { RankBadge } from '@/globalstar/components/rank-badge';
 import { VoteButton } from '@/globalstar/components/vote-button';
 import { EmpireMediaPopup, type EmpireUpload } from '@/globalstar/components/empire-media-popup';
+import { UploadModal } from '@/globalstar/components/upload-modal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Minus, Activity,
   BookOpen, Play, Headphones, ChevronLeft, ChevronRight,
-  X, Crown, Medal, ArrowLeft, Video, Music, Eye, Coins, Upload,
+  X, Crown, Medal, ArrowLeft, Video, Music, Eye, Coins, Upload, Plus,
 } from 'lucide-react';
 
 interface MediaItem {
@@ -132,7 +133,16 @@ export default function FigureDetail() {
   const [activeStory, setActiveStory] = useState(false);
   const [uploads, setUploads] = useState<EmpireUpload[]>([]);
   const [activeUpload, setActiveUpload] = useState<EmpireUpload | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+  // Map figure domain → upload category + figure tag
+  const figureCategory = figure?.domain === 'music' || figure?.domain === 'cinema' ? 'art'
+    : figure?.domain === 'tech' || figure?.domain === 'science' ? 'knowledge'
+    : figure?.domain === 'politics' ? 'press'
+    : 'sport';
+
+  const figureName = figure?.name ?? '';
 
   useEffect(() => {
     if (!figureId) return;
@@ -142,17 +152,15 @@ export default function FigureDetail() {
       .catch(() => {});
   }, [figureId]);
 
-  useEffect(() => {
+  const fetchUploads = () => {
     if (!figure?.domain) return;
-    const cat = figure.domain === 'music' || figure.domain === 'cinema' ? 'art'
-      : figure.domain === 'tech' || figure.domain === 'science' ? 'knowledge'
-      : figure.domain === 'politics' ? 'press'
-      : 'sport';
-    fetch(`${BASE}/api/gs/uploads?category=${cat}&limit=10`, { credentials: 'include' })
+    fetch(`${BASE}/api/gs/uploads?category=${figureCategory}&limit=20`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => setUploads(d.uploads ?? []))
       .catch(() => {});
-  }, [figure?.domain]);
+  };
+
+  useEffect(() => { fetchUploads(); }, [figure?.domain]);
 
   const stories = media.filter(m => m.type === 'story');
 
@@ -189,6 +197,13 @@ export default function FigureDetail() {
         {activeStory && stories.length > 0 && <StoryViewer stories={stories} onClose={() => setActiveStory(false)} />}
       </AnimatePresence>
       <EmpireMediaPopup upload={activeUpload} onClose={() => setActiveUpload(null)} />
+      <UploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={fetchUploads}
+        initialFigureTag={figureName}
+        initialCategory={figureCategory}
+      />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <Link href="/ranking">
@@ -280,10 +295,17 @@ export default function FigureDetail() {
               <h2 className="text-lg font-black uppercase tracking-wider flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-purple-400" /> Stories
               </h2>
-              <Button onClick={() => setActiveStory(true)} size="sm" variant="outline"
-                className="border-purple-400/40 text-purple-400 hover:bg-purple-400/10 text-xs">
-                Read All Stories
-              </Button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setUploadOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all hover:opacity-90"
+                  style={{ background: '#FFD700', color: '#000' }}>
+                  <Plus className="w-3.5 h-3.5" /> رفع محتوى
+                </button>
+                <Button onClick={() => setActiveStory(true)} size="sm" variant="outline"
+                  className="border-purple-400/40 text-purple-400 hover:bg-purple-400/10 text-xs">
+                  Read All Stories
+                </Button>
+              </div>
             </div>
             <div className="grid md:grid-cols-3 gap-4">
               {stories.map((s, i) => (
@@ -320,20 +342,40 @@ export default function FigureDetail() {
                 <p className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>محتوى المواطنين · من خوادم GDNA</p>
               </div>
             </div>
-            <Link href="/earnings">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
-                style={{ border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700', background: 'rgba(255,215,0,0.06)' }}>
-                <Coins className="w-3 h-3" /> أرباحي
+            <div className="flex items-center gap-2">
+              <button onClick={() => setUploadOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-all hover:opacity-90 active:scale-[0.97]"
+                style={{ background: '#FFD700', color: '#000' }}>
+                <Plus className="w-4 h-4" /> رفع محتوى
               </button>
-            </Link>
+              <Link href="/earnings">
+                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
+                  style={{ border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700', background: 'rgba(255,215,0,0.06)' }}>
+                  <Coins className="w-3 h-3" /> أرباحي
+                </button>
+              </Link>
+            </div>
           </div>
 
           {uploads.length === 0 ? (
-            <div className="rounded-2xl p-8 text-center"
-              style={{ background: 'rgba(255,215,0,0.03)', border: '1.5px dashed rgba(255,215,0,0.15)' }}>
-              <Upload className="w-8 h-8 mx-auto mb-2" style={{ color: 'rgba(255,215,0,0.2)' }} />
-              <p className="text-sm" style={{ color: 'rgba(255,215,0,0.4)' }}>لا يوجد محتوى سيادي بعد في هذا التصنيف</p>
-            </div>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="rounded-2xl p-10 text-center"
+              style={{ background: 'rgba(255,215,0,0.03)', border: '1.5px dashed rgba(255,215,0,0.2)' }}>
+              <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+                style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.2)' }}>
+                <Upload className="w-7 h-7" style={{ color: 'rgba(255,215,0,0.4)' }} />
+              </div>
+              <p className="font-black text-white mb-1" dir="rtl">كن أول من ينشر عن {figureName}</p>
+              <p className="text-xs mb-5" style={{ color: 'rgba(255,215,0,0.4)' }} dir="rtl">
+                كل 100 مشاهدة = 1 عملة ذهبية · أرباحك تُحسب تلقائياً
+              </p>
+              <button onClick={() => setUploadOpen(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm transition-all hover:opacity-90 active:scale-[0.97]"
+                style={{ background: '#FFD700', color: '#000' }}>
+                <Plus className="w-4 h-4" /> أضف فيديو أو صوت الآن
+              </button>
+            </motion.div>
           ) : (
             <div className="space-y-2">
               {uploads.map((u, i) => (
@@ -341,6 +383,14 @@ export default function FigureDetail() {
                   <UploadCard upload={u} onClick={() => setActiveUpload(u)} />
                 </motion.div>
               ))}
+              {/* Upload CTA at bottom of list */}
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: uploads.length * 0.05 + 0.1 }}>
+                <button onClick={() => setUploadOpen(true)}
+                  className="w-full rounded-xl py-3 flex items-center justify-center gap-2 font-black text-sm transition-all hover:opacity-80"
+                  style={{ border: '1.5px dashed rgba(255,215,0,0.3)', color: '#FFD700', background: 'rgba(255,215,0,0.04)' }}>
+                  <Plus className="w-4 h-4" /> أضف محتواك عن {figureName}
+                </button>
+              </motion.div>
             </div>
           )}
         </div>

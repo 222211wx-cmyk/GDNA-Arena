@@ -2,8 +2,34 @@ import { Router, type IRouter } from "express";
 import bcrypt from "bcrypt";
 import { eq, or } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { pool } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
+
+// ── رسائل الترحيب — يتلقاها كل مواطن جديد فور تسجيله ─────────────
+const WELCOME_POOL = [
+  { icon: "👑", title: "⚡ المملكة تستدعيك — EMPIRE ETERNAL", body: "أنت الآن جزء من الإمبراطورية الأكبر في تاريخ المحتوى الرقمي. استكشف الـ Legends، صوّت في GlobalStar، وشارك في Pulse — مكانك هنا يستحق أن يُرى." },
+  { icon: "🏛️", title: "🏛️ القوة الحقيقية تبدأ من هنا", body: "EMPIRE ETERNAL ليس مجرد موقع — إنه ميدان السيادة الرقمية. حقق إنجازاتك في الألعاب، ابنِ رصيدك في الشرف، وأصبح أسطورة يعرفها الجميع." },
+  { icon: "🔥", title: "🔥 الإمبراطورية تنتظر مواطناً مثلك", body: "الأبطال لا يُنتظرون — يتقدمون. زُر GlobalStar وصوّت لمن يستحق، أو أدخل الميدان في PLAY وأثبت من أنت. الأسطورة تبدأ الآن." },
+  { icon: "⚔️", title: "⚔️ مرحباً في عالم لا يُنسى", body: "من اللحظة التي قرأت فيها هذا، أنت لستَ زائراً — أنت مواطن في EMPIRE ETERNAL. اكتشف الـ Legends، واترك بصمتك في الـ Pulse، وابنِ إرثك من الصفر." },
+  { icon: "🌌", title: "🌌 الكون الرقمي فتح أبوابه", body: "EMPIRE ETERNAL — حيث يلتقي الرياضة والموسيقى والسينما والتراث في ميدان واحد. صوّتك يصنع التاريخ. مكانك محجوز بين الكبار." },
+  { icon: "🏆", title: "🏆 البطل لا يحتاج دعوة — هو يدخل", body: "منصة GDNA Arena جاهزة لك: Legends من كل الحضارات، GlobalStar لأفضل المواهب، ألعاب ومعارك وشرف. أين ستبدأ رحلتك؟" },
+];
+
+async function sendWelcomeNotification(userId: number) {
+  try {
+    const msg = WELCOME_POOL[userId % WELCOME_POOL.length];
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, body, icon, link_path)
+       VALUES ($1, 'welcome_broadcast', $2, $3, $4, $5)`,
+      [userId, msg.title, msg.body, msg.icon, "/games"]
+    );
+    await pool.query(
+      `UPDATE users SET welcome_broadcast_sent = true WHERE id = $1`,
+      [userId]
+    );
+  } catch { /* non-fatal */ }
+}
 
 const router: IRouter = Router();
 const SALT_ROUNDS = 10;
@@ -83,6 +109,10 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   req.session.userId = user.id;
   req.log.info({ userId: user.id }, "User registered");
+
+  // إرسال رسالة الترحيب فورياً — بدون انتظار
+  sendWelcomeNotification(user.id).catch(() => {});
+
   res.status(201).json(serializeUser(user));
 });
 
