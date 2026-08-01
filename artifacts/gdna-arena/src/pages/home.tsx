@@ -536,6 +536,111 @@ export default function Home() {
         </section>
       )}
 
+      {/* ══════════════════════════════════════ APEX BANNER — FOUNDER */}
+      <section className="relative w-full min-h-screen flex items-center justify-center overflow-hidden border-t"
+        style={{ borderColor: BORDER, zIndex: 1 }}>
+
+        {/* Deep radial glow */}
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ background: `radial-gradient(ellipse 80% 60% at 50% 50%, ${GOLD}12, transparent 70%)` }} />
+
+        {/* Giant blurred orb */}
+        <div className="absolute w-[700px] h-[700px] rounded-full pointer-events-none"
+          style={{ background: `${GOLD}0d`, filter: "blur(120px)", top: "50%", left: "50%", transform: "translate(-50%,-50%)" }} />
+
+        {/* Subtle horizontal line top */}
+        <div className="absolute top-0 w-full h-px"
+          style={{ background: `linear-gradient(to right, transparent, ${GOLD}40, transparent)` }} />
+
+        <div className="relative z-10 text-center px-4 py-24 max-w-4xl mx-auto">
+
+          {/* Empire label */}
+          <motion.div initial={{ opacity: 0, y: -16 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ duration: 0.5 }}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-full border mb-10 text-xs font-black tracking-[0.35em]"
+            style={{ borderColor: `${GOLD}40`, background: `${GOLD}0c`, color: GOLD }}>
+            <Crown className="w-3.5 h-3.5" />
+            GDNA ARENA — HALL OF FOUNDERS
+          </motion.div>
+
+          {/* Name */}
+          <motion.div initial={{ opacity: 0, scale: 0.92 }} whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.1 }}>
+            <h1 className="font-black tracking-tight leading-none select-none"
+              style={{ fontSize: "clamp(3.5rem,11vw,9rem)", lineHeight: 0.9 }}>
+              <span style={{ color: "#ffffff", display: "block",
+                textShadow: `0 0 60px ${GOLD}20` }}>El Qaisy</span>
+              <span style={{
+                display: "block",
+                background: `linear-gradient(135deg, ${GOLD}, #FFF176, ${GOLD2})`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                textShadow: "none",
+                filter: `drop-shadow(0 0 40px ${GOLD}60)`,
+              }}>Abdelmalik</span>
+            </h1>
+          </motion.div>
+
+          {/* Title / role */}
+          <motion.p initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ delay: 0.25 }}
+            className="mt-6 text-base md:text-xl font-black tracking-[0.25em] uppercase"
+            style={{ color: `${GOLD}cc` }}>
+            Founder of the Empire&nbsp;•&nbsp;Top Honored Citizen
+          </motion.p>
+
+          {/* Divider */}
+          <motion.div initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }}
+            viewport={{ once: true }} transition={{ delay: 0.35, duration: 0.6 }}
+            className="mx-auto mt-8 mb-8 h-px w-48"
+            style={{ background: `linear-gradient(to right, transparent, ${GOLD}80, transparent)` }} />
+
+          {/* Accolades row */}
+          <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ delay: 0.4 }}
+            className="flex flex-wrap justify-center gap-3 mb-10">
+            {[
+              { icon: "👑", label: "EMPIRE ARCHITECT" },
+              { icon: "🧬", label: "NOSTALGIA DNA" },
+              { icon: "⚡", label: "HONOR RANK #1" },
+              { icon: "🏛️", label: "ETERNAL CITIZEN" },
+            ].map(a => (
+              <span key={a.label}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-xs font-bold tracking-wider"
+                style={{ borderColor: `${GOLD}35`, background: `${GOLD}0a`, color: `${GOLD}dd` }}>
+                {a.icon} {a.label}
+              </span>
+            ))}
+          </motion.div>
+
+          {/* CTA */}
+          <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ delay: 0.5 }}
+            className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/register">
+              <button
+                className="flex items-center gap-2 px-9 py-4 rounded-xl font-black text-base text-black transition-all hover:scale-105 active:scale-95 shadow-2xl"
+                style={{ background: `linear-gradient(135deg, ${GOLD}, ${GOLD2})`,
+                  boxShadow: `0 0 50px ${GOLD}40` }}>
+                <Crown className="w-5 h-5" /> JOIN THE EMPIRE
+              </button>
+            </Link>
+            <Link href="/citizen/ElQaisy">
+              <button
+                className="flex items-center gap-2 px-9 py-4 rounded-xl font-black text-base border transition-all hover:scale-105 active:scale-95"
+                style={{ borderColor: `${GOLD}50`, color: GOLD, background: `${GOLD}08` }}>
+                VIEW PROFILE <ArrowRight className="w-4 h-4" />
+              </button>
+            </Link>
+          </motion.div>
+        </div>
+
+        {/* Subtle bottom line */}
+        <div className="absolute bottom-0 w-full h-px"
+          style={{ background: `linear-gradient(to right, transparent, ${GOLD}40, transparent)` }} />
+      </section>
+
       {/* ══════════════════════════════════════ FOOTER CTA */}
       <section className="relative border-t py-24 text-center" style={{ borderColor: BORDER, zIndex: 1 }}>
         <div className="absolute inset-0 pointer-events-none"
