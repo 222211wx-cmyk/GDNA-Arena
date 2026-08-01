@@ -20,12 +20,12 @@ import {
 
 // ── Imperial AI Decrees ──────────────────────────────────────────────────────
 const DECREES = [
-  { flag: "🇸🇦", text: "مستجد ذكي: تصويت قياسي في مجال الموسيقى خلال 24 ساعة" },
+  { flag: "🇸🇦", text: "Intel: Record-breaking music votes in the last 24 hours" },
   { flag: "🇫🇷", text: "IA Prédiction: Hausse de 40% des tributes dans Football" },
   { flag: "🇬🇧", text: "AI Alert: Arena Strike trending — 3× normal tribute flow this hour" },
-  { flag: "🇲🇦", text: "تنبيه: Crypto Clash كيقلب كل التوقعات هذا الأسبوع" },
+  { flag: "🇲🇦", text: "Alert: Crypto Clash is defying all predictions this week" },
   { flag: "🌍", text: "System: AI Oracle processed 12,400 tributes — 99.8% accuracy confirmed" },
-  { flag: "🇸🇦", text: "تحديث إمبراطوري: تم تفعيل خوارزمية التنبؤ v4.2 بنجاح" },
+  { flag: "🇸🇦", text: "Imperial Update: Prediction algorithm v4.2 successfully deployed" },
   { flag: "🇫🇷", text: "Décret: Algorithme de classement impérial v4.2 déployé avec succès" },
 ];
 
@@ -232,7 +232,7 @@ export default function Hub() {
           {t("hub_title")}
         </h1>
         <p className="text-xs font-mono tracking-[0.4em] uppercase" style={{ color: "#C9A84C50" }}>
-          Imperial Command Center · قاعة العرش · Salle du Trône
+          Imperial Command Center · Throne Room · Salle du Trône
         </p>
       </motion.div>
 
@@ -257,10 +257,10 @@ export default function Hub() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px"
         style={{ background: "#C9A84C15", border: "1px solid #C9A84C20" }}>
         {[
-          { val: totalVotes > 0 ? (totalVotes / 1000000).toFixed(1) + "M+" : "2.4M+", label: t("hub_stat_votes"), labelAr: "تحية مدفوعة",   glyph: "◈" },
-          { val: "847K+",                                                               label: t("hub_stat_games"), labelAr: "معركة خاضها",   glyph: "⚔" },
-          { val: "156K+",                                                               label: t("hub_stat_users"), labelAr: "مواطن إمبراطور", glyph: "◉" },
-          { val: "99.8%",                                                               label: t("hub_stat_ai"),    labelAr: "دقة الأوراكل",  glyph: "✦" },
+          { val: totalVotes > 0 ? (totalVotes / 1000000).toFixed(1) + "M+" : "2.4M+", label: t("hub_stat_votes"), labelAr: "Votes Cast",      glyph: "◈" },
+          { val: "847K+",                                                               label: t("hub_stat_games"), labelAr: "Battles Fought",  glyph: "⚔" },
+          { val: "156K+",                                                               label: t("hub_stat_users"), labelAr: "Citizens",        glyph: "◉" },
+          { val: "99.8%",                                                               label: t("hub_stat_ai"),    labelAr: "Oracle Accuracy", glyph: "✦" },
         ].map((s, i) => (
           <motion.div key={s.label}
             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.07 }}
@@ -721,7 +721,7 @@ export default function Hub() {
           <span className="imperial-gold font-black">GDNA ARENA</span> · {t("hub_footer")}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
-          {["العربية", "English", "Français", "الدارجة", "Español", "中文", "Русский", "Português"].map(l => (
+          {["Arabic", "English", "Français", "Darija", "Español", "中文", "Русский", "Português"].map(l => (
             <span key={l} className="text-xs px-2 py-0.5 font-mono"
               style={{ border: "1px solid #C9A84C15", color: "#ffffff20" }}>{l}</span>
           ))}

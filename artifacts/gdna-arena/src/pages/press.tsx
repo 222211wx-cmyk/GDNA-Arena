@@ -40,10 +40,10 @@ const goldBox = {
 function timeAgo(iso: string) {
   const d = new Date(iso).getTime();
   const diff = (Date.now() - d) / 1000;
-  if (diff < 60) return "الآن";
-  if (diff < 3600) return `${Math.floor(diff / 60)}د`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}س`;
-  return `${Math.floor(diff / 86400)}ي`;
+  if (diff < 60) return "now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86400)}d`;
 }
 
 function getYtId(url?: string) {
@@ -64,13 +64,13 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
   const [done, setDone]       = useState(false);
 
   const TABS: { key: "video" | "story" | "article"; label: string; icon: typeof Video }[] = [
-    { key: "video",   label: "فيديو",   icon: Video    },
-    { key: "story",   label: "قصة",     icon: BookOpen },
-    { key: "article", label: "مقال",    icon: FileText },
+    { key: "video",   label: "Video",   icon: Video    },
+    { key: "story",   label: "Story",   icon: BookOpen },
+    { key: "article", label: "Article", icon: FileText },
   ];
 
   async function submit() {
-    if (!content.trim()) { setError("المحتوى مطلوب"); return; }
+    if (!content.trim()) { setError("Content is required"); return; }
     setLoading(true); setError("");
     try {
       const r = await fetch(`${BASE()}/api/press/post`, {
@@ -79,10 +79,10 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
         credentials: "include",
         body: JSON.stringify({ type: tab, title, content, video_url: videoUrl, author }),
       });
-      if (!r.ok) { const j = await r.json(); setError(j.error ?? "خطأ"); setLoading(false); return; }
+      if (!r.ok) { const j = await r.json(); setError(j.error ?? "Error"); setLoading(false); return; }
       setDone(true);
       setTimeout(() => { onClose(); onPublished(); }, 1200);
-    } catch { setError("خطأ في الاتصال"); setLoading(false); }
+    } catch { setError("Connection error"); setLoading(false); }
   }
 
   return (
@@ -104,8 +104,8 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
             <Upload className="w-5 h-5" style={{ color: GOLD }} />
           </div>
           <div className="flex-1" dir="rtl">
-            <p className="font-black text-white text-base">انشر محتواك</p>
-            <p className="text-xs" style={{ color: "rgba(255,215,0,0.55)" }}>للصحفيين والمراسلين العالميين</p>
+            <p className="font-black text-white text-base">Publish Your Content</p>
+            <p className="text-xs" style={{ color: "rgba(255,215,0,0.55)" }}>For journalists and global correspondents</p>
           </div>
           <button onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1">
             <X className="w-4 h-4" />
@@ -129,25 +129,25 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
         <div className="px-6 pb-6 space-y-3" dir="rtl">
           <input className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-            placeholder="اسمك / اسم المؤسسة الإعلامية"
+            placeholder="Your name / Media organization"
             value={author} onChange={e => setAuthor(e.target.value)} />
 
           <input className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-            placeholder={tab === "video" ? "عنوان الفيديو" : tab === "story" ? "عنوان القصة" : "عنوان المقال"}
+            placeholder={tab === "video" ? "Video title" : tab === "story" ? "Story title" : "Article title"}
             value={title} onChange={e => setTitle(e.target.value)} />
 
           {tab === "video" && (
             <input className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none"
               style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-              placeholder="معرّف يوتيوب أو رابط الفيديو"
+              placeholder="YouTube ID or video URL"
               value={videoUrl} onChange={e => setVideoUrl(e.target.value)} />
           )}
 
           <textarea className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none resize-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
             rows={4}
-            placeholder={tab === "video" ? "وصف الفيديو..." : tab === "story" ? "اكتب قصتك هنا..." : "اكتب مقالك هنا..."}
+            placeholder={tab === "video" ? "Video description..." : tab === "story" ? "Write your story here..." : "Write your article here..."}
             value={content} onChange={e => setContent(e.target.value)} />
 
           {error && <p className="text-red-400 text-xs text-right">{error}</p>}
@@ -155,9 +155,9 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
           <button onClick={submit} disabled={loading || done}
             className="w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2"
             style={{ background: done ? "#16a34a" : GOLD, color: "#000" }}>
-            {done ? <><Check className="w-4 h-4" /> تم النشر!</> :
-             loading ? "جاري النشر..." :
-             <><Send className="w-4 h-4" /> نشر الآن</>}
+            {done ? <><Check className="w-4 h-4" /> Published!</> :
+             loading ? "Publishing..." :
+             <><Send className="w-4 h-4" /> Publish Now</>}
           </button>
         </div>
       </motion.div>
@@ -211,7 +211,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
       <div className="p-4" dir="rtl">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-xs font-black px-2 py-0.5 rounded-lg" style={{ background: GOLD_DIM, color: GOLD }}>
-            <Video className="w-3 h-3 inline mr-1" />فيديو
+            <Video className="w-3 h-3 inline mr-1" />Video
           </span>
           <span className="text-xs" style={{ color: "rgba(255,215,0,0.4)" }}>{timeAgo(post.created_at)}</span>
         </div>
@@ -235,7 +235,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
             className="flex items-center gap-1.5 text-sm font-bold transition-all"
             style={{ color: "rgba(255,255,255,0.5)" }}>
             <MessageCircle className="w-4 h-4" />
-            {post.comment_count} تعليق
+            {post.comment_count} comments
           </button>
         </div>
 
@@ -245,7 +245,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }} className="mt-3 overflow-hidden">
               <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">لا تعليقات بعد</p>}
+                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">No comments yet</p>}
                 {comments.map(c => (
                   <div key={c.id} className="flex gap-2">
                     <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-black"
@@ -260,7 +260,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
               <div className="flex gap-2">
                 <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-white outline-none"
                   style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-                  placeholder="أضف تعليقك..."
+                  placeholder="Add a comment..."
                   value={newComment} onChange={e => setNewComment(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && submitComment()} />
                 <button onClick={submitComment}
@@ -308,7 +308,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
   function handleLike() { if (!liked) { setLiked(true); onLike(post.id); } }
 
   const accentColor = isStory ? "#a78bfa" : "#38bdf8";
-  const typeLabel   = isStory ? "قصة" : "مقال";
+  const typeLabel   = isStory ? "Story" : "Article";
   const TypeIcon    = isStory ? BookOpen : FileText;
 
   return (
@@ -334,7 +334,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
           <button onClick={() => setExpanded(!expanded)}
             className="flex items-center gap-1 text-xs font-bold mb-3"
             style={{ color: accentColor }}>
-            {expanded ? <><ChevronUp className="w-3 h-3" /> اقرأ أقل</> : <><ChevronDown className="w-3 h-3" /> اقرأ المزيد</>}
+            {expanded ? <><ChevronUp className="w-3 h-3" /> Read Less</> : <><ChevronDown className="w-3 h-3" /> Read More</>}
           </button>
         )}
 
@@ -355,7 +355,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
             className="flex items-center gap-1.5 text-sm font-bold transition-all"
             style={{ color: "rgba(255,255,255,0.5)" }}>
             <MessageCircle className="w-4 h-4" />
-            {post.comment_count} تعليق
+            {post.comment_count} comments
           </button>
         </div>
 
@@ -364,7 +364,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }} className="mt-3 overflow-hidden">
               <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">لا تعليقات بعد</p>}
+                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">No comments yet</p>}
                 {comments.map(c => (
                   <div key={c.id} className="flex gap-2">
                     <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-black"
@@ -379,7 +379,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
               <div className="flex gap-2">
                 <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-white outline-none"
                   style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-                  placeholder="أضف تعليقك..."
+                  placeholder="Add a comment..."
                   value={newComment} onChange={e => setNewComment(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && submitComment()} />
                 <button onClick={submitComment}
@@ -432,7 +432,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
       <div className="p-5" dir="rtl">
         <div className="flex items-center gap-2 mb-3">
           <Smile className="w-4 h-4" style={{ color: "#a78bfa" }} />
-          <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#a78bfa" }}>استطلاع رأي</span>
+          <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#a78bfa" }}>Poll</span>
         </div>
         <h3 className="font-black text-white text-base leading-tight mb-4">{poll.question}</h3>
         <div className="space-y-2.5">
@@ -463,7 +463,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
         </div>
         {voted && (
           <p className="text-xs text-center mt-3" style={{ color: "rgba(255,215,0,0.5)" }}>
-            {total} صوت إجمالاً · شكراً على مشاركتك
+            {total} total votes · Thank you for participating
           </p>
         )}
       </div>
@@ -486,7 +486,7 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
       </div>
       <div className="text-xs font-bold px-3 py-1 rounded-full"
         style={{ background: `${sponsor.color}20`, color: sponsor.color }}>
-        راعٍ رسمي
+        Official Sponsor
       </div>
     </div>
   );
@@ -524,10 +524,10 @@ export default function PressPage() {
   }
 
   const FILTERS: { key: typeof filter; label: string }[] = [
-    { key: "all",     label: "الكل" },
-    { key: "video",   label: "فيديو" },
-    { key: "story",   label: "قصص" },
-    { key: "article", label: "مقالات" },
+    { key: "all",     label: "All"      },
+    { key: "video",   label: "Video"    },
+    { key: "story",   label: "Stories"  },
+    { key: "article", label: "Articles" },
   ];
 
   return (
@@ -554,11 +554,11 @@ export default function PressPage() {
                 </span>
               </div>
               <h1 className="text-4xl md:text-6xl font-black leading-none mb-2">
-                <span style={{ color: "white" }}>الصحافة</span>{" "}
-                <span style={{ color: GOLD, textShadow: `0 0 40px ${GOLD}60` }}>العالمية</span>
+                <span style={{ color: "white" }}>GLOBAL</span>{" "}
+                <span style={{ color: GOLD, textShadow: `0 0 40px ${GOLD}60` }}>PRESS</span>
               </h1>
               <p className="text-sm md:text-base" style={{ color: "rgba(255,215,0,0.6)" }}>
-                المنبر الإعلامي الرسمي للإمبراطورية · فيديو · قصص · مقالات
+                The Empire's official media platform · Video · Stories · Articles
               </p>
             </div>
 
@@ -566,7 +566,7 @@ export default function PressPage() {
               className="flex items-center gap-3 px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:scale-105 shrink-0"
               style={{ background: GOLD, color: "#000", boxShadow: `0 8px 32px ${GOLD}40` }}>
               <Upload className="w-5 h-5" />
-              انشر محتواك
+              Publish Content
             </button>
           </div>
 
@@ -593,7 +593,7 @@ export default function PressPage() {
           <div className="lg:col-span-2 space-y-6">
             <div dir="rtl" className="flex items-center gap-2 mb-2">
               <Newspaper className="w-5 h-5" style={{ color: GOLD }} />
-              <h2 className="font-black text-white text-lg">تقارير المراسلين</h2>
+              <h2 className="font-black text-white text-lg">Correspondent Reports</h2>
             </div>
 
             {loading ? (
@@ -604,8 +604,8 @@ export default function PressPage() {
             ) : posts.length === 0 ? (
               <div className="text-center py-16" style={{ color: "rgba(255,215,0,0.4)" }}>
                 <Newspaper className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p className="font-bold">لا توجد منشورات بعد</p>
-                <p className="text-sm mt-1">كن أول من ينشر!</p>
+                <p className="font-bold">No posts yet</p>
+                <p className="text-sm mt-1">Be the first to publish!</p>
               </div>
             ) : (
               posts.map(p =>
@@ -623,7 +623,7 @@ export default function PressPage() {
             <div>
               <div dir="rtl" className="flex items-center gap-2 mb-4">
                 <Star className="w-5 h-5" style={{ color: GOLD }} />
-                <h2 className="font-black text-white text-base">قسم الرعاية</h2>
+                <h2 className="font-black text-white text-base">Sponsorship</h2>
               </div>
               <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
                 {sponsors.map(s => <SponsorCard key={s.id} sponsor={s} />)}
@@ -634,7 +634,7 @@ export default function PressPage() {
             <div>
               <div dir="rtl" className="flex items-center gap-2 mb-4">
                 <Smile className="w-5 h-5" style={{ color: "#a78bfa" }} />
-                <h2 className="font-black text-white text-base">قسم المرح والآراء</h2>
+                <h2 className="font-black text-white text-base">Fun &amp; Opinions</h2>
               </div>
               <div className="space-y-4">
                 {polls.map(poll => <PollCard key={poll.id} poll={poll} />)}

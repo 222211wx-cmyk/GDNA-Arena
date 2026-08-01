@@ -156,10 +156,10 @@ function TournamentModal({
   }, [phase, players]);
 
   const tierConfig: Record<string, { color: string; icon: typeof Crown; label: string; label_ar: string }> = {
-    champion: { color: "#C9A84C", icon: Crown,  label: "CHAMPION",  label_ar: "البطل المطلق" },
-    elite:    { color: "#E8C97A", icon: Trophy, label: "ELITE",     label_ar: "النخبة" },
-    legend:   { color: "#A8D8EA", icon: Medal,  label: "LEGEND",    label_ar: "الأسطورة" },
-    citizen:  { color: "#6b7280", icon: Shield, label: "CITIZEN",   label_ar: "المواطن" },
+    champion: { color: "#C9A84C", icon: Crown,  label: "CHAMPION",  label_ar: "Champion" },
+    elite:    { color: "#E8C97A", icon: Trophy, label: "ELITE",     label_ar: "Elite"    },
+    legend:   { color: "#A8D8EA", icon: Medal,  label: "LEGEND",    label_ar: "Legend"   },
+    citizen:  { color: "#6b7280", icon: Shield, label: "CITIZEN",   label_ar: "Citizen"  },
   };
 
   return (
@@ -259,7 +259,7 @@ function TournamentModal({
                   className="font-mono text-red-400 text-xs tracking-[0.5em]">
                   ◉ ELIMINATING 90 CITIZENS
                 </motion.div>
-                <div className="font-mono font-black text-4xl text-white tracking-widest">غربل غربل</div>
+                <div className="font-mono font-black text-4xl text-white tracking-widest">GDNA ARENA</div>
                 <div className="font-mono text-yellow-400/40 text-xs tracking-widest">SEPARATING THE GREAT FROM THE REST</div>
               </div>
               <div className="relative h-24 overflow-hidden border border-yellow-400/10">
@@ -455,7 +455,7 @@ export default function Games() {
 
   const GAMING_WARN: Record<string, string> = {
     en: "⚠️ Gaming regulations apply in your country. GDNA Arena coins are virtual only — no real monetary value. Play responsibly.",
-    ar: "⚠️ تنطبق لوائح الألعاب في بلدك. كوينز GDNA Arena افتراضية فقط — بلا قيمة نقدية حقيقية. العب بمسؤولية.",
+    ar: "⚠️ Gaming regulations of your country apply. GDNA Arena coins are virtual only — no real monetary value. Play responsibly.",
     fr: "⚠️ Les réglementations sur les jeux s'appliquent dans votre pays. Les coins GDNA Arena sont virtuels uniquement — aucune valeur monétaire réelle.",
     es: "⚠️ Las regulaciones de juegos aplican en tu país. Las monedas GDNA Arena son solo virtuales — sin valor monetario real.",
     de: "⚠️ In Ihrem Land gelten Spielvorschriften. GDNA Arena Coins sind rein virtuell — kein realer Geldwert.",
@@ -475,7 +475,7 @@ export default function Games() {
               {GAMING_WARN[lang] ?? GAMING_WARN.en}
             </p>
             <Link href="/legal" className="text-orange-400/70 hover:text-orange-300 text-xs underline mt-1 inline-block transition-colors">
-              {lang === "ar" ? "اعرف حقوقك القانونية ←" : "View your legal rights →"}
+              View your legal rights →
             </Link>
           </div>
         </motion.div>

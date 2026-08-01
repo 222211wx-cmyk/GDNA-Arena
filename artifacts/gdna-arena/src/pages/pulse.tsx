@@ -310,7 +310,7 @@ export default function PulsePage() {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-600">PULSE</span>
           </h1>
           <p className="text-muted-foreground max-w-xl mx-auto text-base">
-            تواصل · أحداث · رؤيا · تقدم · نمو · ازدهار · مناسبات
+            Connect · Events · Vision · Progress · Growth · Prosperity · Occasions
           </p>
         </div>
       </div>

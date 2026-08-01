@@ -89,7 +89,7 @@ export default function CallOverlay({
             </div>
             <p className="font-black text-white text-lg">{incomingCall.from}</p>
             <p className="text-xs font-mono animate-pulse" style={{ color: "#22c55e" }}>
-              {incomingCall.video ? "📹 مكالمة فيديو واردة" : "📞 مكالمة صوتية واردة"}
+              {incomingCall.video ? "📹 Incoming video call" : "📞 Incoming voice call"}
             </p>
           </div>
 
@@ -135,7 +135,7 @@ export default function CallOverlay({
               <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center font-black text-sm text-black"
                 style={{ background: "#C9A84C" }}>{peer?.charAt(0).toUpperCase()}</div>
               <p className="text-[10px] font-mono" style={{ color: "#C9A84C" }}>
-                {status === "calling" ? "جاري الاتصال..." : status === "active" ? formatDuration(duration) : "انتهى"}
+                {status === "calling" ? "Calling..." : status === "active" ? formatDuration(duration) : "Ended"}
               </p>
             </div>
           </div>}
@@ -166,9 +166,9 @@ export default function CallOverlay({
             <div className="space-y-1">
               <p className="text-white font-black text-2xl">{peer}</p>
               <p className="text-sm font-mono animate-pulse" style={{ color: status === "active" ? "#22c55e" : "#C9A84C" }}>
-                {status === "calling"  ? "⏳ جاري الاتصال..."
-                : status === "active"  ? `✅ متصل — ${formatDuration(duration)}`
-                : status === "ended"   ? "📵 انتهت المكالمة"
+                {status === "calling"  ? "⏳ Calling..."
+                : status === "active"  ? `✅ Connected — ${formatDuration(duration)}`
+                : status === "ended"   ? "📵 Call ended"
                 : ""}
               </p>
             </div>

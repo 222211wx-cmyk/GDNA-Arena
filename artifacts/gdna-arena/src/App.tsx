@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
 import { LegalProvider } from "@/contexts/LegalContext";
 import { CallProvider } from "@/contexts/CallContext";
+import CommHub from "@/components/CommHub";
 import CookieBanner from "@/components/legal/CookieBanner";
 import AgeGate from "@/components/legal/AgeGate";
 import GeoBlock from "@/components/legal/GeoBlock";
@@ -122,6 +123,7 @@ function App() {
                 <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                   <Router />
                 </WouterRouter>
+                <CommHub />
                 <Toaster />
               </CallProvider>
             </AuthProvider>

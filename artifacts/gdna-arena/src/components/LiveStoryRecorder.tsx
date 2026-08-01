@@ -20,12 +20,12 @@ interface Props {
 }
 
 const DOMAINS = [
-  { value: "general", label: "عام",       icon: "🌍" },
-  { value: "sport",   label: "رياضة",     icon: "⚽" },
-  { value: "music",   label: "موسيقى",    icon: "🎵" },
-  { value: "cinema",  label: "سينما",     icon: "🎬" },
-  { value: "tech",    label: "تقنية",     icon: "💡" },
-  { value: "art",     label: "فنون",      icon: "🎨" },
+  { value: "general", label: "General", icon: "🌍" },
+  { value: "sport",   label: "Sport",   icon: "⚽" },
+  { value: "music",   label: "Music",   icon: "🎵" },
+  { value: "cinema",  label: "Cinema",  icon: "🎬" },
+  { value: "tech",    label: "Tech",    icon: "💡" },
+  { value: "art",     label: "Arts",    icon: "🎨" },
 ];
 
 export default function LiveStoryRecorder({
@@ -99,7 +99,7 @@ export default function LiveStoryRecorder({
         <button onClick={onEndLive}
           className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black text-white"
           style={{ background: "#ef4444" }}>
-          <StopCircle className="w-4 h-4" /> إنهاء البث
+          <StopCircle className="w-4 h-4" /> End Stream
         </button>
       </div>
     </div>
@@ -136,7 +136,7 @@ export default function LiveStoryRecorder({
           className="w-full flex items-center justify-center gap-2 py-3 text-sm font-black uppercase tracking-wider transition-all active:scale-95"
           style={{ background: showCompose ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.08)", border: "1px solid #ef444440", color: "#ef4444" }}>
           <Radio className="w-4 h-4" />
-          ابدأ بثاً مباشراً
+          Go Live
         </button>
       )}
 
@@ -147,7 +147,7 @@ export default function LiveStoryRecorder({
             className="overflow-hidden space-y-3 p-4" style={{ border: "1px solid #ef444430", background: "rgba(239,68,68,0.04)" }}>
 
             <input value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="عنوان البث المباشر..."
+              placeholder="Stream title..."
               className="w-full px-3 py-2 text-sm focus:outline-none"
               style={{ background: "#0a0a0a", border: "1px solid #ffffff15", color: "#fff" }}
               dir="rtl" />
@@ -166,7 +166,7 @@ export default function LiveStoryRecorder({
               onClick={() => { onStartLive(title.trim(), domain); setShowCompose(false); }}
               className="w-full py-2.5 text-sm font-black text-white uppercase tracking-wider disabled:opacity-40 transition-all active:scale-95"
               style={{ background: "#ef4444" }}>
-              📡 ابدأ الآن
+              📡 Start Now
             </button>
           </motion.div>
         )}
@@ -176,7 +176,7 @@ export default function LiveStoryRecorder({
       {activeLives.length > 0 && (
         <div className="space-y-2">
           <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "#ef444460" }}>
-            بث مباشر — {activeLives.length} حالياً
+            Live Now — {activeLives.length} streaming
           </p>
           {activeLives.map(live => (
             <div key={live.liveId} className="flex items-center justify-between p-3"
@@ -191,7 +191,7 @@ export default function LiveStoryRecorder({
               <button onClick={() => { onJoinLive(live.liveId); setWatchingId(live.liveId); }}
                 className="px-3 py-1 text-xs font-bold text-white"
                 style={{ background: "#ef4444" }}>
-                <Users className="w-3 h-3 inline mr-1" />انضم
+                <Users className="w-3 h-3 inline mr-1" />Join
               </button>
             </div>
           ))}
@@ -200,7 +200,7 @@ export default function LiveStoryRecorder({
 
       {activeLives.length === 0 && liveStatus === "idle" && !showCompose && (
         <p className="text-center text-xs py-2" style={{ color: "#ffffff20" }}>
-          لا بث مباشر الآن — كن أول من يبث
+          No live streams right now — be the first to go live
         </p>
       )}
     </div>

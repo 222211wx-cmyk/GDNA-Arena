@@ -26,19 +26,19 @@ const SPORT_IMAGES: Record<string, string> = {
 };
 
 const SPORT_QUOTES: Record<string, string> = {
-  "Cristiano Ronaldo": "العظمة ليست هبة — إنها اختيار تختاره كل يوم.",
-  "Lionel Messi":      "لم أفكر أبداً أنني الأفضل. فكرت فقط في اللعب.",
-  "LeBron James":      "لا توجد حدود. الحدود موجودة فقط في عقلك.",
-  "Roger Federer":     "أنا لا أعيش في الماضي. أعيش في الحاضر وأفكر في المستقبل.",
-  "Serena Williams":   "البطولة ليست إذا لم تفقد شيئاً — إنها كيف تنهض من الخسارة.",
-  "Muhammad Ali":      "المستحيل ليس حقيقة. المستحيل مجرد رأي.",
+  "Cristiano Ronaldo": "Greatness is not a gift — it's a choice you make every day.",
+  "Lionel Messi":      "I never thought of myself as the best. I just thought about playing.",
+  "LeBron James":      "There are no limits. Limits only exist in your mind.",
+  "Roger Federer":     "I don't live in the past. I live in the present and think of the future.",
+  "Serena Williams":   "A champion isn't about how much they win — it's about how they rise from defeat.",
+  "Muhammad Ali":      "Impossible is not a fact. Impossible is just an opinion.",
 };
 
 const DNA_PILLARS = [
-  { icon: "🧬", label: "LEGACY DNA",     desc: "الإرث الذي تركه للتاريخ" },
-  { icon: "⚡", label: "PEAK DNA",       desc: "اللحظة الذهبية في مسيرته" },
-  { icon: "🛡️", label: "CLUTCH DNA",   desc: "الأداء تحت الضغط الأقصى" },
-  { icon: "🌍", label: "IMPACT DNA",    desc: "الأثر على الرياضة والعالم" },
+  { icon: "🧬", label: "LEGACY DNA",     desc: "The legacy they left for history" },
+  { icon: "⚡", label: "PEAK DNA",       desc: "Their golden peak moment" },
+  { icon: "🛡️", label: "CLUTCH DNA",   desc: "Performance under maximum pressure" },
+  { icon: "🌍", label: "IMPACT DNA",    desc: "Their impact on sport and the world" },
 ];
 
 function StatBar({ label, value }: { label: string; value: number }) {
@@ -230,8 +230,8 @@ export default function SportPage() {
               </h1>
 
               <p className="mt-4 text-gray-400 max-w-xl leading-relaxed">
-                الذكاء العاطفي للرياضة — كل أسطورة هنا ليست مجرد بطل،
-                بل <span className="text-yellow-400">DNA</span> كامل من الإرث، الذروة، والتأثير.
+                The emotional intelligence of sport — every legend here is not just a champion,
+                but a complete <span className="text-yellow-400">DNA</span> of legacy, peak, and impact.
               </p>
             </div>
 
@@ -313,7 +313,7 @@ export default function SportPage() {
         ) : displayed.length === 0 ? (
           <div className="text-center py-20 text-gray-600">
             <Trophy size={48} className="mx-auto mb-3 opacity-20" />
-            <p>لا توجد أساطير في هذا التصنيف بعد</p>
+            <p>No legends in this category yet</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -334,13 +334,13 @@ export default function SportPage() {
             <div>
               <div className="flex items-center gap-2 text-yellow-400 text-xs font-black tracking-widest mb-2">
                 <Crown size={14} />
-                GOAT SHOWDOWN — الدورة الكبرى
+                GOAT SHOWDOWN — The Grand Final
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-white">
-                CR7 vs Messi — صوّت للجدل الأبدي
+                CR7 vs Messi — Vote in the Eternal Debate
               </h2>
               <p className="text-gray-400 text-sm mt-2 max-w-md">
-                أعظم مواجهة في تاريخ الرياضة لم تحسم بعد. صوّتك في GlobalStar يرسم التاريخ.
+                The greatest rivalry in sports history is still unsettled. Your GlobalStar vote writes history.
               </p>
             </div>
 
@@ -367,7 +367,7 @@ export default function SportPage() {
                 href="/games/globalstar"
                 className="flex items-center gap-2 px-5 py-3 bg-yellow-400 text-black font-black text-sm rounded-xl hover:bg-yellow-300 transition-all hover:shadow-[0_0_20px_rgba(255,215,0,0.3)]"
               >
-                صوّت الآن
+                Vote Now
                 <ArrowRight size={16} />
               </Link>
             </div>

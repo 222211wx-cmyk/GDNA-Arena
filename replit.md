@@ -48,6 +48,7 @@ Play-to-earn crypto gaming platform — players register, compete in 3 arenas, e
 - LangContext wraps the entire app; lang choice persisted in localStorage
 
 ## User preferences
+- Official platform language: **English** — all UI text, labels, placeholders, buttons, and messages must be in English
 
 _Populate as you build._
 

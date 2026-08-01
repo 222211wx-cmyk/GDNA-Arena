@@ -37,11 +37,11 @@ interface Citizen {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function timeAgo(d: string) {
   const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
-  if (m < 1) return "الآن";
-  if (m < 60) return `${m}د`;
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}س`;
-  return `${Math.floor(h / 24)}ي`;
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 function hoursLeft(d: string) {
   return Math.max(0, Math.floor((new Date(d).getTime() - Date.now()) / 3600000));
@@ -66,10 +66,10 @@ const DOMAIN_ICON: Record<string, string> = {
 };
 
 const REACTIONS = [
-  { emoji: "❤️", key: "heart",  label: "قلب"  },
-  { emoji: "🔥", key: "fire",   label: "نار"  },
-  { emoji: "👑", key: "crown",  label: "تاج"  },
-  { emoji: "⚡", key: "zap",    label: "طاقة" },
+  { emoji: "❤️", key: "heart",  label: "Heart" },
+  { emoji: "🔥", key: "fire",   label: "Fire"  },
+  { emoji: "👑", key: "crown",  label: "Crown" },
+  { emoji: "⚡", key: "zap",    label: "Power" },
 ];
 
 // ─── Stories Strip ────────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ function StoriesStrip({ user }: { user: any }) {
           <button onClick={() => setShowCompose(v => !v)}
             className="ml-auto flex items-center gap-1 px-2.5 py-1 text-xs font-bold"
             style={{ border: "1px solid #C9A84C40", color: "#C9A84C", background: "rgba(201,168,76,0.08)" }}>
-            <Plus className="w-3 h-3" /> نشر
+            <Plus className="w-3 h-3" /> Post
           </button>
         )}
       </div>
@@ -123,7 +123,7 @@ function StoriesStrip({ user }: { user: any }) {
             className="overflow-hidden mb-3">
             <div className="p-3 space-y-2" style={{ border: "1px solid #C9A84C25", background: "rgba(201,168,76,0.04)" }}>
               <textarea value={newStory} onChange={e => setNewStory(e.target.value)}
-                placeholder="شارك لحظتك مع الإمبراطورية... (+10 عملات)"
+                placeholder="Share your moment with the Empire... (+10 coins)"
                 maxLength={400} rows={2}
                 className="w-full px-3 py-2 text-sm resize-none focus:outline-none"
                 style={{ background: "#0a0a0a", border: "1px solid #C9A84C20", color: "#fff" }}
@@ -139,7 +139,7 @@ function StoriesStrip({ user }: { user: any }) {
                 <button onClick={postStory} disabled={!newStory.trim() || posting}
                   className="ml-auto px-4 py-1.5 text-xs font-black text-black disabled:opacity-40"
                   style={{ background: "#C9A84C" }}>
-                  {posting ? "..." : "نشر"}
+                  {posting ? "..." : "Post"}
                 </button>
               </div>
             </div>
@@ -151,7 +151,7 @@ function StoriesStrip({ user }: { user: any }) {
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
         {stories.length === 0 ? (
           <div className="flex items-center gap-2 text-xs" style={{ color: "#ffffff30" }}>
-            <BookOpen className="w-4 h-4" /> لا ستوريات بعد — كن الأول
+            <BookOpen className="w-4 h-4" /> No stories yet — be the first
           </div>
         ) : stories.slice(0, 20).map(s => {
           const dc = DOMAIN_COLOR[s.domain] ?? "#64748b";
@@ -182,7 +182,7 @@ function StoriesStrip({ user }: { user: any }) {
               style={{ border: "1px dashed #C9A84C30" }}>
               <ArrowRight className="w-5 h-5" style={{ color: "#C9A84C40" }} />
             </div>
-            <span className="text-[10px]" style={{ color: "#C9A84C40" }}>الكل</span>
+            <span className="text-[10px]" style={{ color: "#C9A84C40" }}>All</span>
           </button>
         </Link>
       </div>
@@ -202,7 +202,7 @@ function StoriesStrip({ user }: { user: any }) {
                 <div>
                   <div className="font-bold text-sm">{active.username}</div>
                   <div className="text-xs" style={{ color: "#ffffff40" }}>
-                    {timeAgo(active.createdAt)} · {hoursLeft(active.expiresAt)}س متبقية
+                    {timeAgo(active.createdAt)} · {hoursLeft(active.expiresAt)}h left
                   </div>
                 </div>
                 <button onClick={() => setActive(null)} className="ml-auto" style={{ color: "#ffffff40" }}>
@@ -369,17 +369,17 @@ function QuickMessages({ user }: { user: any }) {
   }, [active]);
 
   const getRoomName = (r: DmRoom) => {
-    if (r.type === "group") return r.name ?? "مجموعة";
-    return r.members?.find(m => m.userId !== user?.id)?.username ?? "محادثة";
+    if (r.type === "group") return r.name ?? "Group";
+    return r.members?.find(m => m.userId !== user?.id)?.username ?? "Chat";
   };
 
   if (!user) return (
     <div className="text-center py-12 space-y-3">
       <MessageSquare className="w-12 h-12 mx-auto opacity-20" style={{ color: "#C9A84C" }} />
-      <p className="text-sm" style={{ color: "#ffffff40" }}>سجّل دخولك للوصول للرسائل</p>
+      <p className="text-sm" style={{ color: "#ffffff40" }}>Sign in to access messages</p>
       <Link href="/login">
         <button className="px-4 py-2 text-sm font-bold text-black" style={{ background: "#C9A84C" }}>
-          دخول الإمبراطورية
+          Enter the Empire
         </button>
       </Link>
     </div>
@@ -392,7 +392,7 @@ function QuickMessages({ user }: { user: any }) {
         style={{ width: 220, borderColor: "#C9A84C15", background: "#080808" }}>
         <div className="p-3 flex items-center justify-between" style={{ borderBottom: "1px solid #C9A84C15" }}>
           <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#C9A84C" }}>
-            الرسائل
+            Messages
           </span>
           <button onClick={() => setShowNew(v => !v)}
             className="w-6 h-6 flex items-center justify-center text-black"
@@ -405,13 +405,13 @@ function QuickMessages({ user }: { user: any }) {
           <div className="p-2 space-y-1" style={{ borderBottom: "1px solid #C9A84C10" }}>
             <input value={newDm} onChange={e => setNewDm(e.target.value)}
               onKeyDown={e => e.key === "Enter" && startDm()}
-              placeholder="اسم المواطن..."
+              placeholder="Citizen username..."
               className="w-full px-2 py-1 text-xs focus:outline-none"
               style={{ background: "#111", border: "1px solid #C9A84C20", color: "#fff" }}
               dir="auto" />
             <button onClick={startDm} className="w-full py-1 text-xs font-bold text-black"
               style={{ background: "#C9A84C" }}>
-              بدء المحادثة
+              Start Chat
             </button>
           </div>
         )}
@@ -419,7 +419,7 @@ function QuickMessages({ user }: { user: any }) {
         <div className="flex-1 overflow-y-auto">
           {rooms.length === 0 ? (
             <div className="text-center py-6 px-2">
-              <p className="text-[10px]" style={{ color: "#ffffff25" }}>لا محادثات — ابدأ DM</p>
+              <p className="text-[10px]" style={{ color: "#ffffff25" }}>No chats yet — start a DM</p>
             </div>
           ) : rooms.map(r => (
             <button key={r.id} onClick={() => openRoom(r)}
@@ -429,7 +429,7 @@ function QuickMessages({ user }: { user: any }) {
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold truncate">{getRoomName(r)}</div>
                 <div className="text-[10px] truncate" style={{ color: "#ffffff30" }}>
-                  {r.lastMessage?.content ?? "لا رسائل"}
+                  {r.lastMessage?.content ?? "No messages yet"}
                 </div>
               </div>
               {(r.unreadCount ?? 0) > 0 && (
@@ -443,7 +443,7 @@ function QuickMessages({ user }: { user: any }) {
         <Link href="/messages">
           <button className="w-full py-2 text-[10px] font-bold uppercase tracking-wider"
             style={{ borderTop: "1px solid #C9A84C15", color: "#C9A84C50" }}>
-            فتح الرسائل الكاملة →
+            Open Full Messages →
           </button>
         </Link>
       </div>
@@ -452,17 +452,17 @@ function QuickMessages({ user }: { user: any }) {
       {active ? (
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderBottom: "1px solid #C9A84C15", background: "#080808" }}>
-            <button className="md:hidden mr-1" onClick={() => setActive(null)} style={{ color: "#ffffff40" }}>←</button>
+            <button className="md:hidden mr-1" onClick={() => setActive(null)} style={{ color: "#ffffff40" }}>‹ Back</button>
             <Avatar name={getRoomName(active)} size={7} color="#C9A84C" />
             <span className="text-sm font-bold flex-1">{getRoomName(active)}</span>
             {/* Call buttons */}
-            <button title="مكالمة صوتية"
+            <button title="Voice call"
               onClick={() => call.startCall(getRoomName(active), false)}
               className="w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-95"
               style={{ background: "rgba(34,197,94,0.12)", border: "1px solid #22c55e30", color: "#22c55e" }}>
               <Phone className="w-3.5 h-3.5" />
             </button>
-            <button title="مكالمة فيديو"
+            <button title="Video call"
               onClick={() => call.startCall(getRoomName(active), true)}
               className="w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-95"
               style={{ background: "rgba(59,130,246,0.12)", border: "1px solid #3b82f630", color: "#3b82f6" }}>
@@ -492,7 +492,7 @@ function QuickMessages({ user }: { user: any }) {
               value={input[active.id] ?? ""}
               onChange={e => setInput(v => ({ ...v, [active.id]: e.target.value }))}
               onKeyDown={e => e.key === "Enter" && send()}
-              placeholder="رسالتك..."
+              placeholder="Your message..."
               className="flex-1 px-3 py-1.5 text-xs focus:outline-none"
               style={{ background: "#111", border: "1px solid #C9A84C20", color: "#fff" }}
               dir="auto"
@@ -508,7 +508,7 @@ function QuickMessages({ user }: { user: any }) {
         <div className="hidden md:flex flex-1 items-center justify-center text-center p-8">
           <div>
             <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-10" style={{ color: "#C9A84C" }} />
-            <p className="text-xs" style={{ color: "#ffffff25" }}>اختر محادثة أو ابدأ واحدة جديدة</p>
+            <p className="text-xs" style={{ color: "#ffffff25" }}>Select a chat or start a new one</p>
           </div>
         </div>
       )}
@@ -564,10 +564,10 @@ function CitizensOnline() {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const TABS = [
-  { key: "feed",     label: "الفيد",       icon: <Zap       className="w-4 h-4" /> },
-  { key: "live",     label: "لايف",        icon: <Radio     className="w-4 h-4" />, badge: "🔴" },
-  { key: "messages", label: "الرسائل",     icon: <MessageSquare className="w-4 h-4" /> },
-  { key: "citizens", label: "المواطنون",   icon: <Users     className="w-4 h-4" /> },
+  { key: "feed",     label: "Feed",     icon: <Zap       className="w-4 h-4" /> },
+  { key: "live",     label: "Live",     icon: <Radio     className="w-4 h-4" />, badge: "🔴" },
+  { key: "messages", label: "Messages", icon: <MessageSquare className="w-4 h-4" /> },
+  { key: "citizens", label: "Citizens", icon: <Users     className="w-4 h-4" /> },
 ];
 
 export default function SocialPage() {
@@ -633,7 +633,7 @@ export default function SocialPage() {
             </div>
             <div className="flex items-center gap-4 text-xs font-mono" style={{ color: "#ffffff25" }}>
               <span><Star className="w-3 h-3 inline mr-1" style={{ color: "#C9A84C50" }} />{pulse.citizens ?? "—"}</span>
-              <span><Eye className="w-3 h-3 inline mr-1" />{posts.length} منشور</span>
+              <span><Eye className="w-3 h-3 inline mr-1" />{posts.length} posts</span>
             </div>
           </div>
 
@@ -676,7 +676,7 @@ export default function SocialPage() {
                 </div>
                 <textarea
                   value={compose} onChange={e => setCompose(e.target.value)}
-                  placeholder="ماذا تقول للإمبراطورية اليوم؟..."
+                  placeholder="What will you say to the Empire today?..."
                   maxLength={500} rows={2}
                   className="w-full px-3 py-2 text-sm resize-none focus:outline-none"
                   style={{ background: "#0a0a0a", border: "1px solid #C9A84C15", color: "#fff" }}
@@ -695,16 +695,16 @@ export default function SocialPage() {
                     className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-black text-black disabled:opacity-40"
                     style={{ background: "#C9A84C" }}>
                     {posting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                    نشر
+                    Post
                   </button>
                 </div>
               </div>
             ) : (
               <div className="p-5 text-center space-y-3" style={{ border: "1px solid #C9A84C20" }}>
-                <p className="text-sm" style={{ color: "#ffffff40" }}>سجّل دخولك للتفاعل مع المواطنين</p>
+                <p className="text-sm" style={{ color: "#ffffff40" }}>Sign in to connect with citizens</p>
                 <div className="flex gap-2 justify-center">
-                  <Link href="/login"><button className="px-4 py-2 text-sm font-bold text-black" style={{ background: "#C9A84C" }}>دخول</button></Link>
-                  <Link href="/register"><button className="px-4 py-2 text-sm font-bold" style={{ border: "1px solid #C9A84C40", color: "#C9A84C" }}>تسجيل</button></Link>
+                  <Link href="/login"><button className="px-4 py-2 text-sm font-bold text-black" style={{ background: "#C9A84C" }}>Sign In</button></Link>
+                  <Link href="/register"><button className="px-4 py-2 text-sm font-bold" style={{ border: "1px solid #C9A84C40", color: "#C9A84C" }}>Register</button></Link>
                 </div>
               </div>
             )}
@@ -717,7 +717,7 @@ export default function SocialPage() {
             ) : posts.length === 0 ? (
               <div className="text-center py-12" style={{ color: "#ffffff25" }}>
                 <Zap className="w-10 h-10 mx-auto mb-3 opacity-20" style={{ color: "#C9A84C" }} />
-                <p className="text-sm">لا منشورات بعد</p>
+                <p className="text-sm">No posts yet</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -733,8 +733,8 @@ export default function SocialPage() {
             {!user ? (
               <div className="text-center py-10 space-y-3">
                 <Radio className="w-12 h-12 mx-auto opacity-20" style={{ color: "#ef4444" }} />
-                <p className="text-sm" style={{ color: "#ffffff40" }}>سجّل دخولك لبدء بث مباشر</p>
-                <Link href="/login"><button className="px-4 py-2 text-sm font-bold text-white" style={{ background: "#ef4444" }}>دخول الإمبراطورية</button></Link>
+                <p className="text-sm" style={{ color: "#ffffff40" }}>Sign in to start a live stream</p>
+                <Link href="/login"><button className="px-4 py-2 text-sm font-bold text-white" style={{ background: "#ef4444" }}>Enter the Empire</button></Link>
               </div>
             ) : (
               <LiveStoryRecorder
@@ -761,7 +761,7 @@ export default function SocialPage() {
               <Link href="/stories">
                 <button className="flex items-center gap-2 mx-auto px-6 py-3 font-bold text-black"
                   style={{ background: "#C9A84C" }}>
-                  <BookOpen className="w-4 h-4" /> فتح صفحة الستوريات الكاملة
+                  <BookOpen className="w-4 h-4" /> Open Full Stories Page
                 </button>
               </Link>
             </div>
@@ -778,11 +778,11 @@ export default function SocialPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono uppercase tracking-widest" style={{ color: "#C9A84C60" }}>
-                مواطنو الإمبراطورية
+                Empire Citizens
               </span>
               <Link href="/citizens">
                 <button className="text-xs font-mono" style={{ color: "#C9A84C40" }}>
-                  عرض الكل →
+                  View All →
                 </button>
               </Link>
             </div>
