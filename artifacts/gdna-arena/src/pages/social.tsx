@@ -5,8 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   MessageSquare, BookOpen, Users, Heart, Flame, Crown, Plus,
   Send, Clock, Loader2, X, Mic, Video, Type, ArrowRight,
-  Zap, Radio, Star, Eye
+  Zap, Radio, Star, Eye, Phone, PhoneCall
 } from "lucide-react";
+import { useCallContext } from "@/contexts/CallContext";
+import LiveStoryRecorder from "@/components/LiveStoryRecorder";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -308,6 +310,7 @@ function FeedCard({ post, userId }: { post: FeedPost; userId?: number }) {
 
 // ─── Quick Messages Panel ─────────────────────────────────────────────────────
 function QuickMessages({ user }: { user: any }) {
+  const call = useCallContext();
   const [rooms, setRooms] = useState<DmRoom[]>([]);
   const [input, setInput] = useState<Record<number, string>>({});
   const [active, setActive] = useState<DmRoom | null>(null);
@@ -449,11 +452,22 @@ function QuickMessages({ user }: { user: any }) {
       {active ? (
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderBottom: "1px solid #C9A84C15", background: "#080808" }}>
-            <button className="md:hidden mr-1" onClick={() => setActive(null)} style={{ color: "#ffffff40" }}>
-              ←
-            </button>
+            <button className="md:hidden mr-1" onClick={() => setActive(null)} style={{ color: "#ffffff40" }}>←</button>
             <Avatar name={getRoomName(active)} size={7} color="#C9A84C" />
-            <span className="text-sm font-bold">{getRoomName(active)}</span>
+            <span className="text-sm font-bold flex-1">{getRoomName(active)}</span>
+            {/* Call buttons */}
+            <button title="مكالمة صوتية"
+              onClick={() => call.startCall(getRoomName(active), false)}
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-95"
+              style={{ background: "rgba(34,197,94,0.12)", border: "1px solid #22c55e30", color: "#22c55e" }}>
+              <Phone className="w-3.5 h-3.5" />
+            </button>
+            <button title="مكالمة فيديو"
+              onClick={() => call.startCall(getRoomName(active), true)}
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-95"
+              style={{ background: "rgba(59,130,246,0.12)", border: "1px solid #3b82f630", color: "#3b82f6" }}>
+              <Video className="w-3.5 h-3.5" />
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {msgs.map(m => {
@@ -551,14 +565,15 @@ function CitizensOnline() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 const TABS = [
   { key: "feed",     label: "الفيد",       icon: <Zap       className="w-4 h-4" /> },
-  { key: "stories",  label: "ستوريات",     icon: <Radio     className="w-4 h-4" /> },
+  { key: "live",     label: "لايف",        icon: <Radio     className="w-4 h-4" />, badge: "🔴" },
   { key: "messages", label: "الرسائل",     icon: <MessageSquare className="w-4 h-4" /> },
   { key: "citizens", label: "المواطنون",   icon: <Users     className="w-4 h-4" /> },
 ];
 
 export default function SocialPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"feed" | "stories" | "messages" | "citizens">("feed");
+  const call = useCallContext();
+  const [tab, setTab] = useState<"feed" | "live" | "messages" | "citizens">("feed");
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
   const [pulse, setPulse] = useState<any>({ citizens: 0, voices: 0 });
@@ -626,12 +641,15 @@ export default function SocialPage() {
           <div className="flex">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key as any)}
-                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all"
+                className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold uppercase tracking-wider transition-all relative"
                 style={{
-                  color: tab === t.key ? "#C9A84C" : "#ffffff35",
-                  borderBottom: tab === t.key ? "2px solid #C9A84C" : "2px solid transparent",
+                  color: tab === t.key ? (t.key === "live" ? "#ef4444" : "#C9A84C") : "#ffffff35",
+                  borderBottom: tab === t.key ? `2px solid ${t.key === "live" ? "#ef4444" : "#C9A84C"}` : "2px solid transparent",
                 }}>
                 {t.icon} {t.label}
+                {t.key === "live" && call.activeLives.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full animate-pulse" style={{ background: "#ef4444" }} />
+                )}
               </button>
             ))}
           </div>
@@ -709,8 +727,32 @@ export default function SocialPage() {
           </div>
         )}
 
-        {/* ── STORIES TAB ── */}
-        {tab === "stories" && (
+        {/* ── LIVE TAB ── */}
+        {tab === "live" && (
+          <div className="space-y-4">
+            {!user ? (
+              <div className="text-center py-10 space-y-3">
+                <Radio className="w-12 h-12 mx-auto opacity-20" style={{ color: "#ef4444" }} />
+                <p className="text-sm" style={{ color: "#ffffff40" }}>سجّل دخولك لبدء بث مباشر</p>
+                <Link href="/login"><button className="px-4 py-2 text-sm font-bold text-white" style={{ background: "#ef4444" }}>دخول الإمبراطورية</button></Link>
+              </div>
+            ) : (
+              <LiveStoryRecorder
+                liveStatus={call.liveStatus}
+                localStream={call.localStream}
+                currentLiveId={call.currentLiveId}
+                activeLives={call.activeLives}
+                onStartLive={call.startLive}
+                onEndLive={call.endLive}
+                onJoinLive={call.joinLive}
+                remoteStream={call.remoteStream}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ── STORIES TAB (hidden, kept for data) ── */}
+        {tab === ("stories" as any) && (
           <div className="space-y-4">
             <div className="p-4" style={{ border: "1px solid #C9A84C20", background: "rgba(201,168,76,0.02)" }}>
               <StoriesStrip user={user} />

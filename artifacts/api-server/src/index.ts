@@ -1,6 +1,8 @@
+import http from "http";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
+import { attachSignalingServer } from "./lib/signaling.js";
 import { startHonorAlertJob } from "./jobs/honor-alert.js";
 import { startWelcomeBroadcastJob, runWelcomeBroadcast } from "./jobs/welcome-broadcast.js";
 import { startImperialDecreeJob, runImperialDecree } from "./jobs/imperial-decree.js";
@@ -941,8 +943,13 @@ ensureTables()
     startImperialDecreeJob();
     startNeuralLearningJob();
     startGenomeEvolutionJob();
-    app.listen(port, (err) => {
+
+    // ── HTTP + WebSocket server ──────────────────────────────────────────────
+    const httpServer = http.createServer(app);
+    attachSignalingServer(httpServer);
+
+    httpServer.listen(port, (err?: Error) => {
       if (err) { console.error(err); process.exit(1); }
-      console.log(`[SERVER] Listening on port ${port}`);
+      console.log(`[SERVER] Listening on port ${port} (HTTP + WebSocket /ws)`);
     });
   });

@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
 import { LegalProvider } from "@/contexts/LegalContext";
+import { CallProvider } from "@/contexts/CallContext";
 import CookieBanner from "@/components/legal/CookieBanner";
 import AgeGate from "@/components/legal/AgeGate";
 import GeoBlock from "@/components/legal/GeoBlock";
@@ -117,10 +118,12 @@ function App() {
         <LangProvider>
           <LegalProvider>
             <AuthProvider>
-              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                <Router />
-              </WouterRouter>
-              <Toaster />
+              <CallProvider>
+                <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                  <Router />
+                </WouterRouter>
+                <Toaster />
+              </CallProvider>
             </AuthProvider>
           </LegalProvider>
         </LangProvider>

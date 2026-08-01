@@ -69,85 +69,35 @@ export function Navbar() {
         <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
           <svg width="38" height="38" viewBox="0 0 44 44" fill="none"
             className="transition-all duration-300 group-hover:drop-shadow-[0_0_10px_rgba(201,168,76,0.8)]">
-            <defs>
-              <linearGradient id="goldV" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#FFD700"/>
-                <stop offset="100%" stopColor="#C9A84C"/>
-              </linearGradient>
-              <linearGradient id="cyanV" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#00D4FF"/>
-                <stop offset="100%" stopColor="#0099CC"/>
-              </linearGradient>
-              <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#C9A84C" stopOpacity="0.25"/>
-                <stop offset="100%" stopColor="#C9A84C" stopOpacity="0"/>
-              </radialGradient>
-              <filter id="logoGlow">
-                <feGaussianBlur stdDeviation="0.6" result="blur"/>
-                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-              </filter>
-            </defs>
 
-            {/* Outer arena ring — dashed octagonal feel */}
+            {/* Outer ring */}
             <circle cx="22" cy="22" r="20" stroke="#C9A84C" strokeWidth="0.75"
-              strokeOpacity="0.35" strokeDasharray="4 2.5" fill="url(#centerGlow)"/>
+              strokeOpacity="0.35" strokeDasharray="4 2.5" fill="none"/>
 
-            {/* Inner structural ring */}
-            <circle cx="22" cy="22" r="17" stroke="#C9A84C" strokeWidth="0.4"
-              strokeOpacity="0.15" fill="none"/>
-
-            {/* ── CROWN (top) ── */}
-            {/* Crown base bar */}
-            <line x1="14" y1="14" x2="30" y2="14" stroke="url(#goldV)"
-              strokeWidth="1.5" strokeLinecap="round"/>
-            {/* Crown left spike */}
-            <polyline points="14,14 14,7 17,10" stroke="url(#goldV)"
-              strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-            {/* Crown center spike (tallest) */}
-            <polyline points="17,10 22,5 27,10" stroke="url(#goldV)"
-              strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-            {/* Crown right spike */}
-            <polyline points="27,10 30,7 30,14" stroke="url(#goldV)"
-              strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-            {/* Crown fill */}
+            {/* Crown */}
+            <line x1="14" y1="14" x2="30" y2="14" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round"/>
+            <polyline points="14,14 14,7 17,10 22,5 27,10 30,7 30,14"
+              stroke="#FFD700" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
             <path d="M14 14 L14 7 L17 10 L22 5 L27 10 L30 7 L30 14 Z"
               fill="#C9A84C" fillOpacity="0.12"/>
-            {/* Crown jewels */}
             <circle cx="14" cy="14" r="1.5" fill="#FFD700"/>
             <circle cx="22" cy="5"  r="2"   fill="#FFD700"/>
             <circle cx="30" cy="14" r="1.5" fill="#FFD700"/>
 
-            {/* ── DNA HELIX (body — crown base y=14 to bottom y=39) ── */}
-            {/* Left strand — GOLD: starts left @ y=14, curves right→left→right */}
+            {/* DNA left strand — gold */}
             <path d="M14 14 C22 18 30 22 22 26 C14 30 22 34 22 39"
-              stroke="url(#goldV)" strokeWidth="2" strokeLinecap="round" fill="none"
-              filter="url(#logoGlow)"/>
+              stroke="#C9A84C" strokeWidth="2" strokeLinecap="round" fill="none"/>
 
-            {/* Right strand — CYAN: starts right @ y=14, curves left→right→left */}
+            {/* DNA right strand — cyan */}
             <path d="M30 14 C22 18 14 22 22 26 C30 30 22 34 22 39"
-              stroke="url(#cyanV)" strokeWidth="2" strokeLinecap="round" fill="none"
-              filter="url(#logoGlow)"/>
+              stroke="#00D4FF" strokeWidth="2" strokeLinecap="round" fill="none"/>
 
-            {/* Helix rungs — horizontal connectors */}
-            {/* Rung 1: y≈18, strands close together */}
-            <line x1="17" y1="18" x2="27" y2="18" stroke="#C9A84C"
-              strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
-            {/* Rung 2: crossing point y≈22 (widest apart) */}
-            <line x1="14.5" y1="22" x2="29.5" y2="22" stroke="#C9A84C"
-              strokeWidth="1" strokeOpacity="0.7" strokeLinecap="round"/>
-            {/* Center crossnode */}
-            <circle cx="22" cy="22" r="2.5" fill="#C9A84C" fillOpacity="0.2"
-              stroke="#C9A84C" strokeWidth="0.75" strokeOpacity="0.5"/>
-            <circle cx="22" cy="22" r="1.2" fill="#C9A84C" fillOpacity="0.7"/>
-            {/* Rung 3: y≈26 */}
-            <line x1="17" y1="26" x2="27" y2="26" stroke="#C9A84C"
-              strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
-            {/* Rung 4: y≈30 */}
-            <line x1="15" y1="30.5" x2="29" y2="30.5" stroke="#C9A84C"
-              strokeWidth="1" strokeOpacity="0.4" strokeLinecap="round"/>
-            {/* Base node */}
-            <circle cx="22" cy="39" r="2" fill="#C9A84C" fillOpacity="0.6"
-              stroke="#C9A84C" strokeWidth="0.75"/>
+            {/* Rungs */}
+            <line x1="17" y1="18" x2="27" y2="18" stroke="#C9A84C" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
+            <line x1="14.5" y1="22" x2="29.5" y2="22" stroke="#C9A84C" strokeWidth="1" strokeOpacity="0.7" strokeLinecap="round"/>
+            <circle cx="22" cy="22" r="1.2" fill="#C9A84C"/>
+            <line x1="17" y1="26" x2="27" y2="26" stroke="#C9A84C" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
+            <circle cx="22" cy="39" r="2" fill="#C9A84C" fillOpacity="0.6"/>
           </svg>
 
           {/* Wordmark */}
