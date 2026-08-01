@@ -21,6 +21,11 @@ import notificationsRouter from "./notifications";
 import celebrationsRouter from "./celebrations";
 import pressRouter from "./press";
 import empireMediaRouter from "./empire-media";
+import neuralRouter from "./neural";
+import genomeRouter from "./genome";
+import geoRouter from "./geo";
+import legalRouter from "./legal";
+import socialRouter from "./social";
 
 const router: IRouter = Router();
 
@@ -46,5 +51,10 @@ router.use(notificationsRouter);
 router.use(celebrationsRouter);
 router.use(pressRouter);
 router.use(empireMediaRouter);
+router.use("/neural", neuralRouter);
+router.use("/genome", genomeRouter);
+router.use("/geo", geoRouter);
+router.use("/legal", legalRouter);
+router.use(socialRouter);
 
 export default router;

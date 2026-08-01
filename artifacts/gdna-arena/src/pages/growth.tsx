@@ -404,7 +404,7 @@ export default function Growth() {
   // ──────────────────────────────────────────────────────────────────────────
   if (phase === "initiation") {
     const q = QUESTIONS[qIndex];
-    const isRTL = ["ar", "dz"].includes(lang);
+    const isRTL = lang === "ar";
     const qText = (q.q as Record<string, string>)[lang] ?? q.q.en;
     const progress = ((qIndex) / QUESTIONS.length) * 100;
 

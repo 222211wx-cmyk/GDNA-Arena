@@ -3,6 +3,11 @@ import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import { startHonorAlertJob } from "./jobs/honor-alert.js";
 import { startWelcomeBroadcastJob, runWelcomeBroadcast } from "./jobs/welcome-broadcast.js";
+import { startImperialDecreeJob, runImperialDecree } from "./jobs/imperial-decree.js";
+import { ensureNeuralTables } from "./lib/neural-core.js";
+import { startNeuralLearningJob } from "./jobs/neural-learning.js";
+import { ensureGenomeTables } from "./lib/genome-engine.js";
+import { startGenomeEvolutionJob } from "./jobs/genome-evolution.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -863,6 +868,17 @@ adminRouter.post("/admin/broadcast-welcome", async (req, res): Promise<void> => 
   }
 });
 
+// POST /api/admin/imperial-decree — إطلاق المراسيم الشرفية لجميع المواطنين
+adminRouter.post("/admin/imperial-decree", async (req, res): Promise<void> => {
+  try {
+    const { force = false, aiEnhanced = true, limit = 0 } = req.body ?? {};
+    const result = await runImperialDecree({ force, aiEnhanced, limit });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
 // GET /api/seed — يعمّر 3 مستخدمين تجريبيين مرة واحدة
 adminRouter.get("/seed", async (req, res): Promise<void> => {
   try {
@@ -916,11 +932,17 @@ adminRouter.get("/seed", async (req, res): Promise<void> => {
 
 app.use("/api", adminRouter);
 
-ensureTables().then(() => {
-  startHonorAlertJob();
-  startWelcomeBroadcastJob();
-  app.listen(port, (err) => {
-    if (err) { console.error(err); process.exit(1); }
-    console.log(`[SERVER] Listening on port ${port}`);
+ensureTables()
+  .then(() => ensureNeuralTables())
+  .then(() => ensureGenomeTables())
+  .then(() => {
+    startHonorAlertJob();
+    startWelcomeBroadcastJob();
+    startImperialDecreeJob();
+    startNeuralLearningJob();
+    startGenomeEvolutionJob();
+    app.listen(port, (err) => {
+      if (err) { console.error(err); process.exit(1); }
+      console.log(`[SERVER] Listening on port ${port}`);
+    });
   });
-});

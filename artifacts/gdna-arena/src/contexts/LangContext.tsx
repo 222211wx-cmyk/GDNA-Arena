@@ -1,15 +1,16 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
-export type Lang = "en" | "ar" | "fr" | "dz";
+export type Lang = "en" | "ar" | "fr" | "es" | "de";
 
 export const LANGS: { code: Lang; label: string; flag: string }[] = [
-  { code: "en", label: "English", flag: "🇬🇧" },
-  { code: "ar", label: "العربية", flag: "🌍" },
+  { code: "en", label: "English",  flag: "🇬🇧" },
+  { code: "ar", label: "العربية", flag: "🇸🇦" },
   { code: "fr", label: "Français", flag: "🇫🇷" },
-  { code: "dz", label: "الدارجة", flag: "🇲🇦" },
+  { code: "es", label: "Español",  flag: "🇪🇸" },
+  { code: "de", label: "Deutsch",  flag: "🇩🇪" },
 ];
 
-export const T: Record<Lang, Record<string, string>> = {
+export const T: Record<string, Record<string, string>> = {
   en: {
     home: "Home", games: "Games", news: "News", leaderboard: "Leaderboard",
     ai: "GDN-AI", login: "Login", register: "Register", dashboard: "Dashboard",
@@ -218,6 +219,10 @@ export const T: Record<Lang, Record<string, string>> = {
     lb_rank: "Rank", lb_player: "Player", lb_xp: "XP", lb_wins: "Wins",
     welcome: "Welcome",
     status_online: "Status: Online",
+    apex_arena: "GDNA ARENA", apex_founder: "Qaisypro2026", apex_surname: "",
+    apex_title: "FOUNDER OF THE EMPIRE • TOP HONORED CITIZEN",
+    apex_join: "JOIN THE EMPIRE",
+    live_rankings: "LIVE RANKINGS", globalstar_label: "GlobalStar",
   },
   ar: {
     home: "الرئيسية", games: "الألعاب", news: "الأخبار", leaderboard: "المتصدرون",
@@ -403,6 +408,10 @@ export const T: Record<Lang, Record<string, string>> = {
     lb_rank: "الترتيب", lb_player: "اللاعب", lb_xp: "XP", lb_wins: "الانتصارات",
     welcome: "مرحباً",
     status_online: "الحالة: متصل",
+    apex_arena: "ساحة جي دي ان ايه", apex_founder: "Qaisypro2026", apex_surname: "",
+    apex_title: "مؤسس الإمبراطورية • المواطن الأكثر شرفاً",
+    apex_join: "انضم إلى الإمبراطورية",
+    live_rankings: "التصنيفات المباشرة", globalstar_label: "النجم العالمي",
   },
   fr: {
     home: "Accueil", games: "Jeux", news: "Actualités", leaderboard: "Classement",
@@ -605,8 +614,34 @@ export const T: Record<Lang, Record<string, string>> = {
     lb_rank: "Rang", lb_player: "Joueur", lb_xp: "XP", lb_wins: "Victoires",
     welcome: "Bienvenue",
     status_online: "Statut: En ligne",
+    apex_arena: "GDNA ARENA", apex_founder: "Qaisypro2026", apex_surname: "",
+    apex_title: "FONDATEUR DE L'EMPIRE • CITOYEN LE PLUS HONORÉ",
+    apex_join: "REJOINDRE L'EMPIRE",
+    live_rankings: "CLASSEMENTS EN DIRECT", globalstar_label: "L'Étoile Mondiale",
   },
-  dz: {
+  es: {
+    home: "Inicio", games: "Juegos", news: "Noticias", leaderboard: "Clasificación",
+    ai: "GDN-AI", login: "Iniciar sesión", register: "Registrarse", dashboard: "Panel",
+    wallet: "Cartera", logout: "Salir", hub: "Hub",
+    legends: "TOP 10 LEYENDAS", pulse: "PULSO DEL IMPERIO", citizens: "CIUDADANOS",
+    apex_arena: "GDNA ARENA", apex_founder: "Qaisypro2026", apex_surname: "",
+    apex_title: "FUNDADOR DEL IMPERIO • CIUDADANO MÁS HONORADO",
+    apex_join: "ÚNETE AL IMPERIO",
+    live_rankings: "CLASIFICACIONES EN VIVO", globalstar_label: "La Estrella Global",
+    welcome: "Bienvenido", status_online: "Estado: En línea",
+  },
+  de: {
+    home: "Startseite", games: "Spiele", news: "Nachrichten", leaderboard: "Rangliste",
+    ai: "GDN-AI", login: "Anmelden", register: "Registrieren", dashboard: "Dashboard",
+    wallet: "Wallet", logout: "Abmelden", hub: "Hub",
+    legends: "TOP 10 LEGENDEN", pulse: "EMPIRE PULS", citizens: "BÜRGER",
+    apex_arena: "GDNA ARENA", apex_founder: "Qaisypro2026", apex_surname: "",
+    apex_title: "GRÜNDER DES IMPERIUMS • MEISTGEEHRTER BÜRGER",
+    apex_join: "DEM IMPERIUM BEITRETEN",
+    live_rankings: "LIVE-RANGLISTEN", globalstar_label: "Der Weltstar",
+    welcome: "Willkommen", status_online: "Status: Online",
+  },
+  _dz_removed: {
     home: "الدار", games: "الألعاب", news: "الأخبار", leaderboard: "المراتب",
     ai: "GDN-AI", login: "دخل", register: "سجّل", dashboard: "لوحتي",
     wallet: "المحفظة", logout: "خرج", hub: "الهاب",
@@ -821,16 +856,36 @@ const LangContext = createContext<LangContextType>({
   t: (k) => k,
 });
 
+// ── Auto-detect language from browser on first visit ─────────────────────────
+function detectInitialLang(): Lang {
+  const stored = localStorage.getItem("gdna_lang") as Lang | null;
+  if (stored && (["en", "ar", "fr", "es", "de"] as string[]).includes(stored)) return stored;
+
+  const bl = (navigator.language || "").toLowerCase();
+  // Arabic OR Moroccan / Algerian locale → Arabic
+  if (bl.startsWith("ar") || bl.startsWith("ar-ma") || bl.startsWith("ar-dz")
+    || bl.includes("-ma") || bl.includes("-dz")) return "ar";
+  if (bl.startsWith("fr")) return "fr";
+  if (bl.startsWith("es")) return "es";
+  if (bl.startsWith("de")) return "de";
+  return "en"; // default: English
+}
+
 export function LangProvider({ children }: { children: ReactNode }) {
-  const stored = (localStorage.getItem("gdna_lang") as Lang) ?? "en";
-  const [lang, setLangState] = useState<Lang>(stored);
+  const [lang, setLangState] = useState<Lang>(detectInitialLang);
 
   const setLang = (l: Lang) => {
     localStorage.setItem("gdna_lang", l);
     setLangState(l);
   };
 
-  const t = (key: string) => T[lang][key] ?? T["en"][key] ?? key;
+  // Apply RTL/LTR to <html> whenever language changes
+  useEffect(() => {
+    document.documentElement.dir  = lang === "ar" ? "rtl" : "ltr";
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  const t = (key: string): string => T[lang]?.[key] ?? T["en"][key] ?? key;
 
   return (
     <LangContext.Provider value={{ lang, setLang, t }}>

@@ -4,7 +4,7 @@ import { Coins, TrendingUp, TrendingDown, Trophy, Gift, Loader2 } from "lucide-r
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 
 interface Transaction {
   id: number;
@@ -37,13 +37,12 @@ function timeAgo(iso: string) {
 export default function Wallet() {
   const { user } = useAuth();
   const { t } = useLang();
-  const [, setLocation] = useLocation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { setLocation("/login"); return; }
+    if (!user) { setLoading(false); return; }
     fetch("/api/wallet/transactions", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
@@ -51,13 +50,40 @@ export default function Wallet() {
         setBalance(d.balance ?? 0);
       })
       .finally(() => setLoading(false));
-  }, [user, setLocation]);
+  }, [user]);
 
   const totalWon   = transactions.filter((t) => t.type === "win").reduce((s, t) => s + t.amount, 0);
   const totalGames = transactions.filter((t) => t.type === "win" || t.type === "participation").length;
   const dailyClaims = transactions.filter((t) => t.type === "daily_reward").length;
 
-  if (!user) return null;
+  // Guest screen — do NOT redirect, keep user on this page
+  if (!user) return (
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+        className="max-w-md w-full text-center border border-yellow-500/20 rounded-2xl bg-gray-950/80 p-10">
+        <Coins className="w-14 h-14 text-yellow-400 mx-auto mb-4 drop-shadow-[0_0_16px_rgba(255,215,0,0.4)]" />
+        <h2 className="text-white font-black text-2xl mb-2">Your Wallet</h2>
+        <p className="text-gray-400 text-sm mb-6">
+          Sign in to see your GDNA coin balance, transaction history, and daily rewards.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Link href="/login">
+            <button className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black py-3 rounded-xl transition-all">
+              ⚡ Log In to Access Wallet
+            </button>
+          </Link>
+          <Link href="/register">
+            <button className="w-full border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10 font-semibold py-3 rounded-xl transition-all text-sm">
+              New? Create a free account
+            </button>
+          </Link>
+        </div>
+        <p className="text-gray-700 text-xs mt-6">
+          ⚠️ GDNA Arena coins are virtual credits with no monetary value.
+        </p>
+      </motion.div>
+    </div>
+  );
 
   return (
     <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-4xl mx-auto space-y-8">

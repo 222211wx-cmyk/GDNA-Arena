@@ -6,6 +6,11 @@ import { useEffect } from "react";
 
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
+import { LegalProvider } from "@/contexts/LegalContext";
+import CookieBanner from "@/components/legal/CookieBanner";
+import AgeGate from "@/components/legal/AgeGate";
+import GeoBlock from "@/components/legal/GeoBlock";
+import CoinsDisclaimer from "@/components/legal/CoinsDisclaimer";
 import { Navbar } from "@/components/layout/navbar";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
@@ -34,9 +39,13 @@ import Empire from "@/pages/empire";
 import Legal from "@/pages/legal";
 import Chronicle from "@/pages/chronicle";
 import Welcome from "@/pages/welcome";
+import SocialPage from "@/pages/social";
+import InvitePage from "@/pages/invite";
 import Growth from "@/pages/growth";
 import PressPage from "@/pages/press";
 import SportPage from "@/pages/sport";
+import NeuralCorePage from "@/pages/neural-core";
+import GenomePage from "@/pages/genome";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 
@@ -45,6 +54,7 @@ const queryClient = new QueryClient();
 function Router() {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
+      <CoinsDisclaimer />
       <Navbar />
       <main className="flex-1">
         <Switch>
@@ -58,6 +68,8 @@ function Router() {
           <Route path="/legal/:tab" component={Legal} />
           <Route path="/chronicle" component={Chronicle} />
           <Route path="/welcome" component={Welcome} />
+          <Route path="/social" component={SocialPage} />
+          <Route path="/invite" component={InvitePage} />
           <Route path="/growth" component={Growth} />
           <Route path="/sport" component={SportPage} />
           <Route path="/games" component={Games} />
@@ -76,6 +88,8 @@ function Router() {
           <Route path="/messages" component={MessagesPage} />
           <Route path="/celebrations" component={CelebrationsPage} />
           <Route path="/press" component={PressPage} />
+          <Route path="/neural-core" component={NeuralCorePage} />
+          <Route path="/genome" component={GenomePage} />
           <Route path="/news" component={NewsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />
@@ -85,6 +99,9 @@ function Router() {
       </main>
       <Footer />
       <GdnAiFloating />
+      <CookieBanner />
+      <AgeGate />
+      <GeoBlock />
     </div>
   );
 }
@@ -98,12 +115,14 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <LangProvider>
-          <AuthProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-            <Toaster />
-          </AuthProvider>
+          <LegalProvider>
+            <AuthProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <Router />
+              </WouterRouter>
+              <Toaster />
+            </AuthProvider>
+          </LegalProvider>
         </LangProvider>
       </TooltipProvider>
     </QueryClientProvider>

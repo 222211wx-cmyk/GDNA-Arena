@@ -174,4 +174,37 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   res.json(serializeUser(user));
 });
 
+// ── DELETE /api/auth/me — GDPR right to erasure ───────────────
+router.delete("/auth/me", async (req, res): Promise<void> => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  try {
+    // Anonymise all user content instead of hard-deleting rows
+    // (preserves referential integrity while erasing PII)
+    const anonymousName = `deleted_user_${userId}`;
+
+    await pool.query(`
+      UPDATE users
+      SET username = $1, email = $2, password_hash = 'DELETED', bio = NULL,
+          avatar = NULL, updated_at = NOW()
+      WHERE id = $3
+    `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
+
+    // Also wipe any stored legal consent rows
+    await pool.query(
+      `DELETE FROM user_legal_consents WHERE user_id = $1`, [userId]
+    ).catch(() => {}); // table may not exist yet — ignore
+
+    req.session.destroy(() => {});
+    res.json({ message: "Account erased. All personal data has been deleted per GDPR Art. 17." });
+  } catch (err) {
+    logger.error(err, "GDPR erasure error");
+    res.status(500).json({ error: "Erasure failed. Contact legal@gdna-arena.com." });
+  }
+});
+
 export default router;

@@ -3,10 +3,11 @@ import { Link, useLocation } from "wouter";
 import {
   Search, Trophy, Music, Film, Newspaper, Landmark,
   Gamepad2, LogOut, Globe, LayoutDashboard, Wallet,
-  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit
+  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
+import { Scale } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { name: "NEWS",     emoji: "📰",  icon: <Newspaper size={15} />,  path: "/news",             highlight: false },
   { name: "HERITAGE", emoji: "🏛️", icon: <Landmark  size={15} />,  path: "/chronicle",        highlight: false },
   { name: "PLAY",     emoji: "🎮",  icon: <Gamepad2  size={15} />,  path: "/games",            highlight: false },
+  { name: "SOCIAL",   emoji: "💬",  icon: <MessageSquare size={15} />, path: "/social",          highlight: true  },
 ];
 
 export function Navbar() {
@@ -63,17 +65,102 @@ export function Navbar() {
       {/* ── Main bar ── */}
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
 
-        {/* Logo — CORE SOCKET */}
-        <Link href="/" className="flex items-center gap-2 shrink-0 group">
-          <svg width="36" height="36" viewBox="0 0 40 40" fill="none" className="group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.7)] transition-all">
-            <circle cx="20" cy="20" r="18" stroke="#FFD700" strokeWidth="2"/>
-            <path d="M20 5 L20 12 M20 28 L20 35 M5 20 L12 20 M28 20 L35 20" stroke="#FFD700" strokeWidth="2" strokeLinecap="round"/>
-            <path d="M15 15 Q20 10 25 15 Q30 20 25 25 Q20 30 15 25 Q10 20 15 15" stroke="#FFD700" strokeWidth="1.5" fill="none"/>
-            <circle cx="20" cy="20" r="3" fill="#FFD700"/>
+        {/* Logo — IMPERIAL HELIX CROWN */}
+        <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+          <svg width="38" height="38" viewBox="0 0 44 44" fill="none"
+            className="transition-all duration-300 group-hover:drop-shadow-[0_0_10px_rgba(201,168,76,0.8)]">
+            <defs>
+              <linearGradient id="goldV" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#FFD700"/>
+                <stop offset="100%" stopColor="#C9A84C"/>
+              </linearGradient>
+              <linearGradient id="cyanV" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#00D4FF"/>
+                <stop offset="100%" stopColor="#0099CC"/>
+              </linearGradient>
+              <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#C9A84C" stopOpacity="0.25"/>
+                <stop offset="100%" stopColor="#C9A84C" stopOpacity="0"/>
+              </radialGradient>
+              <filter id="logoGlow">
+                <feGaussianBlur stdDeviation="0.6" result="blur"/>
+                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+              </filter>
+            </defs>
+
+            {/* Outer arena ring — dashed octagonal feel */}
+            <circle cx="22" cy="22" r="20" stroke="#C9A84C" strokeWidth="0.75"
+              strokeOpacity="0.35" strokeDasharray="4 2.5" fill="url(#centerGlow)"/>
+
+            {/* Inner structural ring */}
+            <circle cx="22" cy="22" r="17" stroke="#C9A84C" strokeWidth="0.4"
+              strokeOpacity="0.15" fill="none"/>
+
+            {/* ── CROWN (top) ── */}
+            {/* Crown base bar */}
+            <line x1="14" y1="14" x2="30" y2="14" stroke="url(#goldV)"
+              strokeWidth="1.5" strokeLinecap="round"/>
+            {/* Crown left spike */}
+            <polyline points="14,14 14,7 17,10" stroke="url(#goldV)"
+              strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+            {/* Crown center spike (tallest) */}
+            <polyline points="17,10 22,5 27,10" stroke="url(#goldV)"
+              strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+            {/* Crown right spike */}
+            <polyline points="27,10 30,7 30,14" stroke="url(#goldV)"
+              strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
+            {/* Crown fill */}
+            <path d="M14 14 L14 7 L17 10 L22 5 L27 10 L30 7 L30 14 Z"
+              fill="#C9A84C" fillOpacity="0.12"/>
+            {/* Crown jewels */}
+            <circle cx="14" cy="14" r="1.5" fill="#FFD700"/>
+            <circle cx="22" cy="5"  r="2"   fill="#FFD700"/>
+            <circle cx="30" cy="14" r="1.5" fill="#FFD700"/>
+
+            {/* ── DNA HELIX (body — crown base y=14 to bottom y=39) ── */}
+            {/* Left strand — GOLD: starts left @ y=14, curves right→left→right */}
+            <path d="M14 14 C22 18 30 22 22 26 C14 30 22 34 22 39"
+              stroke="url(#goldV)" strokeWidth="2" strokeLinecap="round" fill="none"
+              filter="url(#logoGlow)"/>
+
+            {/* Right strand — CYAN: starts right @ y=14, curves left→right→left */}
+            <path d="M30 14 C22 18 14 22 22 26 C30 30 22 34 22 39"
+              stroke="url(#cyanV)" strokeWidth="2" strokeLinecap="round" fill="none"
+              filter="url(#logoGlow)"/>
+
+            {/* Helix rungs — horizontal connectors */}
+            {/* Rung 1: y≈18, strands close together */}
+            <line x1="17" y1="18" x2="27" y2="18" stroke="#C9A84C"
+              strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
+            {/* Rung 2: crossing point y≈22 (widest apart) */}
+            <line x1="14.5" y1="22" x2="29.5" y2="22" stroke="#C9A84C"
+              strokeWidth="1" strokeOpacity="0.7" strokeLinecap="round"/>
+            {/* Center crossnode */}
+            <circle cx="22" cy="22" r="2.5" fill="#C9A84C" fillOpacity="0.2"
+              stroke="#C9A84C" strokeWidth="0.75" strokeOpacity="0.5"/>
+            <circle cx="22" cy="22" r="1.2" fill="#C9A84C" fillOpacity="0.7"/>
+            {/* Rung 3: y≈26 */}
+            <line x1="17" y1="26" x2="27" y2="26" stroke="#C9A84C"
+              strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
+            {/* Rung 4: y≈30 */}
+            <line x1="15" y1="30.5" x2="29" y2="30.5" stroke="#C9A84C"
+              strokeWidth="1" strokeOpacity="0.4" strokeLinecap="round"/>
+            {/* Base node */}
+            <circle cx="22" cy="39" r="2" fill="#C9A84C" fillOpacity="0.6"
+              stroke="#C9A84C" strokeWidth="0.75"/>
           </svg>
-          <span className="font-bold text-lg tracking-tight text-yellow-400 hidden sm:block">
-            GDNA Arena
-          </span>
+
+          {/* Wordmark */}
+          <div className="hidden sm:flex flex-col leading-none">
+            <span className="font-black text-base tracking-[0.12em] uppercase"
+              style={{ color: "#C9A84C", letterSpacing: "0.12em", fontFamily: "inherit" }}>
+              GDNA
+            </span>
+            <span className="text-[9px] font-bold tracking-[0.35em] uppercase"
+              style={{ color: "#ffffff40", letterSpacing: "0.35em" }}>
+              ARENA
+            </span>
+          </div>
         </Link>
 
         {/* ── Desktop nav ── */}
@@ -142,6 +229,16 @@ export function Navbar() {
 
           {/* Notification */}
           <NotificationBell />
+
+          {/* Legal Center link */}
+          <Link
+            href="/legal"
+            title="Legal Center"
+            className="hidden md:flex items-center gap-1 text-gray-500 hover:text-yellow-400 transition-colors text-xs border border-gray-800 hover:border-yellow-400/30 rounded-lg px-2 py-1"
+          >
+            <Scale size={12} />
+            <span className="hidden lg:block">Legal</span>
+          </Link>
 
           {/* Language */}
           <div ref={langRef} className="relative hidden md:block">

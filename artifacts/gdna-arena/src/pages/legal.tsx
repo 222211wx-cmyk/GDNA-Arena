@@ -1,219 +1,343 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLegal, COUNTRIES, type CountryProfile } from "@/contexts/LegalContext";
 import { useLang } from "@/contexts/LangContext";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { FileCheck, Lock, Shield, Scale, Globe, AlertCircle, CheckCircle2 } from "lucide-react";
 
-type Tab = "terms" | "privacy" | "cookies" | "gdpr";
+type Tab = "country" | "terms" | "privacy" | "cookies" | "rights";
 
-const TABS: { key: Tab; icon: typeof FileCheck; labelKey: string }[] = [
-  { key: "terms",   icon: FileCheck, labelKey: "legal_tab_terms" },
-  { key: "privacy", icon: Lock,      labelKey: "legal_tab_privacy" },
-  { key: "cookies", icon: Shield,    labelKey: "legal_tab_cookies" },
-  { key: "gdpr",    icon: Globe,     labelKey: "legal_tab_gdpr" },
-];
+const COIN_DISCLAIMER = {
+  en: "⚠️ GDNA Arena coins are virtual in-platform credits with no real-world monetary value. They cannot be exchanged for fiat currency, cryptocurrency, or any real-world asset. Coin balances do not constitute financial instruments under any jurisdiction.",
+  ar: "⚠️ كوينز GDNA Arena هي رصيد افتراضي داخل المنصة ليس له أي قيمة نقدية حقيقية. لا يمكن تحويلها إلى عملات ورقية أو رقمية أو أي أصول حقيقية. أرصدة الكوينز لا تُشكّل أدوات مالية بأي قانون.",
+  fr: "⚠️ Les coins GDNA Arena sont des crédits virtuels sans valeur monétaire réelle. Ils ne peuvent pas être échangés contre des devises ou des crypto-monnaies. Les soldes ne constituent pas des instruments financiers.",
+  es: "⚠️ Las monedas de GDNA Arena son créditos virtuales sin valor monetario real. No se pueden canjear por moneda fiduciaria ni criptomonedas. Los saldos no constituyen instrumentos financieros.",
+  de: "⚠️ GDNA Arena Coins sind virtuelle Guthaben ohne realen Geldwert. Sie können nicht gegen Fiat-Währungen oder Kryptowährungen eingetauscht werden.",
+};
 
-export default function Legal() {
-  const { t } = useLang();
-  const [tab, setTab] = useState<Tab>("terms");
+export default function LegalPage() {
+  const { country, setCountry, consent, setConsent, ageVerified, setAgeVerified } = useLegal();
+  const { lang } = useLang();
+  const isRTL = lang === "ar";
+  const [tab, setTab] = useState<Tab>("country");
+  const [search, setSearch] = useState("");
+
+  const filtered = COUNTRIES.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.code.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const disclaimer = COIN_DISCLAIMER[lang as keyof typeof COIN_DISCLAIMER] ?? COIN_DISCLAIMER.en;
+
+  const tabLabels: Record<Tab, string> = {
+    country: lang === "ar" ? "🌍 بلدك" : lang === "fr" ? "🌍 Votre pays" : lang === "es" ? "🌍 Tu país" : lang === "de" ? "🌍 Ihr Land" : "🌍 Your Country",
+    terms:   lang === "ar" ? "📋 الشروط" : lang === "fr" ? "📋 CGU" : lang === "es" ? "📋 Términos" : lang === "de" ? "📋 AGB" : "📋 Terms",
+    privacy: lang === "ar" ? "🔒 الخصوصية" : lang === "fr" ? "🔒 Confidentialité" : lang === "es" ? "🔒 Privacidad" : lang === "de" ? "🔒 Datenschutz" : "🔒 Privacy",
+    cookies: lang === "ar" ? "🍪 الكوكيز" : "🍪 Cookies",
+    rights:  lang === "ar" ? "⚖️ حقوقك" : lang === "fr" ? "⚖️ Vos droits" : lang === "es" ? "⚖️ Tus derechos" : lang === "de" ? "⚖️ Ihre Rechte" : "⚖️ Your Rights",
+  };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] px-4 py-10 max-w-4xl mx-auto space-y-8">
+    <div dir={isRTL ? "rtl" : "ltr"} className="min-h-screen bg-black text-white pt-16 pb-12">
 
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="text-center space-y-3">
-        <div className="flex justify-center mb-3">
-          <div className="w-14 h-14 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center">
-            <Scale className="w-7 h-7 text-primary" />
-          </div>
-        </div>
-        <h1 className="text-4xl md:text-5xl font-black uppercase tracking-wider neon-text-glow">{t("legal_title")}</h1>
-        <p className="text-sm text-muted-foreground max-w-xl mx-auto">{t("legal_sub")}</p>
-        <div className="flex justify-center gap-2 flex-wrap">
-          <Badge className="bg-green-400/10 text-green-400 border border-green-400/30 font-mono text-xs">✓ GDPR</Badge>
-          <Badge className="bg-blue-400/10 text-blue-400 border border-blue-400/30 font-mono text-xs">✓ CCPA</Badge>
-          <Badge className="bg-primary/10 text-primary border border-primary/30 font-mono text-xs">✓ ISO 27001</Badge>
-        </div>
-        <p className="text-xs text-muted-foreground font-mono">{t("legal_updated")}: 2026-01-01 · v3.2.1</p>
-      </motion.div>
+      <div className="border-b border-yellow-500/20 px-6 py-8 text-center">
+        <div className="text-yellow-500 text-xs tracking-[0.4em] mb-2">⚖️ LEGAL CENTER</div>
+        <h1 className="text-4xl font-black text-white">
+          {lang === "ar" ? "المركز القانوني" : lang === "fr" ? "Centre Légal" : lang === "es" ? "Centro Legal" : lang === "de" ? "Rechtszentrum" : "Legal Center"}
+        </h1>
+        <p className="mt-2 text-gray-400 text-sm">
+          {lang === "ar" ? "قوانين مُكيَّفة حسب دولتك — شفافية كاملة" : "Country-adaptive compliance — full transparency"}
+        </p>
 
-      {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-2 justify-center">
-        {TABS.map((tb) => (
-          <button
-            key={tb.key}
-            onClick={() => setTab(tb.key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wider border transition-all ${
-              tab === tb.key
-                ? "bg-primary/20 text-primary border-primary/60"
-                : "bg-card/30 text-muted-foreground border-border/50 hover:border-primary/30 hover:text-primary"
-            }`}
-          >
-            <tb.icon className="w-4 h-4" />
-            {t(tb.labelKey)}
+        {/* Active country badge */}
+        <div className="inline-flex items-center gap-2 mt-4 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2">
+          <span className="text-xl">{country.flag}</span>
+          <span className="text-yellow-400 font-semibold text-sm">{country.name}</span>
+          <span className="text-gray-500 text-xs">— {country.laws.slice(0, 2).join(", ")}</span>
+        </div>
+      </div>
+
+      {/* Coin disclaimer banner */}
+      {country.coinsDisclaimer && (
+        <div className="bg-orange-950/40 border-b border-orange-500/30 px-6 py-3">
+          <p className="max-w-4xl mx-auto text-orange-300 text-xs leading-relaxed">{disclaimer}</p>
+        </div>
+      )}
+
+      {/* Gaming warning banner */}
+      {country.gamingWarning && (
+        <div className="bg-red-950/30 border-b border-red-500/20 px-6 py-2">
+          <p className="max-w-4xl mx-auto text-red-400 text-xs text-center">
+            {lang === "ar"
+              ? `⚠️ ألعاب الحظ محدودة أو مقيّدة في ${country.name}. GDNA Arena ليست منصة قمار — الكوينز افتراضية فقط.`
+              : `⚠️ Gaming regulations apply in ${country.name}. GDNA Arena is not a gambling platform — all coins are virtual only.`}
+          </p>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex overflow-x-auto border-b border-gray-800 px-4">
+        {(Object.keys(tabLabels) as Tab[]).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-3 text-xs tracking-widest whitespace-nowrap transition-all flex-shrink-0 ${
+              tab === t ? "text-yellow-400 border-b-2 border-yellow-400" : "text-gray-500 hover:text-gray-300"
+            }`}>
+            {tabLabels[t]}
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={tab}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-        >
-          {tab === "terms" && <TermsContent t={t} />}
-          {tab === "privacy" && <PrivacyContent t={t} />}
-          {tab === "cookies" && <CookiesContent t={t} />}
-          {tab === "gdpr" && <GdprContent t={t} />}
-        </motion.div>
-      </AnimatePresence>
+      <div className="max-w-4xl mx-auto px-4 mt-8">
+        <AnimatePresence mode="wait">
+
+          {/* ── COUNTRY SELECTOR ── */}
+          {tab === "country" && (
+            <motion.div key="country" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <p className="text-gray-400 text-sm mb-4">
+                {lang === "ar" ? "اختر دولتك لتطبيق القوانين المناسبة تلقائياً:" : "Select your country to apply the correct legal framework automatically:"}
+              </p>
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder={lang === "ar" ? "ابحث عن دولتك..." : "Search your country..."}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white mb-4 focus:outline-none focus:border-yellow-500"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filtered.map((c: CountryProfile) => (
+                  <button key={c.code} onClick={() => setCountry(c.code)}
+                    className={`text-left p-4 rounded-xl border transition-all ${
+                      country.code === c.code
+                        ? "border-yellow-500 bg-yellow-500/10"
+                        : "border-gray-800 hover:border-gray-600"
+                    }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl">{c.flag}</span>
+                      <span className="font-semibold text-white text-sm">{c.name}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {c.gdpr && <span className="text-xs bg-blue-900/50 text-blue-300 px-1.5 py-0.5 rounded">GDPR</span>}
+                      {c.ccpa && <span className="text-xs bg-green-900/50 text-green-300 px-1.5 py-0.5 rounded">CCPA</span>}
+                      {c.cookieConsentRequired && <span className="text-xs bg-yellow-900/50 text-yellow-300 px-1.5 py-0.5 rounded">🍪</span>}
+                      {c.ageGateRequired && <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">{c.minAge}+</span>}
+                      {c.gamingWarning && <span className="text-xs bg-orange-900/50 text-orange-300 px-1.5 py-0.5 rounded">⚠️</span>}
+                    </div>
+                    <div className="text-xs text-gray-600 mt-1 truncate">{c.laws.slice(0,2).join(" · ")}</div>
+                    {c.notes && <div className="text-xs text-gray-500 mt-1 line-clamp-2">{c.notes}</div>}
+                  </button>
+                ))}
+              </div>
+
+              {/* Active framework summary */}
+              <div className="mt-6 border border-yellow-500/20 rounded-xl p-5 bg-yellow-500/5">
+                <h3 className="text-yellow-400 font-bold mb-3">
+                  {lang === "ar" ? `الإطار القانوني المطبّق — ${country.name}` : `Active Legal Framework — ${country.name}`}
+                </h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {[
+                    { label: lang==="ar" ? "الحد الأدنى للعمر" : "Minimum Age", value: `${country.minAge}+` },
+                    { label: "GDPR", value: country.gdpr ? "✅" : "—" },
+                    { label: "CCPA", value: country.ccpa ? "✅" : "—" },
+                    { label: lang==="ar" ? "موافقة الكوكيز" : "Cookie Consent", value: country.cookieConsentRequired ? "✅ Required" : "Optional" },
+                    { label: lang==="ar" ? "تحذير الألعاب" : "Gaming Warning", value: country.gamingWarning ? "⚠️ Active" : "None" },
+                    { label: lang==="ar" ? "تنبيه الكوينز" : "Coins Disclaimer", value: country.coinsDisclaimer ? "⚠️ Active" : "None" },
+                  ].map(r => (
+                    <div key={r.label} className="flex justify-between">
+                      <span className="text-gray-400">{r.label}</span>
+                      <span className="text-white font-semibold">{r.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-yellow-500/10">
+                  <p className="text-xs text-gray-500">
+                    {lang==="ar" ? "القوانين المطبّقة:" : "Applicable laws:"}{" "}
+                    <span className="text-yellow-400">{country.laws.join(" · ")}</span>
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── TERMS OF SERVICE ── */}
+          {tab === "terms" && (
+            <motion.div key="terms" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="prose prose-invert max-w-none space-y-6">
+              <LegalSection title={lang==="ar" ? "شروط الاستخدام" : lang==="fr" ? "Conditions Générales d'Utilisation" : lang==="es" ? "Términos de Servicio" : lang==="de" ? "Nutzungsbedingungen" : "Terms of Service"} subtitle={`GDNA Arena — ${new Date().getFullYear()}`}>
+                <LegalClause n={1} title={lang==="ar" ? "القبول" : "Acceptance"}>
+                  {lang==="ar"
+                    ? "باستخدامك لمنصة GDNA Arena، فإنك توافق على هذه الشروط. إذا كنت لا توافق، يرجى عدم استخدام المنصة."
+                    : "By accessing GDNA Arena, you agree to these Terms. If you do not agree, please do not use the platform."}
+                </LegalClause>
+                <LegalClause n={2} title={lang==="ar" ? "الأهلية" : "Eligibility"}>
+                  {lang==="ar"
+                    ? `يجب أن يكون عمرك ${country.minAge} سنة على الأقل لاستخدام المنصة في ${country.name}.`
+                    : `You must be at least ${country.minAge} years old to use this platform in ${country.name} (${country.laws[0]}).`}
+                </LegalClause>
+                <LegalClause n={3} title={lang==="ar" ? "العملة الافتراضية" : "Virtual Currency"}>
+                  {disclaimer}
+                </LegalClause>
+                <LegalClause n={4} title={lang==="ar" ? "المحتوى" : "Content"}>
+                  {lang==="ar"
+                    ? "جميع المحتوى الذي تنشره يبقى ملكك. تمنحنا ترخيصاً لعرضه على المنصة. نحتفظ بحق إزالة أي محتوى ينتهك القوانين أو شروط الاستخدام."
+                    : "Content you post remains yours. You grant us a license to display it on the platform. We reserve the right to remove content that violates laws or these Terms."}
+                </LegalClause>
+                <LegalClause n={5} title={lang==="ar" ? "إخلاء المسؤولية" : "Disclaimer"}>
+                  {lang==="ar"
+                    ? 'المنصة مقدمة "كما هي" دون ضمانات. لا نتحمل مسؤولية أي خسائر ناجمة عن استخدام المنصة.'
+                    : 'The platform is provided "as is" without warranties. We are not liable for any losses arising from use of the platform.'}
+                </LegalClause>
+                <LegalClause n={6} title={lang==="ar" ? "القانون الحاكم" : "Governing Law"}>
+                  {lang==="ar"
+                    ? `تخضع هذه الشروط للقانون الدولي المعمول به في ${country.name}: ${country.laws.join("، ")}.`
+                    : `These Terms are governed by applicable law in ${country.name}: ${country.laws.join(", ")}.`}
+                </LegalClause>
+              </LegalSection>
+            </motion.div>
+          )}
+
+          {/* ── PRIVACY POLICY ── */}
+          {tab === "privacy" && (
+            <motion.div key="privacy" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
+              <LegalSection title={lang==="ar" ? "سياسة الخصوصية" : lang==="fr" ? "Politique de Confidentialité" : lang==="es" ? "Política de Privacidad" : lang==="de" ? "Datenschutzerklärung" : "Privacy Policy"} subtitle={`${country.flag} ${country.name} — ${country.laws.slice(0,2).join(", ")}`}>
+                <LegalClause n={1} title={lang==="ar" ? "البيانات التي نجمعها" : "Data We Collect"}>
+                  {lang==="ar"
+                    ? "نجمع: اسم المستخدم، البريد الإلكتروني، نشاط المنصة (ألعاب، تصويت، منشورات)، بيانات الجهاز، ولغة المتصفح."
+                    : "We collect: username, email, platform activity (games, votes, posts), device data, and browser language."}
+                </LegalClause>
+                <LegalClause n={2} title={lang==="ar" ? "كيف نستخدم بياناتك" : "How We Use Your Data"}>
+                  {lang==="ar"
+                    ? "نستخدم بياناتك لتشغيل الخدمة، تحسين التجربة، منع الاحتيال، والامتثال للقوانين. لا نبيع بياناتك لأطراف ثالثة."
+                    : "We use your data to operate the service, improve experience, prevent fraud, and comply with law. We never sell your data."}
+                </LegalClause>
+                {country.gdpr && (
+                  <LegalClause n={3} title="GDPR — Legal Basis">
+                    We process your data under: Contractual necessity (Art. 6(1)(b)), Legitimate interests (Art. 6(1)(f)), and Consent (Art. 6(1)(a)) for optional analytics.
+                  </LegalClause>
+                )}
+                {country.ccpa && (
+                  <LegalClause n={3} title="CCPA — California Rights">
+                    California residents have the right to know what personal information is collected, the right to delete, the right to opt-out of sale, and the right to non-discrimination.
+                  </LegalClause>
+                )}
+                <LegalClause n={country.gdpr || country.ccpa ? 4 : 3} title={lang==="ar" ? "الاحتفاظ بالبيانات" : "Data Retention"}>
+                  {lang==="ar"
+                    ? "نحتفظ ببياناتك طالما حسابك نشط. عند حذف الحساب، يتم حذف بياناتك خلال 30 يوماً."
+                    : "We retain your data while your account is active. Upon account deletion, your data is removed within 30 days."}
+                </LegalClause>
+                <LegalClause n={country.gdpr || country.ccpa ? 5 : 4} title={lang==="ar" ? "الذكاء الاصطناعي" : "AI Processing"}>
+                  {lang==="ar"
+                    ? "تستخدم المنصة OpenAI لمعالجة المحتوى والمودريشن. البيانات المرسلة لـ OpenAI تخضع لسياسة خصوصية OpenAI."
+                    : "The platform uses OpenAI for content moderation and AI features. Data sent to OpenAI is subject to OpenAI's privacy policy."}
+                </LegalClause>
+              </LegalSection>
+            </motion.div>
+          )}
+
+          {/* ── COOKIES ── */}
+          {tab === "cookies" && (
+            <motion.div key="cookies" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
+              <LegalSection title={lang==="ar" ? "سياسة الكوكيز" : "Cookie Policy"} subtitle={country.cookieConsentRequired ? (lang==="ar" ? "⚠️ الموافقة مطلوبة في بلدك" : "⚠️ Consent required in your country") : (lang==="ar" ? "الموافقة اختيارية في بلدك" : "Consent optional in your country")}>
+                <div className="space-y-3">
+                  {[
+                    { name: "gdna_session", type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "جلسة تسجيل الدخول" : "Login session", canReject: false },
+                    { name: "gdna_lang",    type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "تفضيل اللغة" : "Language preference", canReject: false },
+                    { name: "gdna_country", type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "إعداد الامتثال القانوني" : "Legal compliance setup", canReject: false },
+                    { name: "gdna_consent", type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "تتبع موافقتك" : "Consent tracking", canReject: false },
+                    { name: "gdna_age_ok",  type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "التحقق من العمر" : "Age verification", canReject: false },
+                    { name: "_analytics",   type: lang==="ar" ? "اختياري" : "Analytics", purpose: lang==="ar" ? "تحسين الأداء" : "Performance improvement", canReject: true },
+                  ].map(c => (
+                    <div key={c.name} className="border border-gray-800 rounded-xl p-4 flex items-start justify-between gap-4">
+                      <div>
+                        <code className="text-yellow-400 text-xs">{c.name}</code>
+                        <p className="text-white text-sm mt-0.5">{c.purpose}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${c.canReject ? "bg-blue-900/50 text-blue-300" : "bg-green-900/50 text-green-300"}`}>{c.type}</span>
+                        {c.canReject && <span className="text-xs text-gray-600">{lang==="ar" ? "قابل للرفض" : "Can reject"}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Consent control */}
+                <div className="mt-6 border border-yellow-500/20 rounded-xl p-5 bg-yellow-500/5">
+                  <h3 className="text-yellow-400 font-bold mb-3 text-sm">
+                    {lang==="ar" ? "إدارة موافقتك" : "Manage Your Consent"}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {([["full", lang==="ar" ? "✅ قبول الكل" : "✅ Accept All", "bg-yellow-500 text-black"],
+                       ["essential", lang==="ar" ? "🔒 الضروري فقط" : "🔒 Essential Only", "bg-gray-700 text-white"],
+                       ["none", lang==="ar" ? "❌ رفض الكل" : "❌ Reject All", "border border-gray-600 text-gray-400"]] as const).map(([level, label, cls]) => (
+                      <button key={level} onClick={() => setConsent(level)}
+                        className={`text-xs font-bold px-4 py-2 rounded-lg transition-all ${cls} ${consent===level?"ring-2 ring-yellow-400":""}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3">
+                    {lang==="ar" ? `الحالة الحالية: ${consent === "full" ? "✅ قبول الكل" : consent === "essential" ? "🔒 الضروري فقط" : "❌ لم تختر بعد"}` : `Current status: ${consent === "full" ? "✅ Full consent" : consent === "essential" ? "🔒 Essential only" : "❌ Not set"}`}
+                  </p>
+                </div>
+              </LegalSection>
+            </motion.div>
+          )}
+
+          {/* ── YOUR RIGHTS ── */}
+          {tab === "rights" && (
+            <motion.div key="rights" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
+              <div className="border border-yellow-500/20 rounded-xl p-5 bg-yellow-500/5 mb-4">
+                <p className="text-yellow-400 text-sm font-semibold">
+                  {lang==="ar" ? `حقوقك بموجب قوانين ${country.name}:` : `Your rights under ${country.name} law (${country.laws.join(", ")}):`}
+                </p>
+              </div>
+              {country.dataRights.map((right, i) => {
+                const RIGHTS_TEXT: Record<string, Record<string, string>> = {
+                  access:         { en:"Right to Access — Request a copy of all personal data we hold about you.", ar:"حق الوصول — طلب نسخة من جميع بياناتك الشخصية لدينا.", fr:"Droit d'accès — Demander une copie de vos données personnelles." },
+                  delete:         { en:"Right to Erasure — Request deletion of your account and all associated data.", ar:"حق المحو — طلب حذف حسابك وجميع بياناتك.", fr:"Droit à l'effacement — Demander la suppression de votre compte." },
+                  portability:    { en:"Right to Portability — Receive your data in a machine-readable format.", ar:"حق النقل — استلام بياناتك بصيغة قابلة للقراءة الآلية.", fr:"Droit à la portabilité — Recevoir vos données dans un format portable." },
+                  rectification:  { en:"Right to Rectification — Correct any inaccurate personal data.", ar:"حق التصحيح — تصحيح أي بيانات شخصية غير دقيقة.", fr:"Droit de rectification — Corriger vos données inexactes." },
+                  object:         { en:"Right to Object — Object to processing based on legitimate interests.", ar:"حق الاعتراض — الاعتراض على المعالجة.", fr:"Droit d'opposition — Vous opposer au traitement." },
+                  "opt-out-sale": { en:"Right to Opt-Out of Sale — Opt out of the sale of your personal information (CCPA).", ar:"حق الرفض — رفض بيع معلوماتك الشخصية (CCPA).", fr:"Droit d'opt-out — Refuser la vente de vos données (CCPA)." },
+                };
+                const text = RIGHTS_TEXT[right]?.[lang] ?? RIGHTS_TEXT[right]?.["en"] ?? right;
+                return (
+                  <div key={right} className="border border-gray-800 rounded-xl p-4 flex items-start gap-3">
+                    <span className="text-yellow-400 font-black text-lg mt-0.5">{i + 1}</span>
+                    <p className="text-gray-200 text-sm leading-relaxed">{text}</p>
+                  </div>
+                );
+              })}
+              {/* Contact */}
+              <div className="border border-blue-500/20 bg-blue-500/5 rounded-xl p-5 mt-4">
+                <p className="text-blue-300 text-sm">
+                  {lang==="ar"
+                    ? "لممارسة أي من هذه الحقوق، تواصل معنا عبر: legal@gdna-arena.com — سنستجيب خلال 30 يوماً."
+                    : "To exercise any of these rights, contact us at: legal@gdna-arena.com — We will respond within 30 days."}
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
 
-// ── Terms of Service ─────────────────────────────────────────────────────────
-function TermsContent({ t }: { t: (k: string) => string }) {
-  const sections = [
-    { title: t("terms_s1_title"), body: t("terms_s1_body") },
-    { title: t("terms_s2_title"), body: t("terms_s2_body") },
-    { title: t("terms_s3_title"), body: t("terms_s3_body") },
-    { title: t("terms_s4_title"), body: t("terms_s4_body") },
-    { title: t("terms_s5_title"), body: t("terms_s5_body") },
-  ];
+// ── Reusable legal section wrapper ───────────────────────────
+function LegalSection({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <Card className="bg-card/30 border-primary/20">
-      <CardContent className="p-6 md:p-8 space-y-6">
-        <div className="flex items-center gap-3 pb-4 border-b border-border/50">
-          <FileCheck className="w-6 h-6 text-primary" />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("legal_tab_terms")}</h2>
-        </div>
-        {sections.map((s, i) => (
-          <div key={i} className="space-y-2">
-            <h3 className="font-bold text-primary uppercase tracking-wider text-sm">
-              {i + 1}. {s.title}
-            </h3>
-            <p className="text-sm text-foreground/80 leading-relaxed">{s.body}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+    <div className="border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="bg-gray-900/50 px-6 py-4 border-b border-gray-800">
+        <h2 className="text-white font-black text-xl">{title}</h2>
+        {subtitle && <p className="text-gray-500 text-xs mt-1">{subtitle}</p>}
+      </div>
+      <div className="p-6 space-y-4">{children}</div>
+    </div>
   );
 }
 
-// ── Privacy Policy ──────────────────────────────────────────────────────────
-function PrivacyContent({ t }: { t: (k: string) => string }) {
-  const items = [
-    { icon: CheckCircle2, label: t("privacy_1") },
-    { icon: CheckCircle2, label: t("privacy_2") },
-    { icon: CheckCircle2, label: t("privacy_3") },
-    { icon: CheckCircle2, label: t("privacy_4") },
-    { icon: AlertCircle,  label: t("privacy_5") },
-    { icon: CheckCircle2, label: t("privacy_6") },
-  ];
+function LegalClause({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <Card className="bg-card/30 border-primary/20">
-      <CardContent className="p-6 md:p-8 space-y-6">
-        <div className="flex items-center gap-3 pb-4 border-b border-border/50">
-          <Lock className="w-6 h-6 text-primary" />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("legal_tab_privacy")}</h2>
-        </div>
-        <p className="text-sm text-foreground/80 leading-relaxed">{t("privacy_intro")}</p>
-        <div className="space-y-3">
-          {items.map((item, i) => (
-            <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-background/40 border border-border/30">
-              <item.icon className={`w-4 h-4 mt-0.5 shrink-0 ${item.icon === AlertCircle ? "text-yellow-400" : "text-green-400"}`} />
-              <p className="text-sm text-foreground/80">{item.label}</p>
-            </div>
-          ))}
-        </div>
-        <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-          <p className="text-xs text-muted-foreground font-mono">{t("privacy_contact")}</p>
-          <p className="text-xs text-primary font-mono mt-1">legal@gdna-arena.com</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Cookie Policy ────────────────────────────────────────────────────────────
-function CookiesContent({ t }: { t: (k: string) => string }) {
-  const types = [
-    { name: t("cookie_1_name"), purpose: t("cookie_1_purpose"), required: true },
-    { name: t("cookie_2_name"), purpose: t("cookie_2_purpose"), required: true },
-    { name: t("cookie_3_name"), purpose: t("cookie_3_purpose"), required: false },
-    { name: t("cookie_4_name"), purpose: t("cookie_4_purpose"), required: false },
-  ];
-  return (
-    <Card className="bg-card/30 border-primary/20">
-      <CardContent className="p-6 md:p-8 space-y-6">
-        <div className="flex items-center gap-3 pb-4 border-b border-border/50">
-          <Shield className="w-6 h-6 text-primary" />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("legal_tab_cookies")}</h2>
-        </div>
-        <p className="text-sm text-foreground/80 leading-relaxed">{t("cookies_intro")}</p>
-        <div className="space-y-3">
-          {types.map((c, i) => (
-            <div key={i} className="flex items-start justify-between gap-3 p-4 rounded-lg bg-background/40 border border-border/30">
-              <div>
-                <p className="font-bold text-sm">{c.name}</p>
-                <p className="text-xs text-muted-foreground mt-1">{c.purpose}</p>
-              </div>
-              <Badge className={c.required
-                ? "bg-red-400/10 text-red-400 border border-red-400/30 text-xs shrink-0"
-                : "bg-muted/30 text-muted-foreground border border-border/50 text-xs shrink-0"
-              }>
-                {c.required ? t("cookie_required") : t("cookie_optional")}
-              </Badge>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── GDPR Rights ──────────────────────────────────────────────────────────────
-function GdprContent({ t }: { t: (k: string) => string }) {
-  const rights = [
-    { right: t("gdpr_r1"), detail: t("gdpr_r1d") },
-    { right: t("gdpr_r2"), detail: t("gdpr_r2d") },
-    { right: t("gdpr_r3"), detail: t("gdpr_r3d") },
-    { right: t("gdpr_r4"), detail: t("gdpr_r4d") },
-    { right: t("gdpr_r5"), detail: t("gdpr_r5d") },
-    { right: t("gdpr_r6"), detail: t("gdpr_r6d") },
-  ];
-  return (
-    <Card className="bg-card/30 border-green-400/20">
-      <CardContent className="p-6 md:p-8 space-y-6">
-        <div className="flex items-center gap-3 pb-4 border-b border-border/50">
-          <Globe className="w-6 h-6 text-green-400" />
-          <h2 className="text-xl font-black uppercase tracking-wider">{t("legal_tab_gdpr")}</h2>
-          <Badge className="bg-green-400/10 text-green-400 border border-green-400/30 text-xs ml-auto">
-            EU 2016/679
-          </Badge>
-        </div>
-        <p className="text-sm text-foreground/80">{t("gdpr_intro")}</p>
-        <div className="grid md:grid-cols-2 gap-3">
-          {rights.map((r, i) => (
-            <div key={i} className="p-4 rounded-xl bg-background/40 border border-green-400/10 space-y-1">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                <p className="font-bold text-sm text-green-400">{r.right}</p>
-              </div>
-              <p className="text-xs text-muted-foreground pl-6">{r.detail}</p>
-            </div>
-          ))}
-        </div>
-        <div className="p-4 rounded-xl bg-green-400/5 border border-green-400/20 flex items-start gap-3">
-          <AlertCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-          <p className="text-xs text-muted-foreground">{t("gdpr_dpo")}</p>
-        </div>
-      </CardContent>
-    </Card>
+    <div>
+      <h3 className="text-yellow-400 font-bold text-sm mb-1">{n}. {title}</h3>
+      <p className="text-gray-300 text-sm leading-relaxed">{children}</p>
+    </div>
   );
 }

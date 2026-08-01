@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Play, Trophy, X, Coins, Zap, Loader2, Star, Crown, Shield, Medal } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
+import { useLegal } from "@/contexts/LegalContext";
 import { useLocation, Link } from "wouter";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
@@ -394,7 +395,8 @@ function TournamentModal({
 // ══════════════════════════════════════════════════════════════════════════════
 export default function Games() {
   const { user, refreshUser } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const { country } = useLegal();
   const [, setLocation] = useLocation();
   const [playingId, setPlayingId]   = useState<string | null>(null);
   const [result, setResult]         = useState<(PlayResult) | null>(null);
@@ -451,8 +453,34 @@ export default function Games() {
     setShowTournament(false);
   };
 
+  const GAMING_WARN: Record<string, string> = {
+    en: "⚠️ Gaming regulations apply in your country. GDNA Arena coins are virtual only — no real monetary value. Play responsibly.",
+    ar: "⚠️ تنطبق لوائح الألعاب في بلدك. كوينز GDNA Arena افتراضية فقط — بلا قيمة نقدية حقيقية. العب بمسؤولية.",
+    fr: "⚠️ Les réglementations sur les jeux s'appliquent dans votre pays. Les coins GDNA Arena sont virtuels uniquement — aucune valeur monétaire réelle.",
+    es: "⚠️ Las regulaciones de juegos aplican en tu país. Las monedas GDNA Arena son solo virtuales — sin valor monetario real.",
+    de: "⚠️ In Ihrem Land gelten Spielvorschriften. GDNA Arena Coins sind rein virtuell — kein realer Geldwert.",
+  };
+
   return (
     <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-7xl mx-auto space-y-12">
+
+      {/* Gaming warning — restricted countries only */}
+      {country.gamingWarning && (
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          dir={lang === "ar" ? "rtl" : "ltr"}
+          className="mt-4 border border-orange-500/30 bg-orange-950/30 rounded-xl px-5 py-3 flex items-start gap-3">
+          <span className="text-orange-400 text-lg shrink-0">⚠️</span>
+          <div>
+            <p className="text-orange-300 text-sm leading-relaxed">
+              {GAMING_WARN[lang] ?? GAMING_WARN.en}
+            </p>
+            <Link href="/legal" className="text-orange-400/70 hover:text-orange-300 text-xs underline mt-1 inline-block transition-colors">
+              {lang === "ar" ? "اعرف حقوقك القانونية ←" : "View your legal rights →"}
+            </Link>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <div className="text-center space-y-4 pt-8">
         <motion.h1 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
