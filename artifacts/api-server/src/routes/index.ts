@@ -26,6 +26,7 @@ import genomeRouter from "./genome";
 import geoRouter from "./geo";
 import legalRouter from "./legal";
 import socialRouter from "./social";
+import socialHubRouter from "./social-hub";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use("/genome", genomeRouter);
 router.use("/geo", geoRouter);
 router.use("/legal", legalRouter);
 router.use(socialRouter);
+router.use(socialHubRouter);
 
 export default router;

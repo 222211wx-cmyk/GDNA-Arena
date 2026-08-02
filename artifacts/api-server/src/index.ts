@@ -653,6 +653,26 @@ async function ensureTables() {
       )
     `);
     // honor_count column on users table (if not already present)
+    // Social Hub tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "post_comments" (
+        "id" serial PRIMARY KEY,
+        "post_id" integer NOT NULL,
+        "user_id" integer,
+        "username" text NOT NULL DEFAULT 'Anonymous',
+        "content" text NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "user_follows" (
+        "id" serial PRIMARY KEY,
+        "follower_id" integer NOT NULL,
+        "following_id" integer NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        UNIQUE("follower_id","following_id")
+      )
+    `);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_count" integer NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_muted" boolean NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_title" text NOT NULL DEFAULT 'Citizen'`);
