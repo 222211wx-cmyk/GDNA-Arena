@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Search, UserPlus, UserCheck } from "lucide-react";
+import { useLocation } from "wouter";
 import Avatar from "./Avatar";
 import { GOLD, api } from "./social-i18n";
 import { useCallContext } from "../../contexts/CallContext";
@@ -25,11 +26,24 @@ interface Props {
 
 export default function CitizensTab({ user, st }: Props) {
   const call = useCallContext();
+  const [, navigate] = useLocation();
   const [q,         setQ]         = useState("");
   const [citizens,  setCitizens]  = useState<Citizen[]>([]);
   const [following, setFollowing] = useState<Set<number>>(new Set());
   const [loading,   setLoading]   = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  async function openDM(targetUsername: string) {
+    try {
+      await fetch(api("/api/messages/rooms"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ targetUsername, type: "direct" }),
+      });
+    } catch { /* ignore */ }
+    navigate("/messages");
+  }
 
   useEffect(() => { loadCitizens(""); }, []);
   useEffect(() => { if (user) loadFollowing(); }, [user]);
@@ -117,8 +131,9 @@ export default function CitizensTab({ user, st }: Props) {
                       : <><UserPlus  size={11} style={{ display: "inline", marginRight: 3 }} />{st.follow}</>
                     }
                   </button>
-                  {isOnline && (
+                  {user && (
                     <>
+                      <CallBtn icon="💬" title="رسالة" onClick={() => openDM(c.username)} color={GOLD} />
                       <CallBtn icon="📞" title={st.voice_call} onClick={() => call.startCall(c.username, false)} color="#22c55e" />
                       <CallBtn icon="🎥" title={st.video_call} onClick={() => call.startCall(c.username, true)}  color="#3b82f6" />
                     </>

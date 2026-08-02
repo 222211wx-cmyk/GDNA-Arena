@@ -90,10 +90,11 @@ export default function MessagesPage() {
 
   const loadContacts = useCallback(async () => {
     if (!user) return;
-    const res = await fetch("/api/social/v2/following", { credentials: "include" });
+    // Load ALL citizens so call buttons are always visible, regardless of follow status
+    const res = await fetch("/api/citizens?limit=200", { credentials: "include" });
     if (!res.ok) return;
-    const d = await res.json() as { following: Contact[] };
-    setContacts(d.following ?? []);
+    const d = await res.json() as { citizens: Contact[] };
+    setContacts((d.citizens ?? []).filter(c => c.id !== user.id));
   }, [user]);
 
   const searchToAdd = async () => {
@@ -113,6 +114,20 @@ export default function MessagesPage() {
     });
     setAddMsg(`تمت إضافة ${targetUsername} ✅`);
     void loadContacts();
+  };
+
+  const openDMWith = async (targetUsername: string) => {
+    const res = await fetch("/api/messages/rooms", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUsername, type: "direct" }),
+    });
+    const data = await res.json() as { room?: Room; error?: string };
+    if (data.room) {
+      setTab("direct");
+      void loadRooms();
+      setTimeout(() => void openRoom(data.room!), 300);
+    }
   };
 
   const loadMessages = useCallback(async (roomId: number) => {
@@ -352,21 +367,28 @@ export default function MessagesPage() {
                               )}
                             </div>
                           </div>
-                          {/* Call buttons */}
+                          {/* 💬 📞 📹 */}
                           <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => void openDMWith(c.username)}
+                              title="رسالة مباشرة"
+                              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                              style={{ background: `${GOLD}15`, border: `1px solid ${GOLD}40`, color: GOLD }}>
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => callCtx.startCall(c.username, false)}
                               title="مكالمة صوتية"
-                              className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
-                              style={{ background: "#0a2a0a", border: "1px solid #0a0" }}>
-                              <Phone className="w-3 h-3" style={{ color: GREEN }} />
+                              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                              style={{ background: "#0a2a0a", border: `1px solid ${GREEN}60`, color: GREEN }}>
+                              <Phone className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => callCtx.startCall(c.username, true)}
                               title="مكالمة فيديو"
-                              className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
-                              style={{ background: "#0a1a2a", border: "1px solid #09f" }}>
-                              <VideoIcon className="w-3 h-3" style={{ color: "#09f" }} />
+                              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                              style={{ background: "#0a1a2a", border: "1px solid #09f6", color: "#09f" }}>
+                              <VideoIcon className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>

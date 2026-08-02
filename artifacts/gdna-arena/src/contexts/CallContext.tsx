@@ -25,6 +25,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         screenSharing={call.screenSharing}
         onScreenShare={call.startScreenShare}
         onStopScreen={call.stopScreenShare}
+        callError={call.callError}
       />
     </CallContext.Provider>
   );

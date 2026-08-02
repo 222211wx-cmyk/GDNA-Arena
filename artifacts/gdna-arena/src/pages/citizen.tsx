@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   Crown, Sword, Shield, ArrowLeft, Gamepad2, Trophy,
   MessageSquare, Eye, Coins, Zap, Star, Globe,
   Music, Cpu, Briefcase, Film, Calendar, Medal, Heart,
-  AlertTriangle, CheckCircle
+  AlertTriangle, CheckCircle, Phone, Video, MessageCircle
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCallContext } from "@/contexts/CallContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface HonorInfo { title: string; color: string; badge: string }
@@ -110,6 +111,8 @@ function HonorBar({ honorCount, honorInfo }: { honorCount: number; honorInfo: Ho
 export default function CitizenPage() {
   const { username } = useParams<{ username: string }>();
   const { user: currentUser } = useAuth();
+  const call = useCallContext();
+  const [, navigate] = useLocation();
   const [data, setData] = useState<{
     citizen: Citizen; recentPosts: Post[]; achievements: Achievement[];
     violations: { reason: string; severity: string }[];
@@ -120,6 +123,18 @@ export default function CitizenPage() {
   const [honorLoading, setHonorLoading] = useState(false);
   const [honorDone, setHonorDone]   = useState(false);
   const [honorErr, setHonorErr]     = useState("");
+
+  async function openDM(targetUsername: string) {
+    try {
+      await fetch("/api/messages/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ targetUsername, type: "direct" }),
+      });
+    } catch { /* ignore — room may already exist */ }
+    navigate("/messages");
+  }
 
   const fetchData = () => {
     if (!username) return;
@@ -237,19 +252,40 @@ export default function CitizenPage() {
             </div>
           </div>
 
-          {/* Give Honor button */}
+          {/* Action buttons */}
           {currentUser && !isSelf && (
-            <div className="relative mt-5 flex items-center gap-3">
+            <div className="relative mt-5 flex flex-wrap items-center gap-3">
+              {/* Call / Message */}
+              <button onClick={() => openDM(citizen.username)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105 active:scale-95"
+                style={{ background: "#3b82f620", border: "1px solid #3b82f650", color: "#3b82f6" }}>
+                <MessageCircle className="w-4 h-4" /> رسالة
+              </button>
+              <button onClick={() => call.startCall(citizen.username, false)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105 active:scale-95"
+                style={{ background: "#22c55e20", border: "1px solid #22c55e50", color: "#22c55e" }}>
+                <Phone className="w-4 h-4" /> صوتي
+              </button>
+              <button onClick={() => call.startCall(citizen.username, true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105 active:scale-95"
+                style={{ background: "#a855f720", border: "1px solid #a855f750", color: "#a855f7" }}>
+                <Video className="w-4 h-4" /> فيديو
+              </button>
+
+              {/* Divider */}
+              <div style={{ width: 1, height: 28, background: "#ffffff15" }} />
+
+              {/* Give Honor */}
               {honorDone ? (
                 <div className="flex items-center gap-2 text-sm text-green-400 font-bold">
-                  <CheckCircle className="w-4 h-4" /> Honor given! Thank you for recognizing excellence.
+                  <CheckCircle className="w-4 h-4" /> تم الشرف! شكراً لك.
                 </div>
               ) : (
                 <button onClick={giveHonor} disabled={honorLoading}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                   style={{ background: `${citizen.honorInfo.color}20`, border: `1px solid ${citizen.honorInfo.color}50`, color: citizen.honorInfo.color }}>
                   <Heart className="w-4 h-4" />
-                  {honorLoading ? "Honoring…" : `Give Honor to ${citizen.username}`}
+                  {honorLoading ? "…" : `شرّف ${citizen.username}`}
                 </button>
               )}
               {honorErr && <span className="text-xs text-red-400">{honorErr}</span>}

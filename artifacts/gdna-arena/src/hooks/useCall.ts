@@ -56,6 +56,16 @@ export function useCall(user: { id: number; username: string } | null) {
   const [remoteStream,  setRemoteStream]  = useState<MediaStream | null>(null);
   const [screenSharing, setScreenSharing] = useState(false);
 
+  // ── Error feedback (must come AFTER all stream hooks to preserve hook order) ──
+  const [callError,    setCallError]    = useState<string | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showCallError = (msg: string) => {
+    setCallError(msg);
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setCallError(null), 5000);
+  };
+
   const sendWS = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
@@ -191,7 +201,18 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Start a call ──────────────────────────────────────────────────────────
   const startCall = useCallback(async (targetUsername: string, withVideo = true) => {
-    if (callStatus !== "idle") return;
+    if (callStatus !== "idle") {
+      showCallError("مكالمة أخرى جارية بالفعل — أنهِها أولاً");
+      return;
+    }
+    if (!user) {
+      showCallError("يجب تسجيل الدخول أولاً");
+      return;
+    }
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      showCallError("الاتصال بالشبكة منقطع — انتظر ثوانٍ وأعد المحاولة");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
       localStreamRef.current = stream;
@@ -209,9 +230,19 @@ export function useCall(user: { id: number; username: string } | null) {
       setActiveCallId(callId);
       setCallStatus("calling");
 
-      sendWS({ type: "call-offer", to: targetUsername, offer, callId, from: user!.username, video: withVideo });
-    } catch (err) {
+      sendWS({ type: "call-offer", to: targetUsername, offer, callId, from: user.username, video: withVideo });
+    } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
+      const name = (err as Error)?.name ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        showCallError("🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        showCallError("🎤 لا يوجد ميكروفون متصل بالجهاز");
+      } else if (name === "NotReadableError") {
+        showCallError("🎤 الميكروفون مستخدم من تطبيق آخر — أغلقه وأعد المحاولة");
+      } else {
+        showCallError("تعذّر بدء المكالمة — تأكد من إذن الميكروفون");
+      }
       setCallStatus("idle");
     }
   }, [callStatus, createPC, sendWS, user]);
@@ -319,6 +350,7 @@ export function useCall(user: { id: number; username: string } | null) {
     connected, callStatus, liveStatus, incomingCall,
     activePeer, onlineUsers, activeLives, currentLiveId,
     localStream, remoteStream, screenSharing,
+    callError,
     startCall, answerCall, rejectCall, endCall,
     startLive, endLive, joinLive,
     startScreenShare, stopScreenShare,

@@ -22,11 +22,12 @@ interface Props {
   screenSharing?: boolean;
   onScreenShare?: () => void;
   onStopScreen?:  () => void;
+  callError?:     string | null;
 }
 
 export default function CallOverlay({
   status, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd,
-  screenSharing = false, onScreenShare, onStopScreen,
+  screenSharing = false, onScreenShare, onStopScreen, callError,
 }: Props) {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef  = useRef<HTMLVideoElement>(null);
@@ -69,6 +70,31 @@ export default function CallOverlay({
   const formatDuration = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   const hasVideo = !!(localStream?.getVideoTracks().length);
+
+  // ── Call error toast (shown even when idle) ────────────────────────────────
+  if (status === "idle") {
+    if (!callError) return null;
+    return (
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0, y: 60 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 60 }}
+          style={{
+            position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)",
+            zIndex: 9999, background: "#1a0505", border: "1px solid #ef444480",
+            borderRadius: 14, padding: "14px 22px", maxWidth: 400, width: "90vw",
+            display: "flex", alignItems: "center", gap: 12,
+            boxShadow: "0 8px 32px #ef444430",
+          }}>
+          <span style={{ fontSize: 22 }}>📵</span>
+          <p style={{ margin: 0, color: "#fca5a5", fontWeight: 700, fontSize: 13, lineHeight: 1.4 }}>
+            {callError}
+          </p>
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
 
   const visible = status !== "idle";
   if (!visible) return null;
