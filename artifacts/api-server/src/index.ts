@@ -692,6 +692,33 @@ async function ensureTables() {
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_alert_sent" boolean NOT NULL DEFAULT false`);
     console.log("[HONOR] Citizen Honor System tables ready");
 
+    // Social Hub v2 — saved posts + call history + new columns
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "saved_posts" (
+        "id" serial PRIMARY KEY,
+        "user_id" integer NOT NULL,
+        "post_id" integer NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        UNIQUE("user_id","post_id")
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "call_history" (
+        "id" serial PRIMARY KEY,
+        "caller_id" integer NOT NULL,
+        "caller_username" text NOT NULL DEFAULT '',
+        "callee_id" integer,
+        "callee_username" text NOT NULL DEFAULT '',
+        "call_type" text NOT NULL DEFAULT 'audio',
+        "status" text NOT NULL DEFAULT 'missed',
+        "duration_sec" integer NOT NULL DEFAULT 0,
+        "started_at" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+    await pool.query(`ALTER TABLE "pulse_posts"  ADD COLUMN IF NOT EXISTS "image_url" text`);
+    await pool.query(`ALTER TABLE "dm_messages"  ADD COLUMN IF NOT EXISTS "file_url"  text`);
+    console.log("[SOCIAL-V2] saved_posts, call_history tables ready; new columns added");
+
     // Seed starter group rooms if empty
     const { rows: grpRows } = await pool.query(`SELECT COUNT(*) as count FROM "dm_rooms" WHERE type='group'`);
     if (parseInt(grpRows[0].count) === 0) {

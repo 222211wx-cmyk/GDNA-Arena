@@ -1,0 +1,137 @@
+/**
+ * CitizensTab — browse citizens, follow/unfollow, start audio/video calls
+ */
+import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+import { Search, UserPlus, UserCheck } from "lucide-react";
+import Avatar from "./Avatar";
+import { GOLD, api } from "./social-i18n";
+import { useCallContext } from "../../contexts/CallContext";
+import type { Citizen } from "./social-types";
+
+function CallBtn({ icon, title, onClick, color }: { icon: string; title: string; onClick: () => void; color: string }) {
+  return (
+    <button onClick={onClick} title={title}
+      style={{ width: 32, height: 32, borderRadius: "50%", border: "none", cursor: "pointer", background: `${color}20`, color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+      {icon}
+    </button>
+  );
+}
+
+interface Props {
+  user: { id: number; username: string } | null;
+  st: Record<string, string>;
+}
+
+export default function CitizensTab({ user, st }: Props) {
+  const call = useCallContext();
+  const [q,         setQ]         = useState("");
+  const [citizens,  setCitizens]  = useState<Citizen[]>([]);
+  const [following, setFollowing] = useState<Set<number>>(new Set());
+  const [loading,   setLoading]   = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => { loadCitizens(""); }, []);
+  useEffect(() => { if (user) loadFollowing(); }, [user]);
+
+  async function loadCitizens(query: string) {
+    setLoading(true);
+    try {
+      const r = await fetch(api(`/api/social/v2/citizens?q=${encodeURIComponent(query)}&limit=40`));
+      const j = await r.json();
+      setCitizens(j.citizens ?? []);
+    } finally { setLoading(false); }
+  }
+
+  async function loadFollowing() {
+    const r = await fetch(api("/api/social/v2/my-following"), { credentials: "include" });
+    const j = await r.json();
+    setFollowing(new Set<number>(j.following ?? []));
+  }
+
+  function handleSearch(val: string) {
+    setQ(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => loadCitizens(val), 300);
+  }
+
+  async function toggleFollow(c: Citizen) {
+    if (!user) return;
+    if (following.has(c.id)) {
+      await fetch(api(`/api/social/v2/follow/${c.username}`), { method: "DELETE", credentials: "include" });
+      setFollowing(prev => { const s = new Set(prev); s.delete(c.id); return s; });
+    } else {
+      await fetch(api(`/api/social/v2/follow/${c.username}`), { method: "POST", credentials: "include" });
+      setFollowing(prev => new Set([...prev, c.id]));
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Search */}
+      <div style={{ position: "relative" }}>
+        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#666" }} />
+        <input value={q} onChange={e => handleSearch(e.target.value)}
+          placeholder={st.search_placeholder}
+          style={{ width: "100%", background: "#111", border: `1px solid ${GOLD}20`, borderRadius: 10, padding: "10px 12px 10px 36px", color: "#fff", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+      </div>
+
+      {loading && <div style={{ textAlign: "center", color: "#444", padding: 24 }}>…</div>}
+      {!loading && citizens.length === 0 && (
+        <div style={{ textAlign: "center", color: "#444", padding: 60, fontSize: 14 }}>{st.no_citizens}</div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+        {citizens.map(c => {
+          const isFollowing = following.has(c.id);
+          const isOnline    = call.onlineUsers.includes(c.username);
+          const isMe        = c.id === user?.id;
+          return (
+            <motion.div key={c.id} whileHover={{ scale: 1.01 }}
+              style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <Avatar name={c.username} size={38} />
+                  {isOnline && (
+                    <div style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, background: "#22c55e", borderRadius: "50%", border: "2px solid #0d0d0d" }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, overflow: "hidden" }}>
+                  <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.username}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: c.rank.color }}>{c.rank.icon} {c.rank.label}</p>
+                </div>
+              </div>
+              <div style={{ display: "flex", fontSize: 11, color: "#ffffff50", justifyContent: "space-between" }}>
+                <span>⚡ {c.xp.toLocaleString()} {st.xp}</span>
+                <span>🪙 {c.balance.toLocaleString()}</span>
+              </div>
+              {!isMe && (
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button onClick={() => toggleFollow(c)} disabled={!user}
+                    style={{ flex: 1, padding: "6px 0", borderRadius: 8, cursor: user ? "pointer" : "default", fontWeight: 700, fontSize: 11,
+                      background: isFollowing ? "#1a1a1a" : GOLD,
+                      color: isFollowing ? GOLD : "#000",
+                      border: isFollowing ? `1px solid ${GOLD}40` : "none" }}>
+                    {isFollowing
+                      ? <><UserCheck size={11} style={{ display: "inline", marginRight: 3 }} />{st.following}</>
+                      : <><UserPlus  size={11} style={{ display: "inline", marginRight: 3 }} />{st.follow}</>
+                    }
+                  </button>
+                  {isOnline && (
+                    <>
+                      <CallBtn icon="📞" title={st.voice_call} onClick={() => call.startCall(c.username, false)} color="#22c55e" />
+                      <CallBtn icon="🎥" title={st.video_call} onClick={() => call.startCall(c.username, true)}  color="#3b82f6" />
+                    </>
+                  )}
+                </div>
+              )}
+              {isMe && (
+                <p style={{ margin: 0, fontSize: 11, color: "#ffffff30", textAlign: "center" }}>{st.my_profile ?? "My Profile"}</p>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

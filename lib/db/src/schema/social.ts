@@ -28,3 +28,24 @@ export const userFollows = pgTable("user_follows", {
   followingId: integer("following_id").notNull(),
   createdAt:   timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({ uniq: unique().on(t.followerId, t.followingId) }));
+
+// Saved / bookmarked posts
+export const savedPosts = pgTable("saved_posts", {
+  id:        serial("id").primaryKey(),
+  userId:    integer("user_id").notNull(),
+  postId:    integer("post_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({ uniq: unique().on(t.userId, t.postId) }));
+
+// Call history
+export const callHistory = pgTable("call_history", {
+  id:              serial("id").primaryKey(),
+  callerId:        integer("caller_id").notNull(),
+  callerUsername:  text("caller_username").notNull().default(""),
+  calleeId:        integer("callee_id"),
+  calleeUsername:  text("callee_username").notNull().default(""),
+  callType:        text("call_type").notNull().default("audio"),   // audio | video
+  status:          text("status").notNull().default("missed"),     // answered | missed | ended
+  durationSec:     integer("duration_sec").notNull().default(0),
+  startedAt:       timestamp("started_at").notNull().defaultNow(),
+});

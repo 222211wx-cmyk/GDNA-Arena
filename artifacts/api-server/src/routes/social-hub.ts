@@ -6,7 +6,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, or, ilike, ne } from "drizzle-orm";
 import {
   db, pulsePosts, pulsePostLikes, usersTable, postComments, userFollows,
-  platformStories, postReactions,
+  platformStories, postReactions, savedPosts, callHistory,
 } from "@workspace/db";
 import { pool as _pool } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
@@ -362,6 +362,86 @@ router.get("/social/v2/notifications", async (req, res): Promise<void> => {
 
   notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   res.json({ notifications: notifs.slice(0, 30) });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// SAVED POSTS (bookmarks)
+// ────────────────────────────────────────────────────────────────────────────
+
+// POST /api/social/v2/post/:id/save
+router.post("/social/v2/post/:id/save", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const postId = parseInt(req.params.id);
+  if (isNaN(postId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    await db.insert(savedPosts).values({ userId, postId });
+    res.json({ saved: true });
+  } catch {
+    res.json({ saved: true, alreadySaved: true });
+  }
+});
+
+// DELETE /api/social/v2/post/:id/save
+router.delete("/social/v2/post/:id/save", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const postId = parseInt(req.params.id);
+  await db.delete(savedPosts)
+    .where(and(eq(savedPosts.userId, userId), eq(savedPosts.postId, postId)));
+  res.json({ saved: false });
+});
+
+// GET /api/social/v2/my-saved
+router.get("/social/v2/my-saved", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ savedIds: [] }); return; }
+  const rows = await db.select({ postId: savedPosts.postId })
+    .from(savedPosts).where(eq(savedPosts.userId, userId));
+  res.json({ savedIds: rows.map(r => r.postId) });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// CALL HISTORY
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/call-history
+router.get("/social/v2/call-history", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ records: [] }); return; }
+  const { rows } = await pool.query(
+    `SELECT * FROM call_history
+     WHERE caller_id = $1 OR callee_id = $1
+     ORDER BY started_at DESC LIMIT 30`,
+    [userId]
+  );
+  const records = rows.map((r: any) => ({
+    id: r.id, callerId: r.caller_id, callerUsername: r.caller_username,
+    calleeId: r.callee_id, calleeUsername: r.callee_username,
+    callType: r.call_type, status: r.status,
+    durationSec: r.duration_sec, startedAt: r.started_at,
+  }));
+  res.json({ records });
+});
+
+// POST /api/social/v2/call-history
+router.post("/social/v2/call-history", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const { calleeUsername, callType = "audio", status = "missed", durationSec = 0 } = req.body as {
+    calleeUsername: string; callType?: string; status?: string; durationSec?: number;
+  };
+  const [me] = await db.select({ username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  const callerUsername = me?.username ?? "Unknown";
+  const [callee] = await db.select({ id: usersTable.id })
+    .from(usersTable).where(eq(usersTable.username, calleeUsername)).limit(1);
+  await db.insert(callHistory).values({
+    callerId: userId, callerUsername,
+    calleeId: callee?.id ?? null, calleeUsername,
+    callType, status, durationSec,
+  });
+  res.status(201).json({ ok: true });
 });
 
 // GET /api/social/v2/search?q=

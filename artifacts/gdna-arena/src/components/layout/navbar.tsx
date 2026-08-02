@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Search, Trophy, Music, Film, Newspaper, Landmark,
   Gamepad2, LogOut, Globe, LayoutDashboard, Wallet,
-  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare
+  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
@@ -20,8 +20,9 @@ const NAV_ITEMS = [
   { name: "CINEMA",   emoji: "🎬",  icon: <Film      size={15} />,  path: "/legends",          highlight: false },
   { name: "NEWS",     emoji: "📰",  icon: <Newspaper size={15} />,  path: "/news",             highlight: false },
   { name: "HERITAGE", emoji: "🏛️", icon: <Landmark  size={15} />,  path: "/chronicle",        highlight: false },
-  { name: "PLAY",     emoji: "🎮",  icon: <Gamepad2  size={15} />,  path: "/games",            highlight: false },
-  { name: "SOCIAL",   emoji: "💬",  icon: <MessageSquare size={15} />, path: "/social",          highlight: true  },
+  { name: "PLAY",     emoji: "🎮",  icon: <Gamepad2      size={15} />, path: "/games",    highlight: false },
+  { name: "SOCIAL",   emoji: "💬",  icon: <MessageSquare size={15} />, path: "/social",   highlight: true  },
+  { name: "MESSAGES", emoji: "✉️",  icon: <Mail          size={15} />, path: "/messages", highlight: false },
 ];
 
 export function Navbar() {
