@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   Users, Crown, Sword, Shield, Zap, Coins,
-  Trophy, Gamepad2, TrendingUp, Search, Star, Medal
+  Trophy, Gamepad2, TrendingUp, Search, Star, Medal,
+  Phone, Video, MessageSquare, UserPlus, UserCheck, Loader2
 } from "lucide-react";
+import { useAuth }        from "@/contexts/AuthContext";
+import { useCallContext } from "@/contexts/CallContext";
 
 interface HonorInfo { title: string; color: string; badge: string }
 interface Rank { label: string; tier: number; color: string; icon: string }
@@ -25,12 +28,24 @@ const TIER_ICONS: Record<number, React.ReactNode> = {
   6: <Zap className="w-4 h-4" />,
 };
 
-export default function CitizensPage() {
-  const [citizens, setCitizens] = useState<Citizen[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [sort, setSort]         = useState<"xp" | "coins" | "honor">("xp");
-  const [query, setQuery]       = useState("");
+const GREEN = "#22c55e";
+const BASE  = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+const bapi  = (p: string) => `${BASE()}${p}`;
 
+export default function CitizensPage() {
+  const { user }     = useAuth();
+  const call         = useCallContext();
+  const [, navigate] = useLocation();
+
+  const [citizens,   setCitizens]   = useState<Citizen[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [sort,       setSort]       = useState<"xp" | "coins" | "honor">("xp");
+  const [query,      setQuery]      = useState("");
+  const [followIds,  setFollowIds]  = useState<Set<number>>(new Set());
+  const [addingId,   setAddingId]   = useState<number | null>(null);
+  const [dmId,       setDmId]       = useState<number | null>(null);
+
+  /* Load citizens */
   useEffect(() => {
     setLoading(true);
     fetch(`/api/citizens?sort=${sort}&limit=50`, { credentials: "include" })
@@ -38,6 +53,42 @@ export default function CitizensPage() {
       .then(d => setCitizens(d.citizens ?? []))
       .finally(() => setLoading(false));
   }, [sort]);
+
+  /* Load who I follow */
+  const loadFollowing = useCallback(async () => {
+    if (!user) return;
+    const res = await fetch(bapi("/api/social/v2/following"), { credentials: "include" });
+    if (!res.ok) return;
+    const d = await res.json() as { following: { id: number }[] };
+    setFollowIds(new Set((d.following ?? []).map(f => f.id)));
+  }, [user]);
+
+  useEffect(() => { void loadFollowing(); }, [loadFollowing]);
+
+  /* Follow / unfollow */
+  const toggleFollow = async (username: string, id: number) => {
+    if (!user) return;
+    setAddingId(id);
+    const method = followIds.has(id) ? "DELETE" : "POST";
+    await fetch(bapi(`/api/social/v2/follow/${encodeURIComponent(username)}`), {
+      method, credentials: "include",
+    });
+    await loadFollowing();
+    setAddingId(null);
+  };
+
+  /* Open DM → navigate to /messages */
+  const openDM = async (username: string, id: number) => {
+    if (!user) return;
+    setDmId(id);
+    const res = await fetch(bapi("/api/messages/rooms"), {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUsername: username, type: "direct" }),
+    });
+    setDmId(null);
+    if (res.ok) navigate("/messages");
+  };
 
   const filtered = citizens.filter(c =>
     !query || c.username.toLowerCase().includes(query.toLowerCase())
@@ -204,9 +255,50 @@ export default function CitizensPage() {
                     </div>
                   </div>
 
-                  <div className="shrink-0 hidden md:flex items-center gap-1 text-muted-foreground/40 group-hover:text-primary/60 transition-colors">
-                    <TrendingUp className="w-4 h-4" />
-                  </div>
+                  {/* ── Communication buttons (logged-in only, not yourself) ── */}
+                  {user && c.id !== user.id && (
+                    <div className="shrink-0 flex items-center gap-1.5">
+                      {/* رسالة */}
+                      <button onClick={() => void openDM(c.username, c.id)}
+                        disabled={dmId === c.id} title="اكتب رسالة"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80 disabled:opacity-40"
+                        style={{ background: "#1a1400", border: "1px solid #FFD70030", color: "#FFD700" }}>
+                        {dmId === c.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <MessageSquare className="w-3 h-3" />}
+                      </button>
+                      {/* صوتي */}
+                      <button onClick={() => call.startCall(c.username, false)} title="مكالمة صوتية"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80"
+                        style={{ background: "#071a07", border: `1px solid ${GREEN}40`, color: GREEN }}>
+                        <Phone className="w-3 h-3" />
+                      </button>
+                      {/* فيديو */}
+                      <button onClick={() => call.startCall(c.username, true)} title="مكالمة فيديو"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80"
+                        style={{ background: "#07101a", border: "1px solid #09f4", color: "#09f" }}>
+                        <Video className="w-3 h-3" />
+                      </button>
+                      {/* متابعة / إزالة */}
+                      <button onClick={() => void toggleFollow(c.username, c.id)}
+                        disabled={addingId === c.id} title={followIds.has(c.id) ? "إلغاء المتابعة" : "إضافة صديق"}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80 disabled:opacity-40"
+                        style={{
+                          background: followIds.has(c.id) ? "#130303" : "#0d1a0d",
+                          border: followIds.has(c.id) ? "1px solid #f444" : `1px solid ${GREEN}40`,
+                          color: followIds.has(c.id) ? "#f44" : GREEN,
+                        }}>
+                        {addingId === c.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : followIds.has(c.id) ? <UserCheck className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  )}
+                  {(!user || c.id === user.id) && (
+                    <div className="shrink-0 hidden md:flex items-center gap-1 text-muted-foreground/40 group-hover:text-primary/60 transition-colors">
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </div>

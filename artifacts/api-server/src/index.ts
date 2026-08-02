@@ -1007,9 +1007,45 @@ adminRouter.get("/seed", async (req, res): Promise<void> => {
 
 app.use("/api", adminRouter);
 
+/* ─── Auto-seed 10 test citizens if DB has fewer than 3 users ─────────────── */
+async function autoSeedTestUsers() {
+  try {
+    const { rows: cnt } = await pool.query(`SELECT COUNT(*)::int AS n FROM users`);
+    if (cnt[0].n >= 15) return;
+    const citizens = [
+      { username: "Yusuf_Al_Rashid",  email: "yusuf@gdna-test.com"    },
+      { username: "Layla_Haddad",     email: "layla@gdna-test.com"     },
+      { username: "Omar_Farouq",      email: "omar@gdna-test.com"      },
+      { username: "Nour_Khalil",      email: "nour@gdna-test.com"      },
+      { username: "Karim_Benzema99",  email: "karim@gdna-test.com"     },
+      { username: "Sara_Alfarsi",     email: "sara@gdna-test.com"      },
+      { username: "Hamza_Empire",     email: "hamza@gdna-test.com"     },
+      { username: "Dina_Stars",       email: "dina@gdna-test.com"      },
+      { username: "Ziad_Phoenix",     email: "ziad@gdna-test.com"      },
+      { username: "Iman_Legends",     email: "iman@gdna-test.com"      },
+    ];
+    const hash = await bcryptAdmin.hash("empire123", 10);
+    for (const c of citizens) {
+      const { rows: ex } = await pool.query(`SELECT id FROM users WHERE email=$1 OR username=$2 LIMIT 1`, [c.email, c.username]);
+      if (ex.length) continue;
+      const xp      = Math.floor(Math.random() * 5000) + 500;
+      const balance = Math.floor(Math.random() * 2000) + 100;
+      const { rows } = await pool.query<{ id: number }>(
+        `INSERT INTO users (username, email, password_hash, xp, balance, honor_count, last_seen_at)
+         VALUES ($1,$2,$3,$4,$5,3, NOW() - INTERVAL '${Math.floor(Math.random() * 120)} minutes')
+         RETURNING id`,
+        [c.username, c.email, hash, xp, balance]
+      );
+      console.log(`[SEED] ✅ ${c.username} (id:${rows[0].id})`);
+    }
+    console.log("[SEED] 🌱 10 test citizens seeded");
+  } catch (e) { console.warn("[SEED] warn:", e); }
+}
+
 ensureTables()
   .then(() => ensureNeuralTables())
   .then(() => ensureGenomeTables())
+  .then(() => autoSeedTestUsers())
   .then(() => {
     startHonorAlertJob();
     startWelcomeBroadcastJob();
