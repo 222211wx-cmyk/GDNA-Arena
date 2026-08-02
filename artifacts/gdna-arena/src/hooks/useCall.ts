@@ -51,8 +51,10 @@ export function useCall(user: { id: number; username: string } | null) {
   // Streams
   const localStreamRef  = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
-  const [localStream,  setLocalStream]  = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const [localStream,   setLocalStream]   = useState<MediaStream | null>(null);
+  const [remoteStream,  setRemoteStream]  = useState<MediaStream | null>(null);
+  const [screenSharing, setScreenSharing] = useState(false);
 
   const sendWS = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -260,6 +262,31 @@ export function useCall(user: { id: number; username: string } | null) {
     setRemoteStream(null);
   }, [activePeer, activeCallId, sendWS]);
 
+  // ── Screen share ─────────────────────────────────────────────────────────
+  const startScreenShare = useCallback(async () => {
+    if (!pcRef.current) return;
+    try {
+      const stream = await (navigator.mediaDevices as any).getDisplayMedia({ video: true, audio: false });
+      screenStreamRef.current = stream;
+      const screenTrack = stream.getVideoTracks()[0];
+      const sender = pcRef.current.getSenders().find((s: RTCRtpSender) => s.track?.kind === "video");
+      if (sender) await sender.replaceTrack(screenTrack);
+      setScreenSharing(true);
+      screenTrack.onended = () => stopScreenShare();
+    } catch { /* user cancelled */ }
+  }, []);
+
+  const stopScreenShare = useCallback(async () => {
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current = null;
+    if (pcRef.current && localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      const sender = pcRef.current.getSenders().find((s: RTCRtpSender) => s.track?.kind === "video");
+      if (sender && videoTrack) await sender.replaceTrack(videoTrack);
+    }
+    setScreenSharing(false);
+  }, []);
+
   // ── Start live story ──────────────────────────────────────────────────────
   const startLive = useCallback(async (title: string, domain: string) => {
     try {
@@ -291,8 +318,9 @@ export function useCall(user: { id: number; username: string } | null) {
   return {
     connected, callStatus, liveStatus, incomingCall,
     activePeer, onlineUsers, activeLives, currentLiveId,
-    localStream, remoteStream,
+    localStream, remoteStream, screenSharing,
     startCall, answerCall, rejectCall, endCall,
     startLive, endLive, joinLive,
+    startScreenShare, stopScreenShare,
   };
 }

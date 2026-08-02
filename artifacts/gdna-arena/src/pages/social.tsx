@@ -10,7 +10,7 @@ import {
   MessageSquare, Heart, Share2, Search, Users, Radio, Send,
   Phone, Video, Mic, MicOff, Image, X, Plus, ChevronDown,
   UserPlus, UserCheck, Globe, Flame, Crown, Zap, Eye, Camera,
-  Clock, MoreHorizontal, Reply, BookOpen,
+  Clock, MoreHorizontal, Reply, BookOpen, Bell, TrendingUp,
 } from "lucide-react";
 import { useAuth }        from "../contexts/AuthContext";
 import { useLang }        from "../contexts/LangContext";
@@ -25,7 +25,8 @@ const api  = (path: string) => `${BASE}${path}`;
 const SOCIAL_T: Record<string, Record<string, string>> = {
   en: {
     title: "Social Hub", feed: "Feed", messages: "Messages", stories: "Stories",
-    live: "Live", citizens: "Citizens", search_placeholder: "Search the empire…",
+    live: "Live", citizens: "Citizens", notifications: "Notifications",
+    search_placeholder: "Search the empire…",
     post_placeholder: "Share your voice with the empire…", post_btn: "Post",
     like: "Like", comment: "Comment", share: "Share", comments: "Comments",
     write_comment: "Write a comment…", send: "Send", reply: "Reply",
@@ -34,7 +35,8 @@ const SOCIAL_T: Record<string, Record<string, string>> = {
     dm: "Message", new_group: "New Group", group_name: "Group name…",
     no_posts: "No posts yet. Be the first!", no_messages: "No messages yet.",
     no_stories: "No stories yet. Share your moment!", no_citizens: "No citizens found.",
-    search_results: "Search Results", type_message: "Type a message…",
+    no_notifications: "No notifications yet", search_results: "Search Results",
+    type_message: "Type a message…",
     stories_expire: "Stories expire after 24h", add_story: "Add Story",
     story_text: "Story text (max 200 chars)…", story_image: "Image URL (optional)",
     domain: "Domain", general: "General", sport: "Sport", music: "Music",
@@ -47,10 +49,14 @@ const SOCIAL_T: Record<string, Record<string, string>> = {
     online: "Online", offline: "Offline",
     record_voice: "Record Voice Note", stop_recording: "Stop",
     share_copied: "Link copied!", my_profile: "My Profile",
+    trending: "Trending", notif_comment: "commented on your post",
+    notif_follow: "started following you", notif_reaction: "reacted to your post",
+    react: "React",
   },
   ar: {
     title: "المركز الاجتماعي", feed: "المنشورات", messages: "الرسائل",
     stories: "القصص", live: "بث مباشر", citizens: "المواطنون",
+    notifications: "الإشعارات",
     search_placeholder: "ابحث في الإمبراطورية…",
     post_placeholder: "شارك صوتك مع الإمبراطورية…", post_btn: "نشر",
     like: "إعجاب", comment: "تعليق", share: "مشاركة", comments: "التعليقات",
@@ -60,7 +66,8 @@ const SOCIAL_T: Record<string, Record<string, string>> = {
     dm: "رسالة", new_group: "مجموعة جديدة", group_name: "اسم المجموعة…",
     no_posts: "لا منشورات بعد. كن الأول!", no_messages: "لا رسائل بعد.",
     no_stories: "لا قصص بعد. شارك لحظتك!", no_citizens: "لم يُعثر على مواطنين.",
-    search_results: "نتائج البحث", type_message: "اكتب رسالة…",
+    no_notifications: "لا إشعارات بعد", search_results: "نتائج البحث",
+    type_message: "اكتب رسالة…",
     stories_expire: "تنتهي القصص بعد 24 ساعة", add_story: "أضف قصة",
     story_text: "نص القصة (200 حرف كحد أقصى)…", story_image: "رابط الصورة (اختياري)",
     domain: "المجال", general: "عام", sport: "رياضة", music: "موسيقى",
@@ -73,6 +80,9 @@ const SOCIAL_T: Record<string, Record<string, string>> = {
     online: "متصل", offline: "غير متصل",
     record_voice: "تسجيل رسالة صوتية", stop_recording: "إيقاف",
     share_copied: "تم نسخ الرابط!", my_profile: "ملفي",
+    trending: "الأكثر تداولاً", notif_comment: "علّق على منشورك",
+    notif_follow: "بدأ متابعتك", notif_reaction: "تفاعل مع منشورك",
+    react: "تفاعل",
   },
 };
 
@@ -220,6 +230,9 @@ function FeedTab({ user, st, dir }: { user: any; st: Record<string, string>; dir
         </div>
       )}
 
+      {/* Trending section */}
+      <TrendingSection st={st} dir={dir} onSearch={(tag) => setFilter("all")} />
+
       {/* Domain filter */}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
         {["all", ...DOMAINS].map(d => (
@@ -308,9 +321,7 @@ function FeedCard({ post, user, st, dir, liked, onLike, onShare, expanded, onTog
       </div>
       {/* Actions */}
       <div style={{ display: "flex", gap: 4, padding: "8px 12px", borderTop: `1px solid #ffffff08` }}>
-        <ActionBtn icon={<Heart size={15} fill={liked ? "#ef4444" : "none"} />}
-          label={`${post.likes} ${st.like}`} onClick={onLike}
-          active={liked} color="#ef4444" />
+        <ReactionBtn postId={post.id} totalLikes={post.likes} st={st} />
         <ActionBtn icon={<MessageSquare size={15} />}
           label={`${post.commentCount} ${st.comment}`} onClick={handleToggle}
           active={expanded} color={GOLD} />
@@ -361,6 +372,149 @@ function ActionBtn({ icon, label, onClick, active, color }: {
       style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer", background: active ? `${color}15` : "transparent", color: active ? color : "#ffffff50", fontSize: 12, fontWeight: 600, transition: "all 0.2s" }}>
       {icon}{label}
     </button>
+  );
+}
+
+// ── Emoji Reaction Button ─────────────────────────────────────────────────────
+const EMOJIS = ["❤️", "😂", "😮", "😡", "👏"] as const;
+
+function ReactionBtn({ postId, totalLikes, st }: { postId: number; totalLikes: number; st: Record<string, string> }) {
+  const [open,         setOpen]         = useState(false);
+  const [myReaction,   setMyReaction]   = useState<string | null>(null);
+  const [counts,       setCounts]       = useState<Record<string, number>>({});
+  const [total,        setTotal]        = useState(totalLikes);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Load existing reaction on mount
+  useEffect(() => {
+    fetch(api(`/api/social/v2/post/${postId}/reactions`))
+      .then(r => r.json())
+      .then(j => {
+        if (j.reactions) setCounts(j.reactions);
+        if (j.yourReaction) setMyReaction(j.yourReaction);
+        if (j.reactions) setTotal(Object.values(j.reactions as Record<string, number>).reduce((a, b) => a + b, 0));
+      }).catch(() => {});
+  }, [postId]);
+
+  async function sendReaction(emoji: string) {
+    setOpen(false);
+    const prevReaction = myReaction;
+    setMyReaction(emoji);
+    try {
+      const r = await fetch(api(`/api/social/v2/post/${postId}/react`), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reaction: emoji }), credentials: "include",
+      });
+      const j = await r.json();
+      if (j.reactions) {
+        setCounts(j.reactions);
+        setTotal(Object.values(j.reactions as Record<string, number>).reduce((a, b) => a + b, 0));
+      }
+    } catch { setMyReaction(prevReaction); }
+  }
+
+  const topEmoji = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const displayEmoji = myReaction ?? topEmoji ?? "❤️";
+
+  return (
+    <div style={{ position: "relative" }}
+      onMouseEnter={() => { clearTimeout(timerRef.current); setOpen(true); }}
+      onMouseLeave={() => { timerRef.current = setTimeout(() => setOpen(false), 300); }}>
+      <button onClick={() => myReaction ? sendReaction(myReaction) : setOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, border: "none", cursor: "pointer",
+          background: myReaction ? "#ef444415" : "transparent", color: myReaction ? "#ef4444" : "#ffffff50",
+          fontSize: 12, fontWeight: 600, transition: "all 0.2s" }}>
+        <span style={{ fontSize: 15 }}>{displayEmoji}</span>
+        {total > 0 && <span>{total}</span>}
+        {!myReaction && <span>{st.react}</span>}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, scale: 0.8, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8, y: 8 }} transition={{ duration: 0.15 }}
+            style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, background: "#1a1a1a", border: `1px solid ${GOLD}20`, borderRadius: 24, padding: "6px 10px", display: "flex", gap: 4, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,0.8)", whiteSpace: "nowrap" }}>
+            {EMOJIS.map(e => (
+              <button key={e} onClick={() => sendReaction(e)}
+                title={`${counts[e] ?? 0}`}
+                style={{ background: myReaction === e ? "#ffffff20" : "none", border: "none", cursor: "pointer", fontSize: 22, padding: "2px 4px", borderRadius: 12, transition: "transform 0.1s", lineHeight: 1 }}
+                onMouseEnter={el => { (el.currentTarget as HTMLButtonElement).style.transform = "scale(1.3)"; }}
+                onMouseLeave={el => { (el.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}>
+                {e}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRENDING SECTION
+// ─────────────────────────────────────────────────────────────────────────────
+function TrendingSection({ st, dir, onSearch }: { st: Record<string, string>; dir: string; onSearch: (tag: string) => void }) {
+  const [data, setData] = useState<{ topPosts: any[]; hashtags: { tag: string; count: number }[] } | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    fetch(api("/api/social/v2/trending"))
+      .then(r => r.json())
+      .then(j => setData(j))
+      .catch(() => {});
+  }, []);
+
+  if (!data || (data.hashtags.length === 0 && data.topPosts.length === 0)) return null;
+
+  return (
+    <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 10, overflow: "hidden" }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", color: "#fff" }}>
+        <TrendingUp size={14} style={{ color: GOLD }} />
+        <span style={{ fontWeight: 800, fontSize: 12, color: GOLD, textTransform: "uppercase", letterSpacing: 1 }}>{st.trending}</span>
+        {data.hashtags.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flex: 1, overflowX: "auto" }}>
+            {data.hashtags.slice(0, 4).map(h => (
+              <span key={h.tag} style={{ background: `${GOLD}15`, color: GOLD, borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                {h.tag}
+              </span>
+            ))}
+          </div>
+        )}
+        <span style={{ fontSize: 10, color: "#ffffff30" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
+            style={{ overflow: "hidden" }}>
+            <div style={{ padding: "0 14px 12px", borderTop: `1px solid #ffffff08` }}>
+              {/* Top Posts */}
+              {data.topPosts.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ margin: "0 0 6px", fontSize: 10, fontWeight: 800, color: "#ffffff40", textTransform: "uppercase", letterSpacing: 1 }}>Hot Posts</p>
+                  {data.topPosts.slice(0, 3).map((p: any) => (
+                    <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: `1px solid #ffffff05` }}>
+                      <Avatar name={p.username} size={22} />
+                      <p style={{ flex: 1, margin: 0, fontSize: 12, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} dir={dir}>{p.content.slice(0, 70)}</p>
+                      <span style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap" }}>❤️ {p.likes}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* All hashtags */}
+              {data.hashtags.length > 0 && (
+                <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {data.hashtags.map(h => (
+                    <button key={h.tag} onClick={() => onSearch(h.tag)}
+                      style={{ background: `${GOLD}10`, color: GOLD, border: `1px solid ${GOLD}20`, borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      {h.tag} <span style={{ color: "#ffffff40" }}>·{h.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -928,6 +1082,70 @@ function CitizensTab({ user, st }: { user: any; st: Record<string, string> }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+interface NotifItem { type: string; username: string; content: string; postSnippet?: string; createdAt: string; }
+
+function NotificationsTab({ user, st, dir }: { user: any; st: Record<string, string>; dir: string }) {
+  const [notifs,  setNotifs]  = useState<NotifItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    fetch(api("/api/social/v2/notifications"), { credentials: "include" })
+      .then(r => r.json())
+      .then(j => setNotifs(j.notifications ?? []))
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  if (!user) return (
+    <div style={{ textAlign: "center", padding: 48, color: "#444" }}>{st.login_required}</div>
+  );
+
+  const icon = (type: string) => type === "comment" ? "💬" : type === "reaction" ? "😊" : type === "follow" ? "👤" : "🔔";
+  const label = (n: NotifItem) => {
+    if (n.type === "comment") return `${st.notif_comment}`;
+    if (n.type === "reaction") return `${st.notif_reaction} ${n.content}`;
+    return st.notif_follow;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {loading && <div style={{ textAlign: "center", color: "#444", padding: 32 }}>…</div>}
+      {!loading && notifs.length === 0 && (
+        <div style={{ textAlign: "center", color: "#444", padding: 48 }}>
+          <Bell size={32} style={{ opacity: 0.3, display: "block", margin: "0 auto 12px" }} />
+          {st.no_notifications}
+        </div>
+      )}
+      {notifs.map((n, i) => (
+        <motion.div key={i} initial={{ opacity: 0, x: dir === "rtl" ? 10 : -10 }} animate={{ opacity: 1, x: 0 }}
+          style={{ background: "#0d0d0d", border: `1px solid ${GOLD}10`, borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: n.type === "follow" ? "#3b82f620" : n.type === "reaction" ? "#ef444420" : `${GOLD}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+            {icon(n.type)}
+          </div>
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <p style={{ margin: 0, fontSize: 13, color: "#e5e7eb" }}>
+              <strong style={{ color: GOLD }}>{n.username}</strong>{" "}{label(n)}
+            </p>
+            {n.postSnippet && (
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "#ffffff40", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} dir={dir}>
+                "{n.postSnippet}…"
+              </p>
+            )}
+            {n.type === "comment" && (
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#ccc" }} dir={dir}>"{n.content}"</p>
+            )}
+            <p style={{ margin: "4px 0 0", fontSize: 10, color: "#ffffff25" }}>{timeAgo(n.createdAt, st)}</p>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SEARCH RESULTS OVERLAY
 // ─────────────────────────────────────────────────────────────────────────────
 function SearchResults({ q, st, onClose, dir }: { q: string; st: Record<string, string>; onClose: () => void; dir: string }) {
@@ -999,7 +1217,7 @@ function SearchResults({ q, st, onClose, dir }: { q: string; st: Record<string, 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-type Tab = "feed" | "messages" | "stories" | "live" | "citizens";
+type Tab = "feed" | "messages" | "stories" | "live" | "citizens" | "notifications";
 
 export default function SocialPage() {
   const { user }     = useAuth();
@@ -1024,11 +1242,12 @@ export default function SocialPage() {
   }, []);
 
   const TABS: { id: Tab; icon: React.ReactNode; label: string }[] = [
-    { id: "feed",     icon: <Globe size={15} />,        label: st.feed     },
-    { id: "messages", icon: <MessageSquare size={15} />, label: st.messages },
-    { id: "stories",  icon: <BookOpen size={15} />,     label: st.stories  },
-    { id: "live",     icon: <Radio size={15} />,        label: st.live     },
-    { id: "citizens", icon: <Users size={15} />,        label: st.citizens },
+    { id: "feed",          icon: <Globe size={15} />,         label: st.feed          },
+    { id: "messages",      icon: <MessageSquare size={15} />, label: st.messages      },
+    { id: "stories",       icon: <BookOpen size={15} />,      label: st.stories       },
+    { id: "live",          icon: <Radio size={15} />,         label: st.live          },
+    { id: "citizens",      icon: <Users size={15} />,         label: st.citizens      },
+    { id: "notifications", icon: <Bell size={15} />,          label: st.notifications },
   ];
 
   return (
@@ -1080,11 +1299,12 @@ export default function SocialPage() {
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "20px 16px" }}>
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            {tab === "feed"     && <FeedTab     user={user} st={st} dir={dir} />}
-            {tab === "messages" && <MessagesTab user={user} st={st} dir={dir} />}
-            {tab === "stories"  && <StoriesTab  user={user} st={st} dir={dir} />}
-            {tab === "live"     && <LiveTab     user={user} st={st} />}
-            {tab === "citizens" && <CitizensTab user={user} st={st} />}
+            {tab === "feed"          && <FeedTab          user={user} st={st} dir={dir} />}
+            {tab === "messages"      && <MessagesTab      user={user} st={st} dir={dir} />}
+            {tab === "stories"       && <StoriesTab       user={user} st={st} dir={dir} />}
+            {tab === "live"          && <LiveTab          user={user} st={st} />}
+            {tab === "citizens"      && <CitizensTab      user={user} st={st} />}
+            {tab === "notifications" && <NotificationsTab user={user} st={st} dir={dir} />}
           </motion.div>
         </AnimatePresence>
       </div>

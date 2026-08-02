@@ -6,7 +6,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, or, ilike, ne } from "drizzle-orm";
 import {
   db, pulsePosts, pulsePostLikes, usersTable, postComments, userFollows,
-  platformStories,
+  platformStories, postReactions,
 } from "@workspace/db";
 import { pool as _pool } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
@@ -223,6 +223,146 @@ router.get("/social/v2/citizens", async (req, res): Promise<void> => {
 // ────────────────────────────────────────────────────────────────────────────
 // GLOBAL SEARCH
 // ────────────────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────────────────
+// REACTIONS
+// ────────────────────────────────────────────────────────────────────────────
+
+const VALID_REACTIONS = ["❤️", "😂", "😮", "😡", "👏"];
+
+// POST /api/social/v2/post/:id/react
+router.post("/social/v2/post/:id/react", async (req, res): Promise<void> => {
+  const postId = parseInt(req.params.id);
+  if (isNaN(postId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  const { reaction } = req.body as { reaction: string };
+  if (!VALID_REACTIONS.includes(reaction)) { res.status(400).json({ error: "Invalid reaction" }); return; }
+
+  const voterIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    ?? req.socket.remoteAddress ?? "unknown";
+  const userId = req.session?.userId;
+  let username = "Anonymous";
+  if (userId) {
+    const [me] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (me) username = me.username;
+  }
+
+  // Upsert: each IP can change their reaction but not double-react
+  await pool.query(
+    `INSERT INTO post_reactions (post_id, user_id, username, voter_ip, reaction)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (post_id, voter_ip) DO UPDATE SET reaction = $5, created_at = now()`,
+    [postId, userId ?? null, username, voterIp, reaction]
+  );
+
+  const { rows } = await pool.query(
+    `SELECT reaction, COUNT(*)::int as cnt FROM post_reactions WHERE post_id = $1 GROUP BY reaction`,
+    [postId]
+  );
+  const counts: Record<string, number> = {};
+  rows.forEach((r: any) => { counts[r.reaction] = r.cnt; });
+
+  // Update likes counter to total reactions
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  await db.update(pulsePosts).set({ likes: total }).where(eq(pulsePosts.id, postId));
+
+  res.json({ reactions: counts, yourReaction: reaction });
+});
+
+// GET /api/social/v2/post/:id/reactions
+router.get("/social/v2/post/:id/reactions", async (req, res): Promise<void> => {
+  const postId = parseInt(req.params.id);
+  const voterIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    ?? req.socket.remoteAddress ?? "unknown";
+  const { rows } = await pool.query(
+    `SELECT reaction, COUNT(*)::int as cnt FROM post_reactions WHERE post_id = $1 GROUP BY reaction`,
+    [postId]
+  );
+  const counts: Record<string, number> = {};
+  rows.forEach((r: any) => { counts[r.reaction] = r.cnt; });
+  const [myRow] = await pool.query(
+    `SELECT reaction FROM post_reactions WHERE post_id = $1 AND voter_ip = $2 LIMIT 1`,
+    [postId, voterIp]
+  ).then(r => r.rows);
+  res.json({ reactions: counts, yourReaction: myRow?.reaction ?? null });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// TRENDING
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/trending
+router.get("/social/v2/trending", async (req, res): Promise<void> => {
+  const topPosts = await db.select({
+    id: pulsePosts.id, username: pulsePosts.username, content: pulsePosts.content,
+    likes: pulsePosts.likes, domain: pulsePosts.domain, createdAt: pulsePosts.createdAt,
+  }).from(pulsePosts)
+    .where(and(eq(pulsePosts.isVisible, true), sql`${pulsePosts.createdAt} > now() - interval '72 hours'`))
+    .orderBy(desc(pulsePosts.likes))
+    .limit(5);
+
+  const recentContent = await db.select({ content: pulsePosts.content })
+    .from(pulsePosts).where(eq(pulsePosts.isVisible, true))
+    .orderBy(desc(pulsePosts.createdAt)).limit(100);
+
+  const tagMap: Record<string, number> = {};
+  recentContent.forEach(p => {
+    (p.content.match(/#\w+/g) ?? []).forEach(tag => { tagMap[tag] = (tagMap[tag] ?? 0) + 1; });
+  });
+  const hashtags = Object.entries(tagMap).sort((a, b) => b[1] - a[1]).slice(0, 8)
+    .map(([tag, count]) => ({ tag, count }));
+
+  res.json({ topPosts, hashtags });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/notifications
+router.get("/social/v2/notifications", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ notifications: [] }); return; }
+
+  const myPosts = await db.select({ id: pulsePosts.id, content: pulsePosts.content })
+    .from(pulsePosts).where(eq(pulsePosts.userId, userId)).limit(50);
+  const myPostIds = myPosts.map(p => p.id);
+
+  const notifs: { type: string; username: string; content: string; postSnippet?: string; createdAt: string }[] = [];
+
+  if (myPostIds.length > 0) {
+    const comments = await pool.query(
+      `SELECT username, content, post_id, created_at FROM post_comments WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
+      [myPostIds]
+    );
+    comments.rows.forEach((c: any) => {
+      const post = myPosts.find(p => p.id === c.post_id);
+      notifs.push({ type: "comment", username: c.username, content: c.content, postSnippet: post?.content?.slice(0, 50), createdAt: c.created_at });
+    });
+
+    const reactions = await pool.query(
+      `SELECT username, reaction, post_id, created_at FROM post_reactions WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
+      [myPostIds]
+    );
+    reactions.rows.forEach((r: any) => {
+      const post = myPosts.find(p => p.id === r.post_id);
+      notifs.push({ type: "reaction", username: r.username, content: r.reaction, postSnippet: post?.content?.slice(0, 50), createdAt: r.created_at });
+    });
+  }
+
+  const follows = await pool.query(
+    `SELECT uf.follower_id, uf.created_at, u.username FROM user_follows uf
+     JOIN users u ON u.id = uf.follower_id
+     WHERE uf.following_id = $1 ORDER BY uf.created_at DESC LIMIT 15`,
+    [userId]
+  );
+  follows.rows.forEach((f: any) => {
+    notifs.push({ type: "follow", username: f.username, content: "started following you", createdAt: f.created_at });
+  });
+
+  notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json({ notifications: notifs.slice(0, 30) });
+});
 
 // GET /api/social/v2/search?q=
 router.get("/social/v2/search", async (req, res): Promise<void> => {

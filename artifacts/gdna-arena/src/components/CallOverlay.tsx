@@ -6,23 +6,27 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Phone, PhoneOff, Video, VideoOff, Mic, MicOff,
-  Volume2, VolumeX, Minimize2
+  Volume2, VolumeX, Minimize2, Monitor, MonitorOff
 } from "lucide-react";
 import type { CallStatus } from "@/hooks/useCall";
 
 interface Props {
-  status:       CallStatus;
-  peer:         string | null;
-  localStream:  MediaStream | null;
-  remoteStream: MediaStream | null;
-  incomingCall: { from: string; video: boolean } | null;
-  onAnswer:     (video: boolean) => void;
-  onReject:     () => void;
-  onEnd:        () => void;
+  status:         CallStatus;
+  peer:           string | null;
+  localStream:    MediaStream | null;
+  remoteStream:   MediaStream | null;
+  incomingCall:   { from: string; video: boolean } | null;
+  onAnswer:       (video: boolean) => void;
+  onReject:       () => void;
+  onEnd:          () => void;
+  screenSharing?: boolean;
+  onScreenShare?: () => void;
+  onStopScreen?:  () => void;
 }
 
 export default function CallOverlay({
-  status, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd
+  status, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd,
+  screenSharing = false, onScreenShare, onStopScreen,
 }: Props) {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef  = useRef<HTMLVideoElement>(null);
@@ -222,6 +226,19 @@ export default function CallOverlay({
           style={{ background: speakerOff ? "#ef4444" : "#1a1a1a", border: "1px solid #ffffff20" }}>
           {speakerOff ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
         </button>
+
+        {/* Screen share */}
+        {hasVideo && onScreenShare && (
+          <button
+            onClick={screenSharing ? onStopScreen : onScreenShare}
+            className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
+            style={{ background: screenSharing ? "#f59e0b" : "#1a1a1a", border: "1px solid #ffffff20" }}
+            title={screenSharing ? "Stop sharing" : "Share screen"}>
+            {screenSharing
+              ? <MonitorOff className="w-5 h-5 text-black" />
+              : <Monitor className="w-5 h-5 text-white" />}
+          </button>
+        )}
 
         <button onClick={() => setMinimized(true)}
           className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"

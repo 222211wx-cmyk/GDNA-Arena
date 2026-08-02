@@ -673,6 +673,18 @@ async function ensureTables() {
         UNIQUE("follower_id","following_id")
       )
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "post_reactions" (
+        "id" serial PRIMARY KEY,
+        "post_id" integer NOT NULL,
+        "user_id" integer,
+        "username" text NOT NULL DEFAULT 'Anonymous',
+        "voter_ip" text NOT NULL,
+        "reaction" text NOT NULL DEFAULT '❤️',
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        UNIQUE("post_id","voter_ip")
+      )
+    `);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_count" integer NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_muted" boolean NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_title" text NOT NULL DEFAULT 'Citizen'`);

@@ -22,6 +22,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
         onAnswer={call.answerCall}
         onReject={call.rejectCall}
         onEnd={call.endCall}
+        screenSharing={call.screenSharing}
+        onScreenShare={call.startScreenShare}
+        onStopScreen={call.stopScreenShare}
       />
     </CallContext.Provider>
   );
