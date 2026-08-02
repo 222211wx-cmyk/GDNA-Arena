@@ -43,7 +43,7 @@ router.get("/citizens", async (req, res): Promise<void> => {
     : `u.xp DESC`;
 
   const { rows } = await pool.query(
-    `SELECT u.id, u.username, u.xp, u.balance, u.games_played, u.wins, u.created_at, u.honor_count, u.is_muted
+    `SELECT u.id, u.username, u.xp, u.balance, u.games_played, u.wins, u.created_at, u.honor_count, u.is_muted, u.last_seen_at
      FROM "users" u ORDER BY ${orderClause} LIMIT $1`,
     [limit]
   );
@@ -56,6 +56,7 @@ router.get("/citizens", async (req, res): Promise<void> => {
     rank: getRank(parseInt(u.xp ?? "0")),
     honorInfo: getHonorTitle(parseInt(u.honor_count ?? "0")),
     position: i + 1,
+    lastSeenAt: u.last_seen_at ?? null,
   }));
 
   res.json({ citizens });

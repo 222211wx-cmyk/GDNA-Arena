@@ -717,6 +717,7 @@ async function ensureTables() {
     `);
     await pool.query(`ALTER TABLE "pulse_posts"  ADD COLUMN IF NOT EXISTS "image_url" text`);
     await pool.query(`ALTER TABLE "dm_messages"  ADD COLUMN IF NOT EXISTS "file_url"  text`);
+    await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "last_seen_at" timestamp DEFAULT now()`);
     console.log("[SOCIAL-V2] saved_posts, call_history tables ready; new columns added");
 
     // Empire Shop

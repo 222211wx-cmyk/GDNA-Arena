@@ -51,6 +51,17 @@ app.use(
   }),
 );
 
+// Update last_seen_at for authenticated users on every request
+app.use("/api", (req, _res, next) => {
+  const userId = (req.session as any)?.userId;
+  if (userId) {
+    // fire-and-forget — don't await so it never slows down requests
+    import("@workspace/db").then(({ pool }) => {
+      pool?.query(`UPDATE "users" SET "last_seen_at" = NOW() WHERE id = $1`, [userId]).catch(() => {});
+    }).catch(() => {});
+  }
+  next();
+});
 app.use("/api", router);
 
 export default app;

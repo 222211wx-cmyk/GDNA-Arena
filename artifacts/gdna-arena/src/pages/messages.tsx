@@ -2,9 +2,10 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageSquare, Send, Users, Crown, ArrowLeft, Plus, Mic, Video,
-  Lock, Globe2, Hash, Phone, VideoIcon, Type, X, Search
+  Lock, Hash, Phone, VideoIcon, Type, X, Search, UserPlus, Circle
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCallContext } from "@/contexts/CallContext";
 import { Link, useLocation } from "wouter";
 
 interface Room {
@@ -19,38 +20,60 @@ const GREEN    = "#22c55e";
 const DARK_BG  = "#050a05";
 const CARD_BG  = "#0a120a";
 const BORDER_G = "#22c55e22";
+const GOLD     = "#FFD700";
 
 function timeAgo(d: string) {
   const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
-  if (m < 1) return "now"; if (m < 60) return `${m}m`; return `${Math.floor(m/60)}h`;
+  if (m < 1) return "الآن"; if (m < 60) return `${m} د`; if (m < 1440) return `${Math.floor(m/60)} س`; return `${Math.floor(m/1440)} ي`;
 }
 
 function Avatar({ name, size = 8 }: { name: string; size?: number }) {
+  const colors = ["#e74c3c","#e67e22","#2ecc71","#3498db","#9b59b6","#1abc9c","#e91e63","#ff5722"];
+  const bg = colors[name.charCodeAt(0) % colors.length];
   return (
-    <div className={`w-${size} h-${size} rounded-full flex items-center justify-center text-xs font-black text-black shrink-0`}
-      style={{ background: `linear-gradient(135deg, ${GREEN}, #16a34a)`, minWidth: `${size*4}px`, minHeight: `${size*4}px` }}>
+    <div className={`w-${size} h-${size} rounded-full flex items-center justify-center text-xs font-black text-white shrink-0`}
+      style={{ background: bg, minWidth: `${size*4}px`, minHeight: `${size*4}px` }}>
       {name.charAt(0).toUpperCase()}
     </div>
   );
 }
 
+interface Contact { id: number; username: string; xp: number; balance: number; lastSeenAt?: string | null; }
+
+function getOnlineStatus(lastSeenAt?: string | null): { label: string; color: string; dot: string } {
+  if (!lastSeenAt) return { label: "غير متصل", color: "#666", dot: "#555" };
+  const mins = Math.floor((Date.now() - new Date(lastSeenAt).getTime()) / 60000);
+  if (mins < 5)  return { label: "متصل",      color: GREEN,   dot: GREEN };
+  if (mins < 30) return { label: "مشغول",     color: GOLD,    dot: GOLD  };
+  return               { label: "غير متصل",   color: "#666",  dot: "#555" };
+}
+
 export default function MessagesPage() {
   const { user } = useAuth();
+  const callCtx  = useCallContext();
   const [, navigate] = useLocation();
-  const [directRooms,  setDirectRooms]  = useState<Room[]>([]);
-  const [groupRooms,   setGroupRooms]   = useState<Room[]>([]);
-  const [activeRoom,   setActiveRoom]   = useState<Room | null>(null);
-  const [messages,     setMessages]     = useState<DmMessage[]>([]);
-  const [members,      setMembers]      = useState<Member[]>([]);
-  const [input,        setInput]        = useState("");
-  const [msgType,      setMsgType]      = useState<"text"|"audio"|"video">("text");
-  const [mediaUrl,     setMediaUrl]     = useState("");
-  const [sending,      setSending]      = useState(false);
-  const [tab,          setTab]          = useState<"direct"|"groups">("direct");
-  const [newDmTarget,  setNewDmTarget]  = useState("");
-  const [showNewDm,    setShowNewDm]    = useState(false);
-  const [error,        setError]        = useState<string|null>(null);
-  const [totalUnread,  setTotalUnread]  = useState(0);
+  const [directRooms,    setDirectRooms]    = useState<Room[]>([]);
+  const [groupRooms,     setGroupRooms]     = useState<Room[]>([]);
+  const [activeRoom,     setActiveRoom]     = useState<Room | null>(null);
+  const [messages,       setMessages]       = useState<DmMessage[]>([]);
+  const [members,        setMembers]        = useState<Member[]>([]);
+  const [input,          setInput]          = useState("");
+  const [msgType,        setMsgType]        = useState<"text"|"audio"|"video">("text");
+  const [mediaUrl,       setMediaUrl]       = useState("");
+  const [sending,        setSending]        = useState(false);
+  const [tab,            setTab]            = useState<"direct"|"groups"|"contacts">("direct");
+  const [newDmTarget,    setNewDmTarget]    = useState("");
+  const [showNewDm,      setShowNewDm]      = useState(false);
+  const [error,          setError]          = useState<string|null>(null);
+  const [totalUnread,    setTotalUnread]    = useState(0);
+  // Contacts tab state
+  const [contacts,       setContacts]       = useState<Contact[]>([]);
+  const [contactSearch,  setContactSearch]  = useState("");
+  const [showAddFriend,  setShowAddFriend]  = useState(false);
+  const [addQuery,       setAddQuery]       = useState("");
+  const [addResults,     setAddResults]     = useState<Contact[]>([]);
+  const [addSearching,   setAddSearching]   = useState(false);
+  const [addMsg,         setAddMsg]         = useState<string|null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const loadRooms = useCallback(async () => {
@@ -65,6 +88,33 @@ export default function MessagesPage() {
     setGroupRooms(gd.rooms ?? []);
   }, [user]);
 
+  const loadContacts = useCallback(async () => {
+    if (!user) return;
+    const res = await fetch("/api/social/v2/following", { credentials: "include" });
+    if (!res.ok) return;
+    const d = await res.json() as { following: Contact[] };
+    setContacts(d.following ?? []);
+  }, [user]);
+
+  const searchToAdd = async () => {
+    if (!addQuery.trim()) return;
+    setAddSearching(true); setAddMsg(null);
+    try {
+      const res = await fetch(`/api/citizens?limit=50`, { credentials: "include" });
+      const d = await res.json() as { citizens: Contact[] };
+      const q = addQuery.toLowerCase();
+      setAddResults((d.citizens ?? []).filter(c => c.username.toLowerCase().includes(q) && c.id !== user?.id));
+    } finally { setAddSearching(false); }
+  };
+
+  const followContact = async (targetUsername: string) => {
+    await fetch(`/api/social/v2/follow/${encodeURIComponent(targetUsername)}`, {
+      method: "POST", credentials: "include",
+    });
+    setAddMsg(`تمت إضافة ${targetUsername} ✅`);
+    void loadContacts();
+  };
+
   const loadMessages = useCallback(async (roomId: number) => {
     const res = await fetch(`/api/messages/rooms/${roomId}`, { credentials: "include" });
     const data = await res.json() as { messages: DmMessage[]; members: Member[]; room: Room };
@@ -73,12 +123,13 @@ export default function MessagesPage() {
     void loadRooms();
   }, [loadRooms]);
 
-  useEffect(() => { void loadRooms(); }, [loadRooms]);
+  useEffect(() => { void loadRooms(); void loadContacts(); }, [loadRooms, loadContacts]);
   useEffect(() => {
+    if (tab === "contacts") { void loadContacts(); return; }
     if (!activeRoom) return;
     const t = setInterval(() => void loadMessages(activeRoom.id), 4000);
     return () => clearInterval(t);
-  }, [activeRoom, loadMessages]);
+  }, [activeRoom, loadMessages, tab, loadContacts]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
 
   const openRoom = async (room: Room) => {
@@ -167,11 +218,15 @@ export default function MessagesPage() {
             </button>
           </div>
           <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: BORDER_G }}>
-            {(["direct", "groups"] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)}
-                className="flex-1 py-2 text-xs font-bold transition-all"
-                style={{ background: tab === t ? `${GREEN}20` : "transparent", color: tab === t ? GREEN : "#666" }}>
-                {t === "direct" ? "💬 Direct" : "👥 Groups"}
+            {([
+              { id: "direct",   label: "💬 مباشر"    },
+              { id: "groups",   label: "👥 مجموعات"  },
+              { id: "contacts", label: "👤 الأصدقاء" },
+            ] as const).map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className="flex-1 py-2 text-[11px] font-bold transition-all"
+                style={{ background: tab === t.id ? `${GREEN}20` : "transparent", color: tab === t.id ? GREEN : "#666" }}>
+                {t.label}
               </button>
             ))}
           </div>
@@ -226,28 +281,156 @@ export default function MessagesPage() {
           )}
           {tab === "groups" && (
             <>
-              {groupRooms.map(r => {
-                const isMember = directRooms.some(dr => dr.id === r.id) || true; // simplified
-                return (
-                  <button key={r.id} onClick={() => void joinGroup(r)}
-                    className="w-full flex items-center gap-3 p-3 border-b text-left hover:opacity-80 transition-opacity"
-                    style={{ borderColor: BORDER_G, background: activeRoom?.id === r.id ? `${GREEN}08` : "transparent" }}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg border shrink-0"
-                      style={{ borderColor: `${GREEN}30`, background: `${GREEN}10` }}>
-                      {r.icon ?? "👥"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-bold truncate">{r.name}</div>
-                      <div className="text-xs text-muted-foreground">{r.memberCount ?? 0} members</div>
-                    </div>
-                    <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  </button>
-                );
-              })}
+              {groupRooms.map(r => (
+                <button key={r.id} onClick={() => void joinGroup(r)}
+                  className="w-full flex items-center gap-3 p-3 border-b text-left hover:opacity-80 transition-opacity"
+                  style={{ borderColor: BORDER_G, background: activeRoom?.id === r.id ? `${GREEN}08` : "transparent" }}>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg border shrink-0"
+                    style={{ borderColor: `${GREEN}30`, background: `${GREEN}10` }}>
+                    {r.icon ?? "👥"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold truncate">{r.name}</div>
+                    <div className="text-xs text-muted-foreground">{r.memberCount ?? 0} members</div>
+                  </div>
+                  <Hash className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              ))}
             </>
+          )}
+
+          {/* ── قائمة المستخدمين / Contacts ── */}
+          {tab === "contacts" && (
+            <div className="flex flex-col h-full">
+              {/* Add Friend button */}
+              <div className="p-3 border-b" style={{ borderColor: BORDER_G }}>
+                <button onClick={() => { setShowAddFriend(true); setAddResults([]); setAddQuery(""); setAddMsg(null); }}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all"
+                  style={{ background: `${GREEN}15`, border: `1px solid ${GREEN}30`, color: GREEN }}>
+                  <UserPlus className="w-3.5 h-3.5" /> إضافة صديق
+                </button>
+              </div>
+
+              {/* Search bar */}
+              <div className="px-3 py-2 border-b" style={{ borderColor: BORDER_G }}>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{ background: "#050a05", border: `1px solid ${BORDER_G}` }}>
+                  <Search className="w-3 h-3" style={{ color: "#666" }} />
+                  <input value={contactSearch} onChange={e => setContactSearch(e.target.value)}
+                    placeholder="ابحث في جهات الاتصال..."
+                    className="flex-1 bg-transparent text-xs focus:outline-none"
+                    style={{ color: "#e5ffe5" }} />
+                </div>
+              </div>
+
+              {/* Contact list */}
+              <div className="flex-1 overflow-y-auto">
+                {contacts.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-muted-foreground px-4">
+                    <Users className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: GREEN }} />
+                    لا توجد جهات اتصال بعد.<br />أضف أصدقاءك للتواصل معهم.
+                  </div>
+                ) : contacts
+                    .filter(c => !contactSearch || c.username.toLowerCase().includes(contactSearch.toLowerCase()))
+                    .map(c => {
+                      const status = getOnlineStatus(c.lastSeenAt);
+                      return (
+                        <div key={c.id} className="flex items-center gap-2.5 p-3 border-b"
+                          style={{ borderColor: BORDER_G }}>
+                          {/* Avatar + status dot */}
+                          <div className="relative shrink-0">
+                            <Avatar name={c.username} size={9} />
+                            <Circle className="w-2.5 h-2.5 absolute -bottom-0.5 -right-0.5"
+                              style={{ color: status.dot, fill: status.dot, filter: "drop-shadow(0 0 3px currentColor)" }} />
+                          </div>
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-bold truncate">@{c.username}</div>
+                            <div className="text-[10px] font-semibold" style={{ color: status.color }}>
+                              {status.label}
+                              {c.lastSeenAt && status.label === "غير متصل" && (
+                                <span className="text-muted-foreground font-normal ml-1">· {timeAgo(c.lastSeenAt)}</span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Call buttons */}
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => callCtx.startCall(c.username, false)}
+                              title="مكالمة صوتية"
+                              className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
+                              style={{ background: "#0a2a0a", border: "1px solid #0a0" }}>
+                              <Phone className="w-3 h-3" style={{ color: GREEN }} />
+                            </button>
+                            <button
+                              onClick={() => callCtx.startCall(c.username, true)}
+                              title="مكالمة فيديو"
+                              className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
+                              style={{ background: "#0a1a2a", border: "1px solid #09f" }}>
+                              <VideoIcon className="w-3 h-3" style={{ color: "#09f" }} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                }
+              </div>
+            </div>
           )}
         </div>
       </div>
+
+      {/* ── Add Friend Modal ── */}
+      <AnimatePresence>
+        {showAddFriend && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.8)" }}
+            onClick={e => { if (e.target === e.currentTarget) setShowAddFriend(false); }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm rounded-2xl p-5 space-y-3"
+              style={{ background: CARD_BG, border: `1px solid ${GREEN}30` }}>
+              <div className="flex items-center justify-between">
+                <h3 className="font-black text-sm flex items-center gap-2" style={{ color: GREEN }}>
+                  <UserPlus className="w-4 h-4" /> إضافة صديق
+                </h3>
+                <button onClick={() => setShowAddFriend(false)}>
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input value={addQuery} onChange={e => setAddQuery(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && void searchToAdd()}
+                  placeholder="ابحث بالاسم..."
+                  className="flex-1 px-3 py-2 rounded-xl border text-sm focus:outline-none"
+                  style={{ background: DARK_BG, borderColor: `${GREEN}30`, color: "#e5ffe5" }} />
+                <button onClick={() => void searchToAdd()} disabled={addSearching}
+                  className="px-3 py-2 rounded-xl text-xs font-bold text-black disabled:opacity-50"
+                  style={{ background: GREEN }}>
+                  {addSearching ? "..." : <Search className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              {addMsg && <p className="text-xs text-center" style={{ color: GREEN }}>{addMsg}</p>}
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {addResults.map(r => (
+                  <div key={r.id} className="flex items-center gap-2 p-2 rounded-xl"
+                    style={{ background: `${GREEN}08` }}>
+                    <Avatar name={r.username} size={7} />
+                    <span className="flex-1 text-sm font-bold truncate">@{r.username}</span>
+                    <button onClick={() => void followContact(r.username)}
+                      className="px-3 py-1 rounded-lg text-xs font-bold text-black"
+                      style={{ background: GREEN }}>
+                      متابعة
+                    </button>
+                  </div>
+                ))}
+                {addResults.length === 0 && addQuery && !addSearching && (
+                  <p className="text-xs text-center text-muted-foreground py-3">لا نتائج</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Chat panel ── */}
       {activeRoom ? (

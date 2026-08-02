@@ -444,19 +444,19 @@ router.post("/social/v2/call-history", async (req, res): Promise<void> => {
   res.status(201).json({ ok: true });
 });
 
-// GET /api/social/v2/following  — returns full user objects (for Friends page)
+// GET /api/social/v2/following  — returns full user objects with online status
 router.get("/social/v2/following", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.json({ following: [] }); return; }
   const { rows } = await pool.query(
-    `SELECT u.id, u.username, u.xp, u.balance
+    `SELECT u.id, u.username, u.xp, u.balance, u.last_seen_at
      FROM user_follows uf
      JOIN users u ON u.id = uf.following_id
      WHERE uf.follower_id = $1
-     ORDER BY u.username ASC`,
+     ORDER BY u.last_seen_at DESC NULLS LAST, u.username ASC`,
     [userId]
   );
-  res.json({ following: rows });
+  res.json({ following: rows.map((r: any) => ({ ...r, lastSeenAt: r.last_seen_at })) });
 });
 
 // GET /api/social/v2/search?q=
