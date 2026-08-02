@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Search, Trophy, Music, Film, Newspaper, Landmark,
   Gamepad2, LogOut, Globe, LayoutDashboard, Wallet,
-  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User
+  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User, ShoppingBag
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
@@ -23,6 +23,8 @@ const NAV_ITEMS = [
   { name: "PLAY",     emoji: "🎮",  icon: <Gamepad2      size={15} />, path: "/games",    highlight: false },
   { name: "SOCIAL",   emoji: "💬",  icon: <MessageSquare size={15} />, path: "/social",   highlight: true  },
   { name: "MESSAGES", emoji: "✉️",  icon: <Mail          size={15} />, path: "/messages", highlight: false },
+  { name: "AMIS",     emoji: "👥",  icon: <User          size={15} />, path: "/friends",  highlight: false },
+  { name: "SHOP",     emoji: "🛒",  icon: <ShoppingBag   size={15} />, path: "/shop",     highlight: true  },
 ];
 
 export function Navbar() {

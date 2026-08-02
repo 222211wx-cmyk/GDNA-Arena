@@ -41,11 +41,13 @@ import Empire from "@/pages/empire";
 import Legal from "@/pages/legal";
 import Chronicle from "@/pages/chronicle";
 import Welcome from "@/pages/welcome";
-import SocialPage from "@/pages/social";
-import InvitePage from "@/pages/invite";
-import Growth from "@/pages/growth";
-import PressPage from "@/pages/press";
-import SportPage from "@/pages/sport";
+import SocialPage  from "@/pages/social";
+import InvitePage   from "@/pages/invite";
+import Growth       from "@/pages/growth";
+import PressPage    from "@/pages/press";
+import SportPage    from "@/pages/sport";
+import ShopPage     from "@/pages/shop";
+import FriendsPage  from "@/pages/friends";
 import NeuralCorePage from "@/pages/neural-core";
 import GenomePage from "@/pages/genome";
 import { Footer } from "@/components/layout/footer";
@@ -70,10 +72,12 @@ function Router() {
           <Route path="/legal/:tab" component={Legal} />
           <Route path="/chronicle" component={Chronicle} />
           <Route path="/welcome" component={Welcome} />
-          <Route path="/social" component={SocialPage} />
-          <Route path="/invite" component={InvitePage} />
-          <Route path="/growth" component={Growth} />
-          <Route path="/sport" component={SportPage} />
+          <Route path="/social"   component={SocialPage}  />
+          <Route path="/invite"   component={InvitePage}  />
+          <Route path="/growth"   component={Growth}      />
+          <Route path="/sport"    component={SportPage}   />
+          <Route path="/shop"     component={ShopPage}    />
+          <Route path="/friends"  component={FriendsPage} />
           <Route path="/games" component={Games} />
           <Route path="/games/globalstar" component={GlobalStarApp} />
           <Route path="/games/globalstar/figures/:id" component={GlobalStarApp} />

@@ -719,6 +719,19 @@ async function ensureTables() {
     await pool.query(`ALTER TABLE "dm_messages"  ADD COLUMN IF NOT EXISTS "file_url"  text`);
     console.log("[SOCIAL-V2] saved_posts, call_history tables ready; new columns added");
 
+    // Empire Shop
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "purchases" (
+        "id"         serial PRIMARY KEY,
+        "user_id"    integer NOT NULL,
+        "item_id"    integer NOT NULL,
+        "item_name"  text NOT NULL DEFAULT '',
+        "coins_spent" integer NOT NULL DEFAULT 0,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+    console.log("[SHOP] purchases table ready");
+
     // Seed starter group rooms if empty
     const { rows: grpRows } = await pool.query(`SELECT COUNT(*) as count FROM "dm_rooms" WHERE type='group'`);
     if (parseInt(grpRows[0].count) === 0) {

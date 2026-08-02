@@ -27,6 +27,7 @@ import geoRouter from "./geo";
 import legalRouter from "./legal";
 import socialRouter from "./social";
 import socialHubRouter from "./social-hub";
+import shopRouter from "./shop";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use("/geo", geoRouter);
 router.use("/legal", legalRouter);
 router.use(socialRouter);
 router.use(socialHubRouter);
+router.use(shopRouter);
 
 export default router;

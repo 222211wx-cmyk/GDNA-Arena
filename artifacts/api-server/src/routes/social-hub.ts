@@ -444,6 +444,21 @@ router.post("/social/v2/call-history", async (req, res): Promise<void> => {
   res.status(201).json({ ok: true });
 });
 
+// GET /api/social/v2/following  — returns full user objects (for Friends page)
+router.get("/social/v2/following", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ following: [] }); return; }
+  const { rows } = await pool.query(
+    `SELECT u.id, u.username, u.xp, u.balance
+     FROM user_follows uf
+     JOIN users u ON u.id = uf.following_id
+     WHERE uf.follower_id = $1
+     ORDER BY u.username ASC`,
+    [userId]
+  );
+  res.json({ following: rows });
+});
+
 // GET /api/social/v2/search?q=
 router.get("/social/v2/search", async (req, res): Promise<void> => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
