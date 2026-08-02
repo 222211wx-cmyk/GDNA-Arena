@@ -34,7 +34,7 @@ function getHonorTitle(honorCount: number): { title: string; color: string; badg
 
 // ── GET /citizens — leaderboard ───────────────────────────────────────────────
 router.get("/citizens", async (req, res): Promise<void> => {
-  const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
   const sort  = req.query.sort === "coins" ? "coins" : req.query.sort === "honor" ? "honor" : "xp";
 
   const orderClause =
