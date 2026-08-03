@@ -12,17 +12,17 @@ interface Message {
 }
 
 const SUGGESTED: Record<string, string[]> = {
-  en: ["What is GDNA Arena?", "How do I earn coins?", "Explain play-to-earn", "Best strategy for games?"],
-  ar: ["ما هي GDNA Arena؟", "كيف أربح عملات؟", "اشرح play-to-earn", "أفضل استراتيجية للألعاب؟"],
-  fr: ["C'est quoi GDNA Arena?", "Comment gagner des pièces?", "Explique le play-to-earn", "Meilleure stratégie?"],
-  dz: ["شنو هي GDNA Arena؟", "كيفاش نربح كوينز؟", "شرح ليا play-to-earn", "أفضل استراتيجية؟"],
+  en: ["✅ Is my Smart System active?", "How do I earn coins?", "Best strategy for games?", "Explain play-to-earn"],
+  ar: ["✅ هل النظام الذكي نشط؟ أعطني تقريري", "كيف أربح عملات؟", "أفضل استراتيجية للألعاب؟", "اشرح play-to-earn"],
+  fr: ["✅ Smart System actif? Montre mon rapport", "Comment gagner des pièces?", "Meilleure stratégie pour les jeux?", "Explique le play-to-earn"],
+  dz: ["✅ واش النظام الذكي نشط؟ عطيني تقريري", "كيفاش نربح كوينز؟", "أفضل استراتيجية؟", "شرح ليا play-to-earn"],
 };
 
 const WELCOME: Record<string, string> = {
-  en: "Greetings, warrior! I am GDN-AI — the legendary genie of GDNA Arena 🔥 Ask me anything, in any language!",
-  ar: "أهلاً يا محارب! أنا GDN-AI — الجني الأسطوري لـ GDNA Arena 🔥 اسألني أي شيء، بأي لغة!",
-  fr: "Salutations, guerrier! Je suis GDN-AI — le génie légendaire de GDNA Arena 🔥 Demandez-moi n'importe quoi, dans n'importe quelle langue!",
-  dz: "السلام، يا مجاهد! أنا GDN-AI — الجني الخارق ديال GDNA Arena 🔥 سولني على أي حاجة، بأي لغة!",
+  en: "Neural grid online. ✅ GDN-SMART SYSTEM: ACTIVE — monitoring Gaming, Education, Business, Social, Competitions & XP in real time. Ask me for your personalised report.",
+  ar: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، الأعمال، الاجتماعي، المسابقات وXP في الوقت الفعلي. اسألني عن تقريرك الشخصي.",
+  fr: "Grille neurale en ligne. ✅ GDN-SMART SYSTEM: ACTIF — surveillance Gaming, Education, Business, Social, Competitions & XP en temps reel. Demandez votre rapport personnalise.",
+  dz: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، البيزنس، السوشيال وXP. سول على تقريرك الشخصي.",
 };
 
 export default function ChatPage() {

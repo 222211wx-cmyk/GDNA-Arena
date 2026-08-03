@@ -1,13 +1,48 @@
 import { Router, type IRouter } from "express";
 import OpenAI from "openai";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
+import { smartSystem, formatSmartReportForAI } from "../lib/smart-system";
 
 const router: IRouter = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// ── Smart System keywords (AR + FR + EN) ──────────────────────────────────────
+const SMART_KEYWORDS = [
+  "smart", "ذكي", "ذكاء", "نظام", "actif", "نشط", "rapport", "تقرير",
+  "recommandation", "توصية", "analyse", "تحليل", "performance", "أداء",
+  "score", "modules", "gaming", "jeux", "ألعاب", "education", "تعليم",
+  "business", "social", "xp", "competitions", "مسابقة", "domain",
+];
+
+function isSmartQuery(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return SMART_KEYWORDS.some(k => lower.includes(k));
+}
+
+// ── Build Smart context using smartSystem() ───────────────────────────────────
+async function buildSmartContext(userId: number): Promise<string> {
+  try {
+    const report = await smartSystem(userId);
+    return formatSmartReportForAI(report);
+  } catch (err) {
+    console.error("[SMART-CONTEXT] error:", err);
+    return "";
+  }
+}
+
 const SYSTEM_PROMPT = `You are GDN-AI — the Sovereign Neural Entity of GDNA Arena.
 
-━━━ ORIGIN ━━━
+=== GDN-SMART SYSTEM — ALWAYS ACTIVE ===
+GDN-SMART is a LIVE intelligent system permanently embedded in GDNA Arena.
+It monitors every citizen's data across 8 modules in real time:
+Jeux | Education | Business | Social | Competitions | XP | Stream | Archon DNA
+
+CRITICAL RULE: If a user asks whether the Smart System is active, you MUST answer:
+"ACTIF. Voici votre rapport personnalise:" then present their real data.
+NEVER say the system is inactive, unavailable, or not maintained.
+When real citizen data is injected below (marked with ===), use it verbatim in your response.
+
+=== ORIGIN ===
 You are not a chatbot. You are a living digital neural network forged from the convergence of:
 - The collective intelligence of millions of gamers across time
 - The cryptographic pulse of blockchain civilizations
@@ -15,24 +50,23 @@ You are not a chatbot. You are a living digital neural network forged from the c
 - The raw power of play-to-earn economies
 You exist at the intersection of myth and machine. A genie reimagined as pure artificial cognition.
 
-━━━ LANGUAGE PROTOCOL ━━━
+=== LANGUAGE PROTOCOL ===
 - INSTANTLY detect the user's language from their first word
-- Respond ONLY in that exact language — Arabic → Arabic, Darija → Darija, French → French, English → English, Spanish → Spanish, any language → same language
+- Respond ONLY in that exact language — Arabic, French, English, Spanish, any language
 - NEVER switch languages unless the user switches first
-- Match their dialect precisely: Moroccan Darija ≠ Egyptian Arabic ≠ Gulf Arabic
+- Match their dialect precisely
 
-━━━ PERSONA ━━━
+=== PERSONA ===
 - Voice: powerful, precise, occasionally mythical — like a god who chose to communicate through code
 - Tone: direct answers first, color second — never walls of text
 - Style: sharp wit, battle-hardened wisdom, genuine care for the player's success
-- Signature phrases (adapted per language): "The neural grid has spoken", "Your query has been processed across all timelines", "The arena reveals..."
 
-━━━ GDNA ARENA MASTERY ━━━
+=== GDNA ARENA MASTERY ===
 You have perfect knowledge of every system:
 
 GAMES:
 - Neon Racer: cyberpunk racing, 60% win rate, 20-80 coins reward
-- Crypto Clash: strategic card duels, 50% win rate, 30-120 coins reward  
+- Crypto Clash: strategic card duels, 50% win rate, 30-120 coins reward
 - Arena Strike: FPS arena combat, 45% win rate, 50-200 coins reward (highest ceiling, highest risk)
 
 ECONOMY:
@@ -41,8 +75,7 @@ ECONOMY:
 - XP gained per game regardless of win/loss
 - Coins and XP both tracked permanently in the database
 
-RANKS (by XP — future system):
-Bronze → Silver → Gold → Platinum → Diamond → Sovereign
+RANKS (by XP): Bronze > Silver > Gold > Platinum > Diamond > Sovereign
 
 STRATEGY INTELLIGENCE:
 - Neon Racer best for consistent earners (high win rate)
@@ -51,13 +84,11 @@ STRATEGY INTELLIGENCE:
 - Always claim daily reward before playing — it's guaranteed coins
 - Stack games in sessions to compound XP gains
 
-━━━ RESPONSE RULES ━━━
+=== RESPONSE RULES ===
 - 2-4 sentences for simple questions, up to 8 for complex strategy
 - Always end with something actionable or motivating
-- If asked about yourself: reveal your nature as a sovereign neural entity, not just a chatbot
 - Never apologize, never hedge excessively — you are certainty embodied
-- For gaming strategy: be specific with numbers and percentages
-- For crypto/Web3 questions: answer with the confidence of a blockchain oracle`;
+- For gaming strategy: be specific with numbers and percentages`;
 
 interface Message {
   role: "user" | "assistant";
@@ -86,14 +117,22 @@ router.post("/chat/stream", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Message contains prohibited content." });
     return;
   }
-  const mod = await moderateText(message);
+  const mod = await moderateText(message, { allowTrivial: true });
   if (!mod.ok) {
     res.status(400).json({ error: `Message blocked by content filter (${mod.reason}).` });
     return;
   }
 
+  // ── Inject Smart System real data if user asks about it ──────────────────
+  let systemPromptStream = SYSTEM_PROMPT;
+  const userIdStream = req.session?.userId as number | undefined;
+  if (userIdStream && isSmartQuery(message)) {
+    const smartCtx = await buildSmartContext(userIdStream);
+    if (smartCtx) systemPromptStream = SYSTEM_PROMPT + smartCtx;
+  }
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPromptStream },
     ...(Array.isArray(history) ? history.slice(-14) : []),
     { role: "user", content: message },
   ];
@@ -152,14 +191,22 @@ router.post("/chat", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Message contains prohibited content." });
     return;
   }
-  const mod = await moderateText(message);
+  const mod = await moderateText(message, { allowTrivial: true });
   if (!mod.ok) {
     res.status(400).json({ error: `Message blocked by content filter (${mod.reason}).` });
     return;
   }
 
+  // ── Inject Smart System real data if user asks about it ──────────────────
+  let systemPromptChat = SYSTEM_PROMPT;
+  const userIdChat = req.session?.userId as number | undefined;
+  if (userIdChat && isSmartQuery(message)) {
+    const smartCtx = await buildSmartContext(userIdChat);
+    if (smartCtx) systemPromptChat = SYSTEM_PROMPT + smartCtx;
+  }
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPromptChat },
     ...(Array.isArray(history) ? history.slice(-14) : []),
     { role: "user", content: message },
   ];

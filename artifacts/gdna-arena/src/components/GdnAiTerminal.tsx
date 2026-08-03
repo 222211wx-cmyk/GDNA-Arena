@@ -12,17 +12,17 @@ interface Message {
 }
 
 const SUGGESTED: Record<string, string[]> = {
-  en: ["What is GDNA Arena?", "Best strategy to earn coins?", "Tell me about Arena Strike", "How does XP work?"],
-  ar: ["ما هي GDNA Arena؟", "أفضل استراتيجية لكسب العملات؟", "أخبرني عن Arena Strike", "كيف يعمل XP؟"],
-  fr: ["C'est quoi GDNA Arena?", "Meilleure stratégie pour gagner?", "Parle-moi d'Arena Strike", "Comment fonctionne l'XP?"],
-  dz: ["شنو هي GDNA Arena؟", "أفضل طريقة باش نربح كوينز؟", "حدثني على Arena Strike", "كيفاش كيخدم XP؟"],
+  en: ["✅ Is my Smart System active?", "Best strategy to earn coins?", "Tell me about Arena Strike", "How does XP work?"],
+  ar: ["✅ هل النظام الذكي نشط؟ أعطني تقريري", "أفضل استراتيجية لكسب العملات؟", "أخبرني عن Arena Strike", "كيف يعمل XP؟"],
+  fr: ["✅ Système Smart actif? Montre mon rapport", "Meilleure stratégie pour gagner?", "Parle-moi d'Arena Strike", "Comment fonctionne l'XP?"],
+  dz: ["✅ واش النظام الذكي نشط؟ عطيني تقريري", "أفضل طريقة باش نربح كوينز؟", "حدثني على Arena Strike", "كيفاش كيخدم XP؟"],
 };
 
 const WELCOME: Record<string, string> = {
-  en: "Neural grid online. I am GDN-AI — sovereign intelligence of GDNA Arena. All languages. All strategies. Ask anything.",
-  ar: "الشبكة العصبية متصلة. أنا GDN-AI — الذكاء السيادي لـ GDNA Arena. كل اللغات. كل الاستراتيجيات. اسأل أي شيء.",
-  fr: "Grille neurale en ligne. Je suis GDN-AI — intelligence souveraine de GDNA Arena. Toutes les langues. Toutes les stratégies.",
-  dz: "الشبكة العصبية متصلة. أنا GDN-AI — الذكاء الأقوى ديال GDNA Arena. بجميع اللغات. سول على أي حاجة.",
+  en: "Neural grid online. ✅ GDN-SMART SYSTEM: ACTIVE — monitoring Gaming, Education, Business, Social, Competitions & XP in real time. Ask me for your personalised report.",
+  ar: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، الأعمال، الاجتماعي، المسابقات وXP في الوقت الفعلي. اسألني عن تقريرك الشخصي.",
+  fr: "Grille neurale en ligne. ✅ GDN-SMART SYSTEM: ACTIF — surveillance Gaming, Education, Business, Social, Competitions & XP en temps reel. Demandez votre rapport personnalise.",
+  dz: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، البيزنس، السوشيال وXP. سول على تقريرك الشخصي.",
 };
 
 interface GdnAiTerminalProps {
