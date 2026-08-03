@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { name: "MESSAGES", emoji: "✉️",  icon: <Mail          size={15} />, path: "/messages", highlight: false },
   { name: "AMIS",     emoji: "👥",  icon: <User          size={15} />, path: "/friends",  highlight: false },
   { name: "SHOP",     emoji: "🛒",  icon: <ShoppingBag   size={15} />, path: "/shop",     highlight: true  },
+  { name: "SMART",    emoji: "🧠",  icon: <BrainCircuit  size={15} />, path: "/smart",    highlight: true  },
 ];
 
 export function Navbar() {

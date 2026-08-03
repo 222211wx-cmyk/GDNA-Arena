@@ -1,11 +1,164 @@
 import { useLocation, Link } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock } from "lucide-react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
+
+// ── GDN-SMART Widget ───────────────────────────────────────────────────────────
+function SmartWidget() {
+  const [, nav] = useLocation();
+  const [smartData, setSmartData] = useState<{
+    overallScore: number;
+    activeModules: number;
+    totalModules: number;
+    systemStatus: string;
+    modules: { id: string; name: string; status: string; score: number }[];
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/smart/status")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setSmartData(d))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.25 }}
+      onClick={() => nav("/smart")}
+      style={{ cursor: "pointer" }}
+    >
+      <Card style={{
+        background: "linear-gradient(135deg, #0d1117 0%, #0a0f00 50%, #0d1117 100%)",
+        border: "1px solid #eab30840",
+        borderRadius: 16,
+        overflow: "hidden",
+        position: "relative",
+      }}>
+        {/* Animated glow background */}
+        <motion.div
+          animate={{ opacity: [0.3, 0.6, 0.3] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            position: "absolute", inset: 0, pointerEvents: "none",
+            background: "radial-gradient(ellipse at 20% 50%, #eab30815 0%, transparent 60%)",
+          }}
+        />
+
+        <CardContent style={{ padding: "22px 24px", position: "relative", zIndex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+
+            {/* Brain icon with pulse */}
+            <motion.div
+              animate={{ boxShadow: ["0 0 8px #eab30840", "0 0 24px #eab30880", "0 0 8px #eab30840"] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              style={{
+                width: 52, height: 52, borderRadius: "50%",
+                background: "linear-gradient(135deg, #eab308, #f59e0b)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <BrainCircuit size={26} color="#000" />
+            </motion.div>
+
+            {/* Text block */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Title */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <span style={{ color: "#fff", fontWeight: 900, fontSize: 15 }}>
+                  Votre Compagnon Smart est
+                </span>
+                <motion.span
+                  animate={{ opacity: [1, 0.5, 1] }}
+                  transition={{ duration: 1.4, repeat: Infinity }}
+                  style={{
+                    background: "#22c55e20", border: "1px solid #22c55e60",
+                    color: "#22c55e", borderRadius: 6, padding: "2px 9px",
+                    fontSize: 11, fontWeight: 800, letterSpacing: "0.08em",
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                  }}
+                >
+                  <Zap size={10} /> ACTIF ⚡
+                </motion.span>
+              </div>
+              {/* Arabic subtitle */}
+              <p style={{ margin: "0 0 2px", color: "#eab308", fontSize: 12, fontWeight: 700, direction: "rtl", textAlign: "right" }}>
+                رفيقك الذكي نشط ⚡ — يراقب إمبراطوريتك
+              </p>
+              {/* Description */}
+              <p style={{ margin: 0, color: "#888", fontSize: 12, lineHeight: 1.5 }}>
+                Analyse de vos performances en cours dans tous les domaines · تحليل أداءك جارٍ في جميع المجالات
+              </p>
+            </div>
+
+            {/* Score + status (desktop) */}
+            {smartData && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                <div style={{ fontSize: 28, fontWeight: 900, color: "#eab308", lineHeight: 1 }}>
+                  {smartData.overallScore}
+                  <span style={{ fontSize: 12, color: "#888", fontWeight: 400 }}>/100</span>
+                </div>
+                <div style={{ fontSize: 10, color: "#555", letterSpacing: "0.08em", textTransform: "uppercase" }}>SCORE</div>
+              </div>
+            )}
+          </div>
+
+          {/* Module dots row */}
+          {smartData?.modules && (
+            <div style={{ display: "flex", gap: 6, marginTop: 16, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ color: "#555", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", marginRight: 4 }}>
+                {smartData.activeModules}/{smartData.totalModules} modules
+              </span>
+              {smartData.modules.map(m => (
+                <motion.div
+                  key={m.id}
+                  title={m.name}
+                  whileHover={{ scale: 1.2 }}
+                  style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: m.status === "ACTIF" ? "#22c55e20" : "#ffffff08",
+                    border: `1px solid ${m.status === "ACTIF" ? "#22c55e60" : "#ffffff15"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 13,
+                  }}
+                >
+                  {m.name.split(" ")[0]}
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* CTA button */}
+          <div style={{ marginTop: 16 }}>
+            <motion.button
+              whileHover={{ scale: 1.02, boxShadow: "0 0 20px #eab30840" }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                background: "linear-gradient(135deg, #eab308, #f59e0b)",
+                color: "#000", border: "none", borderRadius: 10,
+                padding: "10px 24px", fontWeight: 800, fontSize: 13,
+                cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8,
+              }}
+            >
+              <BrainCircuit size={15} />
+              Voir mes recommandations
+              <ArrowRight size={14} />
+            </motion.button>
+            <span style={{ marginRight: 10, color: "#555", fontSize: 11, marginLeft: 12 }}>
+              · عرض التوصيات الذكية
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
 
 function getRank(xp: number): { label: string; next: number; color: string } {
   if (xp < 500)  return { label: "Bronze I",  next: 500,   color: "#cd7f32" };
@@ -221,6 +374,9 @@ export default function Dashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* ── GDN-SMART Widget ─────────────────────────────────────────── */}
+      <SmartWidget />
 
       {/* ── Recent Matches ──────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>

@@ -50,6 +50,7 @@ import ShopPage     from "@/pages/shop";
 import FriendsPage  from "@/pages/friends";
 import NeuralCorePage from "@/pages/neural-core";
 import GenomePage from "@/pages/genome";
+import SmartPage from "@/pages/smart";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 
@@ -96,6 +97,7 @@ function Router() {
           <Route path="/press" component={PressPage} />
           <Route path="/neural-core" component={NeuralCorePage} />
           <Route path="/genome" component={GenomePage} />
+          <Route path="/smart" component={SmartPage} />
           <Route path="/news" component={NewsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />
