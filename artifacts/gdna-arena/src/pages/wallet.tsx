@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion } from "framer-motion";
 import { Coins, TrendingUp, TrendingDown, Trophy, Gift, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -91,6 +92,9 @@ export default function Wallet() {
         <h1 className="text-4xl md:text-5xl font-black uppercase tracking-wider neon-text-glow mb-2">Wallet</h1>
         <p className="text-muted-foreground uppercase tracking-widest text-sm">Your coin history & balance</p>
       </motion.div>
+
+      {/* Smart Domain Widget */}
+      <SmartDomainWidget domainId="business" label="Module Business" />
 
       {/* Balance + Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

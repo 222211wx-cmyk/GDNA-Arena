@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { useAuth }  from "../contexts/AuthContext";
 import { useLang }  from "../contexts/LangContext";
 import { ShoppingBag, Coins, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
@@ -102,6 +103,11 @@ export default function ShopPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Smart Domain Widget */}
+      <div style={{ maxWidth: 1100, margin: "16px auto 0", padding: "0 24px" }}>
+        <SmartDomainWidget domainId="business" label="Module Business" />
       </div>
 
       {/* Grid */}

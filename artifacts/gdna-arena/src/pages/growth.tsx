@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -600,6 +601,8 @@ export default function Growth() {
         {/* ── Imperial Header ─────────────────────────────────────────── */}
         <div className="border-b border-yellow-400/20 bg-black sticky top-0 z-30">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+            {/* Smart Domain Widget — compact pill */}
+            <SmartDomainWidget domainId="xp" compact />
             <div className="font-mono text-yellow-400 text-xs tracking-[0.3em]">ARCHON SYSTEM</div>
             <div className="h-4 w-px bg-yellow-400/20" />
             <div className="font-mono text-yellow-400/60 text-xs tracking-widest">{activeProfile.archonCode}</div>

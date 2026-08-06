@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ReactNode } from "react";
 import {
@@ -175,6 +176,9 @@ export default function CelebrationsPage() {
       </AnimatePresence>
 
       <div className="max-w-6xl mx-auto px-4 py-10">
+        {/* Smart Domain Widget */}
+        <SmartDomainWidget domainId="competitions" label="Module Compétitions" />
+
         <div className="grid lg:grid-cols-[320px_1fr] gap-6">
           {/* ── Event list ── */}
           <div className="space-y-4">

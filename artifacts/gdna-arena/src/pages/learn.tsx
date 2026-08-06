@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, Play, CheckCircle2, Zap, Users, Clock, Star, GraduationCap, ExternalLink, Award, Filter } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -137,6 +138,9 @@ export default function LearnPage() {
       </AnimatePresence>
 
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-10">
+        {/* ── Smart Domain Widget ── */}
+        <SmartDomainWidget domainId="education" label="Module Éducation" />
+
         {/* ── Domain filter ── */}
         <div className="flex gap-2 flex-wrap">
           {DOMAINS.map(d => {

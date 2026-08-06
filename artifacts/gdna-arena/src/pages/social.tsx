@@ -3,6 +3,7 @@
  * All feature logic lives in src/components/social/
  */
 import { useState, useEffect, useRef } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { AnimatePresence, motion } from "framer-motion";
 import { Globe, MessageSquare, BookOpen, Radio, Users, Bell, Search, X } from "lucide-react";
 import { useAuth }     from "../contexts/AuthContext";
@@ -114,6 +115,11 @@ export default function SocialPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Smart Domain Widget */}
+      <div style={{ maxWidth: 880, margin: "12px auto 0", padding: "0 16px" }}>
+        <SmartDomainWidget domainId="social" label="Module Social" />
       </div>
 
       {/* Tab content */}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -492,6 +493,9 @@ export default function Games() {
           {t("compete")}
         </motion.p>
       </div>
+
+      {/* Smart Domain Widget */}
+      <SmartDomainWidget domainId="gaming" label="Module Gaming" />
 
       {/* 4-game grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import {
@@ -325,6 +326,9 @@ export default function PulsePage() {
         <div className="flex gap-6 flex-col lg:flex-row">
           {/* Feed (main) */}
           <div className="flex-1 min-w-0 space-y-5">
+            {/* Smart Domain Widget */}
+            <SmartDomainWidget domainId="social" label="Module Social & Stream" />
+
             {/* Compose */}
             <ComposeBox onPosted={() => void loadPosts(true)} />
 
