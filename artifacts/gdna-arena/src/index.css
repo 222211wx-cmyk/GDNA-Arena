@@ -305,3 +305,34 @@
 #micBtn:hover { background: #2ecc71; box-shadow: 0 0 10px #25D366; }
 .royal-btn { transition: all 0.3s ease-in-out; }
 .royal-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 0 15px #25D366; }
+
+/* [GDNA Arena] - هيبة الإمبراطورية للموبايل */
+@media (max-width: 768px) {
+  .hero-name {
+    font-size: 32px !important; /* Qaisypro2026 كبيرة وتضرب فـ العين */
+    color: gold !important;
+    text-shadow: 0 0 10px gold; /* توهج خفيف باش تبان فخمة */
+    margin-bottom: 15px !important;
+  }
+  .hero-name span {
+    color: gold !important;
+    background: none !important;
+    -webkit-text-fill-color: gold !important;
+  }
+  .hero-sub {
+    font-size: 14px !important; /* الوصف يصغر باش العنوان يبان هو الملك */
+    color: #25D366 !important; /* أخضر GDNA للهوية */
+    margin-bottom: 25px !important;
+  }
+  .royal-btn {
+    width: 90%; /* سهل الضغط بالصبع */
+    padding: 16px !important;
+    font-size: 18px !important;
+    background: linear-gradient(90deg, gold, #ffc107) !important; /* تدرج ذهبي = فخامة */
+    box-shadow: 0 0 15px gold;
+  }
+  .palace {
+    margin: 30px 10px !important;
+    border: 1px solid #25D366 !important; /* إطار أخضر رقيق أنيق */
+  }
+}

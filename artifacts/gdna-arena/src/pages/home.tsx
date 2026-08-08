@@ -29,7 +29,7 @@ export default function ApexBanner() {
         </h2>
 
         {/* Founder name */}
-        <h1 className="text-4xl sm:text-6xl md:text-8xl font-black text-white mb-4 leading-tight break-words">
+        <h1 className="hero-name text-4xl sm:text-6xl md:text-8xl font-black text-white mb-4 leading-tight break-words">
           {t("apex_founder")}
           <span className="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
             {t("apex_surname")}
@@ -37,7 +37,7 @@ export default function ApexBanner() {
         </h1>
 
         {/* Title */}
-        <p className="text-yellow-400 text-sm sm:text-xl font-semibold mb-8 tracking-wide px-2">
+        <p className="hero-sub text-yellow-400 text-sm sm:text-xl font-semibold mb-8 tracking-wide px-2">
           {t("apex_title")}
         </p>
 
