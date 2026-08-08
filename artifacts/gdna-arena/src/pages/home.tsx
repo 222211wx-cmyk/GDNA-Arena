@@ -1,12 +1,16 @@
 import { useEffect } from "react";
 import { Link } from "wouter";
 import { useLang } from "@/contexts/LangContext";
+import { useAuth } from "@/contexts/AuthContext";
+import RoyalPalace from "@/components/RoyalPalace";
 
 export default function ApexBanner() {
   const { t, lang, setLang } = useLang();
+  const { user } = useAuth();
   const isRTL = lang === "ar";
 
   return (
+    <>
     <section
       dir={isRTL ? "rtl" : "ltr"}
       className="relative w-full h-screen bg-black flex items-center justify-center overflow-hidden"
@@ -38,19 +42,49 @@ export default function ApexBanner() {
         </p>
 
         {/* CTA */}
-        <Link href="/register">
-          <button
-            className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
-            style={{ background: "gold", color: "black", border: "none" }}
-          >
-            {t("apex_join")}
-          </button>
-        </Link>
+        <button
+          className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
+          style={{ background: "gold", color: "black", border: "none" }}
+          onClick={() => document.getElementById("palace")?.scrollIntoView({ behavior: "smooth" })}
+        >
+          {t("apex_join")}
+        </button>
 
         <p dir="rtl" style={{ color: "#aaa", fontSize: 14, marginTop: 10 }}>
           + استشارة مع الحاكم Ameeq بالصوت و 20 لغة
         </p>
       </div>
     </section>
+
+    {/* ── 🏛️ قصر المشاورات — على الصفحة الرئيسية ─────────────────── */}
+    <section id="palace" className="bg-black px-4 pb-16">
+      <div className="max-w-[600px] mx-auto">
+        {user ? (
+          <RoyalPalace />
+        ) : (
+          <div
+            dir="rtl"
+            className="rounded-[20px] p-8 mt-10 text-center"
+            style={{ background: "#0f172a", border: "2px solid #25D366" }}
+          >
+            <h3 className="font-black text-lg md:text-xl mb-3" style={{ color: "#25D366" }}>
+              🏛️ قصر استشارة الحاكم Ameeq
+            </h3>
+            <p className="text-white/70 text-sm mb-5">
+              استشارة شخصية بالذكاء الاصطناعي — بالصوت وبلغتك. سجّل كمواطن باش تدخل للقصر.
+            </p>
+            <Link href="/register">
+              <button
+                className="royal-btn px-8 py-3 rounded-[50px] font-bold"
+                style={{ background: "gold", color: "black", border: "none" }}
+              >
+                {t("apex_join")}
+              </button>
+            </Link>
+          </div>
+        )}
+      </div>
+    </section>
+    </>
   );
 }

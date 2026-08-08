@@ -13,6 +13,15 @@ const TOPICS: { id: string; label: string }[] = [
 
 const SPEECH_LANG: Record<string, string> = { ar: "ar-MA", fr: "fr-FR", en: "en-US", es: "es-ES", de: "de-DE" };
 
+// حفظ التاريخ — آخر 10 استشارات فقط
+function saveToHistory(topic: string, reply: string) {
+  try {
+    const history = JSON.parse(localStorage.getItem("ameeq_history") || "[]") as unknown[];
+    history.unshift({ topic, reply, date: new Date().toLocaleString() });
+    localStorage.setItem("ameeq_history", JSON.stringify(history.slice(0, 10)));
+  } catch { /* localStorage unavailable — ignore */ }
+}
+
 function speak(text: string, lang: string) {
   try {
     speechSynthesis.cancel();
@@ -48,6 +57,7 @@ export default function RoyalPalace() {
       const data = (await res.json()) as { reply?: string; error?: string };
       if (!res.ok || !data.reply) throw new Error(data.error ?? "فشل الاتصال");
       setAnswer(data.reply);
+      saveToHistory(topic.label, data.reply);
       speak(data.reply, lang);
     } catch {
       setError("الحاكم مشغول فـ اجتماع. عاود من بعد.");
@@ -85,6 +95,7 @@ export default function RoyalPalace() {
         const data = (await res.json()) as { reply?: string; error?: string };
         if (!res.ok || !data.reply) throw new Error(data.error ?? "فشل الاتصال");
         setAnswer(data.reply);
+        saveToHistory(`🎙️ ${transcript}`, data.reply);
         speak(data.reply, lang);
       } catch {
         setError("الحاكم مشغول فـ اجتماع. عاود من بعد.");
