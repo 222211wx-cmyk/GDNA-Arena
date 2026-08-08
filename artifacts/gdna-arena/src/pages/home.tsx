@@ -39,10 +39,17 @@ export default function ApexBanner() {
 
         {/* CTA */}
         <Link href="/register">
-          <button className="bg-yellow-500 text-black px-8 py-3 rounded-full font-bold text-lg hover:scale-105 hover:bg-yellow-400 transition-all shadow-[0_0_30px_rgba(255,215,0,0.3)]">
+          <button
+            className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
+            style={{ background: "gold", color: "black", border: "none" }}
+          >
             {t("apex_join")}
           </button>
         </Link>
+
+        <p dir="rtl" style={{ color: "#aaa", fontSize: 14, marginTop: 10 }}>
+          + استشارة مع الحاكم Ameeq بالصوت و 20 لغة
+        </p>
       </div>
     </section>
   );

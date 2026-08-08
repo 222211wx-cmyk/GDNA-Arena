@@ -616,7 +616,7 @@ export const T: Record<string, Record<string, string>> = {
     status_online: "Statut: En ligne",
     apex_arena: "GDNA ARENA", apex_founder: "Qaisypro2026", apex_surname: "",
     apex_title: "FONDATEUR DE L'EMPIRE • CITOYEN LE PLUS HONORÉ",
-    apex_join: "REJOINDRE L'EMPIRE",
+    apex_join: "REJOIGNEZ L'EMPIRE",
     live_rankings: "CLASSEMENTS EN DIRECT", globalstar_label: "L'Étoile Mondiale",
   },
   es: {
