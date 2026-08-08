@@ -20,12 +20,12 @@ export default function ApexBanner() {
       {/* Content */}
       <div className="relative z-10 text-center px-4">
         {/* Arena label */}
-        <h2 className="text-yellow-400 text-2xl tracking-[0.5em] mb-6 font-semibold">
+        <h2 className="text-yellow-400 text-base sm:text-2xl tracking-[0.35em] sm:tracking-[0.5em] mb-4 sm:mb-6 font-semibold">
           {t("apex_arena")}
         </h2>
 
         {/* Founder name */}
-        <h1 className="text-6xl md:text-8xl font-black text-white mb-4 leading-tight">
+        <h1 className="text-4xl sm:text-6xl md:text-8xl font-black text-white mb-4 leading-tight break-words">
           {t("apex_founder")}
           <span className="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
             {t("apex_surname")}
@@ -33,7 +33,7 @@ export default function ApexBanner() {
         </h1>
 
         {/* Title */}
-        <p className="text-yellow-400 text-xl font-semibold mb-8 tracking-wide">
+        <p className="text-yellow-400 text-sm sm:text-xl font-semibold mb-8 tracking-wide px-2">
           {t("apex_title")}
         </p>
 

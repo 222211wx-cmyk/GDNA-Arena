@@ -296,3 +296,12 @@
   0% { transform: translateX(0); }
   100% { transform: translateX(-33.33%); }
 }
+
+/* [GDNA Arena] - إفكتات القصر الملكي */
+.msg-you:hover { background: #008575; transform: translateX(-3px); }
+.msg-ai:hover { background: #2a3a48; transform: translateX(3px); }
+.chat-box img:hover { transform: scale(1.1); border: 2px solid #25D366; }
+.chat-box, .msg-you, .msg-ai { transition: all 0.3s ease-in-out; }
+#micBtn:hover { background: #2ecc71; box-shadow: 0 0 10px #25D366; }
+.royal-btn { transition: all 0.3s ease-in-out; }
+.royal-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 0 15px #25D366; }

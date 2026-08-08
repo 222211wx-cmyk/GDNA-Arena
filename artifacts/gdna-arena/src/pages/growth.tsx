@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import SmartDomainWidget from "@/components/SmartDomainWidget";
+import RoyalPalace from "@/components/RoyalPalace";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -167,7 +168,7 @@ export default function Growth() {
   const [missionLoading, setMissionLoading] = useState(false);
   const [missionResult, setMissionResult] = useState<Record<string, string> | null>(null);
   const [missionDim, setMissionDim] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"profile" | "oracle" | "calibration">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "oracle" | "calibration" | "pillars" | "ameeq">("profile");
   const [breathPhase, setBreathPhase] = useState<typeof BREATH_PHASES[number]>("inhale");
   const [breathing, setBreathing] = useState(false);
   const [breathCount, setBreathCount] = useState(0);
@@ -621,6 +622,7 @@ export default function Growth() {
               { id: "pillars", label: "FOUR PILLARS", symbol: "▓" },
               { id: "oracle", label: "ORACLE INTELLIGENCE", symbol: "👁" },
               { id: "calibration", label: "BREATH CALIBRATION", symbol: "∿" },
+              { id: "ameeq", label: "AMEEQ PALACE", symbol: "🏛️" },
             ] as const).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`px-5 py-2.5 font-mono text-xs tracking-widest border-b-2 transition-all ${
@@ -1126,6 +1128,12 @@ export default function Growth() {
           {/* ════════════════════════════════════════════════════════════ */}
           {/* TAB: BREATH CALIBRATION                                     */}
           {/* ════════════════════════════════════════════════════════════ */}
+          {activeTab === "ameeq" && (
+            <div className="max-w-3xl mx-auto">
+              <RoyalPalace />
+            </div>
+          )}
+
           {activeTab === "calibration" && (
             <div className="space-y-6">
               <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em] mb-2">
