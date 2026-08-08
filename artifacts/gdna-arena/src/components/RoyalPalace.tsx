@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Crown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,13 +13,27 @@ const TOPICS: { id: string; label: string }[] = [
 
 const SPEECH_LANG: Record<string, string> = { ar: "ar-MA", fr: "fr-FR", en: "en-US", es: "es-ES", de: "de-DE" };
 
-// حفظ التاريخ — آخر 10 استشارات فقط
-function saveToHistory(topic: string, reply: string) {
+type HistoryItem = { topic: string; reply: string; date: string };
+
+function readHistory(): HistoryItem[] {
   try {
-    const history = JSON.parse(localStorage.getItem("ameeq_history") || "[]") as unknown[];
+    return JSON.parse(localStorage.getItem("ameeq_history") || "[]") as HistoryItem[];
+  } catch {
+    return [];
+  }
+}
+
+// حفظ التاريخ — آخر 10 استشارات فقط
+function saveToHistory(topic: string, reply: string): HistoryItem[] {
+  try {
+    const history = readHistory();
     history.unshift({ topic, reply, date: new Date().toLocaleString() });
-    localStorage.setItem("ameeq_history", JSON.stringify(history.slice(0, 10)));
-  } catch { /* localStorage unavailable — ignore */ }
+    const trimmed = history.slice(0, 10);
+    localStorage.setItem("ameeq_history", JSON.stringify(trimmed));
+    return trimmed;
+  } catch {
+    return [];
+  }
 }
 
 function speak(text: string, lang: string) {
@@ -39,6 +53,9 @@ export default function RoyalPalace() {
   const [activeTopic, setActiveTopic] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [listening, setListening] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  useEffect(() => { setHistory(readHistory()); }, []);
 
   if (!user) return null;
 
@@ -57,7 +74,7 @@ export default function RoyalPalace() {
       const data = (await res.json()) as { reply?: string; error?: string };
       if (!res.ok || !data.reply) throw new Error(data.error ?? "فشل الاتصال");
       setAnswer(data.reply);
-      saveToHistory(topic.label, data.reply);
+      setHistory(saveToHistory(topic.label, data.reply));
       speak(data.reply, lang);
     } catch {
       setError("الحاكم مشغول فـ اجتماع. عاود من بعد.");
@@ -95,7 +112,7 @@ export default function RoyalPalace() {
         const data = (await res.json()) as { reply?: string; error?: string };
         if (!res.ok || !data.reply) throw new Error(data.error ?? "فشل الاتصال");
         setAnswer(data.reply);
-        saveToHistory(`🎙️ ${transcript}`, data.reply);
+        setHistory(saveToHistory(`🎙️ ${transcript}`, data.reply));
         speak(data.reply, lang);
       } catch {
         setError("الحاكم مشغول فـ اجتماع. عاود من بعد.");
@@ -175,6 +192,24 @@ export default function RoyalPalace() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 📜 سجل الاستشارات السابقة */}
+      {history.length > 0 && (
+        <div id="historyBox" dir="rtl" style={{ marginTop: 15, textAlign: "right", fontSize: 12, color: "#aaa" }}>
+          <h4 className="font-bold mb-2" style={{ color: "#25D366" }}>📜 سجل الاستشارات السابقة</h4>
+          <div id="historyList" className="space-y-2">
+            {history.map((h, i) => (
+              <details key={i} className="rounded-lg p-2" style={{ background: "#1a2332" }}>
+                <summary className="cursor-pointer">
+                  <span style={{ color: "#25D366" }}>{h.topic}</span>
+                  <span className="mr-2 opacity-60"> — {h.date}</span>
+                </summary>
+                <div className="msg-ai mt-2 p-2 rounded-lg whitespace-pre-wrap text-white/80">{h.reply}</div>
+              </details>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
