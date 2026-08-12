@@ -5,6 +5,15 @@ import { validateContent } from "../lib/moderate";
 
 const router: IRouter = Router();
 
+export function isValidAttachmentUrl(url: string): boolean {
+  if (typeof url !== "string" || url.length > 2000) return false;
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // ── GET /messages/rooms — list my rooms ───────────────────────────────────────
 router.get("/messages/rooms", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
@@ -82,6 +91,10 @@ router.post("/messages/rooms/:id/join", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
   const roomId = parseInt(req.params.id);
+  if (isNaN(roomId)) { res.status(400).json({ error: "Invalid room ID" }); return; }
+  const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
+  if (!room) { res.status(404).json({ error: "Room not found" }); return; }
+  if (room.type !== "group") { res.status(403).json({ error: "Direct rooms cannot be joined" }); return; }
   const [me] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!me) { res.status(404).json({ error: "User not found" }); return; }
   const [exists] = await db.select().from(dmRoomMembers)
@@ -97,6 +110,11 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
   const roomId = parseInt(req.params.id);
+  if (isNaN(roomId)) { res.status(400).json({ error: "Invalid room ID" }); return; }
+
+  const [membership] = await db.select().from(dmRoomMembers)
+    .where(and(eq(dmRoomMembers.roomId, roomId), eq(dmRoomMembers.userId, userId))).limit(1);
+  if (!membership) { res.status(403).json({ error: "Not a member of this room" }); return; }
 
   const msgs = await db.select().from(dmMessages)
     .where(eq(dmMessages.roomId, roomId))
@@ -117,17 +135,29 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
   const roomId = parseInt(req.params.id);
+  if (isNaN(roomId)) { res.status(400).json({ error: "Invalid room ID" }); return; }
 
-  const { content, audioUrl, videoUrl, type = "text" } = req.body as {
-    content?: string; audioUrl?: string; videoUrl?: string; type?: string;
+  const [membership] = await db.select().from(dmRoomMembers)
+    .where(and(eq(dmRoomMembers.roomId, roomId), eq(dmRoomMembers.userId, userId))).limit(1);
+  if (!membership) { res.status(403).json({ error: "Not a member of this room" }); return; }
+
+  const { content, audioUrl, videoUrl, fileUrl, type = "text" } = req.body as {
+    content?: string; audioUrl?: string; videoUrl?: string; fileUrl?: string; type?: string;
   };
 
-  if (!content?.trim() && !audioUrl && !videoUrl) {
+  if (!content?.trim() && !audioUrl && !videoUrl && !fileUrl) {
     res.status(400).json({ error: "Message content required" }); return;
   }
 
+  for (const url of [audioUrl, videoUrl, fileUrl]) {
+    if (url !== undefined && !isValidAttachmentUrl(url)) {
+      res.status(400).json({ error: "Invalid attachment URL — must be https and under 2000 chars" }); return;
+    }
+  }
+
   if (content) {
-    const check = await validateContent(content, { allowTrivial: false });
+    const hasAttachment = Boolean(audioUrl ?? videoUrl ?? fileUrl);
+    const check = await validateContent(content, { allowTrivial: hasAttachment });
     if (!check.ok) { res.status(400).json({ error: check.reason }); return; }
   }
 
@@ -137,7 +167,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   const [msg] = await db.insert(dmMessages).values({
     roomId, userId, username: me.username,
     content: content?.trim() ?? null,
-    audioUrl: audioUrl ?? null, videoUrl: videoUrl ?? null, type,
+    audioUrl: audioUrl ?? null, videoUrl: videoUrl ?? null, fileUrl: fileUrl ?? null, type,
   }).returning();
 
   res.status(201).json({ message: msg });

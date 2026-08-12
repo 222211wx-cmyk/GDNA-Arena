@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { pool as _pool } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
+import { isValidAttachmentUrl } from "./messages";
 
 const pool = _pool!;
 const router: IRouter = Router();
@@ -62,12 +63,16 @@ router.post("/social/v2/post", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
 
-  const { content, domain = "general", type = "post" } = req.body as {
-    content: string; domain?: string; type?: string;
+  const { content, domain = "general", type = "post", imageUrl } = req.body as {
+    content: string; domain?: string; type?: string; imageUrl?: string;
   };
 
   if (!content?.trim() || content.length > 500) {
     res.status(400).json({ error: "Content required (max 500 chars)" }); return;
+  }
+
+  if (imageUrl?.trim() && !isValidAttachmentUrl(imageUrl.trim())) {
+    res.status(400).json({ error: "Invalid image URL — must be https and under 2000 chars" }); return;
   }
 
   const check = await validateContent(content, { allowTrivial: false });
@@ -83,6 +88,7 @@ router.post("/social/v2/post", async (req, res): Promise<void> => {
 
   const [post] = await db.insert(pulsePosts).values({
     userId, username: me.username, content: content.trim(), domain, type,
+    imageUrl: imageUrl?.trim() || null,
   }).returning();
 
   res.status(201).json({ post: { ...post, commentCount: 0 } });

@@ -255,6 +255,7 @@ async function ensureTables() {
         "username" text DEFAULT 'Anonymous' NOT NULL,
         "avatar" text,
         "content" text NOT NULL,
+        "image_url" text,
         "domain" text DEFAULT 'general' NOT NULL,
         "type" text DEFAULT 'post' NOT NULL,
         "likes" integer DEFAULT 0 NOT NULL,
@@ -548,7 +549,7 @@ async function ensureTables() {
       CREATE TABLE IF NOT EXISTS "dm_messages" (
         "id" serial PRIMARY KEY, "room_id" integer NOT NULL, "user_id" integer,
         "username" text NOT NULL DEFAULT 'Anonymous', "content" text,
-        "audio_url" text, "video_url" text, "type" text NOT NULL DEFAULT 'text',
+        "audio_url" text, "video_url" text, "file_url" text, "type" text NOT NULL DEFAULT 'text',
         "is_read" boolean NOT NULL DEFAULT false, "created_at" timestamp DEFAULT now() NOT NULL
       )
     `);

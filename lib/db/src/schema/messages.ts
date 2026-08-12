@@ -25,7 +25,8 @@ export const dmMessages = pgTable("dm_messages", {
   content: text("content"),               // null for audio/video messages
   audioUrl: text("audio_url"),            // YouTube/SoundCloud URL
   videoUrl: text("video_url"),
-  type: text("type").notNull().default("text"), // text | audio | video
+  fileUrl: text("file_url"),               // image/file attachment URL
+  type: text("type").notNull().default("text"), // text | audio | video | image | file
   isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
