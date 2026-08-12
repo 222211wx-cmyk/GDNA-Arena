@@ -30,6 +30,7 @@ import socialHubRouter from "./social-hub";
 import shopRouter from "./shop";
 import smartRouter from "./smart";
 import governorRouter from "./governor";
+import ameeqRouter from "./ameeq";
 
 const router: IRouter = Router();
 
@@ -55,6 +56,7 @@ router.use(notificationsRouter);
 router.use(celebrationsRouter);
 router.use(pressRouter);
 router.use(governorRouter);
+router.use(ameeqRouter);
 router.use(empireMediaRouter);
 router.use("/neural", neuralRouter);
 router.use("/genome", genomeRouter);

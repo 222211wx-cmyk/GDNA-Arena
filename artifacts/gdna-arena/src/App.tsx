@@ -44,6 +44,7 @@ import Welcome from "@/pages/welcome";
 import SocialPage  from "@/pages/social";
 import InvitePage   from "@/pages/invite";
 import Growth       from "@/pages/growth";
+import AmeeqPage    from "@/pages/ameeq";
 import PressPage    from "@/pages/press";
 import SportPage    from "@/pages/sport";
 import ShopPage     from "@/pages/shop";
@@ -76,6 +77,7 @@ function Router() {
           <Route path="/social"   component={SocialPage}  />
           <Route path="/invite"   component={InvitePage}  />
           <Route path="/growth"   component={Growth}      />
+          <Route path="/ameeq"    component={AmeeqPage}   />
           <Route path="/sport"    component={SportPage}   />
           <Route path="/shop"     component={ShopPage}    />
           <Route path="/friends"  component={FriendsPage} />
