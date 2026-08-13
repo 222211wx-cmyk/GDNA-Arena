@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
+import { CitizensListSkeleton } from "@/components/Skeleton";
 import { motion } from "framer-motion";
 import {
   Users, Crown, Sword, Shield, Zap, Coins,
@@ -154,9 +155,7 @@ export default function CitizensPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          </div>
+          <CitizensListSkeleton />
         ) : (
           <>
             {/* Top 3 Podium */}

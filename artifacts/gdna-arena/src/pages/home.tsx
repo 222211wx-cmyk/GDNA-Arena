@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "wouter";
 import { useLang } from "@/contexts/LangContext";
 import { useAuth } from "@/contexts/AuthContext";
 import RoyalPalace from "@/components/RoyalPalace";
+import { Skeleton } from "@/components/Skeleton";
 
 interface LiveStats {
   users: number;
@@ -11,17 +12,44 @@ interface LiveStats {
   totalXp: number;
 }
 
+/** Animate a number from 0 → target over ~1.2s */
+function useCountUp(target: number | null, duration = 1200) {
+  const [display, setDisplay] = useState(0);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (target === null) return;
+    const start = performance.now();
+    const step = (now: number) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(eased * target));
+      if (progress < 1) rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target, duration]);
+
+  return display;
+}
 export default function ApexBanner() {
   const { t, lang, setLang } = useLang();
   const { user } = useAuth();
   const isRTL = lang === "ar";
   const [stats, setStats] = useState<LiveStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const countUsers = useCountUp(stats?.users ?? null);
+  const countPosts = useCountUp(stats?.posts ?? null);
 
   useEffect(() => {
     fetch("/api/pulse/stats", { credentials: "include" })
       .then((r) => r.json())
       .then((data: LiveStats) => setStats(data))
-      .catch(() => {/* silently ignore — stats are decorative */});
+      .catch(() => {/* silently ignore — stats are decorative */})
+      .finally(() => setStatsLoading(false));
   }, []);
 
   return (
@@ -60,7 +88,7 @@ export default function ApexBanner() {
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link href="/games">
             <button
-              className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
+              className="royal-btn empire-btn px-8 py-3 rounded-[10px] font-bold text-lg"
               style={{ background: "gold", color: "black", border: "none" }}
             >
               {t("apex_join")}
@@ -68,7 +96,7 @@ export default function ApexBanner() {
           </Link>
           <Link href="/shop">
             <button
-              className="px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
+              className="empire-btn px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
               style={{ border: "2px solid #C9A84C" }}
             >
               {t("apex_shop")}
@@ -80,21 +108,29 @@ export default function ApexBanner() {
           + استشارة مع الحاكم Ameeq بالصوت و 20 لغة
         </p>
 
-        {/* Live stats */}
+        {/* Live stats — count-up on load */}
         <div className="flex items-center justify-center gap-8 mt-8">
           <div className="text-center">
-            <p className="text-2xl sm:text-3xl font-black text-white">
-              {stats ? stats.users.toLocaleString() : "—"}
-            </p>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-16 mx-auto mb-1" />
+            ) : (
+              <p className="text-2xl sm:text-3xl font-black text-white">
+                {countUsers.toLocaleString()}
+              </p>
+            )}
             <p className="text-yellow-400 text-xs sm:text-sm tracking-widest font-semibold uppercase mt-1">
               Citizens
             </p>
           </div>
           <div className="w-px h-10 bg-yellow-400/30" />
           <div className="text-center">
-            <p className="text-2xl sm:text-3xl font-black text-white">
-              {stats ? stats.posts.toLocaleString() : "—"}
-            </p>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-16 mx-auto mb-1" />
+            ) : (
+              <p className="text-2xl sm:text-3xl font-black text-white">
+                {countPosts.toLocaleString()}
+              </p>
+            )}
             <p className="text-yellow-400 text-xs sm:text-sm tracking-widest font-semibold uppercase mt-1">
               Voices
             </p>
@@ -152,7 +188,7 @@ export default function ApexBanner() {
             </p>
             <Link href="/register">
               <button
-                className="royal-btn px-8 py-3 rounded-[50px] font-bold"
+                className="royal-btn empire-btn px-8 py-3 rounded-[50px] font-bold"
                 style={{ background: "gold", color: "black", border: "none" }}
               >
                 {t("apex_join")}

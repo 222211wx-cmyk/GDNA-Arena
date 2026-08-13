@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Crown, Medal, Star, Zap, RefreshCw, ChevronRight, Brain } from "lucide-react";
+import { LegendsListSkeleton } from "@/components/Skeleton";
 
 interface Legend {
   id: number; name: string; domain: string; nationality: string;
@@ -90,11 +91,7 @@ export default function LegendsPage() {
       {/* Leaderboard */}
       <div className="max-w-5xl mx-auto px-4 py-10">
         {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="h-20 bg-card/40 rounded-xl animate-pulse" />
-            ))}
-          </div>
+          <LegendsListSkeleton />
         ) : (
           <div className="space-y-3">
             {legends.map((legend, idx) => {

@@ -60,14 +60,11 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
-function Router() {
+function PageWrapper() {
   const [location] = useLocation();
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
-      <CoinsDisclaimer />
-      <Navbar />
-      <main className="flex-1">
-        <ErrorBoundary key={location}>
+    <main key={location} className="flex-1 page-transition">
+      <ErrorBoundary key={location}>
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/login" component={Login} />
@@ -113,8 +110,17 @@ function Router() {
           <Route path="/wallet" component={Wallet} />
           <Route component={NotFound} />
         </Switch>
-        </ErrorBoundary>
-      </main>
+      </ErrorBoundary>
+    </main>
+  );
+}
+
+function Router() {
+  return (
+    <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
+      <CoinsDisclaimer />
+      <Navbar />
+      <PageWrapper />
       <Footer />
       <GdnAiFloating />
       <CookieBanner />

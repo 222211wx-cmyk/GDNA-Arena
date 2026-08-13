@@ -1,6 +1,79 @@
 @import "@workspace/gdna-ds/styles.css";
 
 /* App-specific CSS below (imperial effects, glows). Theme tokens come from the design system package. */
+
+/* ── Skeleton shimmer — gold on dark ───────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #1a1400 0%,
+    #2a2000 30%,
+    #3a2e00 50%,
+    #2a2000 70%,
+    #1a1400 100%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* ── Page fade-in on navigation ─────────────────────────────────────────────── */
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-transition {
+  animation: page-fade-in 0.25s ease-out both;
+}
+
+/* ── Count-up glow pulse ─────────────────────────────────────────────────────── */
+@keyframes count-glow {
+  0%, 100% { text-shadow: 0 0 0 transparent; }
+  50%       { text-shadow: 0 0 12px rgba(201, 168, 76, 0.6); }
+}
+
+.stat-counting {
+  animation: count-glow 0.8s ease-in-out;
+}
+
+/* ── Consistent hover/press states ──────────────────────────────────────────── */
+.empire-btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  min-height: 44px;
+  min-width: 44px;
+}
+.empire-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.2);
+}
+.empire-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.empire-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Card hover lift ─────────────────────────────────────────────────────────── */
+.empire-card {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.empire-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(201, 168, 76, 0.1);
+}
+
+/* Mobile tap targets — min 44px */
+@media (max-width: 768px) {
+  a, button { min-height: 44px; display: inline-flex; align-items: center; }
+  nav a { min-height: 44px; }
+}
 .neon-glow {
   box-shadow: 0 0 10px 0px hsl(var(--primary) / 0.5), 0 0 20px 0px hsl(var(--primary) / 0.3);
 }

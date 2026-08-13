@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
+import { CitizenSkeleton } from "@/components/Skeleton";
 import {
   Crown, Sword, Shield, ArrowLeft, Gamepad2, Trophy,
   MessageSquare, Eye, Coins, Zap, Star, Globe,
@@ -347,11 +348,7 @@ export default function CitizenPage() {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-    </div>
-  );
+  if (loading) return <CitizenSkeleton />;
 
   if (notFound || !data) return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
