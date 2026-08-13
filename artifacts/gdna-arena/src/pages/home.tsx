@@ -22,37 +22,79 @@ export default function ApexBanner() {
       <div className="absolute w-[800px] h-[800px] bg-yellow-500/10 rounded-full blur-3xl" />
 
       {/* Content */}
-      <div className="relative z-10 text-center px-4">
+      <div dir="rtl" className="relative z-10 text-center px-4">
         {/* Arena label */}
         <h2 className="text-yellow-400 text-base sm:text-2xl tracking-[0.35em] sm:tracking-[0.5em] mb-4 sm:mb-6 font-semibold">
-          {t("apex_arena")}
+          GDNA ARENA — gdna.tv
         </h2>
 
-        {/* Founder name */}
-        <h1 className="hero-name text-4xl sm:text-6xl md:text-8xl font-black text-white mb-4 leading-tight break-words">
-          {t("apex_founder")}
-          <span className="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-            {t("apex_surname")}
-          </span>
+        {/* Welcome heading */}
+        <h1 className="hero-name text-3xl sm:text-5xl md:text-7xl font-black text-white mb-4 leading-tight break-words">
+          مرحبا بك في{" "}
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
+            GDNA Arena
+          </span>{" "}
+          👑
         </h1>
 
-        {/* Title */}
+        {/* Tagline */}
         <p className="hero-sub text-yellow-400 text-sm sm:text-xl font-semibold mb-8 tracking-wide px-2">
-          {t("apex_title")}
+          الساحة الرسمية لجمع XP والقطع والتنافس على لقب الإمبراطور
         </p>
 
-        {/* CTA */}
-        <button
-          className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
-          style={{ background: "gold", color: "black", border: "none" }}
-          onClick={() => document.getElementById("palace")?.scrollIntoView({ behavior: "smooth" })}
-        >
-          {t("apex_join")}
-        </button>
+        {/* CTAs */}
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <Link href="/games">
+            <button
+              className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
+              style={{ background: "gold", color: "black", border: "none" }}
+            >
+              ادخل الساحة الآن
+            </button>
+          </Link>
+          <Link href="/shop">
+            <button
+              className="px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
+              style={{ border: "2px solid #C9A84C" }}
+            >
+              تصفح المتجر
+            </button>
+          </Link>
+        </div>
 
-        <p dir="rtl" style={{ color: "#aaa", fontSize: 14, marginTop: 10 }}>
+        <p dir="rtl" style={{ color: "#aaa", fontSize: 14, marginTop: 14 }}>
           + استشارة مع الحاكم Ameeq بالصوت و 20 لغة
         </p>
+      </div>
+    </section>
+
+    {/* ── الأقسام الثلاثة: الساحة / المتجر / المهام ─────────────── */}
+    <section id="pillars" dir="rtl" className="bg-black px-4 py-14 text-center">
+      <p className="text-white/50 mb-10 text-lg">الساحة الرسمية. اختر طريقك يا مواطن</p>
+      <div className="max-w-[1000px] mx-auto flex flex-wrap justify-center gap-6">
+        {[
+          { href: "/games", title: "⚔️ الساحة", desc: "اجمع XP. تنافس. ارتقي من جندي لإمبراطور", cta: "ادخل الساحة" },
+          { href: "/shop", title: "🛒 المتجر", desc: "اصرف القطع. اشتري الترقيات والأدوات النادرة", cta: "تصفح المتجر" },
+          { href: "/growth", title: "🎯 المهام", desc: "انجز المهام اليومية واربح مكافآت ضخمة", cta: "ابدأ المهمة" },
+        ].map((s) => (
+          <Link key={s.href} href={s.href}>
+            <div
+              className="group rounded-[20px] p-8 w-[280px] text-center cursor-pointer transition-all duration-300 hover:scale-105"
+              style={{ background: "#111", border: "2px solid #333" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "gold"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#333"; }}
+            >
+              <h3 className="font-black text-2xl mb-3" style={{ color: "gold" }}>{s.title}</h3>
+              <p className="text-white/80 text-sm">{s.desc}</p>
+              <span
+                className="block mt-4 py-3 rounded-[10px] font-bold text-white"
+                style={{ background: "red" }}
+              >
+                {s.cta}
+              </span>
+            </div>
+          </Link>
+        ))}
       </div>
     </section>
 
