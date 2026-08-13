@@ -194,8 +194,22 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
         {post.content}
       </div>
 
-      {/* Attached image */}
-      {post.imageUrl && (
+      {/* Attached media — image or YouTube embed */}
+      {post.imageUrl && post.mediaType === "video" && (() => {
+        const ytId = post.imageUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]{11})/)?.[1];
+        return ytId ? (
+          <div style={{ margin: "0 16px 12px", borderRadius: 10, overflow: "hidden", aspectRatio: "16/9", background: "#000" }}>
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${ytId}?rel=0&modestbranding=1`}
+              title="YouTube video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+            />
+          </div>
+        ) : null;
+      })()}
+      {post.imageUrl && post.mediaType !== "video" && (
         <div style={{ margin: "0 16px 12px" }}>
           <img src={post.imageUrl} alt="" style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 8 }}
             onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />

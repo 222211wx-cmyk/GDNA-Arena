@@ -58,21 +58,39 @@ router.get("/social/v2/feed", async (req, res): Promise<void> => {
   res.json({ posts: enriched });
 });
 
+// ── YouTube URL helper ─────────────────────────────────────────────────────────
+function getYouTubeId(url: string): string | null {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]{11})/);
+  return m ? m[1] : null;
+}
+
+function detectMediaType(url: string): "image" | "video" | null {
+  if (!url) return null;
+  if (getYouTubeId(url)) return "video";
+  return "image";
+}
+
 // POST /api/social/v2/post — create post
 router.post("/social/v2/post", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
 
-  const { content, domain = "general", type = "post", imageUrl } = req.body as {
-    content: string; domain?: string; type?: string; imageUrl?: string;
+  const { content, domain = "general", type = "post", imageUrl, mediaUrl } = req.body as {
+    content: string; domain?: string; type?: string; imageUrl?: string; mediaUrl?: string;
   };
+
+  // Accept either imageUrl (legacy) or mediaUrl (new unified field)
+  const rawMediaUrl = (mediaUrl ?? imageUrl ?? "").trim();
 
   if (!content?.trim() || content.length > 500) {
     res.status(400).json({ error: "Content required (max 500 chars)" }); return;
   }
 
-  if (imageUrl?.trim() && !isValidAttachmentUrl(imageUrl.trim())) {
-    res.status(400).json({ error: "Invalid image URL — must be https and under 2000 chars" }); return;
+  if (rawMediaUrl) {
+    const isYouTube = !!getYouTubeId(rawMediaUrl);
+    if (!isYouTube && !isValidAttachmentUrl(rawMediaUrl)) {
+      res.status(400).json({ error: "Invalid media URL — must be https, a YouTube link, or under 2000 chars" }); return;
+    }
   }
 
   const check = await validateContent(content, { allowTrivial: false });
@@ -86,9 +104,12 @@ router.post("/social/v2/post", async (req, res): Promise<void> => {
     .set({ xp: sql`${usersTable.xp} + 20` })
     .where(eq(usersTable.id, userId));
 
+  const resolvedMediaType = rawMediaUrl ? detectMediaType(rawMediaUrl) : null;
+
   const [post] = await db.insert(pulsePosts).values({
     userId, username: me.username, content: content.trim(), domain, type,
-    imageUrl: imageUrl?.trim() || null,
+    imageUrl: rawMediaUrl || null,
+    mediaType: resolvedMediaType,
   }).returning();
 
   res.status(201).json({ post: { ...post, commentCount: 0 } });

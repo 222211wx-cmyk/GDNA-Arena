@@ -39,8 +39,9 @@ export const SOCIAL_T: Record<string, Record<string, string>> = {
     screenshot_warning: "⚠️ Screenshot may have been taken",
     call_history: "Call History", call_missed: "Missed", call_answered: "Answered",
     call_ended: "Ended", call_audio: "Voice", call_video: "Video",
-    attach_image: "Attach Image", attach_file: "Attach File",
-    image_url: "Paste image URL…",
+    attach_image: "Attach Media", attach_file: "Attach File",
+    image_url: "Image or YouTube URL…",
+    video_embed: "YouTube video attached",
     mark_read: "Mark all read",
   },
   ar: {

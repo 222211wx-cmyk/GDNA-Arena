@@ -7,7 +7,8 @@ export const pulsePosts = pgTable("pulse_posts", {
   username: text("username").notNull().default("Anonymous"),
   avatar: text("avatar"),                      // initials fallback
   content: text("content").notNull(),
-  imageUrl: text("image_url"),                 // optional attached image
+  imageUrl: text("image_url"),                 // optional attached image or video URL
+  mediaType: text("media_type"),              // "image" | "video" | null
   domain: text("domain").notNull().default("general"), // sport|tech|music|business|general
   type: text("type").notNull().default("post"), // post|victory|tribute|vision
   likes: integer("likes").notNull().default(0),

@@ -10,6 +10,7 @@ export interface FeedPost {
   likes: number;
   commentCount: number;
   imageUrl?: string;
+  mediaType?: string;   // "image" | "video"
   createdAt: string;
 }
 

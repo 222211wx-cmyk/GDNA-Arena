@@ -2,7 +2,7 @@
  * FeedTab — post composer, trending strip, domain filters, and feed list
  */
 import { useState, useEffect, useCallback } from "react";
-import { TrendingUp, Image } from "lucide-react";
+import { TrendingUp, Image, Video } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import FeedCard from "./FeedCard";
 import Avatar from "./Avatar";
@@ -84,7 +84,7 @@ interface Props {
 export default function FeedTab({ user, st, dir }: Props) {
   const [posts,    setPosts]    = useState<FeedPost[]>([]);
   const [content,  setContent]  = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [mediaUrl, setMediaUrl] = useState("");
   const [showImg,  setShowImg]  = useState(false);
   const [domain,   setDomain]   = useState("general");
   const [filter,   setFilter]   = useState("all");
@@ -111,19 +111,27 @@ export default function FeedTab({ user, st, dir }: Props) {
   useEffect(() => { loadFeed(); }, [loadFeed]);
   useEffect(() => { loadSaved(); }, [loadSaved]);
 
+  // Detect YouTube ID from a URL
+  function getYouTubeId(url: string): string | null {
+    const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]{11})/);
+    return m ? m[1] : null;
+  }
+
+  const isYouTube = !!getYouTubeId(mediaUrl);
+
   async function submitPost() {
     if (!content.trim() || posting || !user) return;
     setPosting(true);
     try {
       const r = await fetch(api("/api/social/v2/post"), {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: content.trim(), domain, imageUrl: imageUrl.trim() || undefined }),
+        body: JSON.stringify({ content: content.trim(), domain, mediaUrl: mediaUrl.trim() || undefined }),
         credentials: "include",
       });
       if (r.ok) {
         const j = await r.json();
         setPosts(prev => [j.post, ...prev]);
-        setContent(""); setImageUrl(""); setShowImg(false);
+        setContent(""); setMediaUrl(""); setShowImg(false);
       }
     } finally { setPosting(false); }
   }
@@ -152,11 +160,18 @@ export default function FeedTab({ user, st, dir }: Props) {
               placeholder={st.post_placeholder} maxLength={500} dir={dir} rows={3}
               style={{ flex: 1, background: "transparent", border: "none", color: "#fff", resize: "none", fontSize: 14, outline: "none", lineHeight: 1.5 }} />
           </div>
-          {/* Optional image URL */}
+          {/* Optional media URL — image or YouTube */}
           {showImg && (
-            <input value={imageUrl} onChange={e => setImageUrl(e.target.value)}
-              placeholder={st.post_image ?? "Image URL (optional)"}
-              style={{ width: "100%", background: "#000", border: `1px solid ${GOLD}20`, borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 12, outline: "none", boxSizing: "border-box", marginTop: 8 }} />
+            <div style={{ marginTop: 8 }}>
+              <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)}
+                placeholder={st.image_url ?? "Image or YouTube URL…"}
+                style={{ width: "100%", background: "#000", border: `1px solid ${isYouTube ? "#ef4444" : `${GOLD}20`}`, borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
+              {isYouTube && (
+                <p style={{ margin: "5px 0 0", fontSize: 11, color: "#ef4444", display: "flex", alignItems: "center", gap: 4 }}>
+                  <Video size={11} /> YouTube video will be embedded
+                </p>
+              )}
+            </div>
           )}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, gap: 8, flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -168,9 +183,10 @@ export default function FeedTab({ user, st, dir }: Props) {
               ))}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => setShowImg(v => !v)} title={st.attach_image ?? "Image"}
-                style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${GOLD}25`, background: showImg ? `${GOLD}20` : "#1a1a1a", color: showImg ? GOLD : "#666", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Image size={14} />
+              <button onClick={() => { setShowImg(v => !v); if (showImg) setMediaUrl(""); }}
+                title={st.attach_image ?? "Attach Media"}
+                style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${GOLD}25`, background: showImg ? `${GOLD}20` : "#1a1a1a", color: showImg ? (isYouTube ? "#ef4444" : GOLD) : "#666", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {isYouTube ? <Video size={14} /> : <Image size={14} />}
               </button>
               <button onClick={submitPost} disabled={!content.trim() || posting}
                 style={{ padding: "8px 22px", borderRadius: 20, fontWeight: 900, fontSize: 13, border: "none", cursor: "pointer", background: content.trim() ? GOLD : "#333", color: content.trim() ? "#000" : "#666", opacity: posting ? 0.5 : 1 }}>
