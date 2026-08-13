@@ -1,13 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useLang } from "@/contexts/LangContext";
 import { useAuth } from "@/contexts/AuthContext";
 import RoyalPalace from "@/components/RoyalPalace";
 
+interface LiveStats {
+  users: number;
+  posts: number;
+  coinsCirculating: number;
+  totalXp: number;
+}
+
 export default function ApexBanner() {
   const { t, lang, setLang } = useLang();
   const { user } = useAuth();
   const isRTL = lang === "ar";
+  const [stats, setStats] = useState<LiveStats | null>(null);
+
+  useEffect(() => {
+    fetch("/api/pulse/stats", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: LiveStats) => setStats(data))
+      .catch(() => {/* silently ignore — stats are decorative */});
+  }, []);
 
   return (
     <>
@@ -63,6 +78,27 @@ export default function ApexBanner() {
         <p dir="rtl" style={{ color: "#aaa", fontSize: 14, marginTop: 14 }}>
           + استشارة مع الحاكم Ameeq بالصوت و 20 لغة
         </p>
+
+        {/* Live stats */}
+        <div className="flex items-center justify-center gap-8 mt-8">
+          <div className="text-center">
+            <p className="text-2xl sm:text-3xl font-black text-white">
+              {stats ? stats.users.toLocaleString() : "—"}
+            </p>
+            <p className="text-yellow-400 text-xs sm:text-sm tracking-widest font-semibold uppercase mt-1">
+              Citizens
+            </p>
+          </div>
+          <div className="w-px h-10 bg-yellow-400/30" />
+          <div className="text-center">
+            <p className="text-2xl sm:text-3xl font-black text-white">
+              {stats ? stats.posts.toLocaleString() : "—"}
+            </p>
+            <p className="text-yellow-400 text-xs sm:text-sm tracking-widest font-semibold uppercase mt-1">
+              Voices
+            </p>
+          </div>
+        </div>
       </div>
     </section>
 
