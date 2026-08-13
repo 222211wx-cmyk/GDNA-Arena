@@ -94,6 +94,18 @@ function CallHistoryPanel({ st, user, onClose }: { st: Record<string, string>; u
   );
 }
 
+// ── Resolve uploaded-attachment paths through the artifact base path ──────────
+function resolveUrl(url: string): string {
+  return url.startsWith("/api/") ? api(url) : url;
+}
+
+const EMOJI_GROUPS: [string, string[]][] = [
+  ["😀", ["😀","😃","😄","😁","😂","🤣","😊","😍","🥰","😘","😜","🤪","😎","🤩","🥳","😏","😢","😭","😡","🤬","😱","🥺","😴","🤔","🤫","🤗","😇","🙄","😬","🤯"]],
+  ["👍", ["👍","👎","👏","🙏","💪","🤝","✌️","🤞","👊","✊","🖐️","👋","🫡","💅","🤙","👀","🧠","❤️","💛","💚","💙","🖤","💔","💯","✨","🔥","⚡","💥","🎉","🎊"]],
+  ["👑", ["👑","🏆","🥇","🥈","🥉","⭐","🌟","💎","🏅","🎖️","⚔️","🛡️","🏰","🦁","🦅","🐉","🇲🇦","🌍","🚀","💰","🪙","📈","🎯","🧿","🕌","🌙","☀️","🌹","🗿","♾️"]],
+  ["⚽", ["⚽","🏀","🎾","🏐","🎮","🕹️","🎲","♟️","🎵","🎶","🎤","🎧","🎸","🥁","🎬","🎥","📸","🍕","🍔","🌮","🍩","☕","🍵","🥤","🚗","✈️","⏰","📱","💻","📚"]],
+];
+
 // ── Main MessagesTab ──────────────────────────────────────────────────────────
 interface Props {
   user: { id: number; username: string } | null;
@@ -117,6 +129,14 @@ export default function MessagesTab({ user, st, dir }: Props) {
   const [imgUrl,      setImgUrl]      = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [toast,       setToast]       = useState("");
+  const [uploading,   setUploading]   = useState(false);
+  const [showEmoji,   setShowEmoji]   = useState(false);
+  const [emojiGroup,  setEmojiGroup]  = useState(0);
+  const [pending,     setPending]     = useState<{ file: File; previewUrl: string | null } | null>(null);
+  const [dragOver,    setDragOver]    = useState(false);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef  = useRef<HTMLInputElement>(null);
+  const fileRef    = useRef<HTMLInputElement>(null);
   // Call tracking for history
   const callStartRef  = useRef<{ peer: string; type: string; start: number } | null>(null);
   const recorderRef   = useRef<MediaRecorder | null>(null);
@@ -196,12 +216,14 @@ export default function MessagesTab({ user, st, dir }: Props) {
     return other?.username ?? "Chat";
   }
 
-  async function sendMessage(audioUrl?: string) {
-    if (!activeRoom || (!text.trim() && !audioUrl && !imgUrl.trim()) || sending) return;
+  async function sendMessage(audioUrl?: string, override?: object) {
+    if (!activeRoom || (!text.trim() && !audioUrl && !imgUrl.trim() && !override) || sending) return;
     setSending(true);
     try {
       let body: object;
-      if (audioUrl) {
+      if (override) {
+        body = override;
+      } else if (audioUrl) {
         body = { audioUrl, type: "audio" };
       } else if (imgUrl.trim()) {
         body = { fileUrl: imgUrl.trim(), type: "file", content: "[Image]" };
@@ -219,6 +241,80 @@ export default function MessagesTab({ user, st, dir }: Props) {
         loadRooms();
       }
     } finally { setSending(false); }
+  }
+
+  // ── Upload a real file (gallery / camera / files / voice note) then send it ──
+  async function uploadAndSend(file: File | Blob, fallbackName = "attachment") {
+    if (!activeRoom || uploading) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file instanceof File ? file.name : `${fallbackName}.webm`);
+      const r = await fetch(api("/api/messages/upload"), { method: "POST", body: fd, credentials: "include" });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setToast(j.error ?? "فشل رفع الملف ❌");
+        return;
+      }
+      const j = await r.json() as { url: string; kind: string; name: string };
+      const body =
+        j.kind === "audio" ? { audioUrl: j.url, type: "audio" } :
+        j.kind === "video" ? { videoUrl: j.url, type: "video" } :
+        { fileUrl: j.url, type: "file", content: j.kind === "image" ? "[Image]" : `📁 ${j.name}` };
+      await sendMessage(undefined, body);
+    } finally { setUploading(false); }
+  }
+
+  // Stage a file for preview before sending (WhatsApp-style)
+  function stageFile(f: File) {
+    if (f.size > 25 * 1024 * 1024) { setToast("الحد الأقصى 25MB ⚠️"); return; }
+    if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+    const isMedia = f.type.startsWith("image/") || f.type.startsWith("video/");
+    setPending({ file: f, previewUrl: isMedia ? URL.createObjectURL(f) : null });
+  }
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) stageFile(f);
+  }
+
+  async function confirmPending() {
+    if (!pending) return;
+    const p = pending;
+    setPending(null);
+    if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+    await uploadAndSend(p.file);
+  }
+
+  function cancelPending() {
+    if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+    setPending(null);
+  }
+
+  // Drag & drop + paste-image support
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f && activeRoom) stageFile(f);
+  }
+
+  function onPaste(e: React.ClipboardEvent) {
+    const f = Array.from(e.clipboardData.files ?? [])[0];
+    if (f) { e.preventDefault(); stageFile(f); }
+  }
+
+  // ── Contact picker (share a contact card as a text message) ──────────────────
+  async function pickContact() {
+    const nav = navigator as Navigator & { contacts?: { select: (p: string[], o?: { multiple?: boolean }) => Promise<{ name?: string[]; tel?: string[] }[]> } };
+    if (!nav.contacts?.select) { setToast("اختيار جهات الاتصال متاح فقط على الهاتف 📱"); return; }
+    try {
+      const [c] = await nav.contacts.select(["name", "tel"]);
+      if (c) {
+        const card = `👤 ${c.name?.[0] ?? "جهة اتصال"}${c.tel?.[0] ? ` — 📞 ${c.tel[0]}` : ""}`;
+        await sendMessage(undefined, { content: card, type: "text" });
+      }
+    } catch { /* user cancelled */ }
   }
 
   async function startNewChat() {
@@ -248,7 +344,7 @@ export default function MessagesTab({ user, st, dir }: Props) {
       rec.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        sendMessage(URL.createObjectURL(blob));
+        uploadAndSend(blob, "voice-note"); // real upload — the other citizen can actually hear it
         setRecording(false);
       };
       rec.start();
@@ -354,7 +450,18 @@ export default function MessagesTab({ user, st, dir }: Props) {
         </div>
 
         {/* ── Chat window ─────────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#080808", border: `1px solid ${GOLD}10`, borderRadius: 12, overflow: "hidden", position: "relative" }}>
+        <div
+          onDragOver={e => { e.preventDefault(); if (activeRoom) setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          style={{ flex: 1, display: "flex", flexDirection: "column", background: "#080808", border: `1px solid ${dragOver ? GOLD : `${GOLD}10`}`, borderRadius: 12, overflow: "hidden", position: "relative", transition: "border-color 0.15s" }}>
+          {/* Drag overlay */}
+          {dragOver && (
+            <div style={{ position: "absolute", inset: 0, background: "#000000cc", zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+              <span style={{ fontSize: 40 }}>📎</span>
+              <p style={{ margin: 0, color: GOLD, fontWeight: 800, fontSize: 15 }}>أفلت الملف هنا للإرسال</p>
+            </div>
+          )}
           {/* Call History Panel overlay */}
           <AnimatePresence>
             {showHistory && (
@@ -403,9 +510,16 @@ export default function MessagesTab({ user, st, dir }: Props) {
                       <div style={{ maxWidth: "70%", background: mine ? GOLD : "#1a1a1a", borderRadius: mine ? "14px 14px 2px 14px" : "14px 14px 14px 2px", padding: "8px 12px" }}>
                         {!mine && <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: GOLD }}>{msg.username}</p>}
                         {msg.type === "audio" && msg.audioUrl ? (
-                          <audio controls src={msg.audioUrl} style={{ maxWidth: 200, height: 36 }} />
+                          <audio controls src={resolveUrl(msg.audioUrl)} style={{ maxWidth: 200, height: 36 }} />
+                        ) : msg.type === "video" && msg.videoUrl ? (
+                          <video controls src={resolveUrl(msg.videoUrl)} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 6, display: "block" }} />
+                        ) : msg.type === "file" && msg.fileUrl && msg.content?.startsWith("📁") ? (
+                          <a href={resolveUrl(msg.fileUrl)} target="_blank" rel="noreferrer"
+                            style={{ color: mine ? "#000" : GOLD, fontSize: 13, fontWeight: 700, wordBreak: "break-word" }}>
+                            {msg.content}
+                          </a>
                         ) : msg.type === "file" && msg.fileUrl ? (
-                          <img src={msg.fileUrl} alt="attachment" style={{ maxWidth: 200, maxHeight: 200, borderRadius: 6, display: "block" }}
+                          <img src={resolveUrl(msg.fileUrl)} alt="attachment" style={{ maxWidth: 200, maxHeight: 200, borderRadius: 6, display: "block" }}
                             onError={e => { (e.target as HTMLImageElement).alt = "Image unavailable"; }} />
                         ) : (
                           <p style={{ margin: 0, fontSize: 13, color: mine ? "#000" : "#e5e7eb", wordBreak: "break-word" }} dir={dir}>{msg.content}</p>
@@ -431,29 +545,99 @@ export default function MessagesTab({ user, st, dir }: Props) {
                 </div>
               )}
 
-              {/* Input bar */}
-              <div style={{ padding: "10px 12px", borderTop: `1px solid ${GOLD}08`, display: "flex", gap: 7, alignItems: "center", flexShrink: 0 }}>
+              {/* Emoji panel — grouped tabs */}
+              {showEmoji && (
+                <div style={{ borderTop: `1px solid ${GOLD}08` }}>
+                  <div style={{ display: "flex", gap: 4, padding: "6px 12px 0" }}>
+                    {EMOJI_GROUPS.map(([icon], i) => (
+                      <button key={icon} onClick={() => setEmojiGroup(i)}
+                        style={{ background: emojiGroup === i ? `${GOLD}25` : "none", border: "none", fontSize: 16, cursor: "pointer", padding: "3px 8px", borderRadius: 6, lineHeight: 1 }}>
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ padding: "6px 12px 8px", display: "flex", flexWrap: "wrap", gap: 2, maxHeight: 120, overflowY: "auto" }}>
+                    {EMOJI_GROUPS[emojiGroup][1].map(e => (
+                      <button key={e} onClick={() => setText(t => t + e)}
+                        style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: 3, lineHeight: 1 }}>
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Attachment preview before sending */}
+              {pending && (
+                <div style={{ padding: "10px 14px", borderTop: `1px solid ${GOLD}08`, display: "flex", gap: 10, alignItems: "center" }}>
+                  {pending.previewUrl && pending.file.type.startsWith("image/") ? (
+                    <img src={pending.previewUrl} alt="preview" style={{ maxWidth: 120, maxHeight: 120, borderRadius: 8, border: `1px solid ${GOLD}30` }} />
+                  ) : pending.previewUrl ? (
+                    <video src={pending.previewUrl} style={{ maxWidth: 140, maxHeight: 120, borderRadius: 8, border: `1px solid ${GOLD}30` }} muted />
+                  ) : (
+                    <div style={{ background: "#1a1a1a", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#ddd" }}>📁 {pending.file.name}</div>
+                  )}
+                  <div style={{ flex: 1, fontSize: 12, color: "#888", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {pending.file.name} · {(pending.file.size / 1024 / 1024).toFixed(1)}MB
+                  </div>
+                  <button onClick={confirmPending} disabled={uploading} title={st.send}
+                    style={{ width: 38, height: 38, borderRadius: "50%", background: "#22c55e", border: "none", color: "#fff", cursor: "pointer", fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+                    ➤
+                  </button>
+                  <button onClick={cancelPending} title="إلغاء"
+                    style={{ width: 32, height: 32, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#ef4444", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Uploading indicator */}
+              {uploading && (
+                <div style={{ padding: "6px 14px", borderTop: `1px solid ${GOLD}08`, fontSize: 12, color: GOLD }}>
+                  ⏳ {st.uploading ?? "جاري رفع الملف…"}
+                </div>
+              )}
+
+              {/* Hidden pickers */}
+              <input ref={galleryRef} type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
+              <input ref={cameraRef}  type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
+              <input ref={fileRef}    type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
+
+              {/* Toolbar + input bar */}
+              <div style={{ padding: "10px 12px", borderTop: `1px solid ${GOLD}08`, display: "flex", gap: 5, alignItems: "center", flexShrink: 0, flexWrap: "wrap" }}>
+                {([
+                  ["📎", st.attach_gallery ?? "معرض الصور والفيديو", () => galleryRef.current?.click()],
+                  ["📷", st.attach_camera ?? "كاميرا",               () => cameraRef.current?.click()],
+                  ["👤", st.attach_contact ?? "جهات الاتصال",         pickContact],
+                  ["😀", st.attach_emoji ?? "ايموجي",                 () => setShowEmoji(v => !v)],
+                  ["📁", st.attach_file ?? "ملفات",                   () => fileRef.current?.click()],
+                ] as [string, string, () => void][]).map(([icon, title, fn]) => (
+                  <button key={icon} onClick={fn} title={title} disabled={uploading}
+                    style={{ width: 32, height: 32, borderRadius: "50%", border: "none", cursor: "pointer",
+                      background: icon === "😀" && showEmoji ? `${GOLD}25` : "#1a1a1a", fontSize: 15,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      opacity: uploading ? 0.5 : 1 }}>
+                    {icon}
+                  </button>
+                ))}
                 {/* Voice note */}
                 <button onClick={recording ? stopVoiceNote : startVoiceNote}
                   title={recording ? st.stop_recording : st.record_voice}
-                  style={{ width: 34, height: 34, borderRadius: "50%", border: "none", cursor: "pointer", background: recording ? "#ef4444" : "#1a1a1a", color: recording ? "#fff" : "#888", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  style={{ width: 32, height: 32, borderRadius: "50%", border: "none", cursor: "pointer", background: recording ? "#ef4444" : "#1a1a1a", color: recording ? "#fff" : "#888", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   {recording ? <MicOff size={14} /> : <Mic size={14} />}
-                </button>
-                {/* Attach image */}
-                <button onClick={() => setShowImgInput(v => !v)} title={st.attach_image ?? "Image"}
-                  style={{ width: 34, height: 34, borderRadius: "50%", border: "none", cursor: "pointer", background: showImgInput ? `${GOLD}20` : "#1a1a1a", color: showImgInput ? GOLD : "#888", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Image size={14} />
                 </button>
                 {/* Text input */}
                 <input value={text} onChange={e => setText(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                  onPaste={onPaste}
                   placeholder={st.type_message} dir={dir} disabled={recording}
-                  style={{ flex: 1, background: "#111", border: `1px solid ${GOLD}15`, borderRadius: 20, padding: "8px 14px", color: "#fff", fontSize: 13, outline: "none", minWidth: 0 }} />
-                {/* Send */}
+                  style={{ flex: 1, background: "#111", border: `1px solid ${GOLD}15`, borderRadius: 20, padding: "8px 14px", color: "#fff", fontSize: 13, outline: "none", minWidth: 120 }} />
+                {/* Send — green */}
                 <button onClick={() => sendMessage()}
                   disabled={(!text.trim() && !imgUrl.trim()) || sending}
-                  style={{ width: 34, height: 34, borderRadius: "50%", background: (text.trim() || imgUrl.trim()) ? GOLD : "#1a1a1a", border: "none", color: (text.trim() || imgUrl.trim()) ? "#000" : "#444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Send size={14} />
+                  title={st.send}
+                  style={{ width: 36, height: 36, borderRadius: "50%", background: (text.trim() || imgUrl.trim()) ? "#22c55e" : "#1a1a1a", border: "none", color: (text.trim() || imgUrl.trim()) ? "#fff" : "#444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16, fontWeight: 800 }}>
+                  ➤
                 </button>
               </div>
             </>

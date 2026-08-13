@@ -1,5 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { db, dmRooms, dmRoomMembers, dmMessages, usersTable } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
@@ -7,10 +10,100 @@ import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from ".
 const router: IRouter = Router();
 
 // ── Attachment URL validator ───────────────────────────────────────────────────
+// Accepts https URLs and our own uploaded-attachment paths (/api/messages/files/…)
 export function isValidAttachmentUrl(url: string): boolean {
   if (typeof url !== "string" || url.length > 2000) return false;
+  if (/^\/api\/messages\/files\/[A-Za-z0-9._-]+$/.test(url)) return true;
   try { return new URL(url).protocol === "https:"; } catch { return false; }
 }
+
+// ── Chat attachment uploads (gallery, camera, files, voice notes) ─────────────
+const chatUploadsDir = path.join(process.cwd(), "uploads", "chat");
+if (!fs.existsSync(chatUploadsDir)) fs.mkdirSync(chatUploadsDir, { recursive: true });
+
+// Strict MIME → extension matrix. The stored extension is ALWAYS chosen by the
+// server from this map — never from the client filename — so active content
+// (.html, .svg, .js …) can never be persisted or served with a dangerous type.
+const MIME_EXT: Record<string, string> = {
+  "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp",
+  "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
+  "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/webm": ".weba",
+  "audio/ogg": ".ogg", "audio/wav": ".wav",
+  "application/pdf": ".pdf", "text/plain": ".txt", "application/zip": ".zip",
+  "application/msword": ".doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+};
+// Types safe to render inline; everything else is forced to download
+const INLINE_SAFE = /^(image\/(jpeg|png|gif|webp)|video\/|audio\/)/;
+
+const chatUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, chatUploadsDir),
+    filename: (_req, file, cb) => {
+      const ext = MIME_EXT[file.mimetype] ?? ".bin";
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  fileFilter: (_req, file, cb) => {
+    if (MIME_EXT[file.mimetype]) cb(null, true);
+    else cb(new Error("نوع الملف غير مسموح"));
+  },
+});
+
+// Per-user upload rate limit (in-memory): max 15 uploads / 10 minutes
+const uploadHistory = new Map<number, number[]>();
+function uploadAllowed(userId: number): boolean {
+  const now = Date.now();
+  const recent = (uploadHistory.get(userId) ?? []).filter(t => now - t < 10 * 60 * 1000);
+  if (recent.length >= 15) { uploadHistory.set(userId, recent); return false; }
+  recent.push(now);
+  uploadHistory.set(userId, recent);
+  return true;
+}
+
+// POST /messages/upload — upload one attachment, returns its URL + kind
+router.post("/messages/upload", (req, res): void => {
+  const uploaderId = req.session?.userId;
+  if (!uploaderId) { res.status(401).json({ error: "Login required" }); return; }
+  if (!uploadAllowed(uploaderId)) {
+    res.status(429).json({ error: "تجاوزت الحد المسموح من الملفات — حاول بعد قليل ⏳" }); return;
+  }
+  chatUpload.single("file")(req, res, (err) => {
+    if (err) { res.status(400).json({ error: err.message ?? "Upload failed" }); return; }
+    if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
+    const mime = req.file.mimetype;
+    const kind = mime.startsWith("image/") ? "image"
+      : mime.startsWith("video/") ? "video"
+      : mime.startsWith("audio/") ? "audio" : "file";
+    res.json({
+      url: `/api/messages/files/${req.file.filename}`,
+      kind,
+      name: req.file.originalname,
+      size: req.file.size,
+    });
+  });
+});
+
+// GET /messages/files/:name — serve an uploaded attachment (login required)
+router.get("/messages/files/:name", (req, res): void => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Login required" }); return; }
+  const name = req.params.name;
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) { res.status(400).json({ error: "Bad name" }); return; }
+  const filePath = path.join(chatUploadsDir, name);
+  if (!filePath.startsWith(chatUploadsDir) || !fs.existsSync(filePath)) {
+    res.status(404).json({ error: "Not found" }); return;
+  }
+  // Content-Type derives from the server-chosen extension only; never sniff.
+  const ext = path.extname(name).toLowerCase();
+  const mime = Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] ?? "application/octet-stream";
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Type", mime);
+  if (!INLINE_SAFE.test(mime)) res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.sendFile(filePath);
+});
 
 // ── Helper: get membership row (null if not a member) ─────────────────────────
 async function getMembership(roomId: number, userId: number) {

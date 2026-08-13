@@ -40,6 +40,7 @@ export interface DmMessage {
   username: string;
   content?: string;
   audioUrl?: string;
+  videoUrl?: string;
   fileUrl?: string;
   type: string;   // text | audio | file
   createdAt: string;

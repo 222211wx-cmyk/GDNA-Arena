@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Bell, BellRing, X, CheckCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
+import { api } from "./social/social-i18n";
 
 interface Notif {
   id: number; type: string; title: string; body: string;
@@ -28,10 +29,13 @@ export function NotificationBell() {
 
   const load = useCallback(async () => {
     if (!user) return;
-    const res = await fetch("/api/notifications", { credentials: "include" });
-    const data = await res.json() as { notifications: Notif[]; unreadCount: number };
-    setNotifs(data.notifications ?? []);
-    setUnread(data.unreadCount ?? 0);
+    try {
+      const res = await fetch(api("/api/notifications"), { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json() as { notifications: Notif[]; unreadCount: number };
+      setNotifs(data.notifications ?? []);
+      setUnread(data.unreadCount ?? 0);
+    } catch { /* network hiccup — keep last state */ }
   }, [user]);
 
   useEffect(() => { void load(); }, [load]);
