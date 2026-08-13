@@ -1,10 +1,12 @@
-import { useEffect, useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
-import { useLang } from "@/contexts/LangContext";
 import { useAuth } from "@/contexts/AuthContext";
-import RoyalPalace from "@/components/RoyalPalace";
-import { Skeleton } from "@/components/Skeleton";
+import {
+  Crown, Flame, Users, Swords, ArrowRight, ChevronRight,
+} from "lucide-react";
 
+// ── LiveStats type (used by StatsBar) ────────────────────────────────────────
 interface LiveStats {
   users: number;
   posts: number;
@@ -12,7 +14,7 @@ interface LiveStats {
   totalXp: number;
 }
 
-/** Animate a number from 0 → target over ~1.2s */
+/** Animate a number from 0 → target over ~1.2 s (ease-out cubic) */
 function useCountUp(target: number | null, duration = 1200) {
   const [display, setDisplay] = useState(0);
   const rafRef = useRef<number | null>(null);
@@ -23,7 +25,6 @@ function useCountUp(target: number | null, duration = 1200) {
     const step = (now: number) => {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
-      // ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       setDisplay(Math.round(eased * target));
       if (progress < 1) rafRef.current = requestAnimationFrame(step);
@@ -34,170 +35,524 @@ function useCountUp(target: number | null, duration = 1200) {
 
   return display;
 }
-export default function ApexBanner() {
-  const { t, lang, setLang } = useLang();
-  const { user } = useAuth();
-  const isRTL = lang === "ar";
+
+// ── Fallback ticker items shown when no live events are in DB ─────────────────
+const FALLBACK_TICKER = [
+  { icon: "🌍", title: "FIFA WORLD CUP 2026", isLive: false, color: "#C9A84C" },
+  { icon: "⚖️", title: "GLOBALSTAR TRIBUTE HALL — vote now", isLive: false, color: "#C9A84C" },
+  { icon: "🧠", title: "GDN-AI Oracle active — processing empire data", isLive: false, color: "#8B5CF6" },
+];
+
+// ── Quick-access cards ────────────────────────────────────────────────────────
+const PORTALS = [
+  { icon: Crown,  label: "TOP 10 LEGENDS", path: "/legends",  accent: "#C9A84C", desc: "Empire's greatest" },
+  { icon: Flame,  label: "EMPIRE PULSE",   path: "/pulse",    accent: "#FF4444", desc: "Live social feed" },
+  { icon: Users,  label: "CITIZENS",       path: "/citizens", accent: "#22C55E", desc: "Browse the empire" },
+  { icon: Swords, label: "GLOBAL ARENA",  path: "/games",    accent: "#00D4FF", desc: "Battle for glory" },
+];
+
+// ── Animated green grid background ───────────────────────────────────────────
+function GridBackground() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <svg className="absolute inset-0 w-full h-full opacity-[0.04]" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#22C55E" strokeWidth="0.5" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+      </svg>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full blur-[120px] opacity-[0.07]"
+        style={{ background: "radial-gradient(circle, #22C55E 0%, transparent 70%)" }} />
+      <div className="absolute top-1/3 left-1/4 w-[300px] h-[300px] rounded-full blur-[80px] opacity-[0.04]"
+        style={{ background: "#C9A84C" }} />
+    </div>
+  );
+}
+
+// ── Live ticker — sources from /api/pulse/events, falls back to FALLBACK_TICKER
+function LiveTicker() {
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const [items, setItems] = useState<Array<{ icon: string; title: string; isLive: boolean; color: string }>>(FALLBACK_TICKER);
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/pulse/events`)
+      .then(r => r.json())
+      .then(d => {
+        const evs: Array<{ icon: string; title: string; isLive: boolean; color: string }> =
+          (d.events ?? []).slice(0, 8).map((e: any) => ({
+            icon: e.icon ?? "🌍",
+            title: e.title,
+            isLive: !!e.isLive,
+            color: e.color ?? "#C9A84C",
+          }));
+        if (evs.length > 0) setItems(evs);
+      })
+      .catch(() => {});
+  }, [BASE]);
+
+  useEffect(() => {
+    const id = setInterval(() => setIdx(p => (p + 1) % items.length), 3800);
+    return () => clearInterval(id);
+  }, [items.length]);
+
+  const ev = items[idx] ?? items[0];
+  if (!ev) return null;
+
+  return (
+    <div className="w-full overflow-hidden flex items-center gap-4 px-4 py-2.5"
+      style={{ background: "rgba(34,197,94,0.04)", borderBottom: "1px solid rgba(34,197,94,0.15)" }}>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: ev.isLive ? "#22C55E" : ev.color }} />
+        <span className="text-xs font-mono font-black tracking-[0.25em] uppercase"
+          style={{ color: ev.isLive ? "#22C55E" : ev.color }}>
+          {ev.isLive ? "LIVE" : "EVENT"}
+        </span>
+      </div>
+      <div className="w-px h-3 shrink-0 bg-white/10" />
+      <AnimatePresence mode="wait">
+        <motion.div key={idx}
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.3 }}
+          className="flex items-center gap-2 flex-1 min-w-0"
+        >
+          <span className="text-sm shrink-0">{ev.icon}</span>
+          <span className="text-xs font-mono text-white/60 truncate font-bold tracking-wide">{ev.title}</span>
+        </motion.div>
+      </AnimatePresence>
+      <Link href="/events" className="shrink-0">
+        <span className="text-xs font-mono text-white/20 hover:text-white/40 transition-colors cursor-pointer">
+          ALL EVENTS →
+        </span>
+      </Link>
+    </div>
+  );
+}
+
+// ── Empire stats bar — uses useCountUp for animated numbers ──────────────────
+function StatsBar() {
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
   const [stats, setStats] = useState<LiveStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/pulse/stats`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setStats(d))
+      .catch(() => {});
+  }, [BASE]);
 
   const countUsers = useCountUp(stats?.users ?? null);
   const countPosts = useCountUp(stats?.posts ?? null);
+  const countCoins = useCountUp(stats?.coinsCirculating ?? null);
+  const countXp    = useCountUp(stats?.totalXp ?? null);
+
+  const fmt = (n: number) => {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+    if (n >= 1_000)     return (n / 1_000).toFixed(1) + "K";
+    return String(n);
+  };
+
+  const items = [
+    { label: "CITIZENS", val: stats ? fmt(countUsers)  : "—", glyph: "◉", accent: "#22C55E" },
+    { label: "VOICES",   val: stats ? fmt(countPosts)  : "—", glyph: "◈", accent: "#C9A84C" },
+    { label: "COINS",    val: stats ? fmt(countCoins)  : "—", glyph: "⬡", accent: "#FFD700" },
+    { label: "XP",       val: stats ? fmt(countXp)     : "—", glyph: "✦", accent: "#8B5CF6" },
+  ];
+
+  return (
+    <div className="grid grid-cols-4 gap-px"
+      style={{ background: "#ffffff05", border: "1px solid #ffffff08" }}>
+      {items.map((s, i) => (
+        <div key={s.label} className="flex flex-col items-center justify-center py-4 px-2 bg-black"
+          style={{ borderRight: i < 3 ? "1px solid #ffffff06" : undefined }}>
+          <span className="text-base mb-1" style={{ color: s.accent + "50" }}>{s.glyph}</span>
+          <p className="text-xl md:text-2xl font-black font-mono" style={{ color: s.accent }}>{s.val}</p>
+          <p className="text-xs uppercase tracking-widest mt-0.5 font-mono" style={{ color: "#ffffff25" }}>{s.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Top 3 Legends preview ─────────────────────────────────────────────────────
+function TopLegendsPreview() {
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const [legends, setLegends] = useState<Array<{
+    id: number; name: string; domain: string; nationality: string; rank: number;
+  }>>([]);
 
   useEffect(() => {
-    fetch("/api/pulse/stats", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data: LiveStats) => setStats(data))
-      .catch(() => {/* silently ignore — stats are decorative */})
-      .finally(() => setStatsLoading(false));
+    fetch(`${BASE}/api/legends`)
+      .then(r => r.json())
+      .then(d => setLegends((d.legends ?? []).slice(0, 3)))
+      .catch(() => {});
+  }, [BASE]);
+
+  const RANK_GLYPHS = ["♔", "♕", "♖"];
+  const RANK_COLORS = ["#C9A84C", "#aaa9ad", "#CD7F32"];
+
+  return (
+    <div className="space-y-2">
+      {legends.map((l, i) => (
+        <Link key={l.id} href={`/legends/${l.id}`}>
+          <motion.div
+            initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
+            className="flex items-center gap-3 p-3 group cursor-pointer transition-all hover:bg-white/[0.02]"
+            style={{ border: "1px solid #C9A84C12", background: "rgba(201,168,76,0.01)" }}
+          >
+            <div className="w-7 text-center shrink-0">
+              <span className="text-base font-black" style={{ color: RANK_COLORS[i] }}>{RANK_GLYPHS[i]}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black truncate" style={{ color: RANK_COLORS[i] }}>{l.name}</p>
+              <p className="text-xs font-mono" style={{ color: "#ffffff30" }}>{l.domain} · {l.nationality}</p>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ color: "#C9A84C50" }} />
+          </motion.div>
+        </Link>
+      ))}
+      {legends.length === 0 && (
+        <div className="py-4 text-center text-xs font-mono text-white/20">Loading legends…</div>
+      )}
+    </div>
+  );
+}
+
+// ── Recent pulse posts — uses correct schema field names (username, likes) ────
+function RecentActivity() {
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const [posts, setPosts] = useState<Array<{
+    id: number; username: string; content: string; domain: string;
+    likes: number; createdAt: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/pulse/feed?limit=3`)
+      .then(r => r.json())
+      .then(d => setPosts(d.posts ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [BASE]);
+
+  const timeAgo = (iso: string) => {
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60)    return `${diff}s ago`;
+    if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  };
+
+  if (loading) {
+    return (
+      <div className="py-4 text-center text-xs font-mono text-white/20">Loading activity…</div>
+    );
+  }
+
+  if (posts.length === 0) {
+    return (
+      <div className="py-4 text-center text-xs font-mono text-white/20">No posts yet — be the first citizen to speak.</div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {posts.map((p, i) => (
+        <motion.div key={p.id}
+          initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+          className="flex gap-3 p-3 group cursor-pointer"
+          style={{ background: "rgba(255,255,255,0.02)", border: "1px solid #ffffff08" }}
+        >
+          <div className="w-8 h-8 shrink-0 flex items-center justify-center font-black text-xs"
+            style={{ background: "rgba(201,168,76,0.08)", border: "1px solid #C9A84C20", color: "#C9A84C" }}>
+            {p.username?.[0]?.toUpperCase() ?? "?"}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold" style={{ color: "#C9A84C" }}>@{p.username}</span>
+              {p.domain && p.domain !== "general" && (
+                <span className="text-xs px-1.5 py-0.5 font-mono uppercase tracking-wider"
+                  style={{ border: "1px solid #ffffff10", color: "#ffffff30" }}>{p.domain}</span>
+              )}
+              <span className="text-xs ml-auto font-mono" style={{ color: "#ffffff20" }}>{timeAgo(p.createdAt)}</span>
+            </div>
+            <p className="text-xs text-white/50 leading-relaxed line-clamp-2">{p.content}</p>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+export default function Home() {
+  const { user } = useAuth();
+  const [taglineIdx, setTaglineIdx] = useState(0);
+
+  const TAGLINES = [
+    "The empire that never sleeps.",
+    "Vote. Compete. Rise.",
+    "Every tribute shapes history.",
+    "The Oracle sees all.",
+    "Join the greatest arena on Earth.",
+  ];
+
+  useEffect(() => {
+    const id = setInterval(() => setTaglineIdx(p => (p + 1) % TAGLINES.length), 3200);
+    return () => clearInterval(id);
   }, []);
 
   return (
-    <>
-    <section
-      dir={isRTL ? "rtl" : "ltr"}
-      className="relative w-full h-screen bg-black flex items-center justify-center overflow-hidden"
-    >
-      {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black via-gray-900 to-black" />
+    <div className="min-h-screen bg-black text-white">
 
-      {/* Gold glow orb */}
-      <div className="absolute w-[800px] h-[800px] bg-yellow-500/10 rounded-full blur-3xl" />
+      {/* ── LIVE EVENTS TICKER ─────────────────────────────────────── */}
+      <LiveTicker />
 
-      {/* Content */}
-      <div className="relative z-10 text-center px-4">
-        {/* Arena label */}
-        <h2 className="text-yellow-400 text-base sm:text-2xl tracking-[0.35em] sm:tracking-[0.5em] mb-4 sm:mb-6 font-semibold">
-          {t("apex_arena")}
-        </h2>
+      {/* ── HERO SECTION ───────────────────────────────────────────── */}
+      <section className="relative min-h-[88vh] flex items-center justify-center overflow-hidden">
+        <GridBackground />
 
-        {/* Founder name */}
-        <h1 className="hero-name text-4xl sm:text-6xl md:text-8xl font-black text-white mb-4 leading-tight break-words">
-          {t("apex_founder")}
-          <span className="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-            {t("apex_surname")}
-          </span>
-        </h1>
+        {/* Scan-line overlay */}
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,197,94,0.015) 2px, rgba(34,197,94,0.015) 4px)" }} />
 
-        {/* Title */}
-        <p className="hero-sub text-yellow-400 text-sm sm:text-xl font-semibold mb-8 tracking-wide px-2">
-          {t("apex_title")}
-        </p>
+        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto space-y-8">
 
-        {/* CTAs */}
-        <div className="flex flex-wrap items-center justify-center gap-4">
-          <Link href="/games">
-            <button
-              className="royal-btn empire-btn px-8 py-3 rounded-[10px] font-bold text-lg"
-              style={{ background: "gold", color: "black", border: "none" }}
-            >
-              {t("apex_join")}
-            </button>
-          </Link>
-          <Link href="/shop">
-            <button
-              className="empire-btn px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
-              style={{ border: "2px solid #C9A84C" }}
-            >
-              {t("apex_shop")}
-            </button>
-          </Link>
-        </div>
-
-        <p style={{ color: "#aaa", fontSize: 14, marginTop: 14 }}>
-          + استشارة مع الحاكم Ameeq بالصوت و 20 لغة
-        </p>
-
-        {/* Live stats — count-up on load */}
-        <div className="flex items-center justify-center gap-8 mt-8">
-          <div className="text-center">
-            {statsLoading ? (
-              <Skeleton className="h-8 w-16 mx-auto mb-1" />
-            ) : (
-              <p className="text-2xl sm:text-3xl font-black text-white">
-                {countUsers.toLocaleString()}
-              </p>
-            )}
-            <p className="text-yellow-400 text-xs sm:text-sm tracking-widest font-semibold uppercase mt-1">
-              Citizens
-            </p>
-          </div>
-          <div className="w-px h-10 bg-yellow-400/30" />
-          <div className="text-center">
-            {statsLoading ? (
-              <Skeleton className="h-8 w-16 mx-auto mb-1" />
-            ) : (
-              <p className="text-2xl sm:text-3xl font-black text-white">
-                {countPosts.toLocaleString()}
-              </p>
-            )}
-            <p className="text-yellow-400 text-xs sm:text-sm tracking-widest font-semibold uppercase mt-1">
-              Voices
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    {/* ── Section cards: Arena / Shop / Missions ──────────────────── */}
-    <section id="pillars" className="bg-black px-4 py-14 text-center" dir={isRTL ? "rtl" : "ltr"}>
-      <p className="text-white/50 mb-10 text-lg">{t("apex_choose_path")}</p>
-      <div className="max-w-[1000px] mx-auto flex flex-wrap justify-center gap-6">
-        {[
-          { href: "/games", title: t("apex_arena_card_title"), desc: t("apex_arena_card_desc"), cta: t("apex_arena_card_cta") },
-          { href: "/shop",  title: t("apex_shop_card_title"),  desc: t("apex_shop_card_desc"),  cta: t("apex_shop_card_cta") },
-          { href: "/growth",title: t("apex_tasks_card_title"), desc: t("apex_tasks_card_desc"), cta: t("apex_tasks_card_cta") },
-        ].map((s) => (
-          <Link key={s.href} href={s.href}>
-            <div
-              className="group rounded-[20px] p-8 w-[280px] text-center cursor-pointer transition-all duration-300 hover:scale-105"
-              style={{ background: "#111", border: "2px solid #333" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "gold"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#333"; }}
-            >
-              <h3 className="font-black text-2xl mb-3" style={{ color: "gold" }}>{s.title}</h3>
-              <p className="text-white/80 text-sm">{s.desc}</p>
-              <span
-                className="block mt-4 py-3 rounded-[10px] font-bold text-white"
-                style={{ background: "#C9A84C" }}
-              >
-                {s.cta}
+          {/* Version badge */}
+          <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5"
+              style={{ border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.05)" }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-xs font-mono font-black tracking-[0.3em] uppercase text-green-400">
+                EMPIRE ETERNAL v2.0 — SYSTEM ONLINE
               </span>
             </div>
-          </Link>
-        ))}
-      </div>
-    </section>
+          </motion.div>
 
-    {/* ── 🏛️ قصر المشاورات — على الصفحة الرئيسية ─────────────────── */}
-    <section id="palace" className="bg-black px-4 pb-16">
-      <div className="max-w-[600px] mx-auto">
-        {user ? (
-          <RoyalPalace />
-        ) : (
-          <div
-            dir="rtl"
-            className="rounded-[20px] p-8 mt-10 text-center"
-            style={{ background: "#0f172a", border: "2px solid #25D366" }}
+          {/* Main title */}
+          <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.15 }}
+            className="space-y-2"
           >
-            <h3 className="font-black text-lg md:text-xl mb-3" style={{ color: "#25D366" }}>
-              🏛️ قصر استشارة الحاكم Ameeq
-            </h3>
-            <p className="text-white/70 text-sm mb-5">
-              استشارة شخصية بالذكاء الاصطناعي — بالصوت وبلغتك. سجّل كمواطن باش تدخل للقصر.
-            </p>
-            <Link href="/register">
-              <button
-                className="royal-btn empire-btn px-8 py-3 rounded-[50px] font-bold"
-                style={{ background: "gold", color: "black", border: "none" }}
+            <div className="flex items-center justify-center gap-6 mb-4">
+              <div className="h-px flex-1 max-w-[80px]"
+                style={{ background: "linear-gradient(90deg, transparent, #22C55E40)" }} />
+              <span className="text-2xl">♔</span>
+              <div className="h-px flex-1 max-w-[80px]"
+                style={{ background: "linear-gradient(90deg, #22C55E40, transparent)" }} />
+            </div>
+
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-black uppercase tracking-tight leading-none">
+              <span className="block" style={{
+                background: "linear-gradient(135deg, #22C55E 0%, #4ADE80 40%, #22C55E 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}>EMPIRE</span>
+              <span className="block text-white">ETERNAL</span>
+            </h1>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <div className="h-px w-12" style={{ background: "#22C55E30" }} />
+              <span className="text-xs font-mono tracking-[0.5em] uppercase text-green-400/50">AWAKE</span>
+              <div className="h-px w-12" style={{ background: "#22C55E30" }} />
+            </div>
+          </motion.div>
+
+          {/* Animated tagline */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+            className="h-8 flex items-center justify-center"
+          >
+            <AnimatePresence mode="wait">
+              <motion.p key={taglineIdx}
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.4 }}
+                className="text-sm md:text-base font-mono tracking-[0.2em] uppercase"
+                style={{ color: "#ffffff40" }}
               >
-                {t("apex_join")}
-              </button>
-            </Link>
-          </div>
-        )}
-      </div>
-    </section>
-    </>
+                {TAGLINES[taglineIdx]}
+              </motion.p>
+            </AnimatePresence>
+          </motion.div>
+
+          {/* CTA buttons */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="flex flex-wrap items-center justify-center gap-4"
+          >
+            {!user ? (
+              <>
+                <Link href="/register">
+                  <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
+                    style={{ background: "#22C55E", color: "#000" }}>
+                    JOIN THE EMPIRE
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </Link>
+                <Link href="/login">
+                  <button className="px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
+                    style={{ border: "1px solid #22C55E40", color: "#22C55E80", background: "rgba(34,197,94,0.04)" }}>
+                    CITIZEN LOGIN
+                  </button>
+                </Link>
+              </>
+            ) : (
+              <Link href="/hub">
+                <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
+                  style={{ background: "#22C55E", color: "#000" }}>
+                  ENTER THE HUB
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </Link>
+            )}
+          </motion.div>
+        </div>
+
+        {/* Bottom fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
+          style={{ background: "linear-gradient(to bottom, transparent, #000)" }} />
+      </section>
+
+      {/* ── EMPIRE STATS BAR ───────────────────────────────────────── */}
+      <StatsBar />
+
+      {/* ── QUICK ACCESS PORTALS ───────────────────────────────────── */}
+      <section className="px-4 py-16 max-w-7xl mx-auto">
+        <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
+          className="text-center mb-10"
+        >
+          <p className="text-xs font-mono tracking-[0.4em] uppercase mb-2" style={{ color: "#ffffff20" }}>
+            Navigate the Empire
+          </p>
+          <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">
+            IMPERIAL PORTALS
+          </h2>
+        </motion.div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {PORTALS.map((p, i) => {
+            const Icon = p.icon;
+            return (
+              <Link key={p.path} href={p.path}>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }} transition={{ delay: i * 0.08 }}
+                  className="group cursor-pointer p-6 flex flex-col items-center text-center space-y-3 transition-all hover:scale-[1.02]"
+                  style={{ border: `1px solid ${p.accent}20`, background: `${p.accent}04` }}
+                  whileHover={{ borderColor: `${p.accent}40`, backgroundColor: `${p.accent}07` }}
+                >
+                  <div className="w-12 h-12 flex items-center justify-center"
+                    style={{ border: `1px solid ${p.accent}30`, background: `${p.accent}10` }}>
+                    <Icon className="w-6 h-6" style={{ color: p.accent }} />
+                  </div>
+                  <div>
+                    <p className="font-black text-sm uppercase tracking-wider" style={{ color: p.accent }}>
+                      {p.label}
+                    </p>
+                    <p className="text-xs mt-1 font-mono" style={{ color: "#ffffff30" }}>{p.desc}</p>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ color: p.accent }} />
+                </motion.div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── BOTTOM SECTION: Legends + Recent Activity ──────────────── */}
+      <section className="px-4 pb-20 max-w-7xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-8">
+
+          {/* TOP 3 LEGENDS */}
+          <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="p-6 space-y-4"
+            style={{ border: "1px solid #C9A84C20", background: "rgba(201,168,76,0.02)" }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#C9A84C50" }}>
+                  Hall of Legends
+                </p>
+                <h3 className="font-black text-sm uppercase tracking-wider">TOP LEGENDS</h3>
+              </div>
+              <Link href="/legends">
+                <button className="text-xs font-mono uppercase tracking-wider px-3 py-1 transition-all"
+                  style={{ border: "1px solid #C9A84C25", color: "#C9A84C60" }}>
+                  View All →
+                </button>
+              </Link>
+            </div>
+            <TopLegendsPreview />
+          </motion.div>
+
+          {/* RECENT PULSE ACTIVITY */}
+          <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="p-6 space-y-4"
+            style={{ border: "1px solid #FF444415", background: "rgba(255,68,68,0.01)" }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#FF444450" }}>
+                  Empire Pulse
+                </p>
+                <h3 className="font-black text-sm uppercase tracking-wider">RECENT ACTIVITY</h3>
+              </div>
+              <Link href="/pulse">
+                <button className="text-xs font-mono uppercase tracking-wider px-3 py-1 transition-all"
+                  style={{ border: "1px solid #FF444425", color: "#FF444460" }}>
+                  View All →
+                </button>
+              </Link>
+            </div>
+            <RecentActivity />
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── JOIN THE EMPIRE CTA ────────────────────────────────────── */}
+      {!user && (
+        <section className="px-4 pb-20">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="max-w-2xl mx-auto text-center py-16 px-8 relative overflow-hidden"
+            style={{ border: "1px solid #22C55E20", background: "rgba(34,197,94,0.03)" }}
+          >
+            <div className="absolute inset-0 opacity-[0.03]">
+              <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="ctaGrid" width="30" height="30" patternUnits="userSpaceOnUse">
+                    <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#22C55E" strokeWidth="0.5" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#ctaGrid)" />
+              </svg>
+            </div>
+            <div className="relative z-10 space-y-6">
+              <div className="text-4xl">♔</div>
+              <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight">
+                <span style={{ color: "#22C55E" }}>Join</span> the Empire
+              </h2>
+              <p className="text-sm font-mono text-white/40 leading-relaxed">
+                Become a citizen of EMPIRE ETERNAL. Vote on legends, compete in the arena,
+                earn XP and coins, and shape the empire's destiny.
+              </p>
+              <Link href="/register">
+                <button className="inline-flex items-center gap-3 px-10 py-4 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
+                  style={{ background: "#22C55E", color: "#000" }}>
+                  BECOME A CITIZEN
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </Link>
+            </div>
+          </motion.div>
+        </section>
+      )}
+    </div>
   );
 }
