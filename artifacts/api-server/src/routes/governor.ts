@@ -100,4 +100,18 @@ router.post("/governor/consult", async (req, res): Promise<void> => {
   }
 });
 
+// ── GET /governor/council-reports — تقارير مجلس الذكاء للإدارة ────────────────
+router.get("/governor/council-reports", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const { pool } = await import("@workspace/db");
+  if (!pool) { res.json({ reports: [] }); return; }
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, headline, report, created_at FROM council_reports ORDER BY created_at DESC LIMIT 5`);
+    res.json({ reports: rows });
+  } catch {
+    res.json({ reports: [] });
+  }
+});
+
 export default router;

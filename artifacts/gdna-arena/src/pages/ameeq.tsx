@@ -17,13 +17,34 @@ type Msg = {
   signature?: string;
 };
 
+type CouncilReport = {
+  id: number;
+  headline: string;
+  report: {
+    state_of_empire?: string;
+    predictions?: string[];
+    research?: string[];
+    directives?: string[];
+  };
+  created_at: string;
+};
+
 export default function AmeeqPage() {
   const [messages, setMessages] = useState<Msg[]>([
     { from: "ai", text: "مرحبا. اسألني أي شيء." },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState<CouncilReport | null>(null);
+  const [showReport, setShowReport] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch(api("/api/governor/council-reports"), { credentials: "include" })
+      .then(r => (r.ok ? r.json() : { reports: [] }))
+      .then((d: { reports: CouncilReport[] }) => setReport(d.reports?.[0] ?? null))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
@@ -74,7 +95,40 @@ export default function AmeeqPage() {
           🏛️ موظف حكومي رقم {EMPLOYEE_ID} | تابع لـ {OWNER}
         </div>
         <h1 style={{ margin: "6px 0 0" }}>👑 {EMPLOYEE_NAME}</h1>
+        <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+          الحاكم الخارجي السيادي — رئيس مجلس الذكاء الإمبراطوري
+        </div>
       </header>
+
+      {report && (
+        <div style={{ background: "#0f0d05", borderBottom: "1px solid #33280a", padding: "10px 16px" }}>
+          <button onClick={() => setShowReport(s => !s)}
+            style={{ background: "none", border: "none", color: "gold", cursor: "pointer",
+              fontWeight: 700, fontSize: 13, width: "100%", textAlign: "right", padding: 0 }}>
+            🏛️ تقرير المجلس الإمبراطوري: {report.headline} {showReport ? "▲" : "▼"}
+          </button>
+          {showReport && (
+            <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: "#ddd" }}>
+              {report.report.state_of_empire && <p style={{ margin: "0 0 8px" }}>{report.report.state_of_empire}</p>}
+              {!!report.report.predictions?.length && (
+                <div><b style={{ color: "gold" }}>🔮 التنبؤات:</b>
+                  <ul style={{ margin: "4px 0 8px", paddingRight: 18 }}>
+                    {report.report.predictions.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
+              )}
+              {!!report.report.research?.length && (
+                <div><b style={{ color: "gold" }}>🔬 البحوث الجماعية:</b>
+                  <ul style={{ margin: "4px 0 8px", paddingRight: 18 }}>
+                    {report.report.research.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
+              )}
+              {!!report.report.directives?.length && (
+                <div><b style={{ color: "gold" }}>⚔️ التوجيهات نحو الريادة:</b>
+                  <ul style={{ margin: "4px 0 0", paddingRight: 18 }}>
+                    {report.report.directives.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: 20 }}>
         {messages.map((msg, i) => (

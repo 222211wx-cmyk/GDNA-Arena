@@ -10,6 +10,7 @@ import { ensureNeuralTables } from "./lib/neural-core.js";
 import { startNeuralLearningJob } from "./jobs/neural-learning.js";
 import { ensureGenomeTables } from "./lib/genome-engine.js";
 import { startGenomeEvolutionJob } from "./jobs/genome-evolution.js";
+import { startCouncilReportJob } from "./jobs/council-report.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -1076,6 +1077,7 @@ ensureTables()
     startImperialDecreeJob();
     startNeuralLearningJob();
     startGenomeEvolutionJob();
+    startCouncilReportJob();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);
