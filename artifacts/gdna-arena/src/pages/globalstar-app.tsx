@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@workspace/gdna-ds/components/ui/tooltip';
+import GameExitButton from '@/components/GameExitButton';
 import { Toaster } from '@workspace/gdna-ds/components/ui/toaster';
 import { Router as WouterRouter, Switch, Route } from 'wouter';
 import { LanguageProvider } from '@/globalstar/contexts/language-context';
@@ -27,6 +28,8 @@ export default function GlobalStarApp() {
     <QueryClientProvider client={gsQueryClient}>
       <LanguageProvider>
         <TooltipProvider>
+          {/* زر الخروج الطارئ من لعبة GlobalStar + حماية من البلوكاج */}
+          <GameExitButton />
           <WouterRouter base="/games/globalstar">
             <Switch>
               <Route path="/" component={Home} />

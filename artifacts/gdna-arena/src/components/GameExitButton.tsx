@@ -1,0 +1,77 @@
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+
+/**
+ * زر الخروج الطارئ — يبقى ثابت فوق أي شاشة لعبة.
+ * + حماية من البلوكاج: إلا بقات اللعبة 30 ثانية بلا أي حركة،
+ *   كيطلع تأكيد الخروج أوتوماتيكياً.
+ *
+ * onExit: إلا تعطات، كتسد اللعبة محلياً (مثلاً سد المودال)؛
+ * إلا ما تعطاتش، كيرجع للصفحة الرئيسية "/".
+ */
+export default function GameExitButton({
+  onExit,
+  idleMs = 30_000,
+}: {
+  onExit?: () => void;
+  idleMs?: number;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [, setLocation] = useLocation();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const doExit = () => {
+    if (onExit) onExit();
+    else setLocation("/");
+  };
+
+  // حماية من البلوكاج — 30 ثانية بلا حركة = اقتراح الخروج
+  useEffect(() => {
+    const reset = () => {
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setConfirming(true), idleMs);
+    };
+    const events: (keyof WindowEventMap)[] = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timerRef.current);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [idleMs]);
+
+  return (
+    <>
+      <button
+        onClick={() => setConfirming(true)}
+        aria-label="الخروج من اللعبة"
+        className="fixed top-[10px] left-[10px] z-[9999] bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-bold text-sm shadow-lg"
+      >
+        ❌ الخروج
+      </button>
+
+      {confirming && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 p-4" dir="rtl">
+          <div className="bg-[#111] border-2 border-yellow-400/40 rounded-2xl p-6 max-w-sm w-full text-center">
+            <p className="text-white font-bold text-lg mb-5">متأكد بغيتي تخرج من اللعبة؟</p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={doExit}
+                className="px-6 py-2.5 rounded-[10px] font-bold text-white bg-red-600 hover:bg-red-700"
+              >
+                خروج
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                className="px-6 py-2.5 rounded-[10px] font-bold text-black"
+                style={{ background: "gold" }}
+              >
+                كمّل اللعب
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

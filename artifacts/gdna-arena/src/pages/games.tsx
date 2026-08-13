@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { useLegal } from "@/contexts/LegalContext";
 import { useLocation, Link } from "wouter";
+import GameExitButton from "@/components/GameExitButton";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -663,11 +664,15 @@ export default function Games() {
       {/* Tournament Modal */}
       <AnimatePresence>
         {showTournament && (
-          <TournamentModal
-            user={user}
-            onClose={() => setShowTournament(false)}
-            onComplete={handleTournamentComplete}
-          />
+          <>
+            <TournamentModal
+              user={user}
+              onClose={() => setShowTournament(false)}
+              onComplete={handleTournamentComplete}
+            />
+            {/* زر الخروج الطارئ + حماية من البلوكاج (30 ثانية بلا حركة) */}
+            <GameExitButton onExit={() => setShowTournament(false)} />
+          </>
         )}
       </AnimatePresence>
     </div>
