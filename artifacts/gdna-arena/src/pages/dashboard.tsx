@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
-import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap } from "lucide-react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
@@ -153,6 +153,213 @@ function SmartWidget() {
             <span style={{ marginRight: 10, color: "#555", fontSize: 11, marginLeft: 12 }}>
               · عرض التوصيات الذكية
             </span>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ── Archon Identity Widget ────────────────────────────────────────────────────
+const ARCHETYPES_DASH: Record<string, { color: string; symbol: string; ar: string }> = {
+  "THE SOVEREIGN":   { color: "#C9A84C", symbol: "♔", ar: "السيد المطلق" },
+  "THE CONQUEROR":   { color: "#FF6B35", symbol: "⚔", ar: "الفاتح" },
+  "THE VISIONARY":   { color: "#A8E6CF", symbol: "👁", ar: "الرائي" },
+  "THE ARCHITECT":   { color: "#DDA0DD", symbol: "⚙", ar: "المعماري" },
+  "THE CATALYST":    { color: "#87CEEB", symbol: "◈", ar: "المحرك" },
+  "THE SENTINEL":    { color: "#98FB98", symbol: "🛡", ar: "الحارس" },
+  "THE SEEKER":      { color: "#E8C97A", symbol: "◉", ar: "الباحث" },
+};
+
+interface ArchonDashProfile {
+  archonCode: string;
+  archetype: string;
+  overallScore: number;
+  archetypeDeclaration: string | null;
+  dimensions: {
+    volontas: number; resilentia: number; intellectus: number;
+    disciplina: number; societas: number; abundantia: number; auctoritas: number;
+  };
+}
+
+function computeFourPillarsDash(d: ArchonDashProfile["dimensions"], overallScore: number) {
+  const dimVals = Object.values(d);
+  return [
+    { id: "mens",    latin: "MENS",    symbol: "🧠", color: "#A8E6CF", score: Math.round((d.intellectus + d.auctoritas) / 2) },
+    { id: "vis",     latin: "VIS",     symbol: "⚔️", color: "#C9A84C", score: Math.round((d.volontas + d.disciplina) / 2) },
+    { id: "anima",   latin: "ANIMA",   symbol: "🔥", color: "#FF8C42", score: Math.round((d.resilentia + d.societas) / 2) },
+    { id: "legatum", latin: "LEGATUM", symbol: "👑", color: "#DDA0DD", score: Math.round((d.abundantia * 0.5) + (overallScore * 0.3) + (Math.min(...dimVals) * 0.2)) },
+  ];
+}
+
+function ArchonIdentityWidget() {
+  const [, nav] = useLocation();
+  const [profile, setProfile] = useState<ArchonDashProfile | "none" | "loading">("loading");
+
+  useEffect(() => {
+    fetch("/api/archon/profile", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.session) {
+          const s = d.session;
+          setProfile({
+            archonCode: s.archonCode,
+            archetype: s.archetype ?? "THE SEEKER",
+            overallScore: Math.round(
+              [s.volontas, s.resilentia, s.intellectus, s.disciplina, s.societas, s.abundantia, s.auctoritas]
+                .reduce((a: number, b: number) => a + b, 0) / 7
+            ),
+            archetypeDeclaration: s.aiProfile?.archetype_declaration ?? null,
+            dimensions: {
+              volontas: s.volontas, resilentia: s.resilentia, intellectus: s.intellectus,
+              disciplina: s.disciplina, societas: s.societas, abundantia: s.abundantia, auctoritas: s.auctoritas,
+            },
+          });
+        } else {
+          setProfile("none");
+        }
+      })
+      .catch(() => setProfile("none"));
+  }, []);
+
+  if (profile === "loading") return null;
+
+  // ── Not initiated ──────────────────────────────────────────────────────────
+  if (profile === "none") return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+      onClick={() => nav("/growth")} style={{ cursor: "pointer" }}
+    >
+      <Card className="border-primary/20 overflow-hidden relative">
+        <CardContent className="p-6 relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="w-13 h-13 rounded-xl shrink-0 bg-primary/5 border border-primary/20 flex items-center justify-center" style={{ width: 52, height: 52 }}>
+              <Lock size={22} className="text-primary/50" />
+            </div>
+            <div className="flex-1">
+              <div className="text-primary/60 font-black text-[10px] tracking-[0.35em] uppercase mb-1">
+                EMPIRE IDENTITY
+              </div>
+              <div className="font-black text-foreground text-[15px] mb-0.5">
+                Archon Initiation Awaits
+              </div>
+              <div className="text-primary/50 text-[11px] font-mono">
+                CLASSIFIED — Complete initiation to unlock your archetype
+              </div>
+            </div>
+            <motion.div
+              animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 2, repeat: Infinity }}
+              className="bg-primary text-primary-foreground rounded-lg px-4 py-2 font-black text-xs tracking-wider shrink-0"
+            >
+              INITIATE ⚡
+            </motion.div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+
+  // ── Has archon profile ─────────────────────────────────────────────────────
+  const archInfo = ARCHETYPES_DASH[profile.archetype] ?? ARCHETYPES_DASH["THE SEEKER"];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+      onClick={() => nav("/growth")} style={{ cursor: "pointer" }}
+    >
+      <Card className="overflow-hidden relative" style={{ borderColor: `${archInfo.color}40` }}>
+        <motion.div
+          animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: `radial-gradient(ellipse at 15% 50%, ${archInfo.color}12 0%, transparent 60%)` }}
+        />
+        <CardContent style={{ padding: "22px 24px", position: "relative", zIndex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+
+            {/* Archetype symbol */}
+            <motion.div
+              animate={{ boxShadow: [`0 0 8px ${archInfo.color}40`, `0 0 24px ${archInfo.color}80`, `0 0 8px ${archInfo.color}40`] }}
+              transition={{ duration: 2.5, repeat: Infinity }}
+              style={{
+                width: 52, height: 52, borderRadius: 14, flexShrink: 0,
+                background: `linear-gradient(135deg, ${archInfo.color}30, ${archInfo.color}10)`,
+                border: `1px solid ${archInfo.color}60`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 26,
+              }}
+            >
+              {archInfo.symbol}
+            </motion.div>
+
+            {/* Text */}
+            <div className="flex-1 min-w-0">
+              <div className="font-black text-[10px] tracking-[0.35em] uppercase mb-0.5" style={{ color: `${archInfo.color}90` }}>
+                EMPIRE IDENTITY — ARCHON
+              </div>
+              <div className="font-black text-foreground text-base mb-0.5">{profile.archetype}</div>
+              <div className="font-mono text-[11px] tracking-wider" style={{ color: `${archInfo.color}80` }}>
+                {profile.archonCode}
+              </div>
+            </div>
+
+            {/* Score */}
+            <div className="flex flex-col items-center gap-0.5 shrink-0">
+              <div className="text-3xl font-black leading-none" style={{ color: archInfo.color }}>
+                {profile.overallScore}
+                <span className="text-xs text-muted-foreground font-normal">/100</span>
+              </div>
+              <div className="text-[10px] text-muted-foreground tracking-wider uppercase">SCORE</div>
+            </div>
+          </div>
+
+          {/* Four Pillars */}
+          <div className="mt-4">
+            <div className="text-muted-foreground text-[10px] font-black tracking-[0.3em] uppercase mb-2.5">
+              FOUR PILLARS — GROWTH ENGINE
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {computeFourPillarsDash(profile.dimensions, profile.overallScore).map(p => (
+                <div key={p.id}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">{p.symbol}</span>
+                      <span className="font-black text-[11px] tracking-[0.15em]" style={{ color: p.color }}>{p.latin}</span>
+                    </div>
+                    <span className="font-black text-xs" style={{ color: p.color }}>{p.score}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${p.score}%` }}
+                      transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
+                      className="h-full rounded-full"
+                      style={{ background: `linear-gradient(90deg, ${p.color}80, ${p.color})` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Archetype declaration */}
+          {profile.archetypeDeclaration && (
+            <div className="mt-3 px-4 py-2.5 rounded-xl italic text-sm text-muted-foreground leading-relaxed bg-muted/20 border-l-2"
+              style={{ borderLeftColor: `${archInfo.color}60` }}>
+              "{profile.archetypeDeclaration}"
+            </div>
+          )}
+
+          {/* CTA */}
+          <div className="mt-3">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl font-black text-xs tracking-wider text-primary-foreground cursor-pointer border-0"
+              style={{ background: `linear-gradient(135deg, ${archInfo.color}, ${archInfo.color}cc)`, color: "#000" }}
+            >
+              ♔ VIEW GROWTH ENGINE
+              <ArrowRight size={13} />
+            </motion.button>
           </div>
         </CardContent>
       </Card>
@@ -374,6 +581,9 @@ export default function Dashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* ── Archon Empire Identity ────────────────────────────────────── */}
+      <ArchonIdentityWidget />
 
       {/* ── GDN-SMART Widget ─────────────────────────────────────────── */}
       <SmartWidget />

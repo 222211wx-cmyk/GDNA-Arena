@@ -5,7 +5,8 @@ import {
   Crown, Sword, Shield, ArrowLeft, Gamepad2, Trophy,
   MessageSquare, Eye, Coins, Zap, Star, Globe,
   Music, Cpu, Briefcase, Film, Calendar, Medal, Heart,
-  AlertTriangle, CheckCircle, Phone, Video, MessageCircle
+  AlertTriangle, CheckCircle, Phone, Video, MessageCircle,
+  Lock, ExternalLink
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCallContext } from "@/contexts/CallContext";
@@ -27,6 +28,181 @@ interface Post {
   likes: number; createdAt: string;
 }
 interface Achievement { id: string; icon: string; label: string; earned: boolean }
+
+// ── Archon types ──────────────────────────────────────────────────────────────
+interface ArchonPublicProfile {
+  archonCode: string;
+  archetype: string;
+  dimensions: {
+    volontas: number; resilentia: number; intellectus: number;
+    disciplina: number; societas: number; abundantia: number; auctoritas: number;
+  };
+  overallScore: number;
+  archetypeDeclaration: string | null;
+}
+
+const ARCHETYPES: Record<string, { color: string; symbol: string; ar: string }> = {
+  "THE SOVEREIGN":   { color: "#C9A84C", symbol: "♔", ar: "السيد المطلق" },
+  "THE CONQUEROR":   { color: "#FF6B35", symbol: "⚔", ar: "الفاتح" },
+  "THE VISIONARY":   { color: "#A8E6CF", symbol: "👁", ar: "الرائي" },
+  "THE ARCHITECT":   { color: "#DDA0DD", symbol: "⚙", ar: "المعماري" },
+  "THE CATALYST":    { color: "#87CEEB", symbol: "◈", ar: "المحرك" },
+  "THE SENTINEL":    { color: "#98FB98", symbol: "🛡", ar: "الحارس" },
+  "THE SEEKER":      { color: "#E8C97A", symbol: "◉", ar: "الباحث" },
+};
+
+function computeFourPillars(d: ArchonPublicProfile["dimensions"], overallScore: number) {
+  const dimVals = Object.values(d);
+  return [
+    {
+      id: "mens",    latin: "MENS",    ar: "العقل الإمبراطوري", sub: "Clarity · Vision · Authority",
+      symbol: "🧠", color: "#A8E6CF",
+      score: Math.round((d.intellectus + d.auctoritas) / 2),
+    },
+    {
+      id: "vis",     latin: "VIS",     ar: "قوة التنفيذ",       sub: "Will · Discipline · Action",
+      symbol: "⚔️", color: "#C9A84C",
+      score: Math.round((d.volontas + d.disciplina) / 2),
+    },
+    {
+      id: "anima",   latin: "ANIMA",   ar: "روح المحارب",       sub: "Resilience · Influence · Connection",
+      symbol: "🔥", color: "#FF8C42",
+      score: Math.round((d.resilentia + d.societas) / 2),
+    },
+    {
+      id: "legatum", latin: "LEGATUM", ar: "الإرث الأبدي",      sub: "Abundance · Balance · Legacy",
+      symbol: "👑", color: "#DDA0DD",
+      score: Math.round((d.abundantia * 0.5) + (overallScore * 0.3) + (Math.min(...dimVals) * 0.2)),
+    },
+  ];
+}
+
+// ── Empire Identity Section ────────────────────────────────────────────────────
+function EmpireIdentitySection({ username }: { username: string }) {
+  const [profile, setProfile] = useState<ArchonPublicProfile | "loading" | "none">("loading");
+
+  useEffect(() => {
+    fetch(`/api/archon/profile/${encodeURIComponent(username)}`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setProfile(d ?? "none"))
+      .catch(() => setProfile("none"));
+  }, [username]);
+
+  if (profile === "loading") return (
+    <div className="mt-6 p-5 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 animate-pulse">
+      <div className="h-4 w-40 bg-yellow-500/20 rounded mb-3" />
+      <div className="h-24 bg-yellow-500/10 rounded" />
+    </div>
+  );
+
+  // ── LOCKED STATE ─────────────────────────────────────────────────────────────
+  if (profile === "none") return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      className="mt-6 rounded-2xl border border-primary/20 overflow-hidden bg-card">
+      <div className="p-5 relative">
+        <div className="relative flex flex-col items-center text-center gap-3 py-4">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-primary/5 border border-primary/20">
+            <Lock className="w-6 h-6 text-primary/50" />
+          </div>
+          <div>
+            <div className="text-xs font-black tracking-[0.4em] text-primary/60 mb-1">EMPIRE IDENTITY</div>
+            <div className="text-lg font-black text-primary/40 tracking-widest">CLASSIFIED</div>
+            <div className="text-xs text-muted-foreground mt-1 font-mono">INITIATION PENDING — ARCHON SYSTEM v4.2</div>
+          </div>
+          <div className="mt-1 px-4 py-2 rounded-xl border border-primary/20 bg-primary/5 text-xs text-primary/50 font-mono tracking-wider">
+            ⚡ THIS CITIZEN HAS NOT COMPLETED ARCHON INITIATION
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  // ── PROFILE STATE ────────────────────────────────────────────────────────────
+  const archInfo = ARCHETYPES[profile.archetype] ?? ARCHETYPES["THE SEEKER"];
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      className="mt-6 rounded-2xl border overflow-hidden"
+      style={{ borderColor: `${archInfo.color}40` }}>
+
+      {/* Header */}
+      <div className="px-5 py-3 flex items-center justify-between"
+        style={{ background: `linear-gradient(135deg, ${archInfo.color}15, transparent)`, borderBottom: `1px solid ${archInfo.color}20` }}>
+        <div className="text-xs font-black tracking-[0.4em]" style={{ color: archInfo.color }}>⚡ EMPIRE IDENTITY</div>
+        <div className="text-xs font-mono text-muted-foreground">ARCHON SYSTEM v4.2</div>
+      </div>
+
+      <div className="p-5 space-y-5 bg-card">
+
+        {/* Archetype Hero */}
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shrink-0"
+            style={{ background: `${archInfo.color}15`, border: `1px solid ${archInfo.color}40` }}>
+            {archInfo.symbol}
+          </div>
+          <div>
+            <div className="text-xs font-mono text-muted-foreground tracking-widest mb-0.5">ARCHON ARCHETYPE</div>
+            <div className="text-xl font-black tracking-wider" style={{ color: archInfo.color }}>
+              {profile.archetype}
+            </div>
+            <div className="text-sm font-bold text-muted-foreground" dir="rtl">{archInfo.ar}</div>
+          </div>
+          <div className="ml-auto text-right shrink-0">
+            <div className="text-3xl font-black" style={{ color: archInfo.color }}>{profile.overallScore}</div>
+            <div className="text-xs text-muted-foreground">/ 100 SCORE</div>
+          </div>
+        </div>
+
+        {/* Cipher code */}
+        <div className="px-4 py-2.5 rounded-xl flex items-center justify-between"
+          style={{ background: `${archInfo.color}08`, border: `1px solid ${archInfo.color}25` }}>
+          <span className="text-xs font-mono text-muted-foreground tracking-widest">CIPHER CODE</span>
+          <span className="font-mono font-black text-sm tracking-widest" style={{ color: archInfo.color }}>
+            {profile.archonCode}
+          </span>
+        </div>
+
+        {/* Four Pillars */}
+        <div>
+          <div className="text-xs font-black tracking-[0.35em] text-muted-foreground mb-3">FOUR PILLARS — GROWTH ENGINE</div>
+          <div className="space-y-3">
+            {computeFourPillars(profile.dimensions, profile.overallScore).map(p => (
+              <div key={p.id}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{p.symbol}</span>
+                    <div>
+                      <span className="text-xs font-black tracking-wider" style={{ color: p.color }}>{p.latin}</span>
+                      <span className="text-xs text-muted-foreground ml-2 hidden sm:inline">{p.sub}</span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black" style={{ color: p.color }}>{p.score}</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${p.score}%` }}
+                    transition={{ duration: 1, ease: "easeOut", delay: 0.1 }}
+                    className="h-full rounded-full"
+                    style={{ background: `linear-gradient(90deg, ${p.color}90, ${p.color})` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Archetype declaration */}
+        {profile.archetypeDeclaration && (
+          <div className="px-4 py-3 rounded-xl italic text-sm text-muted-foreground leading-relaxed bg-card border-l-2"
+            style={{ borderLeftColor: `${archInfo.color}60` }}>
+            "{profile.archetypeDeclaration}"
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 const DOMAIN_META: Record<string, { icon: React.ReactNode; color: string }> = {
   sport:    { icon: <Trophy className="w-4 h-4" />,    color: "#22d3ee" },
@@ -345,6 +521,9 @@ export default function CitizenPage() {
             </div>
           </div>
         )}
+
+        {/* Empire Identity */}
+        <EmpireIdentitySection username={username!} />
 
         {/* Achievements */}
         <div className="mt-6">

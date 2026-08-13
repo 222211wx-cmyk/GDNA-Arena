@@ -184,6 +184,48 @@ router.get("/archon/profile", async (req, res): Promise<void> => {
   res.json({ session: session ?? null });
 });
 
+// ── GET /api/archon/profile/:username — public profile lookup ─────────────────
+router.get("/archon/profile/:username", async (req, res): Promise<void> => {
+  const { username } = req.params;
+  // Resolve username → userId
+  const { usersTable } = await import("@workspace/db");
+  const [user] = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.username, username))
+    .limit(1);
+  if (!user) { res.status(404).json({ error: "Citizen not found" }); return; }
+
+  const [session] = await db.select().from(archonSessionsTable)
+    .where(eq(archonSessionsTable.userId, user.id))
+    .orderBy(desc(archonSessionsTable.createdAt))
+    .limit(1);
+
+  if (!session) { res.status(404).json({ error: "No Archon session" }); return; }
+
+  const dims = [session.volontas, session.resilentia, session.intellectus,
+                session.disciplina, session.societas, session.abundantia, session.auctoritas];
+  const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
+  const fullAiProfile = session.aiProfile as Record<string, string> | null ?? {};
+
+  // Return only the public-facing fields — no decrees, protocols, missions, or personal content
+  res.json({
+    archonCode:  session.archonCode,
+    archetype:   session.archetype,
+    dimensions:  {
+      volontas:    session.volontas,
+      resilentia:  session.resilentia,
+      intellectus: session.intellectus,
+      disciplina:  session.disciplina,
+      societas:    session.societas,
+      abundantia:  session.abundantia,
+      auctoritas:  session.auctoritas,
+    },
+    overallScore,
+    // Only expose the archetype declaration — no personal decrees/protocols/missions
+    archetypeDeclaration: fullAiProfile.archetype_declaration ?? null,
+  });
+});
+
 // ── POST /api/archon/mission ──────────────────────────────────────────────────
 router.post("/archon/mission", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
