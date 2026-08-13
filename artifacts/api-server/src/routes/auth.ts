@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcrypt";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger";
@@ -65,9 +65,16 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
 }
 
 router.post("/auth/register", async (req, res): Promise<void> => {
-  const { username, email, password } = req.body;
+  try {
+  const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!username || !email || !password) {
     res.status(400).json({ error: "Username, email, and password are required" });
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: "صيغة البريد الإلكتروني غير صحيحة" });
     return;
   }
   if (username.length < 3 || username.length > 20) {
@@ -93,19 +100,38 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const existing = await db
     .select()
     .from(usersTable)
-    .where(or(eq(usersTable.email, email), eq(usersTable.username, username)))
+    .where(or(
+      sql`LOWER(${usersTable.email}) = ${email}`,
+      sql`LOWER(${usersTable.username}) = ${username.toLowerCase()}`,
+    ))
     .limit(1);
 
   if (existing.length > 0) {
-    res.status(409).json({ error: "Email or username already taken" });
+    // Tell the citizen exactly what's taken — and that they can just log in.
+    const takenEmail = existing[0].email.toLowerCase() === email;
+    res.status(409).json({
+      error: takenEmail
+        ? "هذا البريد مسجّل من قبل — عندك حساب بالفعل، سجّل الدخول مباشرة"
+        : "اسم المستخدم مأخوذ — اختر اسماً آخر",
+    });
     return;
   }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-  const [user] = await db
-    .insert(usersTable)
-    .values({ username, email, passwordHash })
-    .returning();
+  let user;
+  try {
+    [user] = await db
+      .insert(usersTable)
+      .values({ username, email, passwordHash })
+      .returning();
+  } catch (err: any) {
+    if (err?.code === "23505" || err?.cause?.code === "23505") {
+      // Unique index race — someone registered the same email/username concurrently
+      res.status(409).json({ error: "هذا البريد أو الاسم مسجّل من قبل — سجّل الدخول مباشرة" });
+      return;
+    }
+    throw err;
+  }
 
   req.session.userId = user.id;
   req.log.info({ userId: user.id }, "User registered");
@@ -114,10 +140,16 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   sendWelcomeNotification(user.id).catch(() => {});
 
   res.status(201).json(serializeUser(user));
+  } catch (err) {
+    req.log.error(err, "Register error");
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى" });
+  }
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const { email, password } = req.body;
+  try {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!email || !password) {
     res.status(400).json({ error: "Email and password are required" });
     return;
@@ -126,7 +158,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.email, email))
+    .where(sql`LOWER(${usersTable.email}) = ${email}`)
+    .orderBy(usersTable.id)
     .limit(1);
 
   if (!user) {
@@ -134,7 +167,12 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  let valid = false;
+  try {
+    valid = await bcrypt.compare(password, user.passwordHash);
+  } catch {
+    valid = false; // malformed legacy hash — treat as invalid, not a crash
+  }
   if (!valid) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
@@ -143,6 +181,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   req.session.userId = user.id;
   req.log.info({ userId: user.id }, "User logged in");
   res.json(serializeUser(user));
+  } catch (err) {
+    req.log.error(err, "Login error");
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى" });
+  }
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {

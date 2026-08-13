@@ -28,7 +28,7 @@ export default function GlobalStarHome() {
   const [activeDomainIndex, setActiveDomainIndex] = useState(0);
   const [lineIdx, setLineIdx] = useState(0);
 
-  const activeDomain = domainsData?.domains[activeDomainIndex];
+  const activeDomain = domainsData?.domains?.[activeDomainIndex];
   const { data: figuresData, isLoading: figuresLoading } = useGetGsFigures(
     activeDomain ? { domain: activeDomain.id, limit: 3 } : undefined
   );
@@ -36,7 +36,7 @@ export default function GlobalStarHome() {
   useEffect(() => {
     if (!domainsData?.domains?.length) return;
     const id = setInterval(() => {
-      setActiveDomainIndex(p => (p + 1) % domainsData.domains.length);
+      setActiveDomainIndex(p => (p + 1) % (domainsData.domains?.length || 1));
     }, 5000);
     return () => clearInterval(id);
   }, [domainsData]);

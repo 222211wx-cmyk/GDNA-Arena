@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@workspace/gdna-ds/components/ui/toaster";
 import { TooltipProvider } from "@workspace/gdna-ds/components/ui/tooltip";
@@ -55,15 +55,18 @@ import SmartPage from "@/pages/smart";
 import SearchPage from "@/pages/search";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
 function Router() {
+  const [location] = useLocation();
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
       <CoinsDisclaimer />
       <Navbar />
       <main className="flex-1">
+        <ErrorBoundary key={location}>
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/login" component={Login} />
@@ -108,6 +111,7 @@ function Router() {
           <Route path="/wallet" component={Wallet} />
           <Route component={NotFound} />
         </Switch>
+        </ErrorBoundary>
       </main>
       <Footer />
       <GdnAiFloating />

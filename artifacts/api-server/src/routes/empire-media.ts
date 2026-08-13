@@ -30,16 +30,36 @@ const upload = multer({
 const router = Router();
 
 // ─── POST /gs/uploads ─────────────────────────────────────────────────────────
-router.post("/gs/uploads", upload.single("file"), async (req, res): Promise<void> => {
+// Resolve the logged-in citizen's username — identity comes from the session,
+// never from the client body (anyone could claim anyone's name/earnings).
+async function sessionUsername(req: { session?: { userId?: number } }): Promise<string | null> {
+  const userId = req.session?.userId;
+  if (!userId) return null;
+  const { rows } = await pool.query<{ username: string }>(
+    `SELECT username FROM users WHERE id=$1`, [userId]);
+  return rows[0]?.username ?? null;
+}
+
+// Auth gate BEFORE multer parses the body — otherwise anonymous attackers
+// could still write huge files to disk before getting their 401.
+const requireSessionFirst = async (req: any, res: any, next: any) => {
+  const name = await sessionUsername(req);
+  if (!name) { res.status(401).json({ error: "سجّل الدخول أولاً لرفع المحتوى" }); return; }
+  req.uploaderName = name;
+  next();
+};
+
+router.post("/gs/uploads", requireSessionFirst, upload.single("file"), async (req, res): Promise<void> => {
   try {
+    const uploaderName = (req as any).uploaderName as string;
     if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
-    const { title, category, uploaderName, figureTag } = req.body;
+    const { title, category, figureTag } = req.body;
     const type = req.file.mimetype.startsWith("video/") ? "video" : "audio";
     const { rows } = await pool.query(
       `INSERT INTO gs_uploads (uploader_name, title, type, category, file_path, file_name, file_size, mime_type)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [
-        uploaderName || "مواطن الإمبراطورية",
+        uploaderName,
         title || req.file.originalname,
         type,
         category || "sport",
@@ -200,8 +220,8 @@ router.get("/gs/honor-leaderboard", async (_req, res): Promise<void> => {
 // ─── GET /gs/earnings ─────────────────────────────────────────────────────────
 router.get("/gs/earnings", async (req, res): Promise<void> => {
   try {
-    const name = req.query.name as string;
-    if (!name) { res.status(400).json({ error: "name required" }); return; }
+    const name = await sessionUsername(req);
+    if (!name) { res.status(401).json({ error: "سجّل الدخول أولاً" }); return; }
 
     const { rows } = await pool.query(
       `SELECT id, title, type, category, file_name, views, earnings, created_at
@@ -221,36 +241,51 @@ router.get("/gs/earnings", async (req, res): Promise<void> => {
 // ─── POST /gs/withdrawals ─────────────────────────────────────────────────────
 router.post("/gs/withdrawals", async (req, res): Promise<void> => {
   try {
-    const { uploaderName, amountCoins } = req.body;
-    if (!uploaderName || !amountCoins) {
-      res.status(400).json({ error: "uploaderName and amountCoins required" }); return;
+    const uploaderName = await sessionUsername(req);
+    if (!uploaderName) { res.status(401).json({ error: "سجّل الدخول أولاً" }); return; }
+    const { amountCoins } = req.body;
+    if (!amountCoins) {
+      res.status(400).json({ error: "amountCoins required" }); return;
     }
     const coins = parseFloat(amountCoins);
     if (isNaN(coins) || coins <= 0) {
       res.status(400).json({ error: "Invalid amount" }); return;
     }
-    // Check available earnings
-    const { rows: earnRows } = await pool.query(
-      `SELECT COALESCE(SUM(earnings),0) as total FROM gs_uploads WHERE uploader_name=$1`,
-      [uploaderName]
-    );
-    const { rows: wdRows } = await pool.query(
-      `SELECT COALESCE(SUM(amount_coins),0) as total FROM gs_withdrawals
-       WHERE uploader_name=$1 AND status IN ('pending','approved','paid')`,
-      [uploaderName]
-    );
-    const available = parseFloat(earnRows[0].total) - parseFloat(wdRows[0].total);
-    if (coins > available) {
-      res.status(400).json({ error: "Insufficient balance", available }); return;
+    // Transaction + per-citizen advisory lock: two simultaneous withdrawal
+    // requests can never both pass the balance check (overspend race).
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`gs_wd:${uploaderName}`]);
+      const { rows: earnRows } = await client.query(
+        `SELECT COALESCE(SUM(earnings),0) as total FROM gs_uploads WHERE uploader_name=$1`,
+        [uploaderName]
+      );
+      const { rows: wdRows } = await client.query(
+        `SELECT COALESCE(SUM(amount_coins),0) as total FROM gs_withdrawals
+         WHERE uploader_name=$1 AND status IN ('pending','approved','paid')`,
+        [uploaderName]
+      );
+      const available = parseFloat(earnRows[0].total) - parseFloat(wdRows[0].total);
+      if (coins > available) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: "Insufficient balance", available }); return;
+      }
+      const mad = Math.round(coins * 100) / 100; // 1 coin = 1 MAD
+      const usd = Math.round(coins * 10) / 100;  // 1 MAD ≈ 0.10 USD
+      const { rows } = await client.query(
+        `INSERT INTO gs_withdrawals (uploader_name, amount_coins, amount_mad, amount_usd)
+         VALUES ($1,$2,$3,$4) RETURNING *`,
+        [uploaderName, coins, mad, usd]
+      );
+      await client.query("COMMIT");
+      res.json({ withdrawal: rows[0] });
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
     }
-    const mad = Math.round(coins * 100) / 100; // 1 coin = 1 MAD
-    const usd = Math.round(coins * 10) / 100;  // 1 MAD ≈ 0.10 USD
-    const { rows } = await pool.query(
-      `INSERT INTO gs_withdrawals (uploader_name, amount_coins, amount_mad, amount_usd)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [uploaderName, coins, mad, usd]
-    );
-    res.json({ withdrawal: rows[0] });
   } catch {
     res.status(500).json({ error: "Failed to request withdrawal" });
   }
@@ -259,8 +294,8 @@ router.post("/gs/withdrawals", async (req, res): Promise<void> => {
 // ─── GET /gs/withdrawals ──────────────────────────────────────────────────────
 router.get("/gs/withdrawals", async (req, res): Promise<void> => {
   try {
-    const name = req.query.name as string;
-    if (!name) { res.status(400).json({ error: "name required" }); return; }
+    const name = await sessionUsername(req);
+    if (!name) { res.status(401).json({ error: "سجّل الدخول أولاً" }); return; }
     const { rows } = await pool.query(
       `SELECT * FROM gs_withdrawals WHERE uploader_name=$1 ORDER BY requested_at DESC`,
       [name]

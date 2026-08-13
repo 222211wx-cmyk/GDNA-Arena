@@ -111,7 +111,6 @@ type Status = 'idle' | 'uploading' | 'success' | 'error';
 
 export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initialCategory }: UploadModalProps) {
   const [title, setTitle] = useState('');
-  const [uploaderName, setUploaderName] = useState(() => localStorage.getItem('empire_citizen_name') ?? '');
   const [category, setCategory] = useState(initialCategory ?? 'sport');
   const [figureTag, setFigureTag] = useState(initialFigureTag ?? '');
   const [tagSearch, setTagSearch] = useState('');
@@ -179,10 +178,6 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
   const handleSubmit = async () => {
     if (!file) { setErrorMsg('اختر ملفاً أولاً'); return; }
     if (!title.trim()) { setErrorMsg('أدخل عنوان المحتوى'); return; }
-    if (!uploaderName.trim()) { setErrorMsg('أدخل اسمك كمواطن في الإمبراطورية'); return; }
-
-    localStorage.setItem('empire_citizen_name', uploaderName.trim());
-
     setStatus('uploading');
     setProgress(0);
     setErrorMsg('');
@@ -190,7 +185,6 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
     const formData = new FormData();
     formData.append('file', file);
     formData.append('title', title.trim());
-    formData.append('uploaderName', uploaderName.trim());
     formData.append('category', category);
     if (figureTag.trim()) formData.append('figureTag', figureTag.trim());
 
@@ -333,16 +327,7 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                       style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,215,0,0.25)' }} />
                   </div>
 
-                  {/* Uploader name */}
-                  <div>
-                    <label className="block text-xs font-bold mb-1.5" style={{ color: 'rgba(255,215,0,0.7)' }}>
-                      اسمك (هويتك في الإمبراطورية)
-                    </label>
-                    <input value={uploaderName} onChange={e => setUploaderName(e.target.value)}
-                      disabled={status === 'uploading'} placeholder="مثال: El Qaisy Abdelmalik"
-                      className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition-all disabled:opacity-40"
-                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,215,0,0.25)' }} />
-                  </div>
+                  {/* هوية الرافع تؤخذ تلقائياً من حساب المواطن المسجّل */}
 
                   {/* Category */}
                   <div>

@@ -4,6 +4,8 @@
 - [Neural Legend Engine](neural-legend-engine.md) — TOP 10 LEGENDS at /legends (list) + /legends/:id (4-tab hub); seed data 10 legends; DB tables legends/legend_debates/legend_watches; rewards +10 coins watch, +50 XP debate.
 - [GDNA Empire Design System](gdna-design-system.md) — gdna-arena consumes @workspace/gdna-ds (gold primary, dark canonical); local ui/ deleted, single global Toaster; nav must stay FLAT — owner rejected grouping sections in a dropdown.
 - [Games black-screen report](games-black-screen.md) — owner's blocked-game complaint likely from stale production build; check republish status before debugging dev.
+- [GlobalStar earnings security](globalstar-earnings-security.md) — identity from session only, withdrawal advisory lock, auth before multer, is_admin gate on admin routes.
+- [Session persistence](session-persistence.md) — sessions in Postgres (in-memory wiped on republish = mass logouts); emails normalized lower/trim with unique LOWER() indexes.
 - [API hardening](api-hardening.md) — helmet + tiered rate limits (auth 10/15min, AI 30/5min, global 600/5min) on api-server; trust proxy 1; secure cookies auto in prod.
 - [AMIS call system](amis-calls.md) — call signaling must ride /api/ws (prod router only forwards /api/*); WS upgrades session-authenticated, identity never trusted from client.
 - [Stars Hall + AI Council](stars-hall.md) — star = roster username + reserved email; AI replies gated on invite; daily council report idempotent via unique report_date.

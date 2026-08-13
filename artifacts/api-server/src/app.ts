@@ -3,6 +3,8 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { pool } from "@workspace/db";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -56,7 +58,28 @@ app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
   logger.error("SESSION_SECRET is not set in production — sessions are using an insecure fallback secret!");
 }
+// Persistent session store (PostgreSQL) — sessions survive server restarts
+// and republishes, so citizens stay logged in instead of being kicked out.
+const PgStore = connectPgSimple(session);
+// Create the table ourselves — the store's createTableIfMissing reads a .sql
+// file from disk, which breaks in the bundled production build.
+if (pool) {
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS "user_sessions" (
+      "sid" varchar NOT NULL COLLATE "default" PRIMARY KEY,
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire");
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uniq ON users (LOWER(email));
+    CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uniq ON users (LOWER(username));
+  `).catch((err) => logger.error(err, "Failed to create session table / auth indexes"));
+}
 export const sessionMiddleware = session({
+  store: pool
+    ? new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: false })
+    : undefined,
   secret: process.env.SESSION_SECRET ?? "gdna-arena-secret-fallback",
   resave: false,
   saveUninitialized: false,

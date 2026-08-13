@@ -954,7 +954,10 @@ async function ensureTables() {
 // ── Admin / Utility routes ────────────────────────────────────────
 import express from "express";
 import bcryptAdmin from "bcrypt";
+import { requireAdmin } from "./middleware/require-admin";
 const adminRouter = express.Router();
+// All /admin/* routes require a logged-in admin — previously wide open.
+adminRouter.use("/admin", requireAdmin);
 
 // POST /api/admin/broadcast-welcome — بث يدوي في أي وقت
 adminRouter.post("/admin/broadcast-welcome", async (req, res): Promise<void> => {
@@ -979,8 +982,12 @@ adminRouter.post("/admin/imperial-decree", async (req, res): Promise<void> => {
 });
 
 // GET /api/seed — يعمّر 3 مستخدمين تجريبيين مرة واحدة
-adminRouter.get("/seed", async (req, res): Promise<void> => {
+adminRouter.get("/seed", requireAdmin, async (req, res): Promise<void> => {
   try {
+    if (process.env.NODE_ENV === "production") {
+      res.status(403).json({ error: "Seeding is disabled in production" });
+      return;
+    }
     const seeds = [
       { username: "CR7_Test",   email: "cr7@gdna-test.com",   password: "empire123" },
       { username: "ElQaisy",    email: "qaisy@gdna-test.com",  password: "empire123" },

@@ -84,29 +84,31 @@ export default function EarningsPage() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-  const fetchAll = useCallback(async (n: string, silent = false) => {
-    if (!n.trim()) return;
+  const fetchAll = useCallback(async (_n?: string, silent = false) => {
+    // Identity now comes from the login session — no name needed.
     if (!silent) setLoading(true);
     try {
       const [earnRes, wdRes] = await Promise.all([
-        fetch(`${BASE}/api/gs/earnings?name=${encodeURIComponent(n.trim())}`, { credentials: 'include' }),
-        fetch(`${BASE}/api/gs/withdrawals?name=${encodeURIComponent(n.trim())}`, { credentials: 'include' }),
+        fetch(`${BASE}/api/gs/earnings`, { credentials: 'include' }),
+        fetch(`${BASE}/api/gs/withdrawals`, { credentials: 'include' }),
       ]);
-      const earnData = await earnRes.json();
-      const wdData = await wdRes.json();
-      setUploads(earnData.uploads ?? []);
-      setTotalEarnings(earnData.totalEarnings ?? 0);
-      setTotalViews(earnData.totalViews ?? 0);
-      setWithdrawals(wdData.withdrawals ?? []);
-      setSearched(true);
-      setLastRefresh(new Date());
+      if (earnRes.ok && wdRes.ok) {
+        const earnData = await earnRes.json();
+        const wdData = await wdRes.json();
+        setUploads(earnData.uploads ?? []);
+        setTotalEarnings(earnData.totalEarnings ?? 0);
+        setTotalViews(earnData.totalViews ?? 0);
+        setWithdrawals(wdData.withdrawals ?? []);
+        if (earnData.uploaderName) setName(earnData.uploaderName);
+        setSearched(true);
+        setLastRefresh(new Date());
+      }
     } catch {}
     if (!silent) setLoading(false);
   }, [BASE]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('empire_citizen_name');
-    if (saved) fetchAll(saved);
+    fetchAll();
   }, []);
 
   // Auto-refresh every 15 seconds if we have data
@@ -140,7 +142,7 @@ export default function EarningsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ uploaderName: name, amountCoins: amount }),
+        body: JSON.stringify({ amountCoins: amount }),
       });
       const d = await r.json();
       if (!r.ok) { setWithdrawError(d.error ?? 'فشل الطلب'); setWithdrawStatus('error'); return; }

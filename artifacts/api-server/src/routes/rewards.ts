@@ -40,14 +40,21 @@ router.post("/rewards/daily", async (req, res): Promise<void> => {
     return;
   }
 
+  // Atomic guard: the WHERE clause re-checks "new day" inside the UPDATE, so
+  // two simultaneous requests can never both pay out (race-proof).
   const [updated] = await db
     .update(usersTable)
     .set({
       balance: sql`${usersTable.balance} + ${DAILY_REWARD}`,
       lastDailyReward: new Date(),
     })
-    .where(eq(usersTable.id, userId))
+    .where(sql`${usersTable.id} = ${userId} AND (${usersTable.lastDailyReward} IS NULL OR (${usersTable.lastDailyReward} AT TIME ZONE 'UTC')::date < (NOW() AT TIME ZONE 'UTC')::date)`)
     .returning({ balance: usersTable.balance });
+
+  if (!updated) {
+    res.status(400).json({ error: "Already claimed today. Come back tomorrow!" });
+    return;
+  }
 
   await db.insert(transactionsTable).values({
     userId,
