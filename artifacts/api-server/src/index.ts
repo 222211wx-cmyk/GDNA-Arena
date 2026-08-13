@@ -12,6 +12,7 @@ import { ensureGenomeTables } from "./lib/genome-engine.js";
 import { startGenomeEvolutionJob } from "./jobs/genome-evolution.js";
 import { startCouncilReportJob } from "./jobs/council-report.js";
 import { ensureMissionsTables, startSovereignMissionsJob } from "./jobs/sovereign-missions.js";
+import { startEventLiveAlertJob } from "./jobs/event-live-alert.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -367,9 +368,12 @@ async function ensureTables() {
         "icon" text DEFAULT '🌍' NOT NULL,
         "color" text DEFAULT '#C9A84C' NOT NULL,
         "impact_score" integer DEFAULT 50 NOT NULL,
+        "notified_live" boolean NOT NULL DEFAULT false,
         "created_at" timestamp DEFAULT now() NOT NULL
       )
     `);
+    // Add notified_live to pulse_events (safe — IF NOT EXISTS)
+    await pool.query(`ALTER TABLE "pulse_events" ADD COLUMN IF NOT EXISTS "notified_live" boolean NOT NULL DEFAULT false`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "pulse_post_likes" (
         "id" serial PRIMARY KEY,
@@ -455,6 +459,8 @@ async function ensureTables() {
         "created_at" timestamp DEFAULT now() NOT NULL
       )
     `);
+    // Add notified_live to legend_arena_events now that the table exists
+    await pool.query(`ALTER TABLE "legend_arena_events" ADD COLUMN IF NOT EXISTS "notified_live" boolean NOT NULL DEFAULT false`);
 
     // Seed arena events if empty
     const { rows: arenaRows } = await pool.query(`SELECT COUNT(*) as count FROM "legend_arena_events"`);
@@ -789,8 +795,17 @@ async function ensureTables() {
         "id" serial PRIMARY KEY, "user_id" integer NOT NULL,
         "type" text NOT NULL, "title" text NOT NULL, "body" text NOT NULL,
         "icon" text NOT NULL DEFAULT '⚡', "is_read" boolean NOT NULL DEFAULT false,
-        "link_path" text, "created_at" timestamp DEFAULT now() NOT NULL
+        "link_path" text, "source_ref" text, "created_at" timestamp DEFAULT now() NOT NULL
       )
+    `);
+
+    // Add source_ref to existing notifications table (safe — IF NOT EXISTS)
+    await pool.query(`ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "source_ref" text`);
+    // Unique index prevents duplicate fan-out notifications per (user, event)
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "notifications_user_source_uniq"
+      ON "notifications" ("user_id", "source_ref")
+      WHERE "source_ref" IS NOT NULL
     `);
 
     // ── Celebrations tables ───────────────────────────────────────────────────
@@ -1176,13 +1191,17 @@ import express from "express";
 import bcryptAdmin from "bcrypt";
 import { requireAdmin } from "./middleware/require-admin";
 const adminRouter = express.Router();
+
+    const { limit = 0, force = false, aiEnhanced = true } = req.body ?? {};
+
+    const { limit = 0, force = false, aiEnhanced = true } = req.body ?? {};
 // All /admin/* routes require a logged-in admin — previously wide open.
 adminRouter.use("/admin", requireAdmin);
 
 // POST /api/admin/broadcast-welcome — بث يدوي في أي وقت
 adminRouter.post("/admin/broadcast-welcome", async (req, res): Promise<void> => {
   try {
-    const { limit = 0, force = false, aiEnhanced = true } = req.body ?? {};
+    const { minXp = 0, limit = 0, force = false, aiEnhanced = true } = req.body ?? {};
     const result = await runImperialDecree({ force, aiEnhanced, limit });
     res.json({ ok: true, ...result });
   } catch (err) {
@@ -1307,6 +1326,7 @@ ensureTables()
     startGenomeEvolutionJob();
     startCouncilReportJob();
     startSovereignMissionsJob();
+    startEventLiveAlertJob();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);

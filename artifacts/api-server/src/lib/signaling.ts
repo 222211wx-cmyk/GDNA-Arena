@@ -11,7 +11,7 @@ import { pool } from "@workspace/db";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Client {
   ws:       WebSocket;
-  userId:   number;
+  userId:   number | null;  // null = unauthenticated (WebRTC-only)
   username: string;
   inCall:   boolean;
   liveId:   string | null;
@@ -33,8 +33,10 @@ type SignalMsg =
   | { type: "ping" };
 
 // ── In-memory registry ────────────────────────────────────────────────────────
-const clients  = new Map<string, Client>();  // username → client
-const lives    = new Map<string, { hostUsername: string; title: string; domain: string; startedAt: Date }>();
+const clients   = new Map<string, Client>();  // username (lower) → client
+
+const byUserId  = new Map<number, Client>();  // userId → client (authenticated only)
+const lives     = new Map<string, { hostUsername: string; title: string; domain: string; startedAt: Date }>();
 
 function send(ws: WebSocket, data: object) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
@@ -44,11 +46,16 @@ function findByUsername(username: string): Client | undefined {
   return clients.get(username.toLowerCase());
 }
 
-// ── Attach WebSocket server to HTTP server ────────────────────────────────────
+// ── Broadcast a notification payload to a specific authenticated userId ────────
+export function broadcastToUser(userId: number, data: object) {
+  const client = byUserId.get(userId);
+  if (client) send(client.ws, data);
+}
 export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {
   const wss = new WebSocketServer({ noServer: true });
 
   // Authenticate the WebSocket upgrade against the same session store as HTTP.
+  // Identity is always derived server-side — the client's register payload is ignored for auth.
   httpServer.on("upgrade", (req, socket, head) => {
     const path = (req.url ?? "").split("?")[0];
     if (path !== "/api/ws") return; // not ours
@@ -74,8 +81,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
       // ── REGISTER ──────────────────────────────────────────────────────────
       if (msg.type === "register") {
-        // Identity is derived from the authenticated session, never trusted
-        // from the client payload.
+        // Derive username from DB using the session-authenticated userId.
         let username: string | null = null;
         try {
           const { rows } = (await pool?.query<{ username: string }>(
@@ -86,6 +92,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         if (!username) { send(ws, { type: "error", message: "Unknown user" }); return; }
         self = { ws, userId: sessionUserId, username, inCall: false, liveId: null };
         clients.set(username, self);
+        byUserId.set(sessionUserId, self);
         send(ws, { type: "registered", username, onlineCount: clients.size });
         // Broadcast online list
         const onlineList = Array.from(clients.values()).map(c => c.username);
@@ -192,6 +199,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "live-ended", liveId: self!.liveId }); });
       }
       clients.delete(self.username);
+      byUserId.delete(self.userId);
       const onlineList = Array.from(clients.values()).map(c => c.username);
       wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "online-list", users: onlineList }); });
       console.log(`[WS] 🔴 ${self.username} disconnected (total: ${clients.size})`);

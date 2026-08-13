@@ -39,10 +39,22 @@ export function NotificationBell() {
   }, [user]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Poll every 30s as fallback
   useEffect(() => {
     if (!user) return;
-    const t = setInterval(() => void load(), 10000);
+    const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
+  }, [user, load]);
+
+  // Real-time: CallProvider's WS (useCall) already dispatches a CustomEvent
+  // "gdna:notification" when the server pushes a notification message, so we
+  // simply listen here — no second WS connection needed.
+  useEffect(() => {
+    if (!user) return;
+    const handler = () => void load();
+    window.addEventListener("gdna:notification", handler);
+    return () => window.removeEventListener("gdna:notification", handler);
   }, [user, load]);
 
   // Close on outside click

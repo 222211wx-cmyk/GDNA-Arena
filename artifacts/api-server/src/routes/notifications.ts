@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql } from "drizzle-orm";
 import { db, notifications } from "@workspace/db";
+import { broadcastToUser } from "../lib/signaling";
 
 const router: IRouter = Router();
 
@@ -52,13 +53,17 @@ export async function pushNotification(params: {
   linkPath?: string;
 }) {
   try {
-    await db.insert(notifications).values({
+    const [row] = await db.insert(notifications).values({
       userId: params.userId,
       type: params.type,
       title: params.title,
       body: params.body,
       icon: params.icon ?? "⚡",
       linkPath: params.linkPath ?? null,
-    });
+    }).returning();
+    // Real-time push to connected WebSocket client
+    if (row) {
+      broadcastToUser(params.userId, { type: "notification", notification: row });
+    }
   } catch { /* non-fatal */ }
 }

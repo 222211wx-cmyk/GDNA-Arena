@@ -120,6 +120,11 @@ export function useCall(user: { id: number; username: string } | null) {
         if (msg.type === "registered")    { setConnected(true); }
         if (msg.type === "online-list")   { setOnlineUsers(msg.users); }
         if (msg.type === "pong")          { /* alive */ }
+        // Forward notification events to any listeners via CustomEvent so
+        // NotificationBell can react without opening a second WS connection.
+        if (msg.type === "notification")  {
+          window.dispatchEvent(new CustomEvent("gdna:notification", { detail: msg.notification }));
+        }
 
         // ── Incoming call ──────────────────────────────────────────────────
         if (msg.type === "call-incoming") {

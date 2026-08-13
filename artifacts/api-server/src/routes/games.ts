@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc } from "drizzle-orm";
 import { db, usersTable, transactionsTable } from "@workspace/db";
+import { pushNotification } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -53,6 +54,16 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
     newBalance = updated.balance;
     newXp = updated.xp;
     req.log.info({ userId, game: raw, win, coinsEarned }, "Game played");
+    void pushNotification({
+      userId,
+      type: win ? "coins_earned" : "xp_earned",
+      title: win ? `🎮 Victory in ${game.name}!` : `🎮 ${game.name} — Keep Going!`,
+      body: win
+        ? `+${coinsEarned} Coins & +${xpEarned} XP earned for your win.`
+        : `+${xpEarned} XP earned for participating. Every match counts.`,
+      icon: win ? "🏆" : "🎮",
+      linkPath: "/games",
+    });
   }
 
   res.json({
@@ -111,6 +122,16 @@ router.post("/games/globalstar/tournament", async (req, res): Promise<void> => {
     newXp = updated.xp;
     username = updated.username;
     req.log.info({ userId, placement, coinsEarned, tier }, "GlobalStar tournament played");
+
+    const tierEmoji = tier === "champion" ? "🥇" : tier === "elite" ? "🥈" : tier === "legend" ? "🥉" : "⭐";
+    void pushNotification({
+      userId,
+      type: "coins_earned",
+      title: `${tierEmoji} Tournament — Rank #${placement}`,
+      body: `+${coinsEarned} Coins & +${xpEarned} XP earned in the GlobalStar Tournament.`,
+      icon: tierEmoji,
+      linkPath: "/games/globalstar/ranking",
+    });
   }
 
   // Pull top 10 leaderboard for display

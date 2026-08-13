@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { db, pulsePosts, pulseEvents, pulsePostLikes, usersTable, transactionsTable } from "@workspace/db";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
+import { pushNotification } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -40,6 +41,14 @@ router.post("/pulse/post", async (req, res): Promise<void> => {
     // +20 XP for posting
     await db.update(usersTable).set({ xp: sql`${usersTable.xp} + 20` }).where(eq(usersTable.id, userId));
     await db.insert(transactionsTable).values({ userId, amount: 20, type: "post", description: "Empire Pulse post — +20 XP" });
+    void pushNotification({
+      userId,
+      type: "xp_earned",
+      title: "📢 Voice Broadcast!",
+      body: `+20 XP earned for posting to Empire Pulse.`,
+      icon: "📢",
+      linkPath: "/pulse",
+    });
   }
 
   const [post] = await db.insert(pulsePosts).values({ userId, username, content: content.trim(), domain, type }).returning();
@@ -61,7 +70,19 @@ router.post("/pulse/post/:id/like", async (req, res): Promise<void> => {
 
   await db.insert(pulsePostLikes).values({ postId, voterIp });
   const [updated] = await db.update(pulsePosts).set({ likes: sql`${pulsePosts.likes} + 1` })
-    .where(eq(pulsePosts.id, postId)).returning({ likes: pulsePosts.likes });
+    .where(eq(pulsePosts.id, postId)).returning({ likes: pulsePosts.likes, userId: pulsePosts.userId });
+
+  // Notify the post author (if they are a logged-in citizen)
+  if (updated?.userId) {
+    void pushNotification({
+      userId: updated.userId,
+      type: "story_liked",
+      title: "❤️ Someone liked your post!",
+      body: `Your Empire Pulse post just received a like.`,
+      icon: "❤️",
+      linkPath: "/pulse",
+    });
+  }
 
   res.json({ likes: updated?.likes ?? 0 });
 });

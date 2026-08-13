@@ -6,6 +6,7 @@ import {
   usersTable, transactionsTable,
 } from "@workspace/db";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
+import { pushNotification } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -28,7 +29,8 @@ router.get("/legends", async (req, res): Promise<void> => {
 router.get("/legends/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
-  const [legend] = await db.select().from(legendsTable).where(eq(legendsTable.id, id)).limit(1);
+  const [legend] = await db.select({ domain: legendsTable.domain }).from(legendsTable)
+    .where(eq(legendsTable.id, legendId)).limit(1);
   if (!legend) { res.status(404).json({ error: "Legend not found" }); return; }
   const debates = await db.select().from(legendDebatesTable)
     .where(eq(legendDebatesTable.legendId, id)).orderBy(desc(legendDebatesTable.createdAt)).limit(50);
@@ -49,8 +51,8 @@ router.post("/legends/:id/debate", async (req, res): Promise<void> => {
   if (hasBlockedKeyword(message)) {
     res.status(400).json({ error: "Message contains prohibited content." }); return;
   }
-  const mod = await moderateText(message);
-  if (!mod.ok) { res.status(400).json({ error: `Message blocked (${mod.reason}).` }); return; }
+  const mod = await moderateText(content);
+  if (!mod.ok) { res.status(400).json({ error: `Blocked (${mod.reason}).` }); return; }
 
   let username = "Anonymous";
   if (userId) {
@@ -61,6 +63,14 @@ router.post("/legends/:id/debate", async (req, res): Promise<void> => {
       .set({ xp: sql`${usersTable.xp} + 50`, balance: sql`${usersTable.balance} + 50` })
       .where(eq(usersTable.id, userId));
     await db.insert(transactionsTable).values({ userId, amount: 50, type: "debate", description: "Debate — +50 XP +50 Coins" });
+    void pushNotification({
+      userId,
+      type: "xp_earned",
+      title: "⚔️ Debate Recorded!",
+      body: `+50 XP & +50 Coins earned for joining the legend debate.`,
+      icon: "⚔️",
+      linkPath: `/legends/${legendId}`,
+    });
   }
 
   const [debate] = await db.insert(legendDebatesTable)
@@ -86,6 +96,14 @@ router.post("/legends/:id/watch", async (req, res): Promise<void> => {
     await db.update(usersTable).set({ xp: sql`${usersTable.xp} + 20` }).where(eq(usersTable.id, userId));
     await db.insert(transactionsTable).values({ userId, amount: 20, type: "watch", description: "Lecture watch — +20 XP" });
     xpEarned = 20;
+    void pushNotification({
+      userId,
+      type: "xp_earned",
+      title: "🎓 Lecture Watched!",
+      body: `+20 XP earned for watching a legend lecture.`,
+      icon: "🎓",
+      linkPath: `/legends/${legendId}`,
+    });
   }
   res.json({ xpEarned, message: userId ? "+20 XP earned!" : "Watch recorded" });
 });
@@ -97,7 +115,20 @@ router.post("/legends/:id/debate/:debateId/like", async (req, res): Promise<void
   const [updated] = await db.update(legendDebatesTable)
     .set({ likes: sql`${legendDebatesTable.likes} + 1` })
     .where(eq(legendDebatesTable.id, debateId))
-    .returning({ likes: legendDebatesTable.likes });
+    .returning({ likes: legendDebatesTable.likes, userId: legendDebatesTable.userId });
+
+  // Notify the debate author
+  if (updated?.userId) {
+    void pushNotification({
+      userId: updated.userId,
+      type: "debate_liked",
+      title: "👍 Your debate was liked!",
+      body: `Your legend debate entry just received a like from the empire.`,
+      icon: "👍",
+      linkPath: `/legends/${req.params.id}`,
+    });
+  }
+
   res.json({ likes: updated?.likes ?? 0 });
 });
 
@@ -137,6 +168,14 @@ router.post("/legends/:id/story", async (req, res): Promise<void> => {
     await db.update(usersTable).set({ balance: sql`${usersTable.balance} + 10` }).where(eq(usersTable.id, userId));
     await db.insert(transactionsTable).values({ userId, amount: 10, type: "story", description: "Story post — +10 Coins" });
     coinsEarned = 10;
+    void pushNotification({
+      userId,
+      type: "coins_earned",
+      title: "💰 Story Posted!",
+      body: `+10 Coins earned for sharing a legend story.`,
+      icon: "💰",
+      linkPath: `/legends/${legendId}`,
+    });
   }
 
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
@@ -173,6 +212,15 @@ router.post("/legends/:id/join-event", async (req, res): Promise<void> => {
 
   await db.update(usersTable).set({ balance: sql`${usersTable.balance} + 50` }).where(eq(usersTable.id, userId));
   await db.insert(transactionsTable).values({ userId, amount: 50, type: "event", description: "Arena event joined — +50 Coins" });
+
+  void pushNotification({
+    userId,
+    type: "coins_earned",
+    title: "🏟️ Arena Event Joined!",
+    body: `+50 Coins earned for joining a live arena event.`,
+    icon: "🏟️",
+    linkPath: `/legends/${req.params.id}`,
+  });
 
   res.json({ coinsEarned: 50, message: "+50 Coins for joining the arena!" });
 });
