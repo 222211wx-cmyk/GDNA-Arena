@@ -7,7 +7,7 @@ import {
   MessageSquare, Eye, Coins, Zap, Star, Globe,
   Music, Cpu, Briefcase, Film, Calendar, Medal, Heart,
   AlertTriangle, CheckCircle, Phone, Video, MessageCircle,
-  Lock, ExternalLink
+  Lock, ExternalLink, UserPlus, UserCheck, Users
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCallContext } from "@/contexts/CallContext";
@@ -23,12 +23,14 @@ interface Citizen {
   specialty: string; totalDebates: number;
   uniqueLegends: number; totalWatches: number;
   recentHonors: string[];
+  followerCount: number; followingCount: number;
 }
 interface Post {
   id: number; content: string; domain: string; type: string;
   likes: number; createdAt: string;
 }
 interface Achievement { id: string; icon: string; label: string; earned: boolean }
+interface FollowerItem { id: number; username: string; xp: number }
 
 // ── Archon types ──────────────────────────────────────────────────────────────
 interface ArchonPublicProfile {
@@ -293,6 +295,7 @@ export default function CitizenPage() {
   const [data, setData] = useState<{
     citizen: Citizen; recentPosts: Post[]; achievements: Achievement[];
     violations: { reason: string; severity: string }[];
+    followers: FollowerItem[];
     earned: number; total: number;
   } | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -301,6 +304,10 @@ export default function CitizenPage() {
   const [honorDone, setHonorDone]   = useState(false);
   const [honorErr, setHonorErr]     = useState("");
   const [streaks, setStreaks] = useState<Record<string, { streak: number; completedToday: boolean; totalDays: number }>>({});
+  const [isFollowing,     setIsFollowing]     = useState(false);
+  const [followLoading,   setFollowLoading]   = useState(false);
+  const [followerCount,   setFollowerCount]   = useState(0);
+  const [showFollowers,   setShowFollowers]   = useState(false);
 
   async function openDM(targetUsername: string) {
     try {
@@ -319,11 +326,25 @@ export default function CitizenPage() {
     setLoading(true);
     fetch(`/api/citizens/${encodeURIComponent(username)}`, { credentials: "include" })
       .then(r => { if (r.status === 404) { setNotFound(true); return null; } return r.json(); })
-      .then(d => { if (d) setData(d as typeof data); })
+      .then(d => {
+        if (d) {
+          setData(d as typeof data);
+          setFollowerCount(d.citizen?.followerCount ?? 0);
+        }
+      })
       .finally(() => setLoading(false));
   };
 
   useEffect(fetchData, [username]);
+
+  // Load follow status for the logged-in user
+  useEffect(() => {
+    if (!username || !currentUser) return;
+    fetch(`/api/citizens/${encodeURIComponent(username)}/follow-status`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setIsFollowing(d.isFollowing ?? false))
+      .catch(() => {});
+  }, [username, currentUser]);
 
   useEffect(() => {
     if (!username) return;
@@ -348,6 +369,26 @@ export default function CitizenPage() {
     }
   };
 
+  const toggleFollow = async () => {
+    if (!currentUser || !username) return;
+    setFollowLoading(true);
+    try {
+      const method = isFollowing ? "DELETE" : "POST";
+      const r = await fetch(`/api/citizens/${encodeURIComponent(username)}/follow`, {
+        method, credentials: "include",
+      });
+      if (r.ok) {
+        const wasFollowing = isFollowing;
+        setIsFollowing(!wasFollowing);
+        setFollowerCount(prev => wasFollowing ? Math.max(0, prev - 1) : prev + 1);
+        // Refresh followers list
+        fetchData();
+      }
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   if (loading) return <CitizenSkeleton />;
 
   if (notFound || !data) return (
@@ -358,7 +399,7 @@ export default function CitizenPage() {
     </div>
   );
 
-  const { citizen, recentPosts, achievements, violations, earned, total } = data;
+  const { citizen, recentPosts, achievements, violations, followers, earned, total } = data;
   const domMeta = DOMAIN_META[citizen.specialty] ?? DOMAIN_META.general;
   const winRate = citizen.gamesPlayed > 0 ? Math.round((citizen.wins / citizen.gamesPlayed) * 100) : 0;
   const joinDate = new Date(citizen.createdAt).toLocaleDateString("en", { month: "long", year: "numeric" });
@@ -429,6 +470,22 @@ export default function CitizenPage() {
                 </span>
               </div>
 
+              {/* Follower / Following counts */}
+              <div className="flex items-center gap-4 text-sm">
+                <button onClick={() => setShowFollowers(v => !v)}
+                  className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+                  style={{ color: showFollowers ? "#C9A84C" : undefined }}>
+                  <Users className="w-3.5 h-3.5" />
+                  <span className="font-black" style={{ color: "#C9A84C" }}>{followerCount.toLocaleString()}</span>
+                  <span className="text-muted-foreground">Followers</span>
+                </button>
+                <span className="text-muted-foreground/40">·</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black" style={{ color: "#C9A84C" }}>{citizen.followingCount.toLocaleString()}</span>
+                  <span className="text-muted-foreground">Following</span>
+                </div>
+              </div>
+
               <XpBar xp={citizen.xp} />
               <HonorBar honorCount={citizen.honorCount} honorInfo={citizen.honorInfo} />
             </div>
@@ -437,6 +494,21 @@ export default function CitizenPage() {
           {/* Action buttons */}
           {currentUser && !isSelf && (
             <div className="relative mt-5 flex flex-wrap items-center gap-3">
+              {/* Follow / Unfollow */}
+              <button onClick={toggleFollow} disabled={followLoading}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                style={isFollowing
+                  ? { background: "#1a1a1a", border: "1px solid #C9A84C50", color: "#C9A84C" }
+                  : { background: "#C9A84C", border: "1px solid #C9A84C", color: "#000" }}>
+                {isFollowing
+                  ? <><UserCheck className="w-4 h-4" />{followLoading ? "…" : "Following"}</>
+                  : <><UserPlus  className="w-4 h-4" />{followLoading ? "…" : "Follow"}</>
+                }
+              </button>
+
+              {/* Divider */}
+              <div style={{ width: 1, height: 28, background: "#ffffff15" }} />
+
               {/* Call / Message */}
               <button onClick={() => openDM(citizen.username)}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105 active:scale-95"
@@ -492,6 +564,38 @@ export default function CitizenPage() {
             </div>
           ))}
         </div>
+
+        {/* Followers list — shown when toggled */}
+        {showFollowers && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            className="mt-4 p-4 rounded-2xl border"
+            style={{ borderColor: "#C9A84C30", background: "#C9A84C05" }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-black tracking-widest" style={{ color: "#C9A84C" }}>
+                👥 FOLLOWERS ({followerCount.toLocaleString()})
+              </div>
+              <button onClick={() => setShowFollowers(false)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors">✕</button>
+            </div>
+            {followers && followers.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {followers.map(f => (
+                  <Link key={f.id} href={`/citizen/${f.username}`}>
+                    <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-card border border-border/50 hover:border-primary/40 transition-colors cursor-pointer font-bold">
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-black"
+                        style={{ background: "#C9A84C" }}>
+                        {f.username.slice(0, 1).toUpperCase()}
+                      </span>
+                      {f.username}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-3">No followers yet</p>
+            )}
+          </motion.div>
+        )}
 
         {/* Recent Honors */}
         {citizen.recentHonors.length > 0 && (

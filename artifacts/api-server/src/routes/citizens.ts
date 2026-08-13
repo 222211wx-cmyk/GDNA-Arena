@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, sql, ne } from "drizzle-orm";
+import { eq, desc, sql, ne, and } from "drizzle-orm";
 import {
-  db, usersTable, pulsePosts, legendDebatesTable, legendWatchesTable,
+  db, usersTable, pulsePosts, legendDebatesTable, legendWatchesTable, userFollows,
 } from "@workspace/db";
 import { pool as _pool } from "@workspace/db";
 const pool = _pool!;
@@ -107,6 +107,24 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
   for (const p of recentPosts) domainCounts[p.domain] = (domainCounts[p.domain] ?? 0) + 1;
   const specialty = Object.entries(domainCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "general";
 
+  // Follower / following counts
+  const { rows: followCountRows } = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) FROM "user_follows" WHERE following_id = $1)::int AS followers,
+       (SELECT COUNT(*) FROM "user_follows" WHERE follower_id  = $1)::int AS following`,
+    [user.id]
+  );
+  const followerCount  = followCountRows[0]?.followers  ?? 0;
+  const followingCount = followCountRows[0]?.following  ?? 0;
+
+  // Follower list (latest 20)
+  const { rows: followerRows } = await pool.query(
+    `SELECT u.id, u.username, u.xp FROM "user_follows" uf
+     JOIN "users" u ON u.id = uf.follower_id
+     WHERE uf.following_id = $1 ORDER BY uf.created_at DESC LIMIT 20`,
+    [user.id]
+  );
+
   // Who honored this citizen (latest 5)
   const { rows: honorRows } = await pool.query(
     `SELECT u.username FROM "citizen_honor" ch
@@ -147,13 +165,71 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
       rank: getRank(user.xp),
       honorInfo: getHonorTitle(user.honorCount),
       specialty, totalDebates, uniqueLegends, totalWatches, recentHonors,
+      followerCount, followingCount,
     },
     recentPosts,
     achievements,
     violations: violRows,
+    followers: followerRows,
     earned: achievements.filter(a => a.earned).length,
     total: achievements.length,
   });
+});
+
+// ── GET /citizens/:username/follow-status — is logged-in user following? ──────
+router.get("/citizens/:username/follow-status", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ isFollowing: false }); return; }
+  const { username } = req.params;
+  const { rows } = await pool.query(
+    `SELECT 1 FROM "user_follows" uf
+     JOIN "users" u ON u.id = uf.following_id
+     WHERE uf.follower_id = $1 AND LOWER(u.username) = LOWER($2) LIMIT 1`,
+    [userId, username]
+  );
+  res.json({ isFollowing: rows.length > 0 });
+});
+
+// ── POST /citizens/:username/follow — follow a citizen ────────────────────────
+router.post("/citizens/:username/follow", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const { username } = req.params;
+
+  const { rows } = await pool.query(
+    `SELECT id FROM "users" WHERE LOWER(username) = LOWER($1) LIMIT 1`, [username]
+  );
+  if (!rows[0]) { res.status(404).json({ error: "Citizen not found" }); return; }
+  const targetId: number = rows[0].id;
+
+  if (targetId === userId) { res.status(400).json({ error: "Cannot follow yourself" }); return; }
+
+  try {
+    await db.insert(userFollows).values({ followerId: userId, followingId: targetId });
+    res.json({ isFollowing: true });
+  } catch (err: any) {
+    // Unique constraint violation = already following — treat as success
+    if (err?.code === "23505") { res.json({ isFollowing: true, alreadyFollowing: true }); return; }
+    console.error("[FOLLOW] insert error:", err);
+    res.status(500).json({ error: "Failed to follow citizen" });
+  }
+});
+
+// ── DELETE /citizens/:username/follow — unfollow a citizen ────────────────────
+router.delete("/citizens/:username/follow", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const { username } = req.params;
+
+  const { rows } = await pool.query(
+    `SELECT id FROM "users" WHERE LOWER(username) = LOWER($1) LIMIT 1`, [username]
+  );
+  if (!rows[0]) { res.status(404).json({ error: "Citizen not found" }); return; }
+  const targetId: number = rows[0].id;
+
+  await db.delete(userFollows)
+    .where(and(eq(userFollows.followerId, userId), eq(userFollows.followingId, targetId)));
+  res.json({ isFollowing: false });
 });
 
 // ── POST /citizens/:username/honor — give honor ───────────────────────────────
