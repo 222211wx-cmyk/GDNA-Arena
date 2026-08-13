@@ -1,0 +1,295 @@
+import { useEffect, useState, useRef } from "react";
+import { Link, useLocation } from "wouter";
+import { Search, Trophy, Users, FileText, Calendar, Loader2, Star } from "lucide-react";
+
+const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
+interface LegendResult {
+  id: number;
+  name: string;
+  domain: string;
+  nationality: string;
+  rank: number;
+  image_url: string;
+}
+
+interface CitizenResult {
+  id: number;
+  username: string;
+  xp: number;
+  balance: number;
+}
+
+interface PostResult {
+  id: number;
+  username: string;
+  content: string;
+  domain: string;
+  type: string;
+  likes: number;
+  created_at: string;
+}
+
+interface EventResult {
+  id: number;
+  title: string;
+  title_ar: string;
+  domain: string;
+  location: string;
+  event_date: string;
+  is_live: boolean;
+  icon: string;
+}
+
+interface SearchResults {
+  legends: LegendResult[];
+  citizens: CitizenResult[];
+  posts: PostResult[];
+  events: EventResult[];
+}
+
+const DOMAIN_EMOJI: Record<string, string> = {
+  sport: "⚽",
+  music: "🎵",
+  cinema: "🎬",
+  news: "📰",
+  heritage: "🏛️",
+  general: "🌐",
+};
+
+export default function SearchPage() {
+  const [location] = useLocation();
+  const params = new URLSearchParams(window.location.search);
+  const initialQuery = params.get("q") || "";
+
+  const [query, setQuery] = useState(initialQuery);
+  const [inputValue, setInputValue] = useState(initialQuery);
+  const [results, setResults] = useState<SearchResults | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const totalResults = results
+    ? results.legends.length + results.citizens.length + results.posts.length + results.events.length
+    : 0;
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!query || query.length < 2) {
+      setResults(null);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    const controller = new AbortController();
+    fetch(`${BASE()}/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data) => {
+        setResults(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          setError("Search failed. Please try again.");
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [query]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = inputValue.trim();
+    if (trimmed) {
+      setQuery(trimmed);
+      window.history.replaceState(null, "", `${BASE()}/search?q=${encodeURIComponent(trimmed)}`);
+    }
+  };
+
+  const isEmpty = results && totalResults === 0;
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      {/* Header */}
+      <div className="border-b border-yellow-500/20 bg-gray-950/80 backdrop-blur-sm">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <h1 className="text-2xl font-black uppercase tracking-widest text-yellow-400 mb-1 flex items-center gap-2">
+            <Search size={22} /> Empire Search
+          </h1>
+          <p className="text-gray-500 text-sm mb-5">Search legends, citizens, posts and events across the entire empire</p>
+
+          <form onSubmit={handleSubmit} className="relative">
+            <div className="flex items-center bg-gray-900 border border-gray-700 rounded-2xl px-5 py-3.5 gap-3 focus-within:border-yellow-400/60 transition-all shadow-xl">
+              <Search size={18} className="text-gray-400 shrink-0" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="CR7, Messi, Empire, FIFA, music..."
+                className="bg-transparent outline-none text-white text-base flex-1 placeholder:text-gray-600"
+              />
+              {loading && <Loader2 size={16} className="text-yellow-400 animate-spin shrink-0" />}
+              <button
+                type="submit"
+                className="px-4 py-1.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/40 rounded-xl text-sm font-bold hover:bg-yellow-400 hover:text-black transition-all"
+              >
+                Search
+              </button>
+            </div>
+          </form>
+
+          {results && !loading && (
+            <p className="text-gray-500 text-xs mt-3">
+              {isEmpty
+                ? `No results for "${query}"`
+                : `${totalResults} result${totalResults !== 1 ? "s" : ""} for "${query}"`}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Results */}
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+
+        {error && (
+          <div className="text-center text-red-400 py-12">{error}</div>
+        )}
+
+        {!query && !loading && (
+          <div className="text-center py-20 text-gray-600">
+            <Search size={48} className="mx-auto mb-4 opacity-20" />
+            <p className="text-lg font-semibold">Start typing to search the empire</p>
+            <p className="text-sm mt-2">Find legends, citizens, posts, and events</p>
+          </div>
+        )}
+
+        {isEmpty && !loading && (
+          <div className="text-center py-20 text-gray-600">
+            <Search size={48} className="mx-auto mb-4 opacity-20" />
+            <p className="text-lg font-semibold">No results found</p>
+            <p className="text-sm mt-2">Try different keywords or check spelling</p>
+          </div>
+        )}
+
+        {/* ── Legends ── */}
+        {results && results.legends.length > 0 && (
+          <section>
+            <SectionHeader icon={<Trophy size={16} className="text-yellow-400" />} label="Legends" count={results.legends.length} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              {results.legends.map((leg) => (
+                <Link key={leg.id} href={`/legends/${leg.id}`}>
+                  <div className="flex items-center gap-3 p-4 bg-gray-900/60 border border-gray-800 rounded-xl hover:border-yellow-400/40 hover:bg-gray-900 transition-all cursor-pointer group">
+                    {leg.image_url ? (
+                      <img src={leg.image_url} alt={leg.name} className="w-12 h-12 rounded-full object-cover border border-yellow-400/30 shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-yellow-400/10 flex items-center justify-center shrink-0">
+                        <Star size={20} className="text-yellow-400" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-bold text-white group-hover:text-yellow-400 transition-colors truncate">{leg.name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {DOMAIN_EMOJI[leg.domain] ?? "🌐"} {leg.domain}
+                        {leg.nationality ? ` · ${leg.nationality}` : ""}
+                        {leg.rank ? ` · Rank #${leg.rank}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Citizens ── */}
+        {results && results.citizens.length > 0 && (
+          <section>
+            <SectionHeader icon={<Users size={16} className="text-cyan-400" />} label="Citizens" count={results.citizens.length} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              {results.citizens.map((cit) => (
+                <Link key={cit.id} href={`/citizen/${cit.username}`}>
+                  <div className="flex items-center gap-3 p-4 bg-gray-900/60 border border-gray-800 rounded-xl hover:border-cyan-400/40 hover:bg-gray-900 transition-all cursor-pointer group">
+                    <div className="w-10 h-10 rounded-full bg-cyan-400/10 flex items-center justify-center text-lg shrink-0 border border-cyan-400/20">
+                      {cit.username[0]?.toUpperCase() ?? "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-white group-hover:text-cyan-400 transition-colors truncate">@{cit.username}</p>
+                      <p className="text-xs text-gray-500">{(cit.xp ?? 0).toLocaleString()} XP · {(cit.balance ?? 0).toLocaleString()} 🪙</p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Posts ── */}
+        {results && results.posts.length > 0 && (
+          <section>
+            <SectionHeader icon={<FileText size={16} className="text-purple-400" />} label="Posts" count={results.posts.length} />
+            <div className="space-y-3 mt-4">
+              {results.posts.map((post) => (
+                <Link key={post.id} href="/pulse">
+                  <div className="p-4 bg-gray-900/60 border border-gray-800 rounded-xl hover:border-purple-400/40 hover:bg-gray-900 transition-all cursor-pointer group">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-bold text-purple-400">@{post.username || "anonymous"}</span>
+                      <span className="text-xs text-gray-600">·</span>
+                      <span className="text-xs text-gray-600">{DOMAIN_EMOJI[post.domain] ?? "🌐"} {post.domain}</span>
+                      <span className="text-xs text-gray-600 ml-auto">❤️ {post.likes ?? 0}</span>
+                    </div>
+                    <p className="text-sm text-gray-300 line-clamp-2 group-hover:text-white transition-colors">{post.content}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Events ── */}
+        {results && results.events.length > 0 && (
+          <section>
+            <SectionHeader icon={<Calendar size={16} className="text-green-400" />} label="Events" count={results.events.length} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              {results.events.map((evt) => (
+                <Link key={evt.id} href="/pulse">
+                  <div className="flex items-center gap-3 p-4 bg-gray-900/60 border border-gray-800 rounded-xl hover:border-green-400/40 hover:bg-gray-900 transition-all cursor-pointer group">
+                    <span className="text-2xl shrink-0">{evt.icon ?? "📅"}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-white group-hover:text-green-400 transition-colors truncate text-sm">{evt.title}</p>
+                        {evt.is_live && (
+                          <span className="shrink-0 text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded uppercase animate-pulse">LIVE</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">
+                        {evt.location ? `📍 ${evt.location} · ` : ""}
+                        {evt.event_date ? new Date(evt.event_date).toLocaleDateString() : ""}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ icon, label, count }: { icon: React.ReactNode; label: string; count: number }) {
+  return (
+    <div className="flex items-center gap-2 pb-2 border-b border-gray-800">
+      {icon}
+      <h2 className="text-sm font-black uppercase tracking-widest text-gray-300">{label}</h2>
+      <span className="ml-auto text-xs text-gray-600 font-medium">{count} result{count !== 1 ? "s" : ""}</span>
+    </div>
+  );
+}
