@@ -409,7 +409,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
     { key: "b", label: poll.option_b, votes: poll.votes_b },
     { key: "c", label: poll.option_c, votes: poll.votes_c },
     { key: "d", label: poll.option_d, votes: poll.votes_d },
-  ].filter(o => o.label);
+  ].filter((o): o is { key: "a" | "b" | "c" | "d"; label: string; votes: number } => !!o.label);
 
   async function vote(option: "a" | "b" | "c" | "d") {
     if (voted) return;

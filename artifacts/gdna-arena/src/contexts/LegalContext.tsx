@@ -163,6 +163,7 @@ export function LegalProvider({ children }: { children: ReactNode }) {
       return () => clearTimeout(timer);
     }
     setShowBanner(false);
+    return undefined;
   }, [countryCode, consent]);
 
   const setCountry = useCallback((code: string) => {

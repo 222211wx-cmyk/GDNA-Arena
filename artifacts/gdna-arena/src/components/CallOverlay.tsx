@@ -96,9 +96,6 @@ export default function CallOverlay({
     );
   }
 
-  const visible = status !== "idle";
-  if (!visible) return null;
-
   // ── Incoming call ring ─────────────────────────────────────────────────────
   if (status === "ringing" && incomingCall) return (
     <AnimatePresence>

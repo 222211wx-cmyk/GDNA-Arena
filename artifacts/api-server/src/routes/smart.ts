@@ -21,7 +21,7 @@ function requireAuth(req: any, res: any, next: any) {
 }
 
 // ── GET /api/smart/status — fast module status snapshot ───────────────────────
-router.get("/api/smart/status", requireAuth, async (req: any, res) => {
+router.get("/smart/status", requireAuth, async (req: any, res) => {
   const userId = req.session.userId as number;
   try {
     const [user] = await db
@@ -198,7 +198,7 @@ router.get("/api/smart/status", requireAuth, async (req: any, res) => {
 });
 
 // ── GET /api/smart/analysis — full AI analysis with recommendations ────────────
-router.get("/api/smart/analysis", requireAuth, async (req: any, res) => {
+router.get("/smart/analysis", requireAuth, async (req: any, res) => {
   const userId = req.session.userId as number;
   try {
     // Reuse status data

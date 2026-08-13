@@ -50,7 +50,7 @@ function getRank(xp: number) {
 function TheOracle() {
   const { t, lang } = useLang();
   const [messages, setMessages] = useState<Array<{ role: "user" | "ai"; text: string }>>([
-    { role: "ai", text: { en: "The Oracle hears you. Ask your question, citizen.", ar: "الأوراكل يسمعك. اطرح سؤالك أيها المواطن.", fr: "L'Oracle vous écoute. Posez votre question.", dz: "الأوراكل يسمعك. سول.", }[lang] ?? "The Oracle hears you. Ask your question, citizen." },
+    { role: "ai", text: ({ en: "The Oracle hears you. Ask your question, citizen.", ar: "الأوراكل يسمعك. اطرح سؤالك أيها المواطن.", fr: "L'Oracle vous écoute. Posez votre question.", dz: "الأوراكل يسمعك. سول.", } as Partial<Record<string, string>>)[lang] ?? "The Oracle hears you. Ask your question, citizen." },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
