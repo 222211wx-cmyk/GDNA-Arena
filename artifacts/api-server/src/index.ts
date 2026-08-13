@@ -190,6 +190,95 @@ const SEED_LEGENDS = [
   },
 ];
 
+// Additional music legends added after initial seed — upserted by name on startup
+const EXTRA_MUSIC_LEGENDS = [
+  {
+    rank: 11, name: "Michael Jackson", domain: "music", nationality: "American", score: 9820,
+    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Michael_Jackson_in_1988.jpg/400px-Michael_Jackson_in_1988.jpg",
+    peakYear: 1983,
+    bio: {
+      childhood: "Born August 29, 1958 in Gary, Indiana. The seventh of nine children in a tiny house. His father managed the Jackson 5 with an iron fist. Michael sang before he could speak a sentence clearly.",
+      training: "Trained from age 5 under the strictest conditions. By 10 he was carrying grown men's shows on a child's shoulders. He studied Fred Astaire, James Brown, and Marcel Marceau simultaneously.",
+      breakthrough: "Thriller (1983) — the best-selling album in history. The moonwalk debuted on live television and stopped time. The entire world paused and never quite returned to normal.",
+      stardom: "13 Grammy Awards in a single night. 400 million records sold. The moonwalk. The glove. Neverland. Michael Jackson didn't just become famous — he became the definition of global pop culture."
+    },
+    videos: [
+      { youtubeId: "sOnqjkJTMaA", title: "Thriller — The Greatest Music Video Ever Made" },
+      { youtubeId: "h_D3VFfhvs4", title: "Billie Jean Live — Moonwalk Debut 1983" },
+      { youtubeId: "LeiFF0BxNMk", title: "Black or White — HIStory World Tour" },
+    ],
+    stats: { clutch: 97, legacy: 99, style: 99, impact: 99, peak: 99 },
+  },
+  {
+    rank: 12, name: "Bob Marley", domain: "music", nationality: "Jamaican", score: 9380,
+    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Bob-Marley-in-Concert_Zurich_05-30-80.jpg/400px-Bob-Marley-in-Concert_Zurich_05-30-80.jpg",
+    peakYear: 1977,
+    bio: {
+      childhood: "Born February 6, 1945 in Nine Mile, Saint Ann Parish, Jamaica. Son of a white plantation overseer and a young Black Jamaican woman. He grew up between two worlds and belonged fully to neither — and then to both.",
+      training: "Taught himself guitar on a homemade instrument. Formed the Wailers in Trench Town, Kingston, one of Jamaica's most volatile communities. Music was survival and protest at once.",
+      breakthrough: "Catch a Fire (1973) — the first reggae album marketed internationally as a 'proper' rock album. The world heard Jamaica's voice for the first time and could not unhear it.",
+      stardom: "Legend — the best-selling reggae album of all time. 'No Woman No Cry'. 'One Love'. 'Redemption Song'. Bob Marley turned music into a spiritual and political movement that outlived him by generations."
+    },
+    videos: [
+      { youtubeId: "MIT5TB3XREQ", title: "No Woman No Cry — Live at the Rainbow 1977" },
+      { youtubeId: "NzVJJADWNfk", title: "Redemption Song — Acoustic Original" },
+      { youtubeId: "5JMss11MBe4", title: "One Love — The Anthem of a Generation" },
+    ],
+    stats: { clutch: 88, legacy: 99, style: 92, impact: 98, peak: 91 },
+  },
+  {
+    rank: 13, name: "Elvis Presley", domain: "music", nationality: "American", score: 9150,
+    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Elvis_Presley_promoting_Jailhouse_Rock.jpg/400px-Elvis_Presley_promoting_Jailhouse_Rock.jpg",
+    peakYear: 1956,
+    bio: {
+      childhood: "Born January 8, 1935 in Tupelo, Mississippi in a two-room house his father built. His twin brother Jesse was stillborn. Elvis grew up believing he carried two destinies. He was right.",
+      training: "Sang gospel in church. Taught himself guitar. Walked into Sun Studio in Memphis in 1953 to record a song for his mother. Sam Phillips heard something that had never existed before.",
+      breakthrough: "Heartbreak Hotel (1956) — #1 for 8 weeks. His first national television appearance caused a moral panic. Half of America was scandalized. The other half bought the record.",
+      stardom: "18 number-one hits. 33 films. The Las Vegas residency. The jumpsuit. Elvis Presley invented the concept of the rock star and everything that came after owes him a debt it can never repay."
+    },
+    videos: [
+      { youtubeId: "gj0Rz-uP4Mk", title: "Jailhouse Rock — The Performance That Changed Music" },
+      { youtubeId: "PU5xxh5UX4U", title: "Suspicious Minds — Las Vegas 1970" },
+      { youtubeId: "ApNx-EWAZX4", title: "Elvis — The '68 Comeback Special" },
+    ],
+    stats: { clutch: 88, legacy: 97, style: 95, impact: 96, peak: 93 },
+  },
+  {
+    rank: 14, name: "Whitney Houston", domain: "music", nationality: "American", score: 8970,
+    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Whitney_Houston_Welcome_Home_Heroes_1991.jpg/400px-Whitney_Houston_Welcome_Home_Heroes_1991.jpg",
+    peakYear: 1992,
+    bio: {
+      childhood: "Born August 9, 1963 in Newark, New Jersey. Daughter of gospel singer Cissy Houston and goddaughter of Aretha Franklin. She grew up surrounded by voices of God. Hers was the greatest.",
+      training: "Sang in the New Hope Baptist Junior Choir from age 11. Her mother trained her. Every note was a lesson in precision, power, and soul simultaneously. She made difficulty look like breathing.",
+      breakthrough: "Her debut album in 1985 produced three #1 singles — a record at the time. But it was 'I Will Always Love You' in 1992 that became the single greatest vocal performance in pop history.",
+      stardom: "Two Emmy Awards, six Grammy Awards, 30 Billboard Music Awards. The Bodyguard soundtrack remains one of the best-selling albums ever. When Whitney Houston sang, the room was not a room anymore."
+    },
+    videos: [
+      { youtubeId: "eH3giaIzONA", title: "I Will Always Love You — The Definitive Performance" },
+      { youtubeId: "GvD3ej8dBnM", title: "Greatest Love of All — Live at Wembley" },
+      { youtubeId: "XSbZidsgMfw", title: "Whitney Houston — One Moment in Time" },
+    ],
+    stats: { clutch: 93, legacy: 95, style: 91, impact: 93, peak: 99 },
+  },
+  {
+    rank: 15, name: "Tupac Shakur", domain: "music", nationality: "American", score: 8740,
+    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Tupac_Shakur_photo.jpg/400px-Tupac_Shakur_photo.jpg",
+    peakYear: 1996,
+    bio: {
+      childhood: "Born June 16, 1971 in East Harlem, New York City. His mother Afeni Shakur was a Black Panther. He was born into revolution and raised in its aftermath. Poetry and performance found him before the streets could claim him completely.",
+      training: "Attended the Baltimore School for the Arts where he studied acting, poetry, jazz, and ballet. He was a scholarship student who absorbed everything. The contradiction of tenderness and fury was not a performance — it was who he was.",
+      breakthrough: "'Dear Mama' (1995) — a love letter to a struggling mother that stopped the entire hip-hop world and made grown men weep in public. Nothing had been said that honestly in the genre before.",
+      stardom: "75 million records sold. All Eyez on Me — one of the best-selling rap albums ever. He recorded over 200 songs in the final year of his life. Tupac Shakur was not just a rapper. He was a prophecy in verse."
+    },
+    videos: [
+      { youtubeId: "Mb1ZvUDvLDY", title: "Dear Mama — The Most Emotional Hip-Hop Song Ever" },
+      { youtubeId: "GLb0-f0mWvE", title: "California Love — Iconic Music Video" },
+      { youtubeId: "fPr3yvkHYsE", title: "Changes — The Song That Outlived an Era" },
+    ],
+    stats: { clutch: 88, legacy: 97, style: 92, impact: 95, peak: 91 },
+  },
+];
+
 async function ensureTables() {
   if (!pool) return;
   try {
@@ -425,6 +514,20 @@ async function ensureTables() {
         }
       }
       console.log("[NEURAL] Seeded 10 legends + debates");
+    }
+
+    // Upsert extra music legends by name (runs on every startup; idempotent)
+    for (const l of EXTRA_MUSIC_LEGENDS) {
+      const { rows: existing } = await pool.query(`SELECT id FROM "legends" WHERE name = $1`, [l.name]);
+      if (existing.length === 0) {
+        await pool.query(
+          `INSERT INTO "legends" (name, domain, nationality, rank, score, image_url, peak_year, bio, videos, stats)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [l.name, l.domain, l.nationality, l.rank, l.score, l.imageUrl, l.peakYear,
+           JSON.stringify(l.bio), JSON.stringify(l.videos), JSON.stringify(l.stats)]
+        );
+        console.log(`[NEURAL] Inserted music legend: ${l.name}`);
+      }
     }
 
     // ── Learn Hub tables ───────────────────────────────────────────────────────

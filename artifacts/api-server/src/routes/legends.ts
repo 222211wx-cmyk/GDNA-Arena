@@ -10,9 +10,16 @@ import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 const router: IRouter = Router();
 
 // ── GET /legends ──────────────────────────────────────────────────────────────
-router.get("/legends", async (_req, res): Promise<void> => {
+router.get("/legends", async (req, res): Promise<void> => {
+  const domain = typeof req.query.domain === "string" && req.query.domain ? req.query.domain : null;
+  const limit  = Math.min(parseInt(req.query.limit as string) || 20, 100);
+
+  const where = domain
+    ? and(eq(legendsTable.isActive, true), eq(legendsTable.domain, domain))
+    : eq(legendsTable.isActive, true);
+
   const legends = await db.select().from(legendsTable)
-    .where(eq(legendsTable.isActive, true)).orderBy(legendsTable.rank).limit(10);
+    .where(where).orderBy(legendsTable.rank).limit(limit);
   res.json({ legends, updatedAt: new Date().toISOString() });
 });
 

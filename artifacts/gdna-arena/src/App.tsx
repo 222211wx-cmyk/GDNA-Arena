@@ -47,6 +47,7 @@ import Growth       from "@/pages/growth";
 import AmeeqPage    from "@/pages/ameeq";
 import PressPage    from "@/pages/press";
 import SportPage    from "@/pages/sport";
+import MusicPage    from "@/pages/music";
 import ShopPage     from "@/pages/shop";
 import FriendsPage  from "@/pages/friends";
 import NeuralCorePage from "@/pages/neural-core";
@@ -83,6 +84,7 @@ function Router() {
           <Route path="/growth"   component={Growth}      />
           <Route path="/ameeq"    component={AmeeqPage}   />
           <Route path="/sport"    component={SportPage}   />
+          <Route path="/music"    component={MusicPage}   />
           <Route path="/shop"     component={ShopPage}    />
           <Route path="/friends"  component={FriendsPage} />
           <Route path="/games" component={Games} />
