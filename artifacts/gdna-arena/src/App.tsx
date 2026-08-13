@@ -57,6 +57,7 @@ import SearchPage from "@/pages/search";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import CinemaPage   from "@/pages/cinema";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,7 @@ function PageWrapper() {
           <Route path="/ameeq"    component={AmeeqPage}   />
           <Route path="/sport"    component={SportPage}   />
           <Route path="/music"    component={MusicPage}   />
+          <Route path="/cinema"   component={CinemaPage}  />
           <Route path="/shop"     component={ShopPage}    />
           <Route path="/friends"  component={FriendsPage} />
           <Route path="/games" component={Games} />

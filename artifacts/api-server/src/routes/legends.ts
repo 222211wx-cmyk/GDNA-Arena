@@ -11,8 +11,9 @@ const router: IRouter = Router();
 
 // ── GET /legends ──────────────────────────────────────────────────────────────
 router.get("/legends", async (req, res): Promise<void> => {
-  const domain = typeof req.query.domain === "string" && req.query.domain ? req.query.domain : null;
-  const limit  = Math.min(parseInt(req.query.limit as string) || 20, 100);
+  const domain = typeof req.query["domain"] === "string" && req.query["domain"] ? req.query["domain"] : null;
+  const limitParam = parseInt((req.query["limit"] as string) ?? "50");
+  const limit = isNaN(limitParam) || limitParam < 1 ? 50 : Math.min(limitParam, 200);
 
   const where = domain
     ? and(eq(legendsTable.isActive, true), eq(legendsTable.domain, domain))

@@ -530,6 +530,122 @@ async function ensureTables() {
       }
     }
 
+    // ── Ensure cinema legends (upsert — runs every boot) ──────────────────────
+    const CINEMA_LEGENDS = [
+      {
+        rank: 11, name: "Stanley Kubrick", domain: "cinema", nationality: "American", score: 9800,
+        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Kubrick_cropped.jpg/400px-Kubrick_cropped.jpg",
+        peakYear: 1968,
+        bio: {
+          childhood: "Born July 26, 1928 in New York City. The son of a doctor, Stanley grew up a chess prodigy and a self-taught photographer. He was obsessive by nature — he memorised entire encyclopaedias and played chess with strangers in Central Park for money.",
+          training: "He dropped out of high school and became a staff photographer for Look magazine at 17. By his early twenties he had saved enough to self-finance his first short films. He learned cinema frame by frame, studying every technique himself.",
+          breakthrough: "Paths of Glory (1957) put him on the map. Spartacus (1960) gave him Hollywood clout. Then he retreated to England and built his own universe — 2001: A Space Odyssey (1968) arrived and rewrote what cinema could be.",
+          stardom: "The Shining. Full Metal Jacket. A Clockwork Orange. Dr. Strangelove. Each film a genre-defining masterwork in a different genre. Kubrick never made two films alike. He made only 13 features — and every one is studied in film schools today.",
+        },
+        videos: [
+          { youtubeId: "oR_e9y-bka0", title: "2001: A Space Odyssey — The Dawn of Man" },
+          { youtubeId: "SVZDOdM7BNM", title: "The Shining — All Work and No Play" },
+          { youtubeId: "mAUr8PTQQDQ", title: "Stanley Kubrick: The Cinematic Universe" },
+        ],
+        stats: { clutch: 97, legacy: 99, style: 98, impact: 96, peak: 99 },
+      },
+      {
+        rank: 12, name: "Quentin Tarantino", domain: "cinema", nationality: "American", score: 9400,
+        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Quentin_Tarantino_by_Gage_Skidmore.jpg/400px-Quentin_Tarantino_by_Gage_Skidmore.jpg",
+        peakYear: 1994,
+        bio: {
+          childhood: "Born March 27, 1963 in Knoxville, Tennessee. Raised in Los Angeles, he was obsessed with films from childhood. He memorised every movie at the video store where he worked. No film school — just 10,000 hours of watching.",
+          training: "He worked at Video Archives in Manhattan Beach for five years, devouring every genre — spaghetti westerns, Hong Kong action, French new wave, blaxploitation. That store was his university.",
+          breakthrough: "Reservoir Dogs (1992) detonated at Sundance. Two years later, Pulp Fiction won the Palme d'Or at Cannes and grossed $200M on a $8M budget. Hollywood was never the same.",
+          stardom: "Kill Bill. Inglourious Basterds. Django Unchained. The Hateful Eight. Once Upon a Time in Hollywood. Nine films. He announced he would stop at ten. Every one a cultural event. Tarantino doesn't adapt — he transfigures.",
+        },
+        videos: [
+          { youtubeId: "s7EdQ4FqbhY", title: "Pulp Fiction — Ezekiel 25:17" },
+          { youtubeId: "CY4SMVTMXWQ", title: "Kill Bill Vol. 1 — The Crazy 88 Fight" },
+          { youtubeId: "2m2P9YL0mOY", title: "Inglourious Basterds — Opening Scene" },
+        ],
+        stats: { clutch: 95, legacy: 92, style: 99, impact: 94, peak: 96 },
+      },
+      {
+        rank: 13, name: "Martin Scorsese", domain: "cinema", nationality: "American", score: 9300,
+        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Martin_Scorsese_Sept_2018.jpg/400px-Martin_Scorsese_Sept_2018.jpg",
+        peakYear: 1990,
+        bio: {
+          childhood: "Born November 17, 1942 in Queens, New York. Raised in Little Italy by Sicilian immigrant parents. Too asthmatic to play outside, he watched films with his father from age 3. The cinema was his only door to the world.",
+          training: "Studied at NYU Film School when it was the most radical film programme in America. He and Francis Coppola and Brian De Palma were rewriting Hollywood's rules before they had budgets.",
+          breakthrough: "Mean Streets (1973) with a young Robert De Niro. Taxi Driver (1976) won the Palme d'Or. Raging Bull (1980) is on every shortlist of the greatest films ever made.",
+          stardom: "Goodfellas. Casino. The Departed. The Wolf of Wall Street. Killers of the Flower Moon. Fifty years and no plateau. Scorsese is cinema's living conscience — simultaneously its greatest artist and its most vocal defender.",
+        },
+        videos: [
+          { youtubeId: "QKL_WS3oUjk", title: "Goodfellas — Long Take Copacabana Scene" },
+          { youtubeId: "sY1S34973zA", title: "Taxi Driver — You Talkin to Me?" },
+          { youtubeId: "1G9bWt6b9xY", title: "Martin Scorsese: A Life in Cinema" },
+        ],
+        stats: { clutch: 96, legacy: 97, style: 93, impact: 95, peak: 95 },
+      },
+      {
+        rank: 14, name: "Akira Kurosawa", domain: "cinema", nationality: "Japanese", score: 9200,
+        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Akira_Kurosawa.jpg/400px-Akira_Kurosawa.jpg",
+        peakYear: 1954,
+        bio: {
+          childhood: "Born March 23, 1910 in Tokyo. The youngest of eight children, his father was a military physical instructor who also believed in Western arts and films. A childhood marked by the Great Kanto Earthquake shaped his sense of beauty amid catastrophe.",
+          training: "He failed his first application to Toho Studios. Tried again. Was hired as an assistant director and spent a decade studying every technical role from below. Patience was his training method.",
+          breakthrough: "Rashomon (1950) was submitted to the Venice Film Festival by Daiei Studios without Kurosawa's knowledge. It won the Golden Lion. The West discovered Japanese cinema in an afternoon.",
+          stardom: "Seven Samurai. Ikiru. Ran. Yojimbo. Kagemusha. He invented cinematic grammar — the wipe transition, the telephoto action sequence, the morally ambiguous hero. George Lucas, Spielberg, and Coppola all called him their master.",
+        },
+        videos: [
+          { youtubeId: "UB9OVuQsGqE", title: "Seven Samurai — The Final Battle" },
+          { youtubeId: "fNDpBW7mPns", title: "Ran — The Fire Sequence" },
+          { youtubeId: "jVsUMdBFWOI", title: "Akira Kurosawa — The Art of Influence" },
+        ],
+        stats: { clutch: 90, legacy: 99, style: 95, impact: 98, peak: 97 },
+      },
+      {
+        rank: 15, name: "Meryl Streep", domain: "cinema", nationality: "American", score: 9100,
+        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Meryl_Streep_December_2018.jpg/400px-Meryl_Streep_December_2018.jpg",
+        peakYear: 1982,
+        bio: {
+          childhood: "Born June 22, 1949 in Summit, New Jersey. She sang opera as a teenager, studied drama at Vassar, then Yale. Her teachers said she was gifted but too intellectual. She used that as fuel.",
+          training: "Yale School of Drama graduate. She mastered accents as a technical skill — Polish, British, Danish, Australian, Irish, Southern American. Her preparation is legendarily obsessive, her research exhaustive.",
+          breakthrough: "The Deer Hunter (1978). Kramer vs Kramer (1979) — Oscar. Sophie's Choice (1982) — second Oscar for a Polish accent so perfect Polish viewers thought she was native. She was 33.",
+          stardom: "Three Academy Awards from 21 nominations — the most for any actor in history. Doubt. The Devil Wears Prada. Angels in America. She doesn't perform characters. She inhabits lives. The benchmark against which all screen acting is measured.",
+        },
+        videos: [
+          { youtubeId: "nLzJwJI2hBw", title: "Sophie's Choice — The Selection Scene" },
+          { youtubeId: "7ZDiJTMBaOM", title: "The Devil Wears Prada — That's All" },
+          { youtubeId: "VZDpMlOhwpE", title: "Meryl Streep — The Acting Master Class" },
+        ],
+        stats: { clutch: 98, legacy: 95, style: 92, impact: 91, peak: 97 },
+      },
+      {
+        rank: 16, name: "Christopher Nolan", domain: "cinema", nationality: "British-American", score: 8900,
+        imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Christopher_Nolan_Cannes_2018.jpg/400px-Christopher_Nolan_Cannes_2018.jpg",
+        peakYear: 2008,
+        bio: {
+          childhood: "Born July 30, 1970 in London. The son of a British advertising executive and an American flight attendant, he made 8mm films with his father's camera starting at age 7. Narrative obsession was in him from the start.",
+          training: "Studied English Literature at Cambridge, not film — a fact he considers essential. He made 16mm short films on weekends using borrowed equipment, learning to maximise every frame of expensive film stock.",
+          breakthrough: "Memento (2000) — made for $9,000, acquired by distributors, turned global phenomenon. Nolan had invented a new syntax for non-linear storytelling. He was 30.",
+          stardom: "The Dark Knight. Inception. Interstellar. Dunkirk. Oppenheimer. He makes blockbusters that respect intelligence, films of genuine philosophical weight that gross a billion dollars. The rarest achievement in cinema.",
+        },
+        videos: [
+          { youtubeId: "EXeTwQWrcwY", title: "The Dark Knight — Why So Serious?" },
+          { youtubeId: "8hP9D6kZseM", title: "Inception — The Rotating Hallway" },
+          { youtubeId: "Rt7HVMBFvqg", title: "Interstellar — Docking Scene TARS" },
+        ],
+        stats: { clutch: 94, legacy: 88, style: 91, impact: 93, peak: 96 },
+      },
+    ];
+    for (const cl of CINEMA_LEGENDS) {
+      await pool.query(
+        `INSERT INTO "legends" (name, domain, nationality, rank, score, image_url, peak_year, bio, videos, stats)
+         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+         WHERE NOT EXISTS (SELECT 1 FROM "legends" WHERE name = $1 AND domain = $2)`,
+        [cl.name, cl.domain, cl.nationality, cl.rank, cl.score, cl.imageUrl, cl.peakYear,
+         JSON.stringify(cl.bio), JSON.stringify(cl.videos), JSON.stringify(cl.stats)]
+      );
+    }
+    console.log("[CINEMA] Ensured 6 cinema legends");
+
     // ── Learn Hub tables ───────────────────────────────────────────────────────
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "learn_courses" (
