@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Clock, TrendingUp, Zap, ExternalLink, ChevronRight, Play, Newspaper } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Badge } from "@workspace/gdna-ds/components/ui/badge";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { ScrollArea, ScrollBar } from "@workspace/gdna-ds/components/ui/scroll-area";
 
 const CATEGORIES = ["All", "Gaming", "Crypto", "Esports", "Web3", "Tournaments"];
 

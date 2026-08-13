@@ -1,13 +1,13 @@
 import { Link, useLocation } from 'wouter';
 import { useLanguage } from '@/globalstar/contexts/language-context';
 import { Trophy, BarChart3, Newspaper, Landmark, Info, Coins } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@workspace/gdna-ds/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from '@workspace/gdna-ds/components/ui/dropdown-menu';
 
 export function Navbar() {
   const [location] = useLocation();

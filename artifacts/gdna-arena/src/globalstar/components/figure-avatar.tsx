@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@workspace/gdna-ds/components/ui/avatar';
 
 interface FigureAvatarProps {
   name: string;

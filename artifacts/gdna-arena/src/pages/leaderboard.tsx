@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Coins, Swords, Crown, Medal, RefreshCw, Wifi } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 
 interface LeaderboardPlayer {

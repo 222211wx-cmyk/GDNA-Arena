@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion } from "framer-motion";
 import { Coins, TrendingUp, TrendingDown, Trophy, Gift, Loader2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { Link } from "wouter";

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, Loader2, Zap, Sparkles, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { useLang } from "@/contexts/LangContext";
 
 interface Message {

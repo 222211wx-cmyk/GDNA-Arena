@@ -44,21 +44,19 @@ export default function ApexBanner() {
 
         {/* CTAs */}
         <div className="flex flex-wrap items-center justify-center gap-4">
-          <Link href="/games">
-            <button
-              className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
-              style={{ background: "gold", color: "black", border: "none" }}
-            >
-              ادخل الساحة الآن
-            </button>
+          <Link
+            href="/games"
+            className="royal-btn inline-block px-8 py-3 rounded-[10px] font-bold text-lg"
+            style={{ background: "gold", color: "black", border: "none" }}
+          >
+            ادخل الساحة الآن
           </Link>
-          <Link href="/shop">
-            <button
-              className="px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
-              style={{ border: "2px solid #C9A84C" }}
-            >
-              تصفح المتجر
-            </button>
+          <Link
+            href="/shop"
+            className="inline-block px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
+            style={{ border: "2px solid #C9A84C" }}
+          >
+            تصفح المتجر
           </Link>
         </div>
 
@@ -77,22 +75,19 @@ export default function ApexBanner() {
           { href: "/shop", title: "🛒 المتجر", desc: "اصرف القطع. اشتري الترقيات والأدوات النادرة", cta: "تصفح المتجر" },
           { href: "/growth", title: "🎯 المهام", desc: "انجز المهام اليومية واربح مكافآت ضخمة", cta: "ابدأ المهمة" },
         ].map((s) => (
-          <Link key={s.href} href={s.href}>
-            <div
-              className="group rounded-[20px] p-8 w-[280px] text-center cursor-pointer transition-all duration-300 hover:scale-105"
-              style={{ background: "#111", border: "2px solid #333" }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "gold"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#333"; }}
+          <Link
+            key={s.href}
+            href={s.href}
+            className="block rounded-[20px] p-8 w-[280px] text-center bg-[#111] border-2 border-[#333] transition-all duration-300 hover:scale-105 hover:border-[gold]"
+          >
+            <h3 className="font-black text-2xl mb-3" style={{ color: "gold" }}>{s.title}</h3>
+            <p className="text-white/80 text-sm">{s.desc}</p>
+            <span
+              className="block mt-4 py-3 rounded-[10px] font-bold text-white"
+              style={{ background: "red" }}
             >
-              <h3 className="font-black text-2xl mb-3" style={{ color: "gold" }}>{s.title}</h3>
-              <p className="text-white/80 text-sm">{s.desc}</p>
-              <span
-                className="block mt-4 py-3 rounded-[10px] font-bold text-white"
-                style={{ background: "red" }}
-              >
-                {s.cta}
-              </span>
-            </div>
+              {s.cta}
+            </span>
           </Link>
         ))}
       </div>

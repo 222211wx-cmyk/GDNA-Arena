@@ -8,8 +8,8 @@ import {
   Wallet, LayoutDashboard, Trophy, Gift, Zap, ArrowRight,
   CheckCircle, Star
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 
 const PATHS = [
   {

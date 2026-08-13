@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { Toaster } from '@/components/ui/toaster';
+import { TooltipProvider } from '@workspace/gdna-ds/components/ui/tooltip';
+import { Toaster } from '@workspace/gdna-ds/components/ui/toaster';
 import { Router as WouterRouter, Switch, Route } from 'wouter';
 import { LanguageProvider } from '@/globalstar/contexts/language-context';
 
@@ -38,7 +38,6 @@ export default function GlobalStarApp() {
               <Route path="/earnings" component={EarningsPage} />
             </Switch>
           </WouterRouter>
-          <Toaster />
         </TooltipProvider>
       </LanguageProvider>
     </QueryClientProvider>

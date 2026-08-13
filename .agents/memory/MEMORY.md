@@ -2,4 +2,5 @@
 - [Archon System](archon-system.md) — encrypted self-development system at /growth; 7 dimensions, 3-phase flow (boot→initiation→encoding→profile); DB tables archon_sessions + archon_directives; API at /api/archon/assess|profile|mission.
 - [GlobalStar Tournament](globalstar-tournament.md) — GlobalStar is a 4th game on /games, NOT a separate artifact; tournament API at POST /api/games/globalstar/tournament; rewards: 1st=200, 2-3=100, 4-10=50, 11-100=10 coins; voting hall still at /games/globalstar/ranking.
 - [Neural Legend Engine](neural-legend-engine.md) — TOP 10 LEGENDS at /legends (list) + /legends/:id (4-tab hub); seed data 10 legends; DB tables legends/legend_debates/legend_watches; rewards +10 coins watch, +50 XP debate.
+- [GDNA Empire Design System](gdna-design-system.md) — gdna-arena consumes @workspace/gdna-ds (gold primary, dark canonical); local ui/ deleted, single global Toaster; nav = 3 pillars + الإمبراطورية dropdown.
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ThumbsUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@workspace/gdna-ds/components/ui/button';
 import { useVoteGsFigure, getGetGsFiguresQueryKey, getGetGsRankingQueryKey, getGetGsFigureQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@workspace/gdna-ds/hooks/use-toast';
 import { useLanguage } from '@/globalstar/contexts/language-context';
 
 interface VoteButtonProps {

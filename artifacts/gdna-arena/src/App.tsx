@@ -1,7 +1,7 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@workspace/gdna-ds/components/ui/toaster";
+import { TooltipProvider } from "@workspace/gdna-ds/components/ui/tooltip";
 import { useEffect } from "react";
 
 import { AuthProvider } from "@/contexts/AuthContext";

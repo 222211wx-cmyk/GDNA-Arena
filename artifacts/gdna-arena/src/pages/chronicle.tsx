@@ -8,9 +8,9 @@ import {
   useGetGsNews,
   useGetGsFigures,
 } from "@workspace/api-client-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { Badge } from "@workspace/gdna-ds/components/ui/badge";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
 import {
   Landmark, Zap, BrainCircuit, MapPin, Calendar,
   TrendingUp, Vote, Gamepad2, ArrowRight, Clock,

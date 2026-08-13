@@ -3,9 +3,9 @@ import { useGetGsTraditions } from '@workspace/api-client-react';
 import { useLanguage } from '@/globalstar/contexts/language-context';
 import { Navbar } from '@/globalstar/components/navbar';
 import { NewsTicker } from '@/globalstar/components/news-ticker';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card } from '@workspace/gdna-ds/components/ui/card';
+import { Badge } from '@workspace/gdna-ds/components/ui/badge';
+import { Skeleton } from '@workspace/gdna-ds/components/ui/skeleton';
 import { Landmark, MapPin, Calendar } from 'lucide-react';
 
 export default function Traditions() {

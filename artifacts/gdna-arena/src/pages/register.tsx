@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
+import { Label } from "@workspace/gdna-ds/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { Lock, Mail, User, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 

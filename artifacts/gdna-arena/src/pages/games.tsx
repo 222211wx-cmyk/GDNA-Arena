@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Play, Trophy, X, Coins, Zap, Loader2, Star, Crown, Shield, Medal } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";

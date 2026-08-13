@@ -6,10 +6,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   useGetGsDomains, useGetGsRanking, useGetGsNews, useGetGsFigures,
 } from "@workspace/api-client-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Badge } from "@workspace/gdna-ds/components/ui/badge";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
 import {
   Crown, Swords, Trophy, Zap, TrendingUp, Users,
   Vote, Newspaper, Gamepad2, BrainCircuit, Flame,

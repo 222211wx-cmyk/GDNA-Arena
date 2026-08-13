@@ -1,7 +1,7 @@
 import { useLanguage } from '@/globalstar/contexts/language-context';
 import { Navbar } from '@/globalstar/components/navbar';
 import { NewsTicker } from '@/globalstar/components/news-ticker';
-import { Card } from '@/components/ui/card';
+import { Card } from '@workspace/gdna-ds/components/ui/card';
 import { ShieldCheck, Sparkles, Globe, Users, Vote, TrendingUp } from 'lucide-react';
 
 export default function About() {

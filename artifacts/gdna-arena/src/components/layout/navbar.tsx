@@ -13,29 +13,36 @@ import { NotificationBell } from "@/components/NotificationBell";
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
 // ── Nav items ──────────────────────────────────────────────────────────────────
+// الهيكلة الجديدة: ثلاث أقسام رئيسية (الساحة / المتجر / المهام) + قائمة الإمبراطورية
 const NAV_ITEMS = [
-  { name: "Home",     emoji: null,  icon: null,                     path: "/",                 highlight: false },
-  { name: "SPORT",    emoji: "⚽",  icon: <Trophy    size={15} />,  path: "/sport",            highlight: true  },
-  { name: "MUSIC",    emoji: "🎵",  icon: <Music     size={15} />,  path: "/pulse",            highlight: false },
-  { name: "CINEMA",   emoji: "🎬",  icon: <Film      size={15} />,  path: "/legends",          highlight: false },
-  { name: "NEWS",     emoji: "📰",  icon: <Newspaper size={15} />,  path: "/news",             highlight: false },
-  { name: "HERITAGE", emoji: "🏛️", icon: <Landmark  size={15} />,  path: "/chronicle",        highlight: false },
-  { name: "PLAY",     emoji: "🎮",  icon: <Gamepad2      size={15} />, path: "/games",    highlight: false },
-  { name: "SOCIAL",   emoji: "💬",  icon: <MessageSquare size={15} />, path: "/social",   highlight: true  },
-  { name: "MESSAGES", emoji: "✉️",  icon: <Mail          size={15} />, path: "/messages", highlight: false },
-  { name: "AMIS",     emoji: "👥",  icon: <User          size={15} />, path: "/friends",  highlight: false },
-  { name: "SHOP",     emoji: "🛒",  icon: <ShoppingBag   size={15} />, path: "/shop",     highlight: true  },
-  { name: "SMART",    emoji: "🧠",  icon: <BrainCircuit  size={15} />, path: "/smart",    highlight: true  },
+  { name: "Home",      emoji: null,  icon: null,                       path: "/",       highlight: false },
+  { name: "الساحة",    emoji: "⚔️",  icon: <Gamepad2      size={15} />, path: "/games",  highlight: true  },
+  { name: "المتجر",    emoji: "🛒",  icon: <ShoppingBag   size={15} />, path: "/shop",   highlight: true  },
+  { name: "المهام",    emoji: "🎯",  icon: <BrainCircuit  size={15} />, path: "/growth", highlight: true  },
+];
+
+const MORE_ITEMS = [
+  { name: "SPORT",    emoji: "⚽",  path: "/sport"     },
+  { name: "MUSIC",    emoji: "🎵",  path: "/pulse"     },
+  { name: "CINEMA",   emoji: "🎬",  path: "/legends"   },
+  { name: "NEWS",     emoji: "📰",  path: "/news"      },
+  { name: "HERITAGE", emoji: "🏛️", path: "/chronicle" },
+  { name: "SOCIAL",   emoji: "💬",  path: "/social"    },
+  { name: "MESSAGES", emoji: "✉️",  path: "/messages"  },
+  { name: "AMIS",     emoji: "👥",  path: "/friends"   },
+  { name: "SMART",    emoji: "🧠",  path: "/smart"     },
 ];
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [langOpen, setLangOpen]     = useState(false);
+  const [moreOpen, setMoreOpen]     = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const langRef   = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const moreRef   = useRef<HTMLDivElement>(null);
 
   const [location] = useLocation();
   const { user, logout } = useAuth();
@@ -46,6 +53,7 @@ export function Navbar() {
     function onDown(e: MouseEvent) {
       if (langRef.current   && !langRef.current.contains(e.target as Node))   setLangOpen(false);
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
+      if (moreRef.current   && !moreRef.current.contains(e.target as Node))   setMoreOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -139,6 +147,47 @@ export function Navbar() {
               </Link>
             );
           })}
+
+          {/* الإمبراطورية — dropdown with the rest of the empire */}
+          <div ref={moreRef} className="relative">
+            <button
+              onClick={() => setMoreOpen(!moreOpen)}
+              onKeyDown={(e) => { if (e.key === "Escape") setMoreOpen(false); }}
+              aria-expanded={moreOpen}
+              aria-haspopup="menu"
+              aria-controls="empire-menu"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                MORE_ITEMS.some((i) => isActive(i.path))
+                  ? "text-yellow-400 bg-yellow-400/10 border-b-2 border-yellow-400"
+                  : "text-gray-300 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              🏛️ الإمبراطورية
+              <ChevronRight size={13} className={`transition-transform ${moreOpen ? "rotate-90" : ""}`} />
+            </button>
+            {moreOpen && (
+              <div
+                id="empire-menu"
+                role="menu"
+                onKeyDown={(e) => { if (e.key === "Escape") setMoreOpen(false); }}
+                className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-48 bg-gray-900 border border-yellow-400/20 rounded-xl overflow-hidden shadow-2xl z-50"
+              >
+                {MORE_ITEMS.map((item) => (
+                  <Link
+                    key={item.name}
+                    href={item.path}
+                    onClick={() => setMoreOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-yellow-400/10 ${
+                      isActive(item.path) ? "text-yellow-400 font-bold" : "text-gray-300"
+                    }`}
+                  >
+                    <span>{item.emoji}</span>
+                    {item.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* PRESS — gold special tab */}
           <Link
@@ -277,7 +326,7 @@ export function Navbar() {
 
       {/* ── Mobile horizontal nav strip ── */}
       <div className="md:hidden flex overflow-x-auto gap-1 px-3 py-2 border-t border-gray-800/60 scrollbar-hide">
-        {NAV_ITEMS.map((item) => {
+        {[...NAV_ITEMS, ...MORE_ITEMS.map((i) => ({ ...i, icon: null, highlight: false }))].map((item) => {
           const active   = isActive(item.path);
           const featured = item.highlight && !active;
           return (
@@ -317,7 +366,7 @@ export function Navbar() {
         <div className="md:hidden border-t border-gray-800 bg-black/98 px-4 py-4 space-y-1">
 
           {/* Nav links */}
-          {[...NAV_ITEMS, { name: "PRESS", emoji: "📡", icon: <Mic2 size={16} />, path: "/press", highlight: false }].map((item) => {
+          {[...NAV_ITEMS, ...MORE_ITEMS.map((i) => ({ ...i, icon: null, highlight: false })), { name: "PRESS", emoji: "📡", icon: <Mic2 size={16} />, path: "/press", highlight: false }].map((item) => {
             const active   = isActive(item.path);
             const featured = item.highlight && !active;
             return (

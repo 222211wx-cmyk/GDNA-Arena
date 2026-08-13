@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Bot, User, Loader2, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
+import { Card } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 
 interface Message {

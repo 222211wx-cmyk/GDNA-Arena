@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { useLang } from "@/contexts/LangContext";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { Badge } from "@workspace/gdna-ds/components/ui/badge";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
 import {
   Crown, Globe, Shield, Scale, Cpu, BrainCircuit, Vote,
   Gamepad2, Lock, FileCheck, Award, Landmark, Users,

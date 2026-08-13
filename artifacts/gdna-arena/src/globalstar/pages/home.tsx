@@ -8,8 +8,8 @@ import { NewsTicker } from '@/globalstar/components/news-ticker';
 import { FigureAvatar } from '@/globalstar/components/figure-avatar';
 import { RankBadge } from '@/globalstar/components/rank-badge';
 import { VoteButton } from '@/globalstar/components/vote-button';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@workspace/gdna-ds/components/ui/button';
+import { Skeleton } from '@workspace/gdna-ds/components/ui/skeleton';
 import { ArrowRight, ShieldCheck, Flame } from 'lucide-react';
 
 function seed(n: number) { const x = Math.sin(n + 1) * 43758.5453123; return x - Math.floor(x); }

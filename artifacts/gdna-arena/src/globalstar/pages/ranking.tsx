@@ -8,10 +8,10 @@ import { VoteButton } from '@/globalstar/components/vote-button';
 import { EmpireMediaPopup, type EmpireUpload } from '@/globalstar/components/empire-media-popup';
 import { UploadModal } from '@/globalstar/components/upload-modal';
 import { HonorLeaderboard } from '@/globalstar/components/honor-leaderboard';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@workspace/gdna-ds/components/ui/card';
+import { Skeleton } from '@workspace/gdna-ds/components/ui/skeleton';
+import { Badge } from '@workspace/gdna-ds/components/ui/badge';
+import { Button } from '@workspace/gdna-ds/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Crown, Medal, Play, Headphones, BookOpen,
