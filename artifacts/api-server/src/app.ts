@@ -43,9 +43,35 @@ app.use(
   }),
 );
 
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// Only the app's own origins may make credentialed cross-origin requests.
+// Reflecting arbitrary origins with credentials would let any website drive a
+// logged-in citizen's browser against these APIs (CSRF-style abuse, OpenAI
+// cost drain on public AI endpoints).
+const allowedOrigins = new Set<string>();
+if (process.env.REPLIT_DEV_DOMAIN) {
+  allowedOrigins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+}
+for (const domain of (process.env.REPLIT_DOMAINS ?? "").split(",")) {
+  const d = domain.trim();
+  if (d) allowedOrigins.add(`https://${d}`);
+}
+if (process.env.NODE_ENV !== "production") {
+  allowedOrigins.add("http://localhost:80");
+  allowedOrigins.add("http://localhost");
+}
+
 app.use(
   cors({
-    origin: true,
+    origin(origin, callback) {
+      // Same-origin and non-browser requests carry no Origin header — allow
+      // them (they are not subject to CORS anyway).
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false); // no CORS headers → browser blocks the response
+      }
+    },
     credentials: true,
   }),
 );
