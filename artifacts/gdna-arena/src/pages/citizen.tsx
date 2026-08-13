@@ -7,8 +7,10 @@ import {
   MessageSquare, Eye, Coins, Zap, Star, Globe,
   Music, Cpu, Briefcase, Film, Calendar, Medal, Heart,
   AlertTriangle, CheckCircle, Phone, Video, MessageCircle,
-  Lock, ExternalLink, UserPlus, UserCheck, Users
+  Lock, ExternalLink, UserPlus, UserCheck, Users, Swords, X
 } from "lucide-react";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCallContext } from "@/contexts/CallContext";
 
@@ -78,6 +80,190 @@ function computeFourPillars(d: ArchonPublicProfile["dimensions"], overallScore: 
       score: Math.round((d.abundantia * 0.5) + (overallScore * 0.3) + (Math.min(...dimVals) * 0.2)),
     },
   ];
+}
+
+const DIMENSIONS: { key: keyof ArchonPublicProfile["dimensions"]; label: string; ar: string }[] = [
+  { key: "volontas",    label: "VOLONTAS",    ar: "إرادة الفاتح" },
+  { key: "resilentia",  label: "RESILENTIA",  ar: "صلابة المحارب" },
+  { key: "intellectus", label: "INTELLECTUS", ar: "وضوح الرؤية" },
+  { key: "disciplina",  label: "DISCIPLINA",  ar: "الانضباط الإمبراطوري" },
+  { key: "societas",    label: "SOCIETAS",    ar: "قوة التأثير" },
+  { key: "abundantia",  label: "ABUNDANTIA",  ar: "عقلية الوفرة" },
+  { key: "auctoritas",  label: "AUCTORITAS",  ar: "السلطة الداخلية" },
+];
+
+// ── Archon Compare Panel ──────────────────────────────────────────────────────
+function useArchonProfile(username: string | undefined) {
+  const [profile, setProfile] = useState<ArchonPublicProfile | "loading" | "none">("loading");
+  useEffect(() => {
+    if (!username) { setProfile("none"); return; }
+    setProfile("loading");
+    fetch(`/api/archon/profile/${encodeURIComponent(username)}`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setProfile(d ?? "none"))
+      .catch(() => setProfile("none"));
+  }, [username]);
+  return profile;
+}
+
+function CompareLockedCard({ username }: { username: string }) {
+  return (
+    <Card className="flex-1 border-primary/20 bg-primary/5">
+      <CardContent className="flex h-full flex-col items-center justify-center text-center gap-3 p-6">
+        <Lock className="w-8 h-8 text-primary/40" />
+        <div>
+          <div className="font-black text-sm">{username}</div>
+          <div className="text-xs text-muted-foreground font-mono mt-1">INITIATION PENDING</div>
+          <div className="text-xs text-primary/50 mt-2">This citizen has not completed Archon initiation</div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CompareHeroCard({ username, profile }: { username: string; profile: ArchonPublicProfile }) {
+  const info = ARCHETYPES[profile.archetype] ?? ARCHETYPES["THE SEEKER"];
+  return (
+    <Card className="flex-1 text-center" style={{ borderColor: `${info.color}40`, background: `${info.color}08` }}>
+      <CardContent className="p-4">
+        <div className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-2xl mb-2"
+          style={{ background: `${info.color}15`, border: `1px solid ${info.color}40` }}>
+          {info.symbol}
+        </div>
+        <div className="font-black text-sm truncate">{username}</div>
+        <div className="text-xs font-black tracking-wider mt-0.5" style={{ color: info.color }}>{profile.archetype}</div>
+        <div className="text-xs text-muted-foreground" dir="rtl">{info.ar}</div>
+        <div className="text-2xl font-black mt-1" style={{ color: info.color }}>{profile.overallScore}</div>
+        <div className="text-[10px] text-muted-foreground">/ 100 SCORE</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ArchonComparePanel({ leftUsername, rightUsername, onClose }: {
+  leftUsername: string; rightUsername: string; onClose: () => void;
+}) {
+  const left  = useArchonProfile(leftUsername);
+  const right = useArchonProfile(rightUsername);
+
+  if (left === "loading" || right === "loading") return (
+    <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-primary/5 animate-pulse">
+      <div className="h-4 w-40 bg-primary/20 rounded mb-3" />
+      <div className="h-32 bg-primary/10 rounded" />
+    </div>
+  );
+
+  const leftInfo  = left  !== "none" ? (ARCHETYPES[left.archetype]  ?? ARCHETYPES["THE SEEKER"]) : null;
+  const rightInfo = right !== "none" ? (ARCHETYPES[right.archetype] ?? ARCHETYPES["THE SEEKER"]) : null;
+  const bothReady = left !== "none" && right !== "none";
+
+  let leftWins = 0, rightWins = 0;
+  if (bothReady) {
+    for (const d of DIMENSIONS) {
+      const l = (left as ArchonPublicProfile).dimensions[d.key];
+      const r = (right as ArchonPublicProfile).dimensions[d.key];
+      if (l > r) leftWins++; else if (r > l) rightWins++;
+    }
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <Card className="mt-6 border-primary/30 overflow-hidden py-0 gap-0">
+      {/* Header */}
+      <CardHeader className="px-5 py-3 flex flex-row items-center justify-between border-b border-primary/20 bg-gradient-to-br from-primary/10 to-transparent space-y-0">
+        <CardTitle className="text-xs font-black tracking-[0.4em] text-primary flex items-center gap-2">
+          <Swords className="w-4 h-4" /> ARCHON COMPARISON
+        </CardTitle>
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close comparison" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+          <X className="w-4 h-4" />
+        </Button>
+      </CardHeader>
+
+      <CardContent className="p-5 space-y-5">
+        {/* Hero row */}
+        <div className="flex items-stretch gap-3">
+          {left !== "none"
+            ? <CompareHeroCard username={leftUsername} profile={left} />
+            : <CompareLockedCard username={leftUsername} />}
+          <div className="flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm border border-primary/40 bg-primary/10 text-primary">
+              VS
+            </div>
+          </div>
+          {right !== "none"
+            ? <CompareHeroCard username={rightUsername} profile={right} />
+            : <CompareLockedCard username={rightUsername} />}
+        </div>
+
+        {bothReady && (
+          <>
+            {/* Wins tally */}
+            <div className="flex items-center justify-center gap-4 text-xs font-black">
+              <span style={{ color: leftInfo!.color }}>{leftUsername} leads in {leftWins}</span>
+              <span className="text-muted-foreground">·</span>
+              <span style={{ color: rightInfo!.color }}>{rightUsername} leads in {rightWins}</span>
+            </div>
+
+            {/* Dimension bars */}
+            <div>
+              <div className="text-xs font-black tracking-[0.35em] text-muted-foreground mb-3">SEVEN DIMENSIONS — HEAD TO HEAD</div>
+              <div className="space-y-4">
+                {DIMENSIONS.map(d => {
+                  const l = (left as ArchonPublicProfile).dimensions[d.key];
+                  const r = (right as ArchonPublicProfile).dimensions[d.key];
+                  const leftLeads  = l > r;
+                  const rightLeads = r > l;
+                  return (
+                    <div key={d.key}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-black ${leftLeads ? "" : "text-muted-foreground"}`}
+                          style={leftLeads ? { color: leftInfo!.color } : undefined}>
+                          {l}{leftLeads && " ▲"}
+                        </span>
+                        <span className="text-xs font-black tracking-wider text-foreground/80">
+                          {d.label} <span className="text-muted-foreground font-bold hidden sm:inline" dir="rtl">{d.ar}</span>
+                        </span>
+                        <span className={`text-xs font-black ${rightLeads ? "" : "text-muted-foreground"}`}
+                          style={rightLeads ? { color: rightInfo!.color } : undefined}>
+                          {rightLeads && "▲ "}{r}
+                        </span>
+                      </div>
+                      <div className="flex gap-1.5 items-center">
+                        {/* Left bar grows right-to-left */}
+                        <div className="flex-1 h-2 rounded-full bg-muted/40 overflow-hidden flex justify-end">
+                          <motion.div initial={{ width: 0 }} animate={{ width: `${l}%` }}
+                            transition={{ duration: 0.8, ease: "easeOut" }}
+                            className="h-full rounded-full"
+                            style={{
+                              background: leftLeads
+                                ? `linear-gradient(270deg, ${leftInfo!.color}, ${leftInfo!.color}90)`
+                                : `${leftInfo!.color}40`,
+                              boxShadow: leftLeads ? `0 0 8px ${leftInfo!.color}60` : undefined,
+                            }} />
+                        </div>
+                        <div className="flex-1 h-2 rounded-full bg-muted/40 overflow-hidden">
+                          <motion.div initial={{ width: 0 }} animate={{ width: `${r}%` }}
+                            transition={{ duration: 0.8, ease: "easeOut" }}
+                            className="h-full rounded-full"
+                            style={{
+                              background: rightLeads
+                                ? `linear-gradient(90deg, ${rightInfo!.color}90, ${rightInfo!.color})`
+                                : `${rightInfo!.color}40`,
+                              boxShadow: rightLeads ? `0 0 8px ${rightInfo!.color}60` : undefined,
+                            }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+      </Card>
+    </motion.div>
+  );
 }
 
 // ── Empire Identity Section ────────────────────────────────────────────────────
@@ -308,6 +494,7 @@ export default function CitizenPage() {
   const [followLoading,   setFollowLoading]   = useState(false);
   const [followerCount,   setFollowerCount]   = useState(0);
   const [showFollowers,   setShowFollowers]   = useState(false);
+  const [showCompare,     setShowCompare]     = useState(false);
 
   async function openDM(targetUsername: string) {
     try {
@@ -506,6 +693,14 @@ export default function CitizenPage() {
                 }
               </button>
 
+              {/* Compare Archon */}
+              <Button
+                variant={showCompare ? "default" : "outline"}
+                onClick={() => setShowCompare(v => !v)}
+                className={showCompare ? "" : "border-primary/50 text-primary bg-primary/10 hover:bg-primary/20 hover:text-primary"}>
+                <Swords className="w-4 h-4" /> Compare
+              </Button>
+
               {/* Divider */}
               <div style={{ width: 1, height: 28, background: "#ffffff15" }} />
 
@@ -630,6 +825,15 @@ export default function CitizenPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Archon Comparison — current user vs viewed citizen */}
+        {showCompare && currentUser && !isSelf && (
+          <ArchonComparePanel
+            leftUsername={currentUser.username}
+            rightUsername={citizen.username}
+            onClose={() => setShowCompare(false)}
+          />
         )}
 
         {/* Empire Identity (Archon archetype + Four Pillars) */}

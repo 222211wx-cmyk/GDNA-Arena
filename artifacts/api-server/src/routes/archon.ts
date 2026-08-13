@@ -188,7 +188,8 @@ router.get("/archon/profile", async (req, res): Promise<void> => {
 
 // ── GET /api/archon/profile/:username — public profile lookup ─────────────────
 router.get("/archon/profile/:username", async (req, res): Promise<void> => {
-  const { username } = req.query as { username?: string };
+  const { username } = req.params as { username: string };
+  if (!username) { res.status(400).json({ error: "Username required" }); return; }
   const [user] = await db.select({ id: usersTable.id })
     .from(usersTable)
     .where(eq(usersTable.username, username))

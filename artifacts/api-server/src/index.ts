@@ -1192,9 +1192,6 @@ import bcryptAdmin from "bcrypt";
 import { requireAdmin } from "./middleware/require-admin";
 const adminRouter = express.Router();
 
-    const { limit = 0, force = false, aiEnhanced = true } = req.body ?? {};
-
-    const { limit = 0, force = false, aiEnhanced = true } = req.body ?? {};
 // All /admin/* routes require a logged-in admin — previously wide open.
 adminRouter.use("/admin", requireAdmin);
 
