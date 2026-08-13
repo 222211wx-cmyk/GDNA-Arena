@@ -328,6 +328,7 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
   const yesterdayKey = yesterday.toISOString().slice(0, 10);
 
   const pillarIdx = VALID_PILLARS.indexOf(pillar); // 0–3
+  const advisoryKey = userId * 4 + pillarIdx; // fits in int32 range for typical user IDs
   const client = pool ? await pool.connect() : null;
   if (!client) { res.status(503).json({ error: "Database unavailable" }); return; }
 
@@ -400,5 +401,3 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
 });
 
 export default router;
-
-  const advisoryKey = userId * 4 + pillarIdx; // fits in int32 range for typical user IDs
