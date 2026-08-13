@@ -11,6 +11,7 @@ import { startNeuralLearningJob } from "./jobs/neural-learning.js";
 import { ensureGenomeTables } from "./lib/genome-engine.js";
 import { startGenomeEvolutionJob } from "./jobs/genome-evolution.js";
 import { startCouncilReportJob } from "./jobs/council-report.js";
+import { ensureMissionsTables, startSovereignMissionsJob } from "./jobs/sovereign-missions.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -1181,8 +1182,8 @@ adminRouter.use("/admin", requireAdmin);
 // POST /api/admin/broadcast-welcome — بث يدوي في أي وقت
 adminRouter.post("/admin/broadcast-welcome", async (req, res): Promise<void> => {
   try {
-    const { minXp = 0, limit = 0, force = false } = req.body ?? {};
-    const result = await runWelcomeBroadcast({ minXp, limit, force });
+    const { limit = 0, force = false, aiEnhanced = true } = req.body ?? {};
+    const result = await runImperialDecree({ force, aiEnhanced, limit });
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
@@ -1295,6 +1296,7 @@ async function autoSeedTestUsers() {
 ensureTables()
   .then(() => ensureNeuralTables())
   .then(() => ensureGenomeTables())
+  .then(() => ensureMissionsTables())
   .then(() => autoSeedTestUsers())
   .then(() => import("./routes/stars").then(m => m.ensureStarsSystem()))
   .then(() => {
@@ -1304,6 +1306,7 @@ ensureTables()
     startNeuralLearningJob();
     startGenomeEvolutionJob();
     startCouncilReportJob();
+    startSovereignMissionsJob();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);

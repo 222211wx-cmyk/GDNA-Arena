@@ -52,10 +52,10 @@ router.post("/archon/assess", async (req, res): Promise<void> => {
     return;
   }
 
-  const dims = [session.volontas, session.resilentia, session.intellectus,
-                session.disciplina, session.societas, session.abundantia, session.auctoritas];
-  const dimArray = Object.values(dims);
-  const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
+  const dims = computeDimensions(answers);
+  const dimArray = [dims.volontas, dims.resilentia, dims.intellectus,
+                    dims.disciplina, dims.societas, dims.abundantia, dims.auctoritas];
+  const overallScore = Math.round(dimArray.reduce((a, b) => a + b, 0) / 7);
 
   const LANG_INSTRUCTION: Record<string, string> = {
     en: "Respond entirely in English.",
@@ -119,8 +119,11 @@ Return this exact JSON structure:
     if (!process.env.OPENAI_API_KEY) throw new Error("No API key");
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 200,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 800,
       temperature: 0.85,
       response_format: { type: "json_object" },
     });
@@ -153,20 +156,31 @@ Return this exact JSON structure:
     .set({ isActive: false })
     .where(eq(archonSessionsTable.userId, req.session.userId));
 
-  // Store new session
-  const [session] = await db.select().from(archonSessionsTable)
-    .where(eq(archonSessionsTable.userId, user.id))
-    .orderBy(desc(archonSessionsTable.createdAt))
-    .limit(1);
+  // Insert new session and return it
+  const [newSession] = await db.insert(archonSessionsTable).values({
+    userId:      req.session.userId,
+    volontas:    dims.volontas,
+    resilentia:  dims.resilentia,
+    intellectus: dims.intellectus,
+    disciplina:  dims.disciplina,
+    societas:    dims.societas,
+    abundantia:  dims.abundantia,
+    auctoritas:  dims.auctoritas,
+    archonCode,
+    archetype,
+    aiProfile:   aiProfile as Record<string, string>,
+    answers:     answers as Record<string, string>,
+    isActive:    true,
+  }).returning();
 
-  res.json({ session, archonCode, archetype, dimensions: dims, aiProfile, overallScore });
+  res.json({ session: newSession, archonCode, archetype, dimensions: dims, aiProfile, overallScore });
 });
 
 // ── GET /api/archon/profile ───────────────────────────────────────────────────
 router.get("/archon/profile", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
   const [session] = await db.select().from(archonSessionsTable)
-    .where(eq(archonSessionsTable.userId, user.id))
+    .where(eq(archonSessionsTable.userId, req.session.userId))
     .orderBy(desc(archonSessionsTable.createdAt))
     .limit(1);
   res.json({ session: session ?? null });
@@ -326,6 +340,7 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
   const yesterdayKey = yesterday.toISOString().slice(0, 10);
 
   const pillarIdx = VALID_PILLARS.indexOf(pillar); // 0–3
+  const advisoryKey = userId * 4 + pillarIdx; // fits in int32 range for typical user IDs
   const client = pool ? await pool.connect() : null;
   if (!client) { res.status(503).json({ error: "Database unavailable" }); return; }
 

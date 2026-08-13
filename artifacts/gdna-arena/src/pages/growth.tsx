@@ -168,7 +168,24 @@ export default function Growth() {
   const [missionLoading, setMissionLoading] = useState(false);
   const [missionResult, setMissionResult] = useState<Record<string, string> | null>(null);
   const [missionDim, setMissionDim] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"profile" | "oracle" | "calibration" | "pillars" | "ameeq">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "oracle" | "calibration" | "pillars" | "ameeq" | "missions">("profile");
+
+  // ── Sovereign Missions state ──────────────────────────────────
+  interface CitizenMission {
+    id: number;
+    title: string;
+    title_ar: string;
+    description: string;
+    description_ar: string;
+    category: string;
+    xp_reward: number;
+    completed: boolean;
+    completed_at: string | null;
+    mission_date: string;
+  }
+  const [missions, setMissions] = useState<CitizenMission[]>([]);
+  const [missionsLoading, setMissionsLoading] = useState(false);
+  const [missionCompleting, setMissionCompleting] = useState<number | null>(null);
   const [breathPhase, setBreathPhase] = useState<typeof BREATH_PHASES[number]>("inhale");
   const [breathing, setBreathing] = useState(false);
   const [breathCount, setBreathCount] = useState(0);
@@ -180,6 +197,37 @@ export default function Growth() {
   const [pillarJustCompleted, setPillarJustCompleted] = useState<string | null>(null);
 
   const t = useCallback((key: string) => key, []); // Fallback — uses keys from i18n
+
+  // ── Load today's missions ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user || phase !== "profile") return;
+    setMissionsLoading(true);
+    fetch(`${BASE()}/api/missions/today`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d.missions) setMissions(d.missions); })
+      .catch(() => {})
+      .finally(() => setMissionsLoading(false));
+  }, [user, phase]);
+
+  // ── Complete a sovereign mission ──────────────────────────────────────────
+  const completeMission = useCallback(async (missionId: number) => {
+    if (missionCompleting) return;
+    setMissionCompleting(missionId);
+    try {
+      const res = await fetch(`${BASE()}/api/missions/${missionId}/complete`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setMissions(prev => prev.map(m =>
+          m.id === missionId ? { ...m, completed: true, completed_at: new Date().toISOString() } : m
+        ));
+      }
+    } catch { /* ignore */ } finally {
+      setMissionCompleting(null);
+    }
+  }, [missionCompleting]);
 
   // ── Load pillar streaks ───────────────────────────────────────────────────
   useEffect(() => {
@@ -660,6 +708,7 @@ export default function Growth() {
             {([
               { id: "profile", label: "DIMENSIONAL PROFILE", symbol: "◈" },
               { id: "pillars", label: "FOUR PILLARS", symbol: "▓" },
+              { id: "missions", label: "SOVEREIGN MISSIONS", symbol: "♔" },
               { id: "oracle", label: "ORACLE INTELLIGENCE", symbol: "👁" },
               { id: "calibration", label: "BREATH CALIBRATION", symbol: "∿" },
               { id: "ameeq", label: "AMEEQ PALACE", symbol: "🏛️" },
@@ -1152,6 +1201,204 @@ export default function Growth() {
               </div>
             );
           })()}
+
+          {/* ════════════════════════════════════════════════════════════ */}
+          {/* TAB: SOVEREIGN MISSIONS                                     */}
+          {/* ════════════════════════════════════════════════════════════ */}
+          {activeTab === "missions" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em]">
+                  ♔ GDN-AI SOVEREIGN MISSION ENGINE — مهامك الإمبراطورية اليوم
+                </div>
+                <div className="font-mono text-yellow-400/30 text-xs">
+                  {new Date().toLocaleDateString("en-GB")}
+                </div>
+              </div>
+
+              {/* Missions header card */}
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className="border border-yellow-400/30 p-6 relative overflow-hidden"
+                style={{ boxShadow: "0 0 40px #C9A84C08" }}>
+                <div className="absolute inset-0 opacity-5"
+                  style={{ background: "radial-gradient(circle at 10% 50%, #C9A84C, transparent 60%)" }} />
+                <div className="relative flex items-start gap-4">
+                  <div className="text-4xl shrink-0">♔</div>
+                  <div className="space-y-1">
+                    <div className="font-mono font-black text-yellow-400 tracking-[0.3em] text-sm">
+                      CLASSIFIED DAILY DIRECTIVES
+                    </div>
+                    <p className="text-xs text-white/40 font-mono leading-relaxed">
+                      GDN-AI قرأ ملفك الجيني وبرنامج Archon الخاص بك وولّد لك 3 مهام مخصصة تماماً.
+                      أتمم المهمة واكسب XP إضافي. اختر الأصعب.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Loading state */}
+              {missionsLoading && (
+                <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                  <div className="flex gap-2">
+                    {[0,1,2].map(i => (
+                      <motion.div key={i} className="w-2 h-2 bg-yellow-400 rounded-full"
+                        animate={{ opacity: [0.2, 1, 0.2], y: [0, -6, 0] }}
+                        transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />
+                    ))}
+                  </div>
+                  <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+                    LOADING CLASSIFIED DIRECTIVES...
+                  </div>
+                </div>
+              )}
+
+              {/* No missions yet */}
+              {!missionsLoading && missions.length === 0 && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="border border-yellow-400/10 p-10 text-center space-y-4">
+                  <div className="text-4xl opacity-30">⚙</div>
+                  <div className="font-mono text-yellow-400/40 text-sm tracking-widest">
+                    MISSIONS GENERATING...
+                  </div>
+                  <p className="text-xs text-white/30 font-mono max-w-sm mx-auto">
+                    GDN-AI يولّد مهامك الشخصية. ستصلك إشعاراً عند الاكتمال،
+                    أو عد لاحقاً في وقت منتصف الليل.
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Mission cards */}
+              {!missionsLoading && missions.length > 0 && (
+                <div className="space-y-4">
+                  {missions.map((mission, i) => {
+                    const CATEGORY_STYLE: Record<string, { color: string; symbol: string; label: string }> = {
+                      combat:  { color: "#FF6B35", symbol: "⚔", label: "COMBAT" },
+                      social:  { color: "#87CEEB", symbol: "◈", label: "SOCIAL" },
+                      growth:  { color: "#A8E6CF", symbol: "↑", label: "GROWTH" },
+                      legacy:  { color: "#DDA0DD", symbol: "♔", label: "LEGACY" },
+                    };
+                    const cat = CATEGORY_STYLE[mission.category] ?? CATEGORY_STYLE.growth;
+                    const isCompleting = missionCompleting === mission.id;
+
+                    return (
+                      <motion.div key={mission.id}
+                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                        className={`border p-6 space-y-4 relative overflow-hidden transition-all ${
+                          mission.completed
+                            ? "border-yellow-400/10 opacity-60"
+                            : "border-yellow-400/20 hover:border-yellow-400/40"
+                        }`}
+                      >
+                        {/* Completed overlay */}
+                        {mission.completed && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="font-mono font-black text-green-400/20 text-6xl tracking-widest rotate-[-15deg]">
+                              COMPLETED
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="relative">
+                          {/* Header row */}
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <span className="text-xl shrink-0">{cat.symbol}</span>
+                              <div>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="font-mono text-xs tracking-[0.3em]"
+                                    style={{ color: cat.color }}>{cat.label}</span>
+                                  <span className="font-mono text-yellow-400/20 text-xs">·</span>
+                                  <span className="font-mono text-yellow-400/40 text-xs">+{mission.xp_reward} XP</span>
+                                </div>
+                                <div className="font-mono font-black text-white text-sm tracking-wide">
+                                  {mission.title}
+                                </div>
+                                <div className="font-mono text-yellow-400/50 text-xs mt-0.5" dir="rtl">
+                                  {mission.title_ar}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Mission index */}
+                            <div className="shrink-0 font-mono text-yellow-400/15 font-black text-4xl">
+                              {String(i + 1).padStart(2, "0")}
+                            </div>
+                          </div>
+
+                          {/* Description */}
+                          <div className="mt-4 space-y-2 border-l-2 pl-4"
+                            style={{ borderColor: `${cat.color}30` }}>
+                            <p className="text-sm text-white/60 font-mono leading-relaxed">
+                              {mission.description}
+                            </p>
+                            <p className="text-xs text-yellow-400/40 font-mono leading-relaxed" dir="rtl">
+                              {mission.description_ar}
+                            </p>
+                          </div>
+
+                          {/* Complete button */}
+                          {!mission.completed && (
+                            <div className="mt-4 flex items-center justify-between">
+                              <div className="flex gap-1">
+                                {[0,1,2].map(j => (
+                                  <div key={j} className="w-1.5 h-1.5 rounded-full"
+                                    style={{ background: j < (i + 1) ? cat.color : `${cat.color}20` }} />
+                                ))}
+                              </div>
+                              <button
+                                onClick={() => completeMission(mission.id)}
+                                disabled={isCompleting}
+                                className="px-5 py-2 border font-mono font-black text-xs tracking-[0.3em] transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                                style={{
+                                  borderColor: cat.color,
+                                  color: cat.color,
+                                  boxShadow: `0 0 15px ${cat.color}20`,
+                                }}
+                              >
+                                {isCompleting ? (
+                                  <span className="flex items-center gap-2">
+                                    <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}>⚙</motion.span>
+                                    EXECUTING...
+                                  </span>
+                                ) : "MISSION COMPLETE ✓"}
+                              </button>
+                            </div>
+                          )}
+
+                          {mission.completed && (
+                            <div className="mt-4 flex items-center gap-2">
+                              <span className="text-green-400 text-sm">✓</span>
+                              <span className="font-mono text-green-400/60 text-xs tracking-widest">
+                                EXECUTED — +{mission.xp_reward} XP AWARDED
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+
+                  {/* Summary strip */}
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+                    className="border border-yellow-400/10 p-4 flex items-center justify-between">
+                    <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+                      MISSIONS COMPLETED:
+                      <span className="text-yellow-400 ml-2 font-black">
+                        {missions.filter(m => m.completed).length} / {missions.length}
+                      </span>
+                    </div>
+                    <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+                      TOTAL XP AVAILABLE:
+                      <span className="text-yellow-400 ml-2 font-black">
+                        +{missions.filter(m => !m.completed).reduce((s, m) => s + m.xp_reward, 0)} XP
+                      </span>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ════════════════════════════════════════════════════════════ */}
           {/* TAB: ORACLE INTELLIGENCE                                    */}
