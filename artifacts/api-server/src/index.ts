@@ -545,6 +545,14 @@ async function ensureTables() {
         "username" text NOT NULL, "joined_at" timestamp DEFAULT now() NOT NULL
       )
     `);
+    // Per-member read cursor — add if the table already existed without it
+    await pool.query(`
+      ALTER TABLE "dm_room_members" ADD COLUMN IF NOT EXISTS "last_read_at" timestamp
+    `);
+    // DM XP cooldown cursor on users — add if missing
+    await pool.query(`
+      ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "last_dm_xp_at" timestamptz
+    `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "dm_messages" (
         "id" serial PRIMARY KEY, "room_id" integer NOT NULL, "user_id" integer,

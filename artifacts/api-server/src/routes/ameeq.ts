@@ -72,8 +72,10 @@ function checkEmpireKeywords(text: string): boolean {
 
 // ── 3. POST /ameeq — أمر لاجون الحقيقي ──────────────────────────────
 router.post("/ameeq", async (req, res): Promise<void> => {
-  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
-    ?? req.socket.remoteAddress ?? "unknown";
+  // Use the actual TCP socket address for IP-based rate limiting — never trust the
+  // client-controlled X-Forwarded-For header for this purpose.  Authenticated users
+  // are keyed by their verified session userId instead.
+  const ip = req.socket.remoteAddress ?? "unknown";
   const rateKey = req.session?.userId ? `u:${req.session.userId}` : `ip:${ip}`;
   if (isRateLimited(rateKey)) {
     res.status(429).json({ error: "بزاف ديال الأسئلة دفعة وحدة. تسنى شوية وعاود." });

@@ -15,6 +15,8 @@ export const dmRoomMembers = pgTable("dm_room_members", {
   userId: integer("user_id").notNull(),
   username: text("username").notNull(),
   joinedAt: timestamp("joined_at").notNull().defaultNow(),
+  // Per-member read cursor: messages created after this timestamp are "unread" for this member
+  lastReadAt: timestamp("last_read_at"),
 });
 
 export const dmMessages = pgTable("dm_messages", {

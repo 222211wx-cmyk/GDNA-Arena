@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Search, Trophy, Music, Film, Newspaper, Landmark,
@@ -39,6 +39,7 @@ export function Navbar() {
   const [langOpen, setLangOpen]     = useState(false);
   const [moreOpen, setMoreOpen]     = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [unreadDMs, setUnreadDMs]   = useState(0);
 
   const langRef   = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -47,6 +48,21 @@ export function Navbar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { t, lang, setLang } = useLang();
+
+  // Poll unread DM count every 30 s when logged in
+  const fetchUnread = useCallback(async () => {
+    if (!user) { setUnreadDMs(0); return; }
+    try {
+      const r = await fetch("/api/messages/unread-count", { credentials: "include" });
+      if (r.ok) { const d = await r.json() as { count: number }; setUnreadDMs(d.count ?? 0); }
+    } catch { /* network error — ignore */ }
+  }, [user]);
+
+  useEffect(() => {
+    void fetchUnread();
+    const t = setInterval(() => void fetchUnread(), 30_000);
+    return () => clearInterval(t);
+  }, [fetchUnread]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -129,12 +145,13 @@ export function Navbar() {
         <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
           {NAV_ITEMS.map((item) => {
             const active    = isActive(item.path);
-            const featured  = item.highlight && !active;   // SPORT بدون active
+            const featured  = item.highlight && !active;
+            const isDM      = item.path === "/messages";
             return (
               <Link
                 key={item.name}
                 href={item.path}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
                   active
                     ? "text-yellow-400 bg-yellow-400/10 border-b-2 border-yellow-400"
                     : featured
@@ -144,6 +161,11 @@ export function Navbar() {
               >
                 {item.emoji && <span className="text-base leading-none">{item.emoji}</span>}
                 {item.name}
+                {isDM && unreadDMs > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
+                    {unreadDMs > 9 ? "9+" : unreadDMs}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -329,12 +351,13 @@ export function Navbar() {
         {[...NAV_ITEMS, ...MORE_ITEMS.map((i) => ({ ...i, icon: null, highlight: false }))].map((item) => {
           const active   = isActive(item.path);
           const featured = item.highlight && !active;
+          const isDM     = item.path === "/messages";
           return (
             <Link
               key={item.name}
               href={item.path}
               onClick={() => setMobileOpen(false)}
-              className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 active
                   ? "text-yellow-400 bg-yellow-400/10"
                   : featured
@@ -344,6 +367,11 @@ export function Navbar() {
             >
               {item.emoji && <span>{item.emoji}</span>}
               {item.name}
+              {isDM && unreadDMs > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
+                  {unreadDMs > 9 ? "9+" : unreadDMs}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -369,12 +397,13 @@ export function Navbar() {
           {[...NAV_ITEMS, ...MORE_ITEMS.map((i) => ({ ...i, icon: null, highlight: false })), { name: "PRESS", emoji: "📡", icon: <Mic2 size={16} />, path: "/press", highlight: false }].map((item) => {
             const active   = isActive(item.path);
             const featured = item.highlight && !active;
+            const isDM     = item.path === "/messages";
             return (
               <Link
                 key={item.name}
                 href={item.path}
                 onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
+                className={`relative flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
                   active
                     ? "text-yellow-400 bg-yellow-400/10"
                     : featured
@@ -384,6 +413,11 @@ export function Navbar() {
               >
                 <span className="text-xl leading-none">{item.emoji ?? "›"}</span>
                 {item.name}
+                {isDM && unreadDMs > 0 && (
+                  <span className="ml-auto min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
+                    {unreadDMs > 9 ? "9+" : unreadDMs}
+                  </span>
+                )}
               </Link>
             );
           })}
