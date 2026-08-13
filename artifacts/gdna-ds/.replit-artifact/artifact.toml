@@ -1,0 +1,19 @@
+kind = "design-system"
+previewPath = "/gdna-ds/"
+title = "GDNA Empire Design System"
+description = "Imperial black & gold design system extracted from GDNA Arena — tokens, components, and style guide."
+version = "1.0.0"
+id = "artifacts/gdna-ds"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/gdna-ds/" ]
+localPort = 23916
+
+[services.development]
+run = "pnpm --filter @workspace/gdna-ds run dev"
+
+[services.env]
+PORT = "23916"
+BASE_PATH = "/gdna-ds/"
