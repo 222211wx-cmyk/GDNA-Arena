@@ -166,7 +166,7 @@ Return this exact JSON structure:
 router.get("/archon/profile", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
   const [session] = await db.select().from(archonSessionsTable)
-    .where(eq(archonSessionsTable.userId, user.id))
+    .where(eq(archonSessionsTable.userId, req.session.userId))
     .orderBy(desc(archonSessionsTable.createdAt))
     .limit(1);
   res.json({ session: session ?? null });
@@ -282,8 +282,6 @@ router.get("/archon/pillar/streaks", async (req, res): Promise<void> => {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayKey = yesterday.toISOString().slice(0, 10);
-
-  const pillarIdx = VALID_PILLARS.indexOf(pillar); // 0–3
 
   for (const p of pillars) {
     const pillarRows = rows.filter(r => r.pillar === p);

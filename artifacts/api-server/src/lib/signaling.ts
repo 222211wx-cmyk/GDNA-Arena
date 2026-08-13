@@ -5,6 +5,8 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import type { Server } from "http";
+import type { RequestHandler } from "express";
+import { pool } from "@workspace/db";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Client {
@@ -43,26 +45,52 @@ function findByUsername(username: string): Client | undefined {
 }
 
 // ── Attach WebSocket server to HTTP server ────────────────────────────────────
-export function attachSignalingServer(httpServer: Server) {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {
+  const wss = new WebSocketServer({ noServer: true });
 
-  wss.on("connection", (ws: WebSocket, _req: IncomingMessage) => {
+  // Authenticate the WebSocket upgrade against the same session store as HTTP.
+  httpServer.on("upgrade", (req, socket, head) => {
+    const path = (req.url ?? "").split("?")[0];
+    if (path !== "/api/ws") return; // not ours
+    sessionMiddleware(req as any, {} as any, () => {
+      const userId = (req as any).session?.userId;
+      if (!userId) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+    });
+  });
+
+  wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     let self: Client | null = null;
+    const sessionUserId: number = (req as any).session.userId;
 
-    ws.on("message", (raw) => {
+    ws.on("message", async (raw) => {
       let msg: SignalMsg;
       try { msg = JSON.parse(raw.toString()) as SignalMsg; }
       catch { return; }
 
       // ── REGISTER ──────────────────────────────────────────────────────────
       if (msg.type === "register") {
-        self = { ws, userId: msg.userId, username: msg.username.toLowerCase(), inCall: false, liveId: null };
-        clients.set(msg.username.toLowerCase(), self);
-        send(ws, { type: "registered", username: msg.username, onlineCount: clients.size });
+        // Identity is derived from the authenticated session, never trusted
+        // from the client payload.
+        let username: string | null = null;
+        try {
+          const { rows } = (await pool?.query<{ username: string }>(
+            `SELECT username FROM users WHERE id = $1 LIMIT 1`, [sessionUserId],
+          )) ?? { rows: [] };
+          username = rows[0]?.username?.toLowerCase() ?? null;
+        } catch { /* fall through */ }
+        if (!username) { send(ws, { type: "error", message: "Unknown user" }); return; }
+        self = { ws, userId: sessionUserId, username, inCall: false, liveId: null };
+        clients.set(username, self);
+        send(ws, { type: "registered", username, onlineCount: clients.size });
         // Broadcast online list
         const onlineList = Array.from(clients.values()).map(c => c.username);
         wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "online-list", users: onlineList }); });
-        console.log(`[WS] 🟢 ${msg.username} connected (total: ${clients.size})`);
+        console.log(`[WS] 🟢 ${username} connected (total: ${clients.size})`);
         return;
       }
 

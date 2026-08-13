@@ -255,8 +255,9 @@ export default function Growth() {
     let i = 0;
     const id = setInterval(() => {
       if (i >= lines.length) { clearInterval(id); setBootDone(true); return; }
-      setBootLines(prev => [...prev, lines[i]]);
       i++;
+      // Set by slice (not append) — immune to double-mounted effects (StrictMode)
+      setBootLines(lines.slice(0, i));
     }, 380);
     return () => clearInterval(id);
   }, [phase, user]);
@@ -400,7 +401,7 @@ export default function Growth() {
             ║       GDNA EMPIRE — CLASSIFIED           ║<br/>
             ╚══════════════════════════════════════════╝
           </div>
-          {bootLines.map((line, i) => (
+          {bootLines.filter(Boolean).map((line, i) => (
             <motion.div key={i} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
               className={`text-sm tracking-wider ${line.startsWith(">>>") ? "text-yellow-400 font-black text-base" : "text-green-400/80"}`}>
               {line.startsWith(">>>") ? line : `> ${line}`}

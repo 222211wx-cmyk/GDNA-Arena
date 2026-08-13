@@ -59,6 +59,7 @@ function StatBar({ label, value }: { label: string; value: number }) {
 }
 
 function LegendCard({ legend, index }: { legend: Legend; index: number }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const img  = SPORT_IMAGES[legend.name] ?? legend.imageUrl;
   const quote = SPORT_QUOTES[legend.name];
 
@@ -85,15 +86,19 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
 
       {/* Image */}
       <div className="relative h-56 overflow-hidden bg-gray-800">
-        {img ? (
+        {img && !imgFailed ? (
           <img
             src={img}
             alt={legend.name}
+            onError={() => setImgFailed(true)}
             className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-gray-800 to-gray-900">
             <Trophy size={48} className="text-yellow-400/30" />
+            <span className="text-yellow-400/50 font-black text-2xl tracking-wide">
+              {legend.name.split(" ").map(w => w[0]).join("")}
+            </span>
           </div>
         )}
         {/* Gradient overlay */}

@@ -7,8 +7,9 @@ import { useRef, useState, useEffect, useCallback } from "react";
 const BASE_WS = (() => {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   const host  = window.location.host; // includes port if any
-  // /ws is proxied by Vite dev → api-server:8080/ws
-  return `${proto}://${host}/ws`;
+  // /api/ws rides the /api path so it reaches the api-server in BOTH dev and
+  // production (the deployment router only forwards /api/* to the backend).
+  return `${proto}://${host}/api/ws`;
 })();
 
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
@@ -88,6 +89,8 @@ export function useCall(user: { id: number; username: string } | null) {
     };
 
     pc.onconnectionstatechange = () => {
+      // Ignore events from a PC we already discarded (e.g. failed answer cleanup)
+      if (pcRef.current !== pc) return;
       if (pc.connectionState === "connected") setCallStatus("active");
       if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
         setCallStatus("ended");
@@ -144,8 +147,16 @@ export function useCall(user: { id: number; username: string } | null) {
         }
 
         if (msg.type === "call-busy" || msg.type === "call-unavailable") {
+          showCallError(msg.type === "call-busy"
+            ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
+            : "📴 المواطن غير متصل بالإمبراطورية حالياً — راسله وسيصله إشعار");
+          pcRef.current?.close();
+          pcRef.current = null;
+          localStreamRef.current?.getTracks().forEach(t => t.stop());
+          localStreamRef.current = null;
+          setLocalStream(null);
           setCallStatus("ended");
-          setTimeout(() => { setCallStatus("idle"); setActivePeer(null); }, 1500);
+          setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 1500);
         }
 
         // ── Live events ────────────────────────────────────────────────────
@@ -268,8 +279,27 @@ export function useCall(user: { id: number; username: string } | null) {
       setCallStatus("active");
 
       sendWS({ type: "call-answer", to: incomingCall.from, answer, callId: incomingCall.callId });
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[CALL] Failed to answer:", err);
+      // Tell the caller the answer failed so they don't ring forever.
+      sendWS({ type: "call-reject", to: incomingCall.from, callId: incomingCall.callId });
+      // Recover instead of leaving the UI stuck: clean up and go back to idle.
+      const pc = pcRef.current;
+      pcRef.current = null; // detach BEFORE close so the state handler ignores it
+      pc?.close();
+      localStreamRef.current?.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+      setLocalStream(null);
+      setIncomingCall(null);
+      setCallStatus("idle");
+      const name = (err as Error)?.name ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        showCallError("🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        showCallError("🎤 لا يوجد ميكروفون متصل بالجهاز");
+      } else {
+        showCallError("تعذّر الرد على المكالمة — أعد المحاولة");
+      }
     }
   }, [incomingCall, createPC, sendWS]);
 

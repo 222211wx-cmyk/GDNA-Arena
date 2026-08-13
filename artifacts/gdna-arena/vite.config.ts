@@ -50,7 +50,7 @@ export default defineConfig({
     allowedHosts: true,
     fs: { strict: true },
     proxy: {
-      "/ws": {
+      "/api/ws": {
         target: "ws://localhost:8080",
         ws: true,
         changeOrigin: true,

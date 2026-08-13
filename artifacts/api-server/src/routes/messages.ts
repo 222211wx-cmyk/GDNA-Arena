@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
 import { db, dmRooms, dmRoomMembers, dmMessages, usersTable } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
+import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
 
 const router: IRouter = Router();
 
@@ -191,9 +192,22 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
     }
   }
 
+  // ⭐ Detect a Stars Hall room early: 1:1 with a hosted world star.
+  // Casual/short messages are allowed there — it's a conversation, not a feed.
+  const roomMembers = await db.select({ userId: dmRoomMembers.userId })
+    .from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
+  const otherIds = roomMembers.map(m => m.userId).filter((id): id is number => id !== null && id !== userId);
+  let starPeer: { id: number; username: string; def: StarDef } | null = null;
+  if (otherIds.length === 1) {
+    const [other] = await db.select({ id: usersTable.id, username: usersTable.username, email: usersTable.email })
+      .from(usersTable).where(eq(usersTable.id, otherIds[0])).limit(1);
+    const def = other ? isStarAccount(other) : null;
+    if (other && def) starPeer = { id: other.id, username: other.username, def };
+  }
+
   if (content) {
     const hasAttachment = Boolean(audioUrl ?? videoUrl ?? fileUrl);
-    const check = await validateContent(content, { allowTrivial: hasAttachment });
+    const check = await validateContent(content, { allowTrivial: hasAttachment || starPeer !== null });
     if (!check.ok) { res.status(400).json({ error: check.reason }); return; }
   }
 
@@ -212,9 +226,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   //   2. The per-user DB-backed cooldown has elapsed (60 s)
   // The WHERE clause makes both the eligibility check and the award happen in a
   // single statement, so concurrent requests cannot both pass and double-award.
-  const allMembers = await db.select({ userId: dmRoomMembers.userId })
-    .from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
-  const hasOtherMember = allMembers.some(m => m.userId !== userId);
+  const hasOtherMember = roomMembers.some(m => m.userId !== userId);
 
   let xpEarned = 0;
   if (hasOtherMember) {
@@ -229,6 +241,12 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
       ))
       .returning({ id: usersTable.id });
     if (awarded.length > 0) xpEarned = 5;
+  }
+
+  // ⭐ Stars Hall: the empire's internal intelligence replies in the star's
+  // persona — only for citizens holding a real invite entitlement (no cost bypass).
+  if (content?.trim() && starPeer && await hasStarInvite(userId, starPeer.username)) {
+    generateStarReply(roomId, starPeer.def, starPeer.id, me.username, content.trim()).catch(() => {});
   }
 
   res.status(201).json({ message: msg, xpEarned });

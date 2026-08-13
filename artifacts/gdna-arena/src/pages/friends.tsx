@@ -20,6 +20,13 @@ interface Citizen {
   lastSeenAt?: string | null;
 }
 
+interface Star {
+  username: string; fullName: string; domain: string;
+  nationality: string; invited: boolean;
+}
+
+const DOMAIN_ICONS: Record<string, string> = { sport: "⚽", music: "🎵", cinema: "🎬" };
+
 const COLORS = ["#e74c3c","#e67e22","#27ae60","#2980b9","#8e44ad","#16a085","#c0392b","#d35400"];
 
 function Avatar({ name, size = 44 }: { name: string; size?: number }) {
@@ -91,6 +98,9 @@ export default function FriendsPage() {
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [dmLoadingId,setDmLoadingId]= useState<number | null>(null);
   const [toast,      setToast]      = useState<{ msg: string; ok: boolean } | null>(null);
+  const [stars,      setStars]      = useState<Star[]>([]);
+  const [starQuota,  setStarQuota]  = useState<{ remaining: number; limit: number }>({ remaining: 0, limit: 3 });
+  const [invitingStar, setInvitingStar] = useState<string | null>(null);
 
   const incoming = call.incomingCall;
 
@@ -104,12 +114,18 @@ export default function FriendsPage() {
     if (!user) return;
     setPageLoading(true);
     try {
-      const [fRes, cRes] = await Promise.all([
+      const [fRes, cRes, sRes] = await Promise.all([
         fetch("/api/social/v2/following",  { credentials: "include" }),
         fetch("/api/citizens?limit=200",   { credentials: "include" }),
+        fetch("/api/stars",                { credentials: "include" }),
       ]);
       const fData = fRes.ok ? (await fRes.json() as { following: Citizen[] }) : { following: [] };
       const cData = cRes.ok ? (await cRes.json() as { citizens: Citizen[] })  : { citizens: [] };
+      if (sRes.ok) {
+        const sData = await sRes.json() as { stars: Star[]; dailyLimit: number; remainingToday: number };
+        setStars(sData.stars ?? []);
+        setStarQuota({ remaining: sData.remainingToday ?? 0, limit: sData.dailyLimit ?? 3 });
+      }
 
       const list = fData.following ?? [];
       const ids  = new Set(list.map(f => f.id));
@@ -160,6 +176,26 @@ export default function FriendsPage() {
       navigate("/messages");
     } catch { showToast("تعذّر فتح المحادثة", false); }
     finally  { setDmLoadingId(null); }
+  };
+
+  /* ── Host a star (invite → DM room with AI-powered star) ── */
+  const inviteStar = async (s: Star) => {
+    setInvitingStar(s.username);
+    try {
+      const res = await fetch("/api/stars/invite", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ starUsername: s.username }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(`⭐ ${s.fullName} ${s.invited ? "في محادثتك" : "قبل الاستضافة! افتح الرسائل"} 👑`);
+        navigate("/messages");
+      } else {
+        showToast(data.error ?? "تعذّرت الاستضافة، حاول مجدداً", false);
+      }
+    } catch { showToast("تعذّرت الاستضافة، حاول مجدداً", false); }
+    finally { setInvitingStar(null); }
   };
 
   /* ── Auth loading ── */
@@ -249,6 +285,45 @@ export default function FriendsPage() {
           </div>
         ) : (
           <>
+            {/* ══ SECTION 0: قاعة النجوم ══ */}
+            {stars.length > 0 && (
+              <>
+                <SectionTitle label={`⭐ قاعة النجوم — استضف نجماً عالمياً (${starQuota.remaining}/${starQuota.limit} اليوم)`} />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                  gap: 10, marginBottom: 28 }}>
+                  {stars.map(s => (
+                    <motion.div key={s.username} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+                      style={{ display: "flex", alignItems: "center", gap: 11,
+                        background: "linear-gradient(135deg, #14100200, #14100260), #0d0b04",
+                        border: `1px solid ${GOLD}${s.invited ? "50" : "22"}`,
+                        borderRadius: 14, padding: "11px 13px" }}>
+                      <div style={{
+                        width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                        background: "#1a1503", border: `2px solid ${GOLD}70`,
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                        {DOMAIN_ICONS[s.domain] ?? "⭐"}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 900, fontSize: 14, color: GOLD, whiteSpace: "nowrap",
+                          overflow: "hidden", textOverflow: "ellipsis" }}>★ {s.fullName}</div>
+                        <div style={{ fontSize: 11, color: "#887744" }}>{s.nationality}</div>
+                      </div>
+                      <ActBtn
+                        icon={invitingStar === s.username
+                          ? <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} />
+                          : <MessageSquare size={13} />}
+                        label={s.invited ? "مراسلة" : "استضافة"}
+                        color={s.invited ? GREEN : "#000"}
+                        bg={s.invited ? "#071a07" : GOLD}
+                        border={s.invited ? `1px solid ${GREEN}50` : `1px solid ${GOLD}`}
+                        onClick={() => void inviteStar(s)}
+                        disabled={invitingStar !== null || (!s.invited && starQuota.remaining <= 0)} />
+                    </motion.div>
+                  ))}
+                </div>
+              </>
+            )}
+
             {/* ══ SECTION 1: أصدقائي ══ */}
             <SectionTitle label={`👥 أصدقائي (${friends.length})`} />
 

@@ -1,5 +1,5 @@
 import http from "http";
-import app from "./app";
+import app, { sessionMiddleware } from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import { attachSignalingServer } from "./lib/signaling.js";
@@ -1069,6 +1069,7 @@ ensureTables()
   .then(() => ensureNeuralTables())
   .then(() => ensureGenomeTables())
   .then(() => autoSeedTestUsers())
+  .then(() => import("./routes/stars").then(m => m.ensureStarsSystem()))
   .then(() => {
     startHonorAlertJob();
     startWelcomeBroadcastJob();
@@ -1078,10 +1079,10 @@ ensureTables()
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);
-    attachSignalingServer(httpServer);
+    attachSignalingServer(httpServer, sessionMiddleware);
 
     httpServer.listen(port, (err?: Error) => {
       if (err) { console.error(err); process.exit(1); }
-      console.log(`[SERVER] Listening on port ${port} (HTTP + WebSocket /ws)`);
+      console.log(`[SERVER] Listening on port ${port} (HTTP + WebSocket /api/ws)`);
     });
   });
