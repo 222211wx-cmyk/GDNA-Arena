@@ -39,3 +39,14 @@ export const archonDirectivesTable = pgTable("archon_directives", {
   completed:   boolean("completed").notNull().default(false),
   createdAt:   timestamp("created_at").defaultNow(),
 });
+
+// ── Pillar Daily Completions & Streaks ────────────────────────────────────────
+// One row per user per pillar per calendar day (UTC date string "YYYY-MM-DD")
+export const pillarCompletionsTable = pgTable("pillar_completions", {
+  id:          serial("id").primaryKey(),
+  userId:      integer("user_id").notNull(),
+  pillar:      text("pillar").notNull(),                    // "mens" | "vis" | "anima" | "legatum"
+  dateKey:     text("date_key").notNull(),                  // UTC date e.g. "2026-08-13"
+  streak:      integer("streak").notNull().default(1),      // streak at time of completion
+  createdAt:   timestamp("created_at").defaultNow(),
+});

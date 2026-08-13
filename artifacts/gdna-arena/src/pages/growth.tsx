@@ -174,7 +174,46 @@ export default function Growth() {
   const [breathCount, setBreathCount] = useState(0);
   const breathTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Pillar streak state ───────────────────────────────────────────────────
+  const [pillarStreaks, setPillarStreaks] = useState<Record<string, { streak: number; completedToday: boolean; totalDays: number }>>({});
+  const [pillarCompleting, setPillarCompleting] = useState<string | null>(null);
+  const [pillarJustCompleted, setPillarJustCompleted] = useState<string | null>(null);
+
   const t = useCallback((key: string) => key, []); // Fallback — uses keys from i18n
+
+  // ── Load pillar streaks ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    fetch(`${BASE()}/api/archon/pillar/streaks`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d.streaks) setPillarStreaks(d.streaks); })
+      .catch(() => {});
+  }, [user]);
+
+  // ── Complete pillar challenge ──────────────────────────────────────────────
+  const completePillar = useCallback(async (pillarId: string) => {
+    if (pillarCompleting || pillarStreaks[pillarId]?.completedToday) return;
+    setPillarCompleting(pillarId);
+    try {
+      const res = await fetch(`${BASE()}/api/archon/pillar/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ pillar: pillarId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPillarStreaks(prev => ({
+          ...prev,
+          [pillarId]: { streak: data.streak, completedToday: true, totalDays: (prev[pillarId]?.totalDays ?? 0) + 1 },
+        }));
+        setPillarJustCompleted(pillarId);
+        setTimeout(() => setPillarJustCompleted(null), 3000);
+      }
+    } catch { /* ignore */ } finally {
+      setPillarCompleting(null);
+    }
+  }, [pillarCompleting, pillarStreaks]);
 
   // ── Load existing profile ─────────────────────────────────────────────────
   useEffect(() => {
@@ -1004,12 +1043,72 @@ export default function Growth() {
                         "{p.power}"
                       </div>
 
-                      {/* Daily challenge */}
-                      <div className="border p-3 space-y-1.5" style={{ borderColor: `${p.color}20`, background: `${p.color}05` }}>
-                        <div className="font-mono text-xs tracking-widest" style={{ color: p.color }}>
-                          ⚡ DAILY PILLAR CHALLENGE
+                      {/* Daily challenge + streak */}
+                      <div className="border p-3 space-y-2.5" style={{ borderColor: `${p.color}20`, background: `${p.color}05` }}>
+                        <div className="flex items-center justify-between">
+                          <div className="font-mono text-xs tracking-widest" style={{ color: p.color }}>
+                            ⚡ DAILY PILLAR CHALLENGE
+                          </div>
+                          {/* Streak counter */}
+                          <div className="flex items-center gap-1.5 font-mono text-xs">
+                            <span className="text-orange-400">🔥</span>
+                            <span style={{ color: p.color }} className="font-black">
+                              {pillarStreaks[p.id]?.streak ?? 0}
+                            </span>
+                            <span className="text-white/30">day streak</span>
+                          </div>
                         </div>
                         <p className="font-mono text-xs text-white/60 leading-relaxed" dir="rtl">{p.challenge}</p>
+
+                        {/* Mark Complete button */}
+                        <AnimatePresence mode="wait">
+                          {pillarStreaks[p.id]?.completedToday ? (
+                            <motion.div
+                              key="done"
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="flex items-center gap-2 font-mono text-xs py-2 px-3 border"
+                              style={{ borderColor: `${p.color}40`, color: p.color, background: `${p.color}10` }}
+                            >
+                              <span className="text-base">✓</span>
+                              <span className="font-black tracking-widest">COMPLETED TODAY</span>
+                              {pillarJustCompleted === p.id && (
+                                <motion.span
+                                  initial={{ opacity: 0, x: 6 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0 }}
+                                  className="ml-auto text-yellow-400 font-black"
+                                >
+                                  +15 XP ⚡
+                                </motion.span>
+                              )}
+                            </motion.div>
+                          ) : (
+                            <motion.button
+                              key="btn"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.97 }}
+                              disabled={pillarCompleting === p.id}
+                              onClick={() => completePillar(p.id)}
+                              className="w-full py-2 px-3 border font-mono font-black text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2"
+                              style={{
+                                borderColor: p.color,
+                                color: p.color,
+                              }}
+                            >
+                              {pillarCompleting === p.id ? (
+                                <>
+                                  <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ repeat: Infinity, duration: 0.8 }}>▋</motion.span>
+                                  ENCODING...
+                                </>
+                              ) : (
+                                <>▶ MARK COMPLETE — +15 XP</>
+                              )}
+                            </motion.button>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </motion.div>
                   ))}

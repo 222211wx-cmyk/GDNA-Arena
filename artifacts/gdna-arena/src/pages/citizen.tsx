@@ -299,6 +299,7 @@ export default function CitizenPage() {
   const [honorLoading, setHonorLoading] = useState(false);
   const [honorDone, setHonorDone]   = useState(false);
   const [honorErr, setHonorErr]     = useState("");
+  const [streaks, setStreaks] = useState<Record<string, { streak: number; completedToday: boolean; totalDays: number }>>({});
 
   async function openDM(targetUsername: string) {
     try {
@@ -322,6 +323,14 @@ export default function CitizenPage() {
   };
 
   useEffect(fetchData, [username]);
+
+  useEffect(() => {
+    if (!username) return;
+    fetch(`/api/archon/pillar/streaks?username=${encodeURIComponent(username)}`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d.streaks) setStreaks(d.streaks); })
+      .catch(() => {});
+  }, [username]);
 
   const giveHonor = async () => {
     setHonorLoading(true); setHonorErr("");
@@ -522,8 +531,45 @@ export default function CitizenPage() {
           </div>
         )}
 
-        {/* Empire Identity */}
+        {/* Empire Identity (Archon archetype + Four Pillars) */}
         <EmpireIdentitySection username={username!} />
+
+        {/* Empire Pillar Streaks */}
+        {Object.values(streaks).some(s => s.totalDays > 0) && (
+          <div className="mt-5">
+            <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <span className="text-orange-400">🔥</span> Empire Pillar Streaks
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { id: "mens",    latin: "MENS",    symbol: "🧠", color: "#A8E6CF" },
+                { id: "vis",     latin: "VIS",     symbol: "⚔️", color: "#C9A84C" },
+                { id: "anima",   latin: "ANIMA",   symbol: "🔥", color: "#FF8C42" },
+                { id: "legatum", latin: "LEGATUM", symbol: "👑", color: "#DDA0DD" },
+              ].map(p => {
+                const s = streaks[p.id];
+                if (!s || s.totalDays === 0) return null;
+                return (
+                  <motion.div key={p.id}
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    className="p-3 rounded-xl border text-center space-y-1"
+                    style={{ borderColor: `${p.color}30`, background: `${p.color}08` }}>
+                    <div className="text-2xl">{p.symbol}</div>
+                    <div className="font-black text-xs tracking-widest" style={{ color: p.color }}>{p.latin}</div>
+                    <div className="font-black text-xl" style={{ color: p.color }}>
+                      {s.streak}
+                      <span className="text-orange-400 ml-1">🔥</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{s.totalDays} days total</div>
+                    {s.completedToday && (
+                      <div className="text-xs font-bold text-green-400">✓ today</div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Achievements */}
         <div className="mt-6">

@@ -729,6 +729,20 @@ async function ensureTables() {
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "last_seen_at" timestamp DEFAULT now()`);
     console.log("[SOCIAL-V2] saved_posts, call_history tables ready; new columns added");
 
+    // Pillar Completions & Streaks
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "pillar_completions" (
+        "id" serial PRIMARY KEY,
+        "user_id" integer NOT NULL,
+        "pillar" text NOT NULL,
+        "date_key" text NOT NULL,
+        "streak" integer NOT NULL DEFAULT 1,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        UNIQUE("user_id","pillar","date_key")
+      )
+    `);
+    console.log("[PILLARS] pillar_completions table ready");
+
     // Empire Shop
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "purchases" (

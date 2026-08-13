@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import OpenAI from "openai";
-import { db } from "@workspace/db";
-import { archonSessionsTable, archonDirectivesTable } from "@workspace/db/schema";
+import { db, pool } from "@workspace/db";
+import { archonSessionsTable, archonDirectivesTable, pillarCompletionsTable } from "@workspace/db/schema";
+import { usersTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -51,9 +52,10 @@ router.post("/archon/assess", async (req, res): Promise<void> => {
     return;
   }
 
-  const dims = computeDimensions(answers);
+  const dims = [session.volontas, session.resilentia, session.intellectus,
+                session.disciplina, session.societas, session.abundantia, session.auctoritas];
   const dimArray = Object.values(dims);
-  const overallScore = Math.round(dimArray.reduce((a, b) => a + b, 0) / dimArray.length);
+  const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
 
   const LANG_INSTRUCTION: Record<string, string> = {
     en: "Respond entirely in English.",
@@ -117,12 +119,9 @@ Return this exact JSON structure:
     if (!process.env.OPENAI_API_KEY) throw new Error("No API key");
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: 900,
-      temperature: 0.8,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 200,
+      temperature: 0.85,
       response_format: { type: "json_object" },
     });
     aiProfile = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
@@ -155,21 +154,10 @@ Return this exact JSON structure:
     .where(eq(archonSessionsTable.userId, req.session.userId));
 
   // Store new session
-  const [session] = await db.insert(archonSessionsTable).values({
-    userId:      req.session.userId,
-    volontas:    dims.volontas,
-    resilentia:  dims.resilentia,
-    intellectus: dims.intellectus,
-    disciplina:  dims.disciplina,
-    societas:    dims.societas,
-    abundantia:  dims.abundantia,
-    auctoritas:  dims.auctoritas,
-    archonCode,
-    archetype,
-    aiProfile,
-    answers,
-    isActive:    true,
-  }).returning();
+  const [session] = await db.select().from(archonSessionsTable)
+    .where(eq(archonSessionsTable.userId, user.id))
+    .orderBy(desc(archonSessionsTable.createdAt))
+    .limit(1);
 
   res.json({ session, archonCode, archetype, dimensions: dims, aiProfile, overallScore });
 });
@@ -178,7 +166,7 @@ Return this exact JSON structure:
 router.get("/archon/profile", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
   const [session] = await db.select().from(archonSessionsTable)
-    .where(eq(archonSessionsTable.userId, req.session.userId))
+    .where(eq(archonSessionsTable.userId, user.id))
     .orderBy(desc(archonSessionsTable.createdAt))
     .limit(1);
   res.json({ session: session ?? null });
@@ -186,9 +174,7 @@ router.get("/archon/profile", async (req, res): Promise<void> => {
 
 // ── GET /api/archon/profile/:username — public profile lookup ─────────────────
 router.get("/archon/profile/:username", async (req, res): Promise<void> => {
-  const { username } = req.params;
-  // Resolve username → userId
-  const { usersTable } = await import("@workspace/db");
+  const { username } = req.query as { username?: string };
   const [user] = await db.select({ id: usersTable.id })
     .from(usersTable)
     .where(eq(usersTable.username, username))
@@ -262,4 +248,157 @@ The directive should be specific, actionable, and feel like a classified militar
   }
 });
 
+// ── GET /api/archon/pillar/streaks ────────────────────────────────────────────
+// Returns today's completion status + current streak per pillar for the citizen
+// Also accepts ?username= to show public streak data on another citizen's profile
+router.get("/archon/pillar/streaks", async (req, res): Promise<void> => {
+  const { username } = req.query as { username?: string };
+
+  let targetUserId: number | null = null;
+
+  if (username) {
+    // Public profile: look up by username
+    const [u] = await db.select({ id: usersTable.id }).from(usersTable)
+      .where(eq(usersTable.username, username)).limit(1);
+    targetUserId = u?.id ?? null;
+  } else {
+    // Own profile
+    if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+    targetUserId = req.session.userId;
+  }
+
+  if (!targetUserId) { res.json({ streaks: {} }); return; }
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const pillars = ["mens", "vis", "anima", "legatum"] as const;
+
+  // Fetch all completions for this user across all pillars
+  const rows = await db.select().from(pillarCompletionsTable)
+    .where(eq(pillarCompletionsTable.userId, targetUserId))
+    .orderBy(desc(pillarCompletionsTable.createdAt));
+
+  const streakMap: Record<string, { streak: number; completedToday: boolean; totalDays: number }> = {};
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+  const pillarIdx = VALID_PILLARS.indexOf(pillar); // 0–3
+
+  for (const p of pillars) {
+    const pillarRows = rows.filter(r => r.pillar === p);
+    const todayRow = pillarRows.find(r => r.dateKey === todayKey);
+    const latestRow = pillarRows[0]; // most recent by createdAt desc
+
+    // Streak is only "live" if the last completion was today or yesterday.
+    // If there's a gap (missed day+), the stored streak number is stale — show 0.
+    const isActive =
+      latestRow?.dateKey === todayKey || latestRow?.dateKey === yesterdayKey;
+
+    streakMap[p] = {
+      streak: isActive ? (latestRow?.streak ?? 0) : 0,
+      completedToday: !!todayRow,
+      totalDays: pillarRows.length,
+    };
+  }
+
+  res.json({ streaks: streakMap, todayKey });
+});
+
+// ── POST /api/archon/pillar/complete ─────────────────────────────────────────
+// Mark today's pillar challenge complete — awards +15 XP atomically, tracks streak.
+// Idempotent: repeated/concurrent calls for the same (user, pillar, day) are safe —
+// the UNIQUE constraint + ON CONFLICT DO NOTHING ensures exactly one row, and XP is
+// only awarded when the insert actually inserts (not on conflict).
+router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const { pillar } = req.body as { pillar: string };
+
+  const VALID_PILLARS = ["mens", "vis", "anima", "legatum"];
+  if (!pillar || !VALID_PILLARS.includes(pillar)) {
+    res.status(400).json({ error: "Invalid pillar" }); return;
+  }
+
+  const userId = req.session.userId;
+  const todayKey = new Date().toISOString().slice(0, 10);
+
+  // Calculate yesterday's key for streak continuity check
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+  const pillarIdx = VALID_PILLARS.indexOf(pillar); // 0–3
+  const client = pool ? await pool.connect() : null;
+  if (!client) { res.status(503).json({ error: "Database unavailable" }); return; }
+
+  try {
+    await client.query("BEGIN");
+
+    // Acquire transaction-scoped advisory lock — auto-released at COMMIT/ROLLBACK.
+    // All concurrent completions for the same (user, pillar) queue behind this lock.
+    await client.query("SELECT pg_advisory_xact_lock($1)", [advisoryKey]);
+
+    // Fetch yesterday's streak (within transaction for consistent read)
+    const { rows: yRows } = await client.query<{ streak: number }>(
+      `SELECT streak FROM pillar_completions WHERE user_id=$1 AND pillar=$2 AND date_key=$3 LIMIT 1`,
+      [userId, pillar, yesterdayKey],
+    );
+    const newStreak = yRows.length > 0 ? yRows[0].streak + 1 : 1;
+
+    // Attempt insert; ON CONFLICT DO NOTHING means a same-day repeat is a no-op
+    const { rows: inserted } = await client.query<{ id: number; streak: number }>(
+      `INSERT INTO pillar_completions (user_id, pillar, date_key, streak)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, pillar, date_key) DO NOTHING
+       RETURNING id, streak`,
+      [userId, pillar, todayKey, newStreak],
+    );
+
+    let xpEarned = 0;
+    let finalStreak = newStreak;
+
+    if (inserted.length > 0) {
+      // New completion — award XP atomically inside the same transaction
+      await client.query(
+        `UPDATE users SET xp = xp + 15 WHERE id = $1`,
+        [userId],
+      );
+      xpEarned = 15;
+    } else {
+      // Already completed today — fetch stored streak for accurate response
+      const { rows: existing } = await client.query<{ streak: number }>(
+        `SELECT streak FROM pillar_completions WHERE user_id=$1 AND pillar=$2 AND date_key=$3 LIMIT 1`,
+        [userId, pillar, todayKey],
+      );
+      finalStreak = existing[0]?.streak ?? 1;
+    }
+
+    await client.query("COMMIT");
+
+    // Fetch current XP for the response
+    const { rows: uRows } = await client.query<{ xp: number }>(
+      `SELECT xp FROM users WHERE id = $1 LIMIT 1`,
+      [userId],
+    );
+
+    res.json({
+      success: true,
+      alreadyCompleted: inserted.length === 0,
+      streak: finalStreak,
+      xpEarned,
+      newXp: uRows[0]?.xp ?? 0,
+      pillar,
+      dateKey: todayKey,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    req.log?.error({ err }, "pillar/complete transaction failed");
+    res.status(500).json({ error: "Could not record completion — please try again" });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
+
+  const advisoryKey = userId * 4 + pillarIdx; // fits in int32 range for typical user IDs
