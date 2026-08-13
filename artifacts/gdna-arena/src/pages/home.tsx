@@ -37,45 +37,46 @@ export default function ApexBanner() {
       <div className="absolute w-[800px] h-[800px] bg-yellow-500/10 rounded-full blur-3xl" />
 
       {/* Content */}
-      <div dir="rtl" className="relative z-10 text-center px-4">
+      <div className="relative z-10 text-center px-4">
         {/* Arena label */}
         <h2 className="text-yellow-400 text-base sm:text-2xl tracking-[0.35em] sm:tracking-[0.5em] mb-4 sm:mb-6 font-semibold">
-          GDNA ARENA — gdna.tv
+          {t("apex_arena")}
         </h2>
 
-        {/* Welcome heading */}
-        <h1 className="hero-name text-3xl sm:text-5xl md:text-7xl font-black text-white mb-4 leading-tight break-words">
-          مرحبا بك في{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-            GDNA Arena
-          </span>{" "}
-          👑
+        {/* Founder name */}
+        <h1 className="hero-name text-4xl sm:text-6xl md:text-8xl font-black text-white mb-4 leading-tight break-words">
+          {t("apex_founder")}
+          <span className="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
+            {t("apex_surname")}
+          </span>
         </h1>
 
-        {/* Tagline */}
+        {/* Title */}
         <p className="hero-sub text-yellow-400 text-sm sm:text-xl font-semibold mb-8 tracking-wide px-2">
-          الساحة الرسمية لجمع XP والقطع والتنافس على لقب الإمبراطور
+          {t("apex_title")}
         </p>
 
         {/* CTAs */}
         <div className="flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href="/games"
-            className="royal-btn inline-block px-8 py-3 rounded-[10px] font-bold text-lg"
-            style={{ background: "gold", color: "black", border: "none" }}
-          >
-            ادخل الساحة الآن
+          <Link href="/games">
+            <button
+              className="royal-btn px-8 py-3 rounded-[10px] font-bold text-lg"
+              style={{ background: "gold", color: "black", border: "none" }}
+            >
+              {t("apex_join")}
+            </button>
           </Link>
-          <Link
-            href="/shop"
-            className="inline-block px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
-            style={{ border: "2px solid #C9A84C" }}
-          >
-            تصفح المتجر
+          <Link href="/shop">
+            <button
+              className="px-8 py-3 rounded-[10px] font-bold text-lg text-yellow-400 bg-transparent"
+              style={{ border: "2px solid #C9A84C" }}
+            >
+              {t("apex_shop")}
+            </button>
           </Link>
         </div>
 
-        <p dir="rtl" style={{ color: "#aaa", fontSize: 14, marginTop: 14 }}>
+        <p style={{ color: "#aaa", fontSize: 14, marginTop: 14 }}>
           + استشارة مع الحاكم Ameeq بالصوت و 20 لغة
         </p>
 
@@ -102,28 +103,31 @@ export default function ApexBanner() {
       </div>
     </section>
 
-    {/* ── الأقسام الثلاثة: الساحة / المتجر / المهام ─────────────── */}
-    <section id="pillars" dir="rtl" className="bg-black px-4 py-14 text-center">
-      <p className="text-white/50 mb-10 text-lg">الساحة الرسمية. اختر طريقك يا مواطن</p>
+    {/* ── Section cards: Arena / Shop / Missions ──────────────────── */}
+    <section id="pillars" className="bg-black px-4 py-14 text-center" dir={isRTL ? "rtl" : "ltr"}>
+      <p className="text-white/50 mb-10 text-lg">{t("apex_choose_path")}</p>
       <div className="max-w-[1000px] mx-auto flex flex-wrap justify-center gap-6">
         {[
-          { href: "/games", title: "⚔️ الساحة", desc: "اجمع XP. تنافس. ارتقي من جندي لإمبراطور", cta: "ادخل الساحة" },
-          { href: "/shop", title: "🛒 المتجر", desc: "اصرف القطع. اشتري الترقيات والأدوات النادرة", cta: "تصفح المتجر" },
-          { href: "/growth", title: "🎯 المهام", desc: "انجز المهام اليومية واربح مكافآت ضخمة", cta: "ابدأ المهمة" },
+          { href: "/games", title: t("apex_arena_card_title"), desc: t("apex_arena_card_desc"), cta: t("apex_arena_card_cta") },
+          { href: "/shop",  title: t("apex_shop_card_title"),  desc: t("apex_shop_card_desc"),  cta: t("apex_shop_card_cta") },
+          { href: "/growth",title: t("apex_tasks_card_title"), desc: t("apex_tasks_card_desc"), cta: t("apex_tasks_card_cta") },
         ].map((s) => (
-          <Link
-            key={s.href}
-            href={s.href}
-            className="block rounded-[20px] p-8 w-[280px] text-center bg-[#111] border-2 border-[#333] transition-all duration-300 hover:scale-105 hover:border-[gold]"
-          >
-            <h3 className="font-black text-2xl mb-3" style={{ color: "gold" }}>{s.title}</h3>
-            <p className="text-white/80 text-sm">{s.desc}</p>
-            <span
-              className="block mt-4 py-3 rounded-[10px] font-bold text-white"
-              style={{ background: "red" }}
+          <Link key={s.href} href={s.href}>
+            <div
+              className="group rounded-[20px] p-8 w-[280px] text-center cursor-pointer transition-all duration-300 hover:scale-105"
+              style={{ background: "#111", border: "2px solid #333" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "gold"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#333"; }}
             >
-              {s.cta}
-            </span>
+              <h3 className="font-black text-2xl mb-3" style={{ color: "gold" }}>{s.title}</h3>
+              <p className="text-white/80 text-sm">{s.desc}</p>
+              <span
+                className="block mt-4 py-3 rounded-[10px] font-bold text-white"
+                style={{ background: "#C9A84C" }}
+              >
+                {s.cta}
+              </span>
+            </div>
           </Link>
         ))}
       </div>

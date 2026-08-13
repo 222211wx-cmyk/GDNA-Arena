@@ -81,22 +81,46 @@ router.post("/gs/uploads", requireSessionFirst, upload.single("file"), async (re
   }
 });
 
+// ─── GET /gs/uploads/tags ─────────────────────────────────────────────────────
+router.get("/gs/uploads/tags", async (_req, res): Promise<void> => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT figure_tag AS tag, COUNT(*)::integer AS count
+      FROM gs_uploads
+      WHERE figure_tag IS NOT NULL AND figure_tag <> ''
+      GROUP BY figure_tag
+      ORDER BY count DESC
+    `);
+    res.json({ tags: rows });
+  } catch {
+    res.status(500).json({ error: "Failed to fetch tags" });
+  }
+});
+
 // ─── GET /gs/uploads ──────────────────────────────────────────────────────────
 router.get("/gs/uploads", async (req, res): Promise<void> => {
   try {
-    const { category, type, limit } = req.query;
+    const { category, type, limit, offset, figureTag } = req.query;
     const params: (string | number)[] = [];
     let where = "WHERE 1=1";
-    if (category) { params.push(category as string); where += ` AND category = $${params.length}`; }
-    if (type)     { params.push(type as string);     where += ` AND type = $${params.length}`; }
-    const lim = Math.min(Number(limit) || 50, 200);
+    if (category)  { params.push(category as string);  where += ` AND category = $${params.length}`; }
+    if (type)      { params.push(type as string);      where += ` AND type = $${params.length}`; }
+    if (figureTag) { params.push(figureTag as string); where += ` AND figure_tag = $${params.length}`; }
+    const lim = Math.min(Number(limit) || 20, 200);
+    const off = Math.max(Number(offset) || 0, 0);
     params.push(lim);
+    params.push(off);
+    // Also fetch total count for this filter so the client knows if more pages exist
+    const { rows: countRows } = await pool.query(
+      `SELECT COUNT(*)::integer AS total FROM gs_uploads ${where}`,
+      params.slice(0, params.length - 2)
+    );
     const { rows } = await pool.query(
-      `SELECT id, uploader_name, title, type, category, file_name, file_size, mime_type, views, earnings, created_at
-       FROM gs_uploads ${where} ORDER BY views DESC, created_at DESC LIMIT $${params.length}`,
+      `SELECT id, uploader_name, title, type, category, figure_tag, file_name, file_size, mime_type, views, earnings, created_at
+       FROM gs_uploads ${where} ORDER BY views DESC, created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
-    res.json({ uploads: rows });
+    res.json({ uploads: rows, total: countRows[0]?.total ?? 0 });
   } catch {
     res.status(500).json({ error: "Failed to fetch uploads" });
   }

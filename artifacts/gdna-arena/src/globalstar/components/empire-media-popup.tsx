@@ -8,6 +8,7 @@ export interface EmpireUpload {
   title: string;
   type: 'video' | 'audio';
   category: string;
+  figure_tag?: string;
   file_name: string;
   file_size: number;
   views: number;

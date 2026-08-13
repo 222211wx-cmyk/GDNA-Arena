@@ -239,6 +239,14 @@ function UploadCard({ upload, onClick }: { upload: EmpireUpload; onClick: () => 
         <p className="text-xs mt-0.5" style={{ color: 'rgba(255,215,0,0.55)' }}>
           {upload.uploader_name}
         </p>
+        {upload.figure_tag && (
+          <span
+            className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-bold"
+            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}
+          >
+            {upload.figure_tag}
+          </span>
+        )}
       </div>
       <div className="shrink-0 text-right">
         <div className="flex items-center gap-1 justify-end mb-1">
@@ -275,12 +283,52 @@ export default function Ranking() {
   const [uploads, setUploads] = useState<EmpireUpload[]>([]);
   const [activeUpload, setActiveUpload] = useState<EmpireUpload | null>(null);
   const [uploadTab, setUploadTab] = useState<'all' | 'video' | 'audio'>('all');
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [tags, setTags] = useState<{ tag: string; count: number }[]>([]);
+  const [uploadOffset, setUploadOffset] = useState(0);
+  const [uploadTotal, setUploadTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE_SIZE = 20;
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-  const fetchUploads = () => {
-    fetch(`${BASE}/api/gs/uploads?limit=20`, { credentials: 'include' })
+  const buildUploadUrl = (tag: string | null, type: string, offset: number) => {
+    let url = `${BASE}/api/gs/uploads?limit=${PAGE_SIZE}&offset=${offset}`;
+    if (tag !== null) url += `&figureTag=${encodeURIComponent(tag)}`;
+    if (type !== 'all') url += `&type=${encodeURIComponent(type)}`;
+    return url;
+  };
+
+  const fetchUploads = (tag?: string | null, type?: string) => {
+    const resolvedTag = tag !== undefined ? tag : activeTag;
+    const resolvedType = type !== undefined ? type : uploadTab;
+    fetch(buildUploadUrl(resolvedTag, resolvedType, 0), { credentials: 'include' })
       .then(r => r.json())
-      .then(d => setUploads(d.uploads ?? []))
+      .then(d => {
+        setUploads(d.uploads ?? []);
+        setUploadTotal(d.total ?? 0);
+        setUploadOffset(0);
+      })
+      .catch(() => {});
+  };
+
+  const loadMoreUploads = () => {
+    const nextOffset = uploadOffset + PAGE_SIZE;
+    setLoadingMore(true);
+    fetch(buildUploadUrl(activeTag, uploadTab, nextOffset), { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        setUploads(prev => [...prev, ...(d.uploads ?? [])]);
+        setUploadTotal(d.total ?? uploadTotal);
+        setUploadOffset(nextOffset);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
+  };
+
+  const fetchTags = () => {
+    fetch(`${BASE}/api/gs/uploads/tags`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setTags(d.tags ?? []))
       .catch(() => {});
   };
 
@@ -294,7 +342,7 @@ export default function Ranking() {
       .catch(() => {});
   }, [activeDomain, rankingData]);
 
-  useEffect(() => { fetchUploads(); }, []);
+  useEffect(() => { fetchUploads(); fetchTags(); }, []);
 
   if (isLoading) {
     return (
@@ -317,9 +365,7 @@ export default function Ranking() {
 
   const getMedia = (figureId: number) => media.filter(m => m.figureId === figureId);
 
-  const filteredUploads = uploads.filter(u =>
-    uploadTab === 'all' ? true : u.type === uploadTab
-  );
+  // Type filtering is now server-side; uploads already reflect the active type filter
 
   return (
     <div className="min-h-[100dvh] bg-background">
@@ -338,7 +384,7 @@ export default function Ranking() {
       <UploadModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onUploaded={() => { fetchUploads(); setUploadOpen(false); }}
+        onUploaded={() => { fetchUploads(); fetchTags(); setUploadOpen(false); }}
       />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
@@ -491,12 +537,39 @@ export default function Ranking() {
             </Link>
           </div>
 
-          {/* Upload type filter */}
+          {/* Tag filter bar */}
+          {tags.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-thin">
+              <button
+                onClick={() => { setActiveTag(null); fetchUploads(null); }}
+                className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all"
+                style={activeTag === null
+                  ? { background: '#FFD700', color: '#000' }
+                  : { background: 'rgba(255,215,0,0.06)', color: 'rgba(255,215,0,0.6)', border: '1px solid rgba(255,215,0,0.2)' }}
+              >
+                الكل
+              </button>
+              {tags.map(({ tag, count }) => (
+                <button
+                  key={tag}
+                  onClick={() => { setActiveTag(tag); fetchUploads(tag); }}
+                  className="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all"
+                  style={activeTag === tag
+                    ? { background: '#FFD700', color: '#000' }
+                    : { background: 'rgba(255,215,0,0.06)', color: 'rgba(255,215,0,0.6)', border: '1px solid rgba(255,215,0,0.2)' }}
+                >
+                  {tag} · {count}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Upload type filter — server-side, resets pagination */}
           <div className="flex gap-2 mb-4">
             {([['all', 'الكل'], ['video', 'فيديو'], ['audio', 'صوت']] as const).map(([val, label]) => (
               <button
                 key={val}
-                onClick={() => setUploadTab(val)}
+                onClick={() => { setUploadTab(val); fetchUploads(undefined, val); }}
                 className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                 style={uploadTab === val
                   ? { background: '#FFD700', color: '#000' }
@@ -509,7 +582,7 @@ export default function Ranking() {
             ))}
           </div>
 
-          {filteredUploads.length === 0 ? (
+          {uploads.length === 0 ? (
             <div
               className="rounded-2xl p-8 text-center"
               style={{ background: 'rgba(255,215,0,0.03)', border: '1.5px dashed rgba(255,215,0,0.2)' }}
@@ -531,9 +604,28 @@ export default function Ranking() {
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredUploads.map(u => (
+              {uploads.map(u => (
                 <UploadCard key={u.id} upload={u} onClick={() => setActiveUpload(u)} />
               ))}
+              {uploads.length < uploadTotal && (
+                <button
+                  onClick={loadMoreUploads}
+                  disabled={loadingMore}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold transition-all mt-2"
+                  style={{
+                    background: 'rgba(255,215,0,0.06)',
+                    border: '1px solid rgba(255,215,0,0.25)',
+                    color: loadingMore ? 'rgba(255,215,0,0.3)' : 'rgba(255,215,0,0.7)',
+                  }}
+                >
+                  {loadingMore ? 'جارٍ التحميل...' : `تحميل المزيد · ${uploadTotal - uploads.length} متبقٍ`}
+                </button>
+              )}
+              {uploads.length > 0 && uploads.length >= uploadTotal && uploadTotal > PAGE_SIZE && (
+                <p className="text-center text-xs py-1" style={{ color: 'rgba(255,215,0,0.3)' }}>
+                  تم تحميل جميع المحتويات · {uploadTotal}
+                </p>
+              )}
             </div>
           )}
         </div>
