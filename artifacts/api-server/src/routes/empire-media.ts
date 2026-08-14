@@ -5,6 +5,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { pool } from "@workspace/db";
 import { getRate } from "./rights";
+import { moderateText } from "../lib/moderate";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -57,6 +58,16 @@ router.post("/gs/uploads", requireSessionFirst, upload.single("file"), async (re
     if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
     const { title, category, figureTag } = req.body;
     const type = req.file.mimetype.startsWith("video/") ? "video" : "audio";
+
+    // ── الموقع ضد التفاهة: عنوان العمل يمر عبر فلتر الجودة قبل النشر
+    if (title && typeof title === "string" && title.trim()) {
+      const mod = await moderateText(title.trim(), { allowTrivial: true });
+      if (!mod.ok) {
+        fs.unlink(req.file.path, () => {});
+        res.status(400).json({ error: "⚖️ العنوان مرفوض — الإمبراطورية ضد التفاهة، اختر عنواناً يليق بعملك" });
+        return;
+      }
+    }
 
     // ── Rights protection: fingerprint the file (sha256). First owner wins —
     // re-uploading someone else's work is rejected and earns nothing.
