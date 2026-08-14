@@ -100,7 +100,19 @@ if (pool) {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false;
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uniq ON users (LOWER(email));
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uniq ON users (LOWER(username));
-  `).catch((err) => logger.error(err, "Failed to create session table / auth indexes"));
+  `).then(() => {
+    // Bootstrap admin access: grant is_admin to emails listed in ADMIN_EMAILS
+    // (comma-separated). Needed because production DB writes can only happen
+    // from the running app — there is no manual SQL path to prod.
+    const adminEmails = (process.env.ADMIN_EMAILS ?? "")
+      .split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
+    if (adminEmails.length && pool) {
+      return pool.query(
+        `UPDATE users SET is_admin = true WHERE LOWER(email) = ANY($1) AND is_admin = false`,
+        [adminEmails]
+      ).then(r => { if (r.rowCount) logger.info(`Granted admin to ${r.rowCount} account(s)`); });
+    }
+  }).catch((err) => logger.error(err, "Failed to create session table / auth indexes"));
 }
 export const sessionMiddleware = session({
   store: pool
