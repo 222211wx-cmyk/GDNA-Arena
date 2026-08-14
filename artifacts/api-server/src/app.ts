@@ -114,11 +114,16 @@ if (pool) {
     }
   }).catch((err) => logger.error(err, "Failed to create session table / auth indexes"));
 }
+// Never run production with a forgeable fallback secret — refuse to start.
+const sessionSecret = process.env.SESSION_SECRET
+  ?? (process.env.NODE_ENV === "production"
+    ? (() => { logger.error("SESSION_SECRET is required in production"); process.exit(1); })()
+    : "gdna-arena-dev-secret");
 export const sessionMiddleware = session({
   store: pool
     ? new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: false })
     : undefined,
-  secret: process.env.SESSION_SECRET ?? "gdna-arena-secret-fallback",
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   // Netflix-style: every visit slides the expiry window forward, so active

@@ -113,8 +113,8 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     const takenEmail = existing[0].email.toLowerCase() === email;
     res.status(409).json({
       error: takenEmail
-        ? "هذا البريد مسجّل من قبل — عندك حساب بالفعل، سجّل الدخول مباشرة"
-        : "اسم المستخدم مأخوذ — اختر اسماً آخر",
+        ? "هذا البريد مسجّل من قبل — سجّل الدخول مباشرة | Cet email est déjà enregistré — connectez-vous"
+        : "اسم المستخدم مأخوذ — اختر اسماً آخر | Nom d'utilisateur déjà pris",
     });
     return;
   }
@@ -129,12 +129,16 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   } catch (err: any) {
     if (err?.code === "23505" || err?.cause?.code === "23505") {
       // Unique index race — someone registered the same email/username concurrently
-      res.status(409).json({ error: "هذا البريد أو الاسم مسجّل من قبل — سجّل الدخول مباشرة" });
+      res.status(409).json({ error: "هذا البريد أو الاسم مسجّل من قبل — سجّل الدخول مباشرة | Email ou nom déjà enregistré" });
       return;
     }
     throw err;
   }
 
+  // Regenerate the session ID before authenticating it (anti session-fixation)
+  await new Promise<void>((resolve, reject) =>
+    req.session.regenerate((err) => (err ? reject(err) : resolve()))
+  );
   req.session.userId = user.id;
   req.log.info({ userId: user.id }, "User registered");
 
@@ -144,7 +148,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   res.status(201).json(serializeUser(user));
   } catch (err) {
     req.log.error(err, "Register error");
-    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى" });
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
   }
 });
 
@@ -152,8 +156,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   try {
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   const password = typeof req.body?.password === "string" ? req.body.password : "";
-  // "Se souvenir de moi" — defaults to true: one login, stay in like Netflix
-  const rememberMe = req.body?.rememberMe !== false;
+  // "Se souvenir de moi" — must be explicitly true; omitted = standard 7 days
+  const rememberMe = req.body?.rememberMe === true;
   if (!email || !password) {
     res.status(400).json({ error: "البريد الإلكتروني وكلمة السر مطلوبان — Email et mot de passe requis" });
     return;
@@ -171,7 +175,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!user) {
-    res.status(401).json({ error: "لا يوجد حساب بهذا البريد — سجّل حساباً جديداً | Aucun compte avec cet email" });
+    // Generic message (same as wrong password) — prevents account enumeration
+    res.status(401).json({ error: "البريد أو كلمة السر غير صحيحة — Email ou mot de passe incorrect" });
     return;
   }
 
@@ -182,19 +187,23 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     valid = false; // malformed legacy hash — treat as invalid, not a crash
   }
   if (!valid) {
-    res.status(401).json({ error: "كلمة السر غير صحيحة — Mot de passe incorrect" });
+    res.status(401).json({ error: "البريد أو كلمة السر غير صحيحة — Email ou mot de passe incorrect" });
     return;
   }
 
+  // Regenerate the session ID after credential verification (anti session-fixation)
+  await new Promise<void>((resolve, reject) =>
+    req.session.regenerate((err) => (err ? reject(err) : resolve()))
+  );
   req.session.userId = user.id;
-  // Remember me: 90-day sliding session; otherwise the default 7 days.
+  // Remember me: 30-day sliding session; otherwise the default 7 days.
   // Combined with rolling sessions, active citizens never see the login page.
-  if (rememberMe) req.session.cookie.maxAge = 90 * 24 * 60 * 60 * 1000;
+  if (rememberMe) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
   req.log.info({ userId: user.id, rememberMe }, "User logged in");
   res.json(serializeUser(user));
   } catch (err) {
     req.log.error(err, "Login error");
-    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى" });
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
   }
 });
 
