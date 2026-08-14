@@ -392,7 +392,7 @@ export default function MessagesTab({ user, st, dir }: Props) {
 
   return (
     <>
-      <div style={{ display: "flex", gap: 12, height: "calc(100vh - 280px)", minHeight: 440 }}>
+      <div style={{ display: "flex", gap: 12, height: "calc(100dvh - 280px)", minHeight: 440, overscrollBehavior: "none" }}>
         {/* ── Sidebar ─────────────────────────────────────────────────── */}
         <div style={{ width: 240, minWidth: 190, display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
           {/* Action buttons */}
@@ -536,7 +536,7 @@ export default function MessagesTab({ user, st, dir }: Props) {
                   return (
                     <div key={msg.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6 }}>
                       {!mine && <Avatar name={msg.username} size={24} />}
-                      <div style={{ maxWidth: "70%", background: mine ? GOLD : "#1a1a1a", borderRadius: mine ? "14px 14px 2px 14px" : "14px 14px 14px 2px", padding: "8px 12px" }}>
+                      <div style={{ maxWidth: "70%", background: mine ? GOLD : "#1a1a1a", borderRadius: mine ? "14px 14px 2px 14px" : "14px 14px 14px 2px", padding: "8px 12px", userSelect: "text", WebkitUserSelect: "text" }}>
                         {!mine && <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: GOLD }}>{msg.username}</p>}
                         {msg.type === "audio" && msg.audioUrl ? (
                           <audio controls src={resolveUrl(msg.audioUrl)} style={{ maxWidth: 200, height: 36 }} />
@@ -660,7 +660,7 @@ export default function MessagesTab({ user, st, dir }: Props) {
               <input ref={fileRef}    type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
 
               {/* Toolbar + input bar */}
-              <div style={{ padding: "10px 12px", borderTop: `1px solid ${GOLD}08`, display: "flex", gap: 5, alignItems: "center", flexShrink: 0, flexWrap: "wrap" }}>
+              <div style={{ padding: "10px 12px", paddingBottom: "calc(10px + env(safe-area-inset-bottom))", borderTop: `1px solid ${GOLD}08`, display: "flex", gap: 5, alignItems: "center", flexShrink: 0, flexWrap: "nowrap", overflowX: "auto", position: "sticky", bottom: 0, background: "#080808", zIndex: 50 }}>
                 {([
                   ["📎", st.attach_gallery ?? "معرض الصور والفيديو", () => galleryRef.current?.click()],
                   ["📷", st.attach_camera ?? "كاميرا",               () => cameraRef.current?.click()],
