@@ -367,14 +367,12 @@ function ArchonIdentityWidget() {
   );
 }
 
-function getRank(xp: number): { label: string; next: number; color: string } {
-  if (xp < 500)  return { label: "Bronze I",  next: 500,   color: "#cd7f32" };
-  if (xp < 1000) return { label: "Bronze II", next: 1000,  color: "#cd7f32" };
-  if (xp < 2000) return { label: "Silver I",  next: 2000,  color: "#aaa9ad" };
-  if (xp < 3500) return { label: "Silver II", next: 3500,  color: "#aaa9ad" };
-  if (xp < 5000) return { label: "Gold I",    next: 5000,  color: "#ffd700" };
-  if (xp < 7500) return { label: "Gold II",   next: 7500,  color: "#ffd700" };
-  return { label: "Diamond", next: 10000, color: "#00d4ff" };
+// نظام المستويات — Empire Levels (mirrors the server's /api/levels table)
+function getRank(xp: number): { label: string; min: number; next: number; color: string; icon: string; multiplier: number } {
+  if (xp <= 100)  return { label: "مبتدئ Level 1",  min: 0,    next: 101,  color: "#8bc34a", icon: "🌱", multiplier: 1.0 };
+  if (xp <= 500)  return { label: "محترف Level 2",  min: 101,  next: 501,  color: "#aaa9ad", icon: "⚔️", multiplier: 1.25 };
+  if (xp <= 2000) return { label: "خبير Level 3",   min: 501,  next: 2001, color: "#ffd700", icon: "🏆", multiplier: 1.5 };
+  return { label: "أسطورة Level 4", min: 2001, next: xp, color: "#00d4ff", icon: "👑", multiplier: 2.0 };
 }
 
 export default function Dashboard() {
@@ -408,7 +406,9 @@ export default function Dashboard() {
   if (!user) return null;
 
   const rank = getRank(user.xp);
-  const xpProgress = Math.min((user.xp / rank.next) * 100, 100);
+  const xpProgress = rank.next > rank.min
+    ? Math.min(((user.xp - rank.min) / (rank.next - rank.min)) * 100, 100)
+    : 100; // max level
   const winRate = user.gamesPlayed > 0 ? Math.round((user.wins / user.gamesPlayed) * 100) : 0;
 
   const handleLogout = async () => {
@@ -544,7 +544,8 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-widest text-muted-foreground">Rank</p>
-                  <p className="text-xl font-bold" style={{ color: rank.color }} data-testid="text-rank">{rank.label}</p>
+                  <p className="text-xl font-bold" style={{ color: rank.color }} data-testid="text-rank">{rank.icon} {rank.label}</p>
+                  <p className="text-[11px] text-muted-foreground">مضاعف الأرباح ×{rank.multiplier}</p>
                 </div>
               </div>
               <div className="w-full bg-background rounded-full h-2 mt-4 border border-primary/20">

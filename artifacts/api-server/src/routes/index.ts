@@ -35,6 +35,7 @@ import governorRouter from "./governor";
 import ameeqRouter from "./ameeq";
 import starsRouter from "./stars";
 import missionsRouter from "./missions";
+import levelsRouter from "./levels";
 
 const router: IRouter = Router();
 
@@ -65,6 +66,7 @@ router.use(starsRouter);
 router.use(missionsRouter);
 router.use(empireMediaRouter);
 router.use(rightsRouter);
+router.use(levelsRouter);
 router.use("/neural", neuralRouter);
 router.use("/genome", genomeRouter);
 router.use("/geo", geoRouter);

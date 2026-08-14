@@ -4,6 +4,7 @@ import { db, pulsePosts, pulseEvents, pulsePostLikes, usersTable, transactionsTa
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { pushNotification } from "./notifications";
 import { getRate } from "./rights";
+import { multiplierForUserId } from "../lib/levels.js";
 
 const router: IRouter = Router();
 
@@ -84,7 +85,10 @@ router.post("/pulse/post/:id/like", async (req, res): Promise<void> => {
   const selfLike = sessionUserId !== null && post.userId === sessionUserId;
   if (sessionUserId && !selfLike) {
     const rate = await getRate("pulse_post", 0.05);
-    await db.execute(sql`UPDATE pulse_posts SET earnings = COALESCE(earnings,0) + ${rate} WHERE id = ${postId}`);
+    // Higher empire levels earn more per like (level multiplier of the AUTHOR)
+    const mult = post.userId ? await multiplierForUserId(post.userId) : 1.0;
+    const amount = Math.round(rate * mult * 10000) / 10000;
+    await db.execute(sql`UPDATE pulse_posts SET earnings = COALESCE(earnings,0) + ${amount} WHERE id = ${postId}`);
   }
   const [updated] = await db.update(pulsePosts).set({ likes: sql`${pulsePosts.likes} + 1` })
     .where(eq(pulsePosts.id, postId)).returning({ likes: pulsePosts.likes, userId: pulsePosts.userId });

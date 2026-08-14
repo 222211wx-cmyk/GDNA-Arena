@@ -17,7 +17,7 @@ const MIN_MEANINGFUL_LENGTH = 15;
 const TRIVIAL_PATTERNS = [
   /^(lol|lmao|haha|hehe|ok|yes|no|wow|omg|nice|good|great|cool|test|hi|hello|hey|sup|yo|yep|nope|true|false|sure|okay|k|kk|lol+|lmao+)\.?[!?]*$/i,
   /^(.)\1{4,}$/, // "aaaaa", ".....", "!!!!!!" etc.
-  /^\W+$/,       // only symbols / emojis
+  /^[^\p{L}\p{N}]+$/u, // only symbols / emojis (Unicode-aware: Arabic letters are letters, not symbols)
   /^(first|first!|1st|gg|ez|wp|rekt|noob|based|cringe|mid|ratio|L|W)\.?!?$/i,
   /^.{1,4}$/,    // anything under 5 chars
 ];

@@ -35,6 +35,20 @@ interface PiracyReport {
 
 interface RateSetting { content_type: string; rate: string; unit: string }
 
+interface FinanceData {
+  totalRevenue: number;
+  sources: {
+    globalstar: { earnings: number; views: number; items: number };
+    pulse: { earnings: number; likes: number; items: number };
+  };
+  withdrawalsCommitted: number;
+  divisions: { division: string; sharePct: number; amount: number }[];
+}
+
+const DIVISION_ICONS: Record<string, string> = {
+  GLOBALSTAR: "🌟", "GDNA TV": "📺", "GDNA MUSIC": "🎵", "GDNA MERCH": "👕",
+};
+
 const RATE_LABELS: Record<string, string> = {
   gs_upload: "🎬 أعمال GlobalStar — الريع لكل مشاهدة",
   pulse_post: "📢 منشورات Pulse — الريع لكل إعجاب",
@@ -50,6 +64,9 @@ export default function AdminWithdrawals() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
   const [rateBusy, setRateBusy] = useState<string | null>(null);
+  const [finance, setFinance] = useState<FinanceData | null>(null);
+  const [shareDraft, setShareDraft] = useState<Record<string, string>>({});
+  const [shareMsg, setShareMsg] = useState("");
 
   const headers = useCallback((): Record<string, string> => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -79,6 +96,17 @@ export default function AdminWithdrawals() {
     void fetch(API("/api/rights/settings"), { credentials: "include" })
       .then(res => res.ok ? res.json() : { settings: [] })
       .then(d => setRates(d.settings ?? []));
+    // الإدارة المالية — revenue split per division
+    void fetch(API("/api/rights/admin/finance"), { headers: h, credentials: "include" })
+      .then(res => res.ok ? res.json() : null)
+      .then(d => {
+        if (d) {
+          setFinance(d);
+          const draft: Record<string, string> = {};
+          for (const dv of d.divisions) draft[dv.division] = String(dv.sharePct);
+          setShareDraft(draft);
+        }
+      });
   }, []);
 
   useEffect(() => { if (secret) load(secret); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -124,6 +152,22 @@ export default function AdminWithdrawals() {
       });
       if (!r.ok) setError("فشل حفظ النسبة");
     } finally { setRateBusy(null); }
+  }
+
+  async function saveShares() {
+    setShareMsg("");
+    const shares = Object.entries(shareDraft).map(([division, pct]) => ({ division, sharePct: parseFloat(pct) }));
+    const sum = shares.reduce((s, x) => s + (isNaN(x.sharePct) ? 0 : x.sharePct), 0);
+    if (Math.abs(sum - 100) > 0.01) { setShareMsg(`⚠️ المجموع ${sum}% — خاصو يكون 100%`); return; }
+    const r = await fetch(API("/api/rights/admin/divisions"), {
+      method: "PATCH", headers: headers(), credentials: "include",
+      body: JSON.stringify({ shares }),
+    });
+    if (r.ok) { setShareMsg("✅ تم الحفظ"); void load(secret); }
+    else {
+      const j = await r.json().catch(() => ({}));
+      setShareMsg(j.error ?? "فشل الحفظ");
+    }
   }
 
   const pendingTotal = rows.filter(w => w.status === "pending")
@@ -197,6 +241,58 @@ export default function AdminWithdrawals() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* ─── الإدارة المالية — تقسيم الأرباح ─── */}
+        <h2 style={{ color: GOLD, fontSize: 17, fontWeight: 900, margin: "34px 0 12px" }}>🏦 الإدارة المالية — تقسيم الأرباح</h2>
+        {!finance ? (
+          <p style={{ color: "#666", textAlign: "center", padding: 24 }}>جارٍ التحميل...</p>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 14 }}>
+              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}30`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+                <p style={{ margin: 0, color: "#888", fontSize: 11 }}>💰 إجمالي المداخيل</p>
+                <p style={{ margin: "4px 0 0", color: GOLD, fontWeight: 900, fontSize: 20 }}>{finance.totalRevenue.toFixed(2)} 🪙</p>
+              </div>
+              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+                <p style={{ margin: 0, color: "#888", fontSize: 11 }}>🎬 GlobalStar ({finance.sources.globalstar.views} مشاهدة)</p>
+                <p style={{ margin: "4px 0 0", color: "#fff", fontWeight: 800, fontSize: 16 }}>{finance.sources.globalstar.earnings.toFixed(2)} 🪙</p>
+              </div>
+              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+                <p style={{ margin: 0, color: "#888", fontSize: 11 }}>📢 Pulse ({finance.sources.pulse.likes} إعجاب)</p>
+                <p style={{ margin: "4px 0 0", color: "#fff", fontWeight: 800, fontSize: 16 }}>{finance.sources.pulse.earnings.toFixed(2)} 🪙</p>
+              </div>
+              <div style={{ background: "#0d0d0d", border: `1px solid #ef444430`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+                <p style={{ margin: 0, color: "#888", fontSize: 11 }}>📤 سحوبات ملتزم بها</p>
+                <p style={{ margin: "4px 0 0", color: "#ef4444", fontWeight: 800, fontSize: 16 }}>{finance.withdrawalsCommitted.toFixed(2)} 🪙</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {finance.divisions.map(d => (
+                <div key={d.division} style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <p style={{ margin: 0, color: "#fff", fontSize: 14, fontWeight: 800, flex: 1, minWidth: 140 }}>
+                    {DIVISION_ICONS[d.division] ?? "🏛️"} {d.division}
+                  </p>
+                  <div style={{ flex: 2, minWidth: 120, height: 8, background: "#1a1a1a", borderRadius: 6, overflow: "hidden" }}>
+                    <div style={{ width: `${d.sharePct}%`, height: "100%", background: GOLD, borderRadius: 6 }} />
+                  </div>
+                  <input type="number" step="1" min="0" max="100"
+                    value={shareDraft[d.division] ?? String(d.sharePct)}
+                    onChange={e => setShareDraft(prev => ({ ...prev, [d.division]: e.target.value }))}
+                    style={{ width: 64, background: "#111", border: `1px solid ${GOLD}25`, borderRadius: 8, padding: "6px 8px", color: GOLD, fontSize: 13, fontWeight: 800, textAlign: "center", outline: "none" }} />
+                  <span style={{ color: "#888", fontSize: 12, minWidth: 20 }}>%</span>
+                  <b style={{ color: GOLD, fontSize: 14, minWidth: 90, textAlign: "left" }}>{d.amount.toFixed(2)} 🪙</b>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+              <button onClick={() => void saveShares()}
+                style={{ background: GOLD, border: "none", borderRadius: 10, padding: "8px 18px", color: "#000", fontWeight: 900, fontSize: 13, cursor: "pointer" }}>
+                حفظ النسب
+              </button>
+              {shareMsg && <span style={{ color: shareMsg.startsWith("✅") ? "#22c55e" : "#ef4444", fontSize: 13 }}>{shareMsg}</span>}
+            </div>
+          </>
         )}
 
         {/* ─── نسب الريع والأرباح ─── */}

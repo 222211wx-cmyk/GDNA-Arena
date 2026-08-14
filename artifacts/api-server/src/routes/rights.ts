@@ -40,6 +40,21 @@ export async function ensureRightsTables(): Promise<void> {
       ALTER TABLE pulse_posts ADD COLUMN IF NOT EXISTS media_type TEXT;
       ALTER TABLE gs_uploads ADD COLUMN IF NOT EXISTS is_frozen BOOLEAN NOT NULL DEFAULT false;
       CREATE UNIQUE INDEX IF NOT EXISTS uq_pulse_post_likes ON pulse_post_likes (post_id, voter_ip);
+      CREATE TABLE IF NOT EXISTS revenue_divisions (
+        division TEXT PRIMARY KEY,
+        share_pct NUMERIC(5,2) NOT NULL CHECK (share_pct >= 0 AND share_pct <= 100),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    // Seed the empire's revenue split (YouTube/Twitch-style profit share)
+    await pool.query(`
+      INSERT INTO revenue_divisions (division, share_pct, sort_order) VALUES
+        ('GLOBALSTAR', 40, 1),
+        ('GDNA TV', 30, 2),
+        ('GDNA MUSIC', 20, 3),
+        ('GDNA MERCH', 10, 4)
+      ON CONFLICT (division) DO NOTHING;
     `);
     // Seed default rates (keeps existing 0.01/view for uploads)
     await pool.query(`
@@ -215,6 +230,79 @@ router.get("/rights/my-earnings", async (req, res): Promise<void> => {
       totalEarnings: parseFloat(gs[0].total) + parseFloat(pulse[0].total),
       rates: settings,
     });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ─── GET /rights/admin/finance — الإدارة المالية: revenue per division ────────
+// Total platform revenue = all content earnings (GS views + Pulse likes),
+// automatically split across the empire's divisions by their share_pct.
+router.get("/rights/admin/finance", async (req, res): Promise<void> => {
+  try {
+    if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
+    const { rows: gs } = await pool.query(
+      `SELECT COALESCE(SUM(earnings),0) AS total, COALESCE(SUM(views),0)::int AS views, COUNT(*)::int AS items FROM gs_uploads`);
+    const { rows: pulse } = await pool.query(
+      `SELECT COALESCE(SUM(earnings),0) AS total, COALESCE(SUM(likes),0)::int AS likes, COUNT(*)::int AS items FROM pulse_posts WHERE is_visible=true`);
+    const { rows: withdrawals } = await pool.query(
+      `SELECT COALESCE(SUM(amount_coins),0) AS total FROM gs_withdrawals WHERE status IN ('pending','approved','paid')`);
+    const gsTotal = parseFloat(gs[0].total);
+    const pulseTotal = parseFloat(pulse[0].total);
+    const totalRevenue = Math.round((gsTotal + pulseTotal) * 10000) / 10000;
+    const { rows: divisions } = await pool.query(
+      `SELECT division, share_pct, sort_order FROM revenue_divisions ORDER BY sort_order`);
+    res.json({
+      totalRevenue,
+      sources: {
+        globalstar: { earnings: gsTotal, views: gs[0].views, items: gs[0].items },
+        pulse: { earnings: pulseTotal, likes: pulse[0].likes, items: pulse[0].items },
+      },
+      withdrawalsCommitted: parseFloat(withdrawals[0].total),
+      divisions: divisions.map((d: any) => ({
+        division: d.division,
+        sharePct: parseFloat(d.share_pct),
+        amount: Math.round(totalRevenue * parseFloat(d.share_pct)) / 100,
+      })),
+    });
+  } catch { res.status(500).json({ error: "Failed" }); }
+});
+
+// ─── PATCH /rights/admin/divisions — admin edits the split (must total 100) ───
+router.patch("/rights/admin/divisions", async (req, res): Promise<void> => {
+  try {
+    if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
+    const shares = req.body?.shares;
+    if (!Array.isArray(shares) || shares.length === 0) {
+      res.status(400).json({ error: "shares مطلوبة" }); return;
+    }
+    const { rows: existing } = await pool.query(`SELECT division FROM revenue_divisions`);
+    const known = new Set(existing.map((r: any) => r.division));
+    let sum = 0;
+    for (const s of shares) {
+      const pct = parseFloat(s?.sharePct);
+      if (!known.has(s?.division) || isNaN(pct) || pct < 0 || pct > 100) {
+        res.status(400).json({ error: "قسم غير معروف أو نسبة غير صالحة" }); return;
+      }
+      sum += pct;
+    }
+    const submitted = new Set(shares.map((s: any) => s?.division));
+    if (submitted.size !== shares.length || submitted.size !== known.size || Math.abs(sum - 100) > 0.01) {
+      res.status(400).json({ error: "مجموع النسب خاصو يكون 100% ولجميع الأقسام" }); return;
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const s of shares) {
+        await client.query(
+          `UPDATE revenue_divisions SET share_pct=$1, updated_at=NOW() WHERE division=$2`,
+          [parseFloat(s.sharePct), s.division]);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally { client.release(); }
+    const { rows } = await pool.query(`SELECT division, share_pct, sort_order FROM revenue_divisions ORDER BY sort_order`);
+    res.json({ divisions: rows });
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 

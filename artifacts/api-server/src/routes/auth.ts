@@ -91,7 +91,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Username contains prohibited content." });
     return;
   }
-  const usernameMod = await moderateText(username);
+  // allowTrivial: usernames are short by nature (3–20 chars) — only run the
+  // profanity/meme/OpenAI checks, not the 15-char "substance" rule.
+  const usernameMod = await moderateText(username, { allowTrivial: true });
   if (!usernameMod.ok) {
     res.status(400).json({ error: "Username rejected by content filter." });
     return;

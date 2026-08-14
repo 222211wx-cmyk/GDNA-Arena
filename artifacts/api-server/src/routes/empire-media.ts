@@ -5,6 +5,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { pool } from "@workspace/db";
 import { getRate } from "./rights";
+import { getLevel, multiplierForUsername } from "../lib/levels.js";
 import { moderateText } from "../lib/moderate";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -200,12 +201,18 @@ router.post("/gs/uploads/:id/view", async (req, res): Promise<void> => {
         [id, ip]
       );
       const rate = await getRate("gs_upload", 0.01);
+      // Higher empire levels earn more per view (level multiplier of the UPLOADER).
+      // Incremental credit (not a recompute) so past earnings at old rates/levels stay honest.
+      const { rows: up } = await pool.query(
+        `SELECT uploader_name FROM gs_uploads WHERE id=$1`, [id]);
+      const mult = up[0] ? await multiplierForUsername(up[0].uploader_name) : 1.0;
+      const amount = Math.round(rate * mult * 10000) / 10000;
       // Frozen (confirmed pirated) uploads never earn again
       const { rows } = await pool.query(
         `UPDATE gs_uploads SET views = views + 1,
-           earnings = CASE WHEN is_frozen THEN 0 ELSE ROUND((views + 1) * $2::numeric, 4) END
+           earnings = CASE WHEN is_frozen THEN earnings ELSE ROUND(earnings + $2::numeric, 4) END
          WHERE id=$1 RETURNING views, earnings`,
-        [id, rate]
+        [id, amount]
       );
       res.json({ views: rows[0]?.views ?? 0, earnings: rows[0]?.earnings ?? 0, counted: true });
     } else {
@@ -407,10 +414,15 @@ router.get("/gifs/search", async (req, res): Promise<void> => {
     if (!name) { res.status(401).json({ error: "سجّل الدخول أولاً" }); return; }
     const key = process.env.GIPHY_API_KEY;
     if (!key) { res.status(503).json({ error: "خدمة GIF غير مفعّلة بعد — المفتاح غير موجود" }); return; }
+    // Level perks: higher levels get more GIFs; expert+ unlock exclusive stickers
+    const { rows: lvlRows } = await pool.query(`SELECT xp FROM users WHERE username=$1`, [name]);
+    const lvl = getLevel(lvlRows[0]?.xp ?? 0);
     const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 80) : "";
+    const wantStickers = req.query.type === "stickers" && lvl.gifExclusive;
+    const endpoint = wantStickers ? "stickers" : "gifs";
     const url = q
-      ? `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(q)}&limit=24&rating=pg-13`
-      : `https://api.giphy.com/v1/gifs/trending?api_key=${key}&limit=24&rating=pg-13`;
+      ? `https://api.giphy.com/v1/${endpoint}/search?api_key=${key}&q=${encodeURIComponent(q)}&limit=${lvl.gifLimit}&rating=pg-13`
+      : `https://api.giphy.com/v1/${endpoint}/trending?api_key=${key}&limit=${lvl.gifLimit}&rating=pg-13`;
     const r = await fetch(url);
     if (r.status === 401 || r.status === 403) {
       res.status(503).json({ error: "مفتاح GIPHY غير صالح — خاص مفتاح جديد من developers.giphy.com" }); return;
@@ -423,7 +435,7 @@ router.get("/gifs/search", async (req, res): Promise<void> => {
       preview: g.images?.fixed_width_small?.url ?? g.images?.fixed_width?.url,
       title: g.title ?? "",
     })).filter((g: any) => g.url && g.preview);
-    res.json({ gifs });
+    res.json({ gifs, level: { level: lvl.level, name: lvl.name, icon: lvl.icon, gifLimit: lvl.gifLimit, exclusiveUnlocked: lvl.gifExclusive } });
   } catch {
     res.status(500).json({ error: "GIF search failed" });
   }
