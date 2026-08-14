@@ -5,6 +5,39 @@ import { db, usersTable } from "@workspace/db";
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
+import { sendVerificationEmail, isMailerConfigured } from "../lib/mailer";
+
+// ── Email verification codes (one-time, at registration) ────────────────
+const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const RESEND_COOLDOWN_MS = 60 * 1000; // 1 minute between sends
+const MAX_ATTEMPTS = 5;
+
+function generateCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+}
+
+// Email verification is only enforced when we can actually deliver codes:
+// a real provider in production, or the dev log fallback in development.
+function verificationActive(): boolean {
+  return isMailerConfigured() || process.env.NODE_ENV !== "production";
+}
+
+async function issueVerificationCode(userId: number, email: string): Promise<boolean> {
+  const code = generateCode();
+  const codeHash = await bcrypt.hash(code, SALT_ROUNDS);
+  // Send FIRST — a failed delivery must not clobber a still-usable prior code
+  const { sent } = await sendVerificationEmail(email, code);
+  if (!sent) return false;
+  await pool.query(
+    `INSERT INTO email_verification_codes (user_id, code_hash, expires_at, attempts, last_sent_at)
+     VALUES ($1, $2, now() + interval '10 minutes', 0, now())
+     ON CONFLICT (user_id) DO UPDATE
+       SET code_hash = EXCLUDED.code_hash, expires_at = EXCLUDED.expires_at,
+           attempts = 0, last_sent_at = now()`,
+    [userId, codeHash]
+  );
+  return true;
+}
 
 // ── رسائل الترحيب — يتلقاها كل مواطن جديد فور تسجيله ─────────────
 const WELCOME_POOL = [
@@ -135,17 +168,31 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     throw err;
   }
 
-  // Regenerate the session ID before authenticating it (anti session-fixation)
-  await new Promise<void>((resolve, reject) =>
-    req.session.regenerate((err) => (err ? reject(err) : resolve()))
-  );
-  req.session.userId = user.id;
-  req.log.info({ userId: user.id }, "User registered");
+  // No mail delivery available → never lock citizens out: register verified,
+  // log them in immediately (previous behavior).
+  if (!verificationActive()) {
+    await pool.query(`UPDATE users SET email_verified = true WHERE id = $1`, [user.id]);
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve()))
+    );
+    req.session.userId = user.id;
+    req.log.info({ userId: user.id }, "User registered (verification skipped — no mailer)");
+    sendWelcomeNotification(user.id).catch(() => {});
+    res.status(201).json(serializeUser(user));
+    return;
+  }
 
-  // إرسال رسالة الترحيب فورياً — بدون انتظار
-  sendWelcomeNotification(user.id).catch(() => {});
+  // One-time email verification: no session until the code is confirmed
+  req.log.info({ userId: user.id }, "User registered — verification code sent");
+  const sent = await issueVerificationCode(user.id, email).catch(() => false);
 
-  res.status(201).json(serializeUser(user));
+  res.status(201).json({
+    needsVerification: true,
+    email,
+    message: sent
+      ? "أرسلنا كود التحقق إلى بريدك الإلكتروني — Code de vérification envoyé à votre email"
+      : "تعذر إرسال الكود مؤقتاً — جرب «إعادة الإرسال» بعد لحظات | Envoi du code temporairement indisponible",
+  });
   } catch (err) {
     req.log.error(err, "Register error");
     res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
@@ -191,18 +238,249 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  // One-time email verification gate (registration-era accounts are grandfathered)
+  if (!user.emailVerified) {
+    if (!verificationActive()) {
+      // Can't deliver codes → don't lock the citizen out; grandfather as verified
+      await pool.query(`UPDATE users SET email_verified = true WHERE id = $1`, [user.id]);
+    } else {
+      await issueVerificationCode(user.id, email).catch(() => false);
+      res.status(403).json({
+        needsVerification: true,
+        email,
+        error: "حسابك محتاج تحقق بالإيميل — أرسلنا لك الكود | Vérifiez votre email — code envoyé",
+      });
+      return;
+    }
+  }
+
   // Regenerate the session ID after credential verification (anti session-fixation)
   await new Promise<void>((resolve, reject) =>
     req.session.regenerate((err) => (err ? reject(err) : resolve()))
   );
   req.session.userId = user.id;
-  // Remember me: 30-day sliding session; otherwise the default 7 days.
-  // Combined with rolling sessions, active citizens never see the login page.
-  if (rememberMe) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+  // Remember me: effectively unlimited (1 year, renewed on every visit thanks
+  // to rolling sessions) — the citizen stays logged in until they log out.
+  if (rememberMe) req.session.cookie.maxAge = 365 * 24 * 60 * 60 * 1000;
   req.log.info({ userId: user.id, rememberMe }, "User logged in");
   res.json(serializeUser(user));
   } catch (err) {
     req.log.error(err, "Login error");
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
+  }
+});
+
+// ── POST /auth/verify-email — confirm the one-time code, then log in ────
+router.post("/auth/verify-email", async (req, res): Promise<void> => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+    if (!email || !/^\d{6}$/.test(code)) {
+      res.status(400).json({ error: "أدخل الكود المكوّن من 6 أرقام — Entrez le code à 6 chiffres" });
+      return;
+    }
+
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(sql`LOWER(${usersTable.email}) = ${email}`)
+      .limit(1);
+    if (!user) {
+      res.status(400).json({ error: "الكود غير صحيح أو منتهي الصلاحية — Code invalide ou expiré" });
+      return;
+    }
+    if (user.emailVerified) {
+      res.status(400).json({ error: "هذا الحساب متحقق منه بالفعل — سجّل الدخول مباشرة | Compte déjà vérifié" });
+      return;
+    }
+
+    // Atomically reserve an attempt (concurrency-safe: parallel guesses can
+    // never exceed MAX_ATTEMPTS because the increment happens in the check)
+    const { rows } = await pool.query(
+      `UPDATE email_verification_codes
+       SET attempts = attempts + 1
+       WHERE user_id = $1 AND attempts < $2 AND expires_at > now()
+       RETURNING code_hash`,
+      [user.id, MAX_ATTEMPTS]
+    );
+    const row = rows[0];
+    if (!row) {
+      res.status(400).json({ error: "الكود منتهي الصلاحية — اطلب كوداً جديداً | Code expiré — demandez-en un nouveau" });
+      return;
+    }
+
+    const match = await bcrypt.compare(code, row.code_hash);
+    if (!match) {
+      res.status(400).json({ error: "الكود غير صحيح — Code incorrect" });
+      return;
+    }
+
+    await pool.query(`UPDATE users SET email_verified = true WHERE id = $1`, [user.id]);
+    await pool.query(`DELETE FROM email_verification_codes WHERE user_id = $1`, [user.id]);
+
+    // Verified — log the citizen in with a 30-day remembered session
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve()))
+    );
+    req.session.userId = user.id;
+    req.session.cookie.maxAge = 365 * 24 * 60 * 60 * 1000;
+    req.log.info({ userId: user.id }, "Email verified — user logged in");
+
+    sendWelcomeNotification(user.id).catch(() => {});
+    res.json(serializeUser(user));
+  } catch (err) {
+    req.log.error(err, "Verify email error");
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
+  }
+});
+
+// ── POST /auth/resend-code — new code, 60s cooldown, no enumeration ─────
+router.post("/auth/resend-code", async (req, res): Promise<void> => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const generic = { message: "إذا كان الحساب موجوداً، أرسلنا كوداً جديداً — Si le compte existe, un nouveau code a été envoyé" };
+    if (!email) { res.json(generic); return; }
+
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(sql`LOWER(${usersTable.email}) = ${email}`)
+      .limit(1);
+    if (user && !user.emailVerified && verificationActive()) {
+      // Atomic server-side cooldown: reserve the send slot in one statement
+      const { rows } = await pool.query(
+        `UPDATE email_verification_codes
+         SET last_sent_at = now()
+         WHERE user_id = $1 AND last_sent_at < now() - interval '60 seconds'
+         RETURNING user_id`,
+        [user.id]
+      );
+      const noRow = (await pool.query(
+        `SELECT 1 FROM email_verification_codes WHERE user_id = $1`, [user.id]
+      )).rowCount === 0;
+      if (rows.length > 0 || noRow) {
+        await issueVerificationCode(user.id, email).catch(() => false);
+      }
+    }
+    res.json(generic);
+  } catch (err) {
+    req.log.error(err, "Resend code error");
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
+  }
+});
+
+// ── POST /auth/forgot-password — send a reset code (non-enumerating) ────
+router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (!verificationActive()) {
+      res.status(503).json({ error: "خدمة استرجاع الحساب غير متاحة مؤقتاً — Récupération de compte temporairement indisponible" });
+      return;
+    }
+    const generic = { message: "إذا كان الحساب موجوداً، أرسلنا كود الاسترجاع إلى بريدك — Si le compte existe, un code de récupération a été envoyé" };
+    if (!email) { res.json(generic); return; }
+
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(sql`LOWER(${usersTable.email}) = ${email}`)
+      .limit(1);
+    if (user) {
+      // Atomic server-side cooldown (same pattern as resend-code)
+      const { rows } = await pool.query(
+        `UPDATE password_reset_codes
+         SET last_sent_at = now()
+         WHERE user_id = $1 AND last_sent_at < now() - interval '60 seconds'
+         RETURNING user_id`,
+        [user.id]
+      );
+      const noRow = (await pool.query(
+        `SELECT 1 FROM password_reset_codes WHERE user_id = $1`, [user.id]
+      )).rowCount === 0;
+      if (rows.length > 0 || noRow) {
+        const code = generateCode();
+        const codeHash = await bcrypt.hash(code, SALT_ROUNDS);
+        const { sent } = await sendVerificationEmail(email, code);
+        if (sent) {
+          await pool.query(
+            `INSERT INTO password_reset_codes (user_id, code_hash, expires_at, attempts, last_sent_at)
+             VALUES ($1, $2, now() + interval '10 minutes', 0, now())
+             ON CONFLICT (user_id) DO UPDATE
+               SET code_hash = EXCLUDED.code_hash, expires_at = EXCLUDED.expires_at,
+                   attempts = 0, last_sent_at = now()`,
+            [user.id, codeHash]
+          );
+        }
+      }
+    }
+    res.json(generic);
+  } catch (err) {
+    req.log.error(err, "Forgot password error");
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
+  }
+});
+
+// ── POST /auth/reset-password — verify the code, set the new password ───
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+    const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+    if (!email || !/^\d{6}$/.test(code)) {
+      res.status(400).json({ error: "أدخل الكود المكوّن من 6 أرقام — Entrez le code à 6 chiffres" });
+      return;
+    }
+    if (newPassword.length < 6) {
+      res.status(400).json({ error: "كلمة السر الجديدة يجب أن تكون 6 أحرف على الأقل — Nouveau mot de passe: 6 caractères minimum" });
+      return;
+    }
+
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(sql`LOWER(${usersTable.email}) = ${email}`)
+      .limit(1);
+    if (!user) {
+      res.status(400).json({ error: "الكود غير صحيح أو منتهي الصلاحية — Code invalide ou expiré" });
+      return;
+    }
+
+    // Atomic attempt reservation (concurrency-safe, max 5 guesses)
+    const { rows } = await pool.query(
+      `UPDATE password_reset_codes
+       SET attempts = attempts + 1
+       WHERE user_id = $1 AND attempts < $2 AND expires_at > now()
+       RETURNING code_hash`,
+      [user.id, MAX_ATTEMPTS]
+    );
+    const row = rows[0];
+    if (!row) {
+      res.status(400).json({ error: "الكود منتهي الصلاحية — اطلب كوداً جديداً | Code expiré — demandez-en un nouveau" });
+      return;
+    }
+    const match = await bcrypt.compare(code, row.code_hash);
+    if (!match) {
+      res.status(400).json({ error: "الكود غير صحيح — Code incorrect" });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await pool.query(`UPDATE users SET password_hash = $1, email_verified = true WHERE id = $2`, [passwordHash, user.id]);
+    await pool.query(`DELETE FROM password_reset_codes WHERE user_id = $1`, [user.id]);
+    // Revoke EVERY existing session for this user — a stolen session must not
+    // survive a password reset. The new session is established just below.
+    await pool.query(`DELETE FROM user_sessions WHERE (sess->>'userId')::int = $1`, [user.id]);
+
+    // Log the citizen straight in — like all platforms
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve()))
+    );
+    req.session.userId = user.id;
+    req.session.cookie.maxAge = 365 * 24 * 60 * 60 * 1000;
+    req.log.info({ userId: user.id }, "Password reset — user logged in");
+    res.json(serializeUser(user));
+  } catch (err) {
+    req.log.error(err, "Reset password error");
     res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
   }
 });

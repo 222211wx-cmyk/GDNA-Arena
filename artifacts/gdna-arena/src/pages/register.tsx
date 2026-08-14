@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
@@ -10,25 +10,63 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function Register() {
   const [, setLocation] = useLocation();
-  const { register } = useAuth();
+  const { register, verifyEmail, resendCode } = useAuth();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<"form" | "verify">("form");
+  const [code, setCode] = useState("");
+
+  // Arriving from login with an unverified account (?verify=email)
+  useEffect(() => {
+    const pending = new URLSearchParams(window.location.search).get("verify");
+    if (pending) {
+      setEmail(pending);
+      setInfo("أرسلنا كود التحقق إلى بريدك الإلكتروني — Code envoyé à votre email");
+      setStep("verify");
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
     try {
-      await register(username, email, password);
-      setLocation("/social");
+      const result = await register(username, email, password);
+      if (result.needsVerification) {
+        setInfo(result.message ?? "أرسلنا كود التحقق إلى بريدك الإلكتروني");
+        setStep("verify");
+      } else {
+        setLocation("/social");
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+    try {
+      await verifyEmail(email, code);
+      setLocation("/social");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError("");
+    await resendCode(email);
+    setInfo("تم إرسال كود جديد — Nouveau code envoyé");
   };
 
   return (
@@ -49,6 +87,56 @@ export default function Register() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {step === "verify" ? (
+              <form onSubmit={handleVerify} className="space-y-5">
+                {error && (
+                  <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {error}
+                  </div>
+                )}
+                {info && !error && (
+                  <div className="p-3 rounded-md bg-primary/10 border border-primary/30 text-primary text-sm text-center">
+                    {info}
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground text-center">
+                  📧 أدخل الكود المكوّن من 6 أرقام المرسل إلى <span className="text-primary font-semibold">{email}</span>
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="code" className="text-xs uppercase tracking-widest text-muted-foreground">Verification Code</Label>
+                  <Input
+                    id="code"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="\d{6}"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    className="bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-14 text-center text-2xl tracking-[0.5em] font-bold"
+                    required
+                    data-testid="input-verify-code"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-lg font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground neon-glow transition-all duration-300"
+                  disabled={isLoading || code.length !== 6}
+                  data-testid="button-verify"
+                >
+                  {isLoading ? "Verifying..." : "✅ تأكيد الكود"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  className="w-full text-center text-sm text-primary hover:underline"
+                  data-testid="button-resend-code"
+                >
+                  ما وصلك الكود؟ إعادة الإرسال — Renvoyer le code
+                </button>
+              </form>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
@@ -123,6 +211,7 @@ export default function Register() {
                 </Link>
               </p>
             </form>
+            )}
           </CardContent>
         </Card>
       </motion.div>

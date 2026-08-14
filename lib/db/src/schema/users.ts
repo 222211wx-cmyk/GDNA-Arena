@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,6 +13,7 @@ export const usersTable = pgTable("users", {
   wins: integer("wins").notNull().default(0),
   lastDailyReward: timestamp("last_daily_reward", { withTimezone: true }),
   lastDmXpAt: timestamp("last_dm_xp_at", { withTimezone: true }), // DM XP cooldown cursor
+  emailVerified: boolean("email_verified").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

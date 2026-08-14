@@ -100,6 +100,25 @@ if (pool) {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false;
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uniq ON users (LOWER(email));
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uniq ON users (LOWER(username));
+    -- Email verification: existing citizens are grandfathered as verified
+    -- (column added with DEFAULT true backfills them), new registrations
+    -- start unverified (default flipped to false right after).
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT true;
+    ALTER TABLE users ALTER COLUMN email_verified SET DEFAULT false;
+    CREATE TABLE IF NOT EXISTS email_verification_codes (
+      user_id integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      code_hash text NOT NULL,
+      expires_at timestamptz NOT NULL,
+      attempts integer NOT NULL DEFAULT 0,
+      last_sent_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS password_reset_codes (
+      user_id integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      code_hash text NOT NULL,
+      expires_at timestamptz NOT NULL,
+      attempts integer NOT NULL DEFAULT 0,
+      last_sent_at timestamptz NOT NULL DEFAULT now()
+    );
   `).then(() => {
     // Bootstrap admin access: grant is_admin to emails listed in ADMIN_EMAILS
     // (comma-separated). Needed because production DB writes can only happen
@@ -150,7 +169,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "محاولات كثيرة — انتظر 15 دقيقة ثم أعد المحاولة" },
 });
-app.use(["/api/auth/login", "/api/auth/register"], authLimiter);
+app.use(["/api/auth/login", "/api/auth/register", "/api/auth/verify-email"], authLimiter);
+// Resend always answers 200 (non-enumerating), so throttle ALL requests: 5 / 15 min per IP
+const resendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "محاولات كثيرة — انتظر 15 دقيقة ثم أعد المحاولة | Trop de tentatives — réessayez dans 15 min" },
+});
+app.use(["/api/auth/resend-code", "/api/auth/forgot-password"], resendLimiter);
+app.use("/api/auth/reset-password", authLimiter);
 
 // AI-powered endpoints are expensive — 30 requests / 5 min per IP.
 const aiLimiter = rateLimit({
