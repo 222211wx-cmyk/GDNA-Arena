@@ -14,65 +14,16 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [mode, setMode] = useState<"login" | "forgot" | "reset">("login");
-  const [code, setCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-
-  const handleForgot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setIsLoading(true);
-    try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      setInfo(data.message ?? "تم إرسال الكود إلى بريدك");
-      setMode("reset");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setIsLoading(true);
-    try {
-      const res = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, code, newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      window.location.href = "/social"; // logged in — full reload picks up session
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed");
-      setIsLoading(false);
-    }
-  };
+  const [showForgotHint, setShowForgotHint] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
     try {
-      const result = await login(email, password, rememberMe);
-      if (result.needsVerification) {
-        setLocation(`/register?verify=${encodeURIComponent(email)}`);
-        return;
-      }
+      await login(email, password, rememberMe);
       setLocation("/social");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -99,92 +50,6 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {mode === "forgot" ? (
-              <form onSubmit={handleForgot} className="space-y-6">
-                {error && (
-                  <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {error}
-                  </div>
-                )}
-                <p className="text-sm text-muted-foreground text-center">
-                  🔑 أدخل بريدك الإلكتروني وغادي نرسلو لك كود الاسترجاع
-                </p>
-                <div className="space-y-2">
-                  <Label htmlFor="forgot-email" className="text-xs uppercase tracking-widest text-muted-foreground">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
-                    <Input
-                      id="forgot-email"
-                      type="email"
-                      placeholder="player@gdna.network"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
-                      required
-                      data-testid="input-forgot-email"
-                    />
-                  </div>
-                </div>
-                <Button type="submit" className="w-full h-12 text-lg font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground neon-glow" disabled={isLoading} data-testid="button-send-reset">
-                  {isLoading ? "Sending..." : "📧 إرسال الكود"}
-                </Button>
-                <button type="button" onClick={() => { setMode("login"); setError(""); }} className="w-full text-center text-sm text-primary hover:underline">
-                  الرجوع لتسجيل الدخول — Retour
-                </button>
-              </form>
-            ) : mode === "reset" ? (
-              <form onSubmit={handleReset} className="space-y-6">
-                {error && (
-                  <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {error}
-                  </div>
-                )}
-                {info && !error && (
-                  <div className="p-3 rounded-md bg-primary/10 border border-primary/30 text-primary text-sm text-center">{info}</div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="reset-code" className="text-xs uppercase tracking-widest text-muted-foreground">Code</Label>
-                  <Input
-                    id="reset-code"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="123456"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                    className="bg-background/50 border-primary/30 h-14 text-center text-2xl tracking-[0.5em] font-bold"
-                    required
-                    data-testid="input-reset-code"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-password" className="text-xs uppercase tracking-widest text-muted-foreground">New Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
-                    <Input
-                      id="new-password"
-                      type="password"
-                      autoComplete="new-password"
-                      placeholder="كلمة السر الجديدة (6+ أحرف)"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="pl-10 bg-background/50 border-primary/30 h-12"
-                      required
-                      minLength={6}
-                      data-testid="input-new-password"
-                    />
-                  </div>
-                </div>
-                <Button type="submit" className="w-full h-12 text-lg font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground neon-glow" disabled={isLoading || code.length !== 6} data-testid="button-reset-password">
-                  {isLoading ? "..." : "🔐 تغيير كلمة السر والدخول"}
-                </Button>
-                <button type="button" onClick={handleForgot} className="w-full text-center text-sm text-primary hover:underline">
-                  ما وصلك الكود؟ إعادة الإرسال — Renvoyer
-                </button>
-              </form>
-            ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
@@ -243,12 +108,17 @@ export default function Login() {
               </Button>
               <button
                 type="button"
-                onClick={() => { setMode("forgot"); setError(""); }}
+                onClick={() => setShowForgotHint((v) => !v)}
                 className="w-full text-center text-sm text-primary hover:underline"
                 data-testid="button-forgot-password"
               >
                 نسيت كلمة السر؟ — Mot de passe oublié ?
               </button>
+              {showForgotHint && (
+                <div className="p-3 rounded-md bg-primary/10 border border-primary/30 text-primary text-sm text-center" data-testid="text-forgot-hint">
+                  🔐 تقدر تبدل كلمة السر مباشرة من صفحة الملف الشخصي (الإعدادات) بعد الدخول
+                </div>
+              )}
               <p className="text-center text-sm text-muted-foreground">
                 No account?{" "}
                 <Link href="/register" className="text-primary hover:underline font-semibold">
@@ -256,7 +126,6 @@ export default function Login() {
                 </Link>
               </p>
             </form>
-            )}
           </CardContent>
         </Card>
       </motion.div>

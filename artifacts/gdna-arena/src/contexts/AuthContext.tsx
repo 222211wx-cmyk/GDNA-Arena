@@ -14,10 +14,9 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<{ needsVerification?: boolean }>;
-  register: (username: string, email: string, password: string) => Promise<{ needsVerification?: boolean; message?: string }>;
-  verifyEmail: (email: string, code: string) => Promise<void>;
-  resendCode: (email: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -54,12 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ email, password, rememberMe }),
     });
     const data = await res.json();
-    if (!res.ok) {
-      if (data?.needsVerification) return { needsVerification: true };
-      throw new Error(data.error ?? "Login failed");
-    }
+    if (!res.ok) throw new Error(data.error ?? "Login failed");
     setUser(data);
-    return {};
   };
 
   const register = async (username: string, email: string, password: string) => {
@@ -70,34 +65,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ username, email, password }),
     });
     const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error ?? "Registration failed");
-    }
-    // New flow: registration returns needsVerification instead of a session
-    if (data?.needsVerification) return { needsVerification: true, message: data.message };
+    if (!res.ok) throw new Error(data.error ?? "Registration failed");
+    // Simple flow: registered = logged in immediately
     setUser(data);
-    return {};
   };
 
-  const verifyEmail = async (email: string, code: string) => {
-    const res = await fetch("/api/auth/verify-email", {
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    const res = await fetch("/api/auth/change-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, code }),
+      body: JSON.stringify({ currentPassword, newPassword }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Verification failed");
-    setUser(data);
-  };
-
-  const resendCode = async (email: string) => {
-    await fetch("/api/auth/resend-code", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email }),
-    });
+    if (!res.ok) throw new Error(data.error ?? "Change password failed");
+    return data.message as string;
   };
 
   const logout = async () => {
@@ -109,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, resendCode, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, changePassword, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -4,6 +4,7 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
 
@@ -642,6 +643,77 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Settings — change password directly (no email codes) */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <Card className="bg-card/50 border-primary/20">
+          <CardHeader>
+            <CardTitle className="text-lg uppercase tracking-wider flex items-center gap-2">
+              🔐 تغيير كلمة السر — Changer le mot de passe
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChangePasswordForm />
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
+  );
+}
+
+function ChangePasswordForm() {
+  const { changePassword } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg("");
+    setErr("");
+    setBusy(true);
+    try {
+      const message = await changePassword(currentPassword, newPassword);
+      setMsg(message);
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4 max-w-md">
+      {err && <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">{err}</div>}
+      {msg && <div className="p-3 rounded-md bg-primary/10 border border-primary/30 text-primary text-sm">{msg}</div>}
+      <input
+        type="password"
+        autoComplete="current-password"
+        placeholder="كلمة السر الحالية — Mot de passe actuel"
+        value={currentPassword}
+        onChange={(e) => setCurrentPassword(e.target.value)}
+        className="w-full h-11 px-3 rounded-md bg-background/50 border border-primary/30 text-sm focus:outline-none focus:border-primary"
+        required
+        data-testid="input-current-password"
+      />
+      <input
+        type="password"
+        autoComplete="new-password"
+        placeholder="كلمة السر الجديدة (6+ أحرف) — Nouveau mot de passe"
+        value={newPassword}
+        onChange={(e) => setNewPassword(e.target.value)}
+        className="w-full h-11 px-3 rounded-md bg-background/50 border border-primary/30 text-sm focus:outline-none focus:border-primary"
+        required
+        minLength={6}
+        data-testid="input-new-password"
+      />
+      <Button type="submit" disabled={busy} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-wider" data-testid="button-change-password">
+        {busy ? "..." : "✅ تغيير كلمة السر"}
+      </Button>
+    </form>
   );
 }
