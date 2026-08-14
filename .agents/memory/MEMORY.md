@@ -10,4 +10,5 @@
 - [AMIS call system](amis-calls.md) — call signaling must ride /api/ws (prod router only forwards /api/*); WS upgrades session-authenticated, identity never trusted from client.
 - [Stars Hall + AI Council](stars-hall.md) — star = roster username + reserved email; AI replies gated on invite; daily council report idempotent via unique report_date.
 - [Chat attachments](chat-attachments.md) — uploads: server-chosen extension + nosniff (XSS guard), 15/10min rate limit, uploads/chat not persistent in prod.
+- [Rights & Monetization](rights-monetization.md) — content earnings per view/like, sha256 first-owner fingerprints, piracy freeze; only authed non-self likes mint coins; earnings updates must be raw SQL.
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.

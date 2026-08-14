@@ -3,6 +3,7 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { db, pulsePosts, pulseEvents, pulsePostLikes, usersTable, transactionsTable } from "@workspace/db";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { pushNotification } from "./notifications";
+import { getRate } from "./rights";
 
 const router: IRouter = Router();
 
@@ -60,15 +61,31 @@ router.post("/pulse/post/:id/like", async (req, res): Promise<void> => {
   const postId = parseInt(req.params.id);
   if (isNaN(postId)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
-  const voterIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
-    ?? req.socket.remoteAddress ?? "unknown";
+  const sessionUserId = req.session?.userId ?? null;
+  // Logged-in citizens are identified by account (can't be forged); anonymous
+  // visitors fall back to IP.
+  const voterIp = sessionUserId
+    ? `user:${sessionUserId}`
+    : ((req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+        ?? req.socket.remoteAddress ?? "unknown");
 
-  const existing = await db.select().from(pulsePostLikes)
-    .where(and(eq(pulsePostLikes.postId, postId), eq(pulsePostLikes.voterIp, voterIp))).limit(1);
+  const [post] = await db.select({ userId: pulsePosts.userId, isVisible: pulsePosts.isVisible })
+    .from(pulsePosts).where(eq(pulsePosts.id, postId)).limit(1);
+  if (!post || !post.isVisible) { res.status(404).json({ error: "Post not found" }); return; }
 
-  if (existing.length > 0) { res.json({ alreadyLiked: true }); return; }
+  // Atomic dedupe: unique index (post_id, voter_ip) — concurrent duplicates lose
+  const insertResult = await db.execute(
+    sql`INSERT INTO pulse_post_likes (post_id, voter_ip) VALUES (${postId}, ${voterIp})
+        ON CONFLICT (post_id, voter_ip) DO NOTHING RETURNING id`);
+  if (!(insertResult as any).rows?.length) { res.json({ alreadyLiked: true }); return; }
 
-  await db.insert(pulsePostLikes).values({ postId, voterIp });
+  // Each like earns the author royalty coins (rate is admin-configurable) —
+  // except self-likes and anonymous likes, which never generate money.
+  const selfLike = sessionUserId !== null && post.userId === sessionUserId;
+  if (sessionUserId && !selfLike) {
+    const rate = await getRate("pulse_post", 0.05);
+    await db.execute(sql`UPDATE pulse_posts SET earnings = COALESCE(earnings,0) + ${rate} WHERE id = ${postId}`);
+  }
   const [updated] = await db.update(pulsePosts).set({ likes: sql`${pulsePosts.likes} + 1` })
     .where(eq(pulsePosts.id, postId)).returning({ likes: pulsePosts.likes, userId: pulsePosts.userId });
 

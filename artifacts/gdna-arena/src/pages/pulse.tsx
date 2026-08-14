@@ -143,6 +143,7 @@ function EventsPanel({ events }: { events: Event[] }) {
 // ── Post Card ─────────────────────────────────────────────────────────────────
 function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => void }) {
   const [liked, setLiked] = useState(false);
+  const [reported, setReported] = useState(false);
   const domColor = DOMAIN_COLORS[post.domain] ?? "#C9A84C";
 
   const handleLike = () => {
@@ -150,6 +151,24 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => void }
     setLiked(true);
     onLike(post.id);
   };
+
+  const handleReport = async () => {
+    if (reported) return;
+    const reason = window.prompt("⚖️ بلّغ عن سرقة محتوى — علاش هاد المنشور مسروق؟");
+    if (!reason?.trim()) return;
+    const r = await fetch("/api/rights/report", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contentType: "pulse_post", contentId: post.id, reason: reason.trim() }),
+    });
+    if (r.ok) setReported(true);
+    else {
+      const j = await r.json().catch(() => ({} as { error?: string }));
+      window.alert((j as { error?: string }).error ?? "فشل التبليغ");
+    }
+  };
+
+  const earnings = parseFloat((post as unknown as { earnings?: string }).earnings ?? "0") || 0;
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -175,11 +194,23 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => void }
           {/* Content */}
           <p className="text-sm text-foreground/90 leading-relaxed mb-3">{post.content}</p>
           {/* Actions */}
-          <button onClick={handleLike}
-            className={`flex items-center gap-1.5 text-xs transition-all active:scale-95 ${liked ? "text-red-400" : "text-muted-foreground hover:text-red-400"}`}>
-            <Heart className={`w-4 h-4 ${liked ? "fill-red-400" : ""}`} />
-            {post.likes + (liked ? 1 : 0)}
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={handleLike}
+              className={`flex items-center gap-1.5 text-xs transition-all active:scale-95 ${liked ? "text-red-400" : "text-muted-foreground hover:text-red-400"}`}>
+              <Heart className={`w-4 h-4 ${liked ? "fill-red-400" : ""}`} />
+              {post.likes + (liked ? 1 : 0)}
+            </button>
+            {earnings > 0 && (
+              <span className="text-xs font-bold" style={{ color: "#C9A84C" }} title="أرباح صاحب المحتوى">
+                💰 {earnings.toFixed(2)}
+              </span>
+            )}
+            <button onClick={() => void handleReport()}
+              className={`text-xs ml-auto transition-all ${reported ? "text-green-400" : "text-muted-foreground/60 hover:text-red-400"}`}
+              title="بلّغ عن سرقة محتوى">
+              {reported ? "✅ تم التبليغ" : "🚨"}
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

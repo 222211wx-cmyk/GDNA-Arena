@@ -1315,6 +1315,7 @@ ensureTables()
   .then(() => ensureMissionsTables())
   .then(() => autoSeedTestUsers())
   .then(() => import("./routes/stars").then(m => m.ensureStarsSystem()))
+  .then(() => import("./routes/rights").then(m => m.ensureRightsTables()))
   .then(() => {
     startHonorAlertJob();
     startWelcomeBroadcastJob();

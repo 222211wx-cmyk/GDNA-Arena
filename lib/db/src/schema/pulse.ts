@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
 
 // Social posts feed
 export const pulsePosts = pgTable("pulse_posts", {
@@ -12,6 +12,7 @@ export const pulsePosts = pgTable("pulse_posts", {
   domain: text("domain").notNull().default("general"), // sport|tech|music|business|general
   type: text("type").notNull().default("post"), // post|victory|tribute|vision
   likes: integer("likes").notNull().default(0),
+  earnings: numeric("earnings", { precision: 10, scale: 4 }).notNull().default("0"),
   isVisible: boolean("is_visible").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

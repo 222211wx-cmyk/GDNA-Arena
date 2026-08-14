@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { pool } from "@workspace/db";
+import { getRate } from "./rights";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -56,24 +57,66 @@ router.post("/gs/uploads", requireSessionFirst, upload.single("file"), async (re
     if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
     const { title, category, figureTag } = req.body;
     const type = req.file.mimetype.startsWith("video/") ? "video" : "audio";
-    const { rows } = await pool.query(
-      `INSERT INTO gs_uploads (uploader_name, title, type, category, file_path, file_name, file_size, mime_type)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [
-        uploaderName,
-        title || req.file.originalname,
-        type,
-        category || "sport",
-        req.file.path,
-        req.file.filename,
-        req.file.size,
-        req.file.mimetype,
-      ]
-    );
-    // Store figure_tag if provided
-    if (figureTag && rows[0]) {
-      await pool.query(`UPDATE gs_uploads SET figure_tag=$1 WHERE id=$2`, [figureTag, rows[0].id]);
-      rows[0].figure_tag = figureTag;
+
+    // ── Rights protection: fingerprint the file (sha256). First owner wins —
+    // re-uploading someone else's work is rejected and earns nothing.
+    const hash = crypto.createHash("sha256");
+    await new Promise<void>((resolve, reject) => {
+      fs.createReadStream(req.file!.path)
+        .on("data", (d) => hash.update(d))
+        .on("end", () => resolve())
+        .on("error", reject);
+    });
+    const fingerprint = hash.digest("hex");
+    // Transaction: the upload row only exists if THIS uploader wins the
+    // fingerprint claim — two identical concurrent uploads can't both publish.
+    const client = await pool.connect();
+    let rows: any[];
+    try {
+      await client.query("BEGIN");
+      const { rows: inserted } = await client.query(
+        `INSERT INTO gs_uploads (uploader_name, title, type, category, file_path, file_name, file_size, mime_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [
+          uploaderName,
+          title || req.file.originalname,
+          type,
+          category || "sport",
+          req.file.path,
+          req.file.filename,
+          req.file.size,
+          req.file.mimetype,
+        ]
+      );
+      const { rows: claim } = await client.query(
+        `INSERT INTO content_fingerprints (fingerprint, content_type, content_id, owner_name)
+         VALUES ($1,'gs_upload',$2,$3) ON CONFLICT (fingerprint) DO NOTHING RETURNING id`,
+        [fingerprint, inserted[0].id, uploaderName]
+      );
+      if (!claim[0]) {
+        await client.query("ROLLBACK");
+        const { rows: fp } = await pool.query(
+          `SELECT owner_name FROM content_fingerprints WHERE fingerprint=$1`, [fingerprint]);
+        fs.unlink(req.file.path, () => {});
+        const owner = fp[0]?.owner_name;
+        res.status(409).json({
+          error: owner === uploaderName
+            ? "سبق لك رفع هذا العمل من قبل"
+            : `⚖️ هذا العمل مسجّل باسم صاحبه الأصلي "${owner ?? "مواطن آخر"}" — حقوق الملكية محفوظة في الإمبراطورية`,
+        });
+        return;
+      }
+      if (figureTag) {
+        await client.query(`UPDATE gs_uploads SET figure_tag=$1 WHERE id=$2`, [figureTag, inserted[0].id]);
+        inserted[0].figure_tag = figureTag;
+      }
+      await client.query("COMMIT");
+      rows = inserted;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
     }
     res.json({ upload: rows[0] });
   } catch (err) {
@@ -145,10 +188,13 @@ router.post("/gs/uploads/:id/view", async (req, res): Promise<void> => {
         `INSERT INTO gs_upload_views (upload_id, viewer_ip) VALUES ($1,$2)`,
         [id, ip]
       );
+      const rate = await getRate("gs_upload", 0.01);
+      // Frozen (confirmed pirated) uploads never earn again
       const { rows } = await pool.query(
-        `UPDATE gs_uploads SET views = views + 1, earnings = ROUND((views + 1) * 0.01, 4)
+        `UPDATE gs_uploads SET views = views + 1,
+           earnings = CASE WHEN is_frozen THEN 0 ELSE ROUND((views + 1) * $2::numeric, 4) END
          WHERE id=$1 RETURNING views, earnings`,
-        [id]
+        [id, rate]
       );
       res.json({ views: rows[0]?.views ?? 0, earnings: rows[0]?.earnings ?? 0, counted: true });
     } else {
@@ -254,10 +300,15 @@ router.get("/gs/earnings", async (req, res): Promise<void> => {
       [name]
     );
 
-    const totalEarnings = rows.reduce((s, r) => s + parseFloat(r.earnings), 0);
-    const totalViews    = rows.reduce((s, r) => s + r.views, 0);
+    const uploadEarnings = rows.reduce((s, r) => s + parseFloat(r.earnings), 0);
+    const totalViews     = rows.reduce((s, r) => s + r.views, 0);
+    const { rows: pulseRows } = await pool.query(
+      `SELECT COALESCE(SUM(p.earnings),0) as total
+       FROM pulse_posts p JOIN users u ON p.user_id=u.id
+       WHERE u.username=$1 AND p.is_visible=true`, [name]);
+    const pulseEarnings = parseFloat(pulseRows[0].total);
 
-    res.json({ uploads: rows, totalEarnings, totalViews, uploaderName: name });
+    res.json({ uploads: rows, totalEarnings: uploadEarnings + pulseEarnings, pulseEarnings, totalViews, uploaderName: name });
   } catch {
     res.status(500).json({ error: "Failed" });
   }
@@ -286,12 +337,19 @@ router.post("/gs/withdrawals", async (req, res): Promise<void> => {
         `SELECT COALESCE(SUM(earnings),0) as total FROM gs_uploads WHERE uploader_name=$1`,
         [uploaderName]
       );
+      // Pulse earnings are part of the same withdrawable pool
+      const { rows: pulseRows } = await client.query(
+        `SELECT COALESCE(SUM(p.earnings),0) as total
+         FROM pulse_posts p JOIN users u ON p.user_id=u.id
+         WHERE u.username=$1 AND p.is_visible=true`,
+        [uploaderName]
+      );
       const { rows: wdRows } = await client.query(
         `SELECT COALESCE(SUM(amount_coins),0) as total FROM gs_withdrawals
          WHERE uploader_name=$1 AND status IN ('pending','approved','paid')`,
         [uploaderName]
       );
-      const available = parseFloat(earnRows[0].total) - parseFloat(wdRows[0].total);
+      const available = parseFloat(earnRows[0].total) + parseFloat(pulseRows[0].total) - parseFloat(wdRows[0].total);
       if (coins > available) {
         await client.query("ROLLBACK");
         res.status(400).json({ error: "Insufficient balance", available }); return;
