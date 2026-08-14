@@ -138,6 +138,7 @@ export default function MessagesTab({ user, st, dir }: Props) {
   const [gifLoading,  setGifLoading]  = useState(false);
   const [pending,     setPending]     = useState<{ file: File; previewUrl: string | null } | null>(null);
   const [dragOver,    setDragOver]    = useState(false);
+  const [isMobile,    setIsMobile]    = useState(typeof window !== "undefined" && window.innerWidth < 640);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef  = useRef<HTMLInputElement>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
@@ -147,6 +148,13 @@ export default function MessagesTab({ user, st, dir }: Props) {
   const chunksRef     = useRef<Blob[]>([]);
   const endRef        = useRef<HTMLDivElement>(null);
   const pollRef       = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  // ── Responsive: track mobile viewport ───────────────────────────────────────
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // ── Load rooms ──────────────────────────────────────────────────────────────
   const loadRooms = useCallback(async () => {
@@ -483,7 +491,9 @@ export default function MessagesTab({ user, st, dir }: Props) {
           onDragOver={e => { e.preventDefault(); if (activeRoom) setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
-          style={{ flex: 1, display: "flex", flexDirection: "column", background: "#080808", border: `1px solid ${dragOver ? GOLD : `${GOLD}10`}`, borderRadius: 12, overflow: "hidden", position: "relative", transition: "border-color 0.15s" }}>
+          style={isMobile && activeRoom
+            ? { position: "fixed", inset: 0, height: "100dvh", zIndex: 100, display: "flex", flexDirection: "column", background: "#080808", overflow: "hidden", overscrollBehavior: "none" }
+            : { flex: 1, display: "flex", flexDirection: "column", background: "#080808", border: `1px solid ${dragOver ? GOLD : `${GOLD}10`}`, borderRadius: 12, overflow: "hidden", position: "relative", transition: "border-color 0.15s" }}>
           {/* Drag overlay */}
           {dragOver && (
             <div style={{ position: "absolute", inset: 0, background: "#000000cc", zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
@@ -507,6 +517,12 @@ export default function MessagesTab({ user, st, dir }: Props) {
             <>
               {/* Chat header */}
               <div style={{ padding: "11px 14px", borderBottom: `1px solid ${GOLD}10`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                {isMobile && (
+                  <button onClick={() => setActiveRoom(null)} title="رجوع"
+                    style={{ width: 32, height: 32, borderRadius: "50%", border: "none", cursor: "pointer", background: "#1a1a1a", color: GOLD, fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    ‹
+                  </button>
+                )}
                 <Avatar name={getPeerName(activeRoom)} size={32} />
                 <div style={{ flex: 1 }}>
                   <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 14 }}>{getPeerName(activeRoom)}</p>
@@ -661,14 +677,21 @@ export default function MessagesTab({ user, st, dir }: Props) {
 
               {/* Toolbar + input bar */}
               <div style={{ padding: "10px 12px", paddingBottom: "calc(10px + env(safe-area-inset-bottom))", borderTop: `1px solid ${GOLD}08`, display: "flex", gap: 5, alignItems: "center", flexShrink: 0, flexWrap: "nowrap", overflowX: "auto", position: "sticky", bottom: 0, background: "#080808", zIndex: 50 }}>
-                {([
-                  ["📎", st.attach_gallery ?? "معرض الصور والفيديو", () => galleryRef.current?.click()],
-                  ["📷", st.attach_camera ?? "كاميرا",               () => cameraRef.current?.click()],
-                  ["👤", st.attach_contact ?? "جهات الاتصال",         pickContact],
-                  ["😀", st.attach_emoji ?? "ايموجي",                 () => { setShowGif(false); setShowEmoji(v => !v); }],
-                  ["🎬", "GIF",                                        toggleGif],
-                  ["📁", st.attach_file ?? "ملفات",                   () => fileRef.current?.click()],
-                ] as [string, string, () => void][]).map(([icon, title, fn]) => (
+                {((isMobile
+                  ? [
+                      // Mobile: one compact row — [📎][😀][🎬][🎤][input][➤]
+                      ["📎", st.attach_file ?? "صور وفيديو وملفات",   () => fileRef.current?.click()],
+                      ["😀", st.attach_emoji ?? "ايموجي",             () => { setShowGif(false); setShowEmoji(v => !v); }],
+                      ["🎬", "GIF",                                    toggleGif],
+                    ]
+                  : [
+                      ["📎", st.attach_gallery ?? "معرض الصور والفيديو", () => galleryRef.current?.click()],
+                      ["📷", st.attach_camera ?? "كاميرا",               () => cameraRef.current?.click()],
+                      ["👤", st.attach_contact ?? "جهات الاتصال",         pickContact],
+                      ["😀", st.attach_emoji ?? "ايموجي",                 () => { setShowGif(false); setShowEmoji(v => !v); }],
+                      ["🎬", "GIF",                                        toggleGif],
+                      ["📁", st.attach_file ?? "ملفات",                   () => fileRef.current?.click()],
+                    ]) as [string, string, () => void][]).map(([icon, title, fn]) => (
                   <button key={icon} onClick={fn} title={title} disabled={uploading}
                     style={{ width: 32, height: 32, borderRadius: "50%", border: "none", cursor: "pointer",
                       background: (icon === "😀" && showEmoji) || (icon === "🎬" && showGif) ? `${GOLD}25` : "#1a1a1a", fontSize: 15,

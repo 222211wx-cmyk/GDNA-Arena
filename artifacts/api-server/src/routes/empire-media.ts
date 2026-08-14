@@ -343,6 +343,9 @@ router.get("/gifs/search", async (req, res): Promise<void> => {
       ? `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(q)}&limit=24&rating=pg-13`
       : `https://api.giphy.com/v1/gifs/trending?api_key=${key}&limit=24&rating=pg-13`;
     const r = await fetch(url);
+    if (r.status === 401 || r.status === 403) {
+      res.status(503).json({ error: "مفتاح GIPHY غير صالح — خاص مفتاح جديد من developers.giphy.com" }); return;
+    }
     if (!r.ok) { res.status(502).json({ error: "Giphy error" }); return; }
     const j = await r.json() as any;
     const gifs = (j.data ?? []).map((g: any) => ({
