@@ -3,11 +3,12 @@ import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { db, dmRooms, dmRoomMembers, dmMessages, usersTable } from "@workspace/db";
+import { db, dmRooms, dmRoomMembers, dmMessages, usersTable, pool as _pool } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
 
 const router: IRouter = Router();
+const pool = _pool!;
 
 // ── Attachment URL validator ───────────────────────────────────────────────────
 // Accepts https URLs and our own uploaded-attachment paths (/api/messages/files/…)
@@ -127,6 +128,21 @@ async function unreadCount(roomId: number, userId: number, lastReadAt: Date | nu
   return r?.cnt ?? 0;
 }
 
+// Privacy: members who disabled read receipts must never expose their read
+// cursor to other members. Their own cursor is kept for the viewer themself
+// (it only drives their private unread badge).
+type MemberRow = typeof dmRoomMembers.$inferSelect;
+async function hideReadCursors<T extends MemberRow>(members: T[], viewerId: number): Promise<T[]> {
+  const otherIds = members.map(m => m.userId).filter(id => id !== viewerId);
+  if (otherIds.length === 0) return members;
+  const r = await pool.query(
+    `SELECT user_id FROM dm_user_settings WHERE user_id = ANY($1) AND read_receipts = false`,
+    [otherIds]);
+  const hidden = new Set<number>(r.rows.map((row: { user_id: number }) => row.user_id));
+  if (hidden.size === 0) return members;
+  return members.map(m => hidden.has(m.userId) ? { ...m, lastReadAt: null } : m);
+}
+
 // ── GET /messages/rooms — list my rooms ───────────────────────────────────────
 router.get("/messages/rooms", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
@@ -137,16 +153,22 @@ router.get("/messages/rooms", async (req, res): Promise<void> => {
 
   if (myMemberships.length === 0) { res.json({ rooms: [] }); return; }
 
+  // muted flag lives in a raw column (added by DDL, not in the drizzle schema)
+  const mutedRes = await pool.query(
+    `SELECT room_id FROM dm_room_members WHERE user_id = $1 AND muted`, [userId]);
+  const mutedSet = new Set<number>(mutedRes.rows.map((r: { room_id: number }) => r.room_id));
+
   const rooms = await Promise.all(myMemberships.map(async (membership) => {
     const { roomId, lastReadAt } = membership;
     const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
     if (!room) return null;
-    const members = await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
+    const members = await hideReadCursors(
+      await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId)), userId);
     const [lastMsg] = await db.select().from(dmMessages)
       .where(eq(dmMessages.roomId, roomId))
       .orderBy(desc(dmMessages.createdAt)).limit(1);
     const cnt = await unreadCount(roomId, userId, lastReadAt ?? null);
-    return { ...room, members, lastMessage: lastMsg ?? null, unreadCount: cnt };
+    return { ...room, members, lastMessage: lastMsg ?? null, unreadCount: cnt, muted: mutedSet.has(roomId) };
   }));
 
   res.json({ rooms: rooms.filter(Boolean) });
@@ -237,7 +259,8 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
     .where(eq(dmMessages.roomId, roomId))
     .orderBy(desc(dmMessages.createdAt)).limit(60);
 
-  const members = await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
+  const members = await hideReadCursors(
+    await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId)), userId);
   const [room]  = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
 
   // Advance this member's read cursor to the latest fetched message timestamp.
@@ -354,11 +377,85 @@ router.get("/messages/unread-count", async (req, res): Promise<void> => {
     .from(dmRoomMembers).where(eq(dmRoomMembers.userId, userId));
   if (memberships.length === 0) { res.json({ count: 0 }); return; }
 
+  // Muted conversations don't contribute to the badge
+  const mutedRes = await pool.query(
+    `SELECT room_id FROM dm_room_members WHERE user_id = $1 AND muted`, [userId]);
+  const mutedSet = new Set<number>(mutedRes.rows.map((r: { room_id: number }) => r.room_id));
+
   let count = 0;
   for (const m of memberships) {
+    if (mutedSet.has(m.roomId)) continue;
     count += await unreadCount(m.roomId, userId, m.lastReadAt ?? null);
   }
   res.json({ count });
+});
+
+// ── DELETE /messages/rooms/:roomId/messages/:msgId — unsend own message ───────
+router.delete("/messages/rooms/:roomId/messages/:msgId", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const roomId = parseInt(req.params.roomId);
+  const msgId  = parseInt(req.params.msgId);
+  if (isNaN(roomId) || isNaN(msgId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  const membership = await getMembership(roomId, userId);
+  if (!membership) { res.status(403).json({ error: "Access denied — not a member of this room" }); return; }
+
+  // Only the author can delete their own message — enforced in the WHERE clause
+  const deleted = await db.delete(dmMessages)
+    .where(and(eq(dmMessages.id, msgId), eq(dmMessages.roomId, roomId), eq(dmMessages.userId, userId)))
+    .returning({ id: dmMessages.id });
+  if (deleted.length === 0) {
+    res.status(403).json({ error: "يمكنك حذف رسائلك فقط — Vous ne pouvez supprimer que vos propres messages" }); return;
+  }
+  res.json({ deleted: true });
+});
+
+// ── POST /messages/rooms/:id/mute — mute/unmute a conversation ────────────────
+router.post("/messages/rooms/:id/mute", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const roomId = parseInt(req.params.id);
+  if (isNaN(roomId)) { res.status(400).json({ error: "Invalid room ID" }); return; }
+  const membership = await getMembership(roomId, userId);
+  if (!membership) { res.status(403).json({ error: "Access denied" }); return; }
+  const muted = req.body?.muted === true;
+  await pool.query(`UPDATE dm_room_members SET muted = $1 WHERE room_id = $2 AND user_id = $3`,
+    [muted, roomId, userId]);
+  res.json({ muted });
+});
+
+// ── GET /messages/settings — per-user messenger settings ─────────────────────
+router.get("/messages/settings", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const { rows } = await pool.query(
+    `SELECT notifications, read_receipts FROM dm_user_settings WHERE user_id = $1`, [userId]);
+  res.json({
+    notifications: rows[0]?.notifications ?? true,
+    readReceipts:  rows[0]?.read_receipts ?? true,
+  });
+});
+
+// ── POST /messages/settings ───────────────────────────────────────────────────
+router.post("/messages/settings", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const { notifications, readReceipts } = req.body as { notifications?: boolean; readReceipts?: boolean };
+  if (typeof notifications !== "boolean" && typeof readReceipts !== "boolean") {
+    res.status(400).json({ error: "Nothing to update" }); return;
+  }
+  await pool.query(
+    `INSERT INTO dm_user_settings (user_id, notifications, read_receipts)
+     VALUES ($1, COALESCE($2, true), COALESCE($3, true))
+     ON CONFLICT (user_id) DO UPDATE SET
+       notifications = COALESCE($2, dm_user_settings.notifications),
+       read_receipts = COALESCE($3, dm_user_settings.read_receipts),
+       updated_at = now()`,
+    [userId, notifications ?? null, readReceipts ?? null]);
+  const { rows } = await pool.query(
+    `SELECT notifications, read_receipts FROM dm_user_settings WHERE user_id = $1`, [userId]);
+  res.json({ notifications: rows[0].notifications, readReceipts: rows[0].read_receipts });
 });
 
 // ── GET /messages/group-rooms — public group rooms list ───────────────────────

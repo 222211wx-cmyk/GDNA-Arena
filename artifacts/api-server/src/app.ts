@@ -106,6 +106,14 @@ if (pool) {
     UPDATE users SET email_verified = true WHERE email_verified = false;
     DROP TABLE IF EXISTS email_verification_codes;
     DROP TABLE IF EXISTS password_reset_codes;
+    -- AMIS unified messenger: per-conversation mute + per-user messenger settings
+    ALTER TABLE dm_room_members ADD COLUMN IF NOT EXISTS muted boolean NOT NULL DEFAULT false;
+    CREATE TABLE IF NOT EXISTS dm_user_settings (
+      user_id integer PRIMARY KEY,
+      notifications boolean NOT NULL DEFAULT true,
+      read_receipts boolean NOT NULL DEFAULT true,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
   `).then(() => {
     // Bootstrap admin access: grant is_admin to emails listed in ADMIN_EMAILS
     // (comma-separated). Needed because production DB writes can only happen

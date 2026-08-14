@@ -48,9 +48,18 @@ Play-to-earn crypto gaming platform — players register, compete in 3 arenas, e
 - LangContext wraps the entire app; lang choice persisted in localStorage
 
 ## User preferences
-- Official platform language: **English** — all UI text, labels, placeholders, buttons, and messages must be in English
+- Official platform language: **English** — all UI text, labels, placeholders, buttons, and messages must be in English (Arabic translations kept in i18n where the feature has them)
+- Reply to the owner (Qaisypro) warmly **in Darija**, with 👑 empire vocabulary
 
-_Populate as you build._
+### Permanent working rules (set by the owner, Aug 15, 2026)
+1. **Auto configuration log**: after every completed change, write a summary — what changed + why + where — and commit with a message in the form `GDNA Update - [date & time]`.
+2. **Self-review**: before saying "done", self-review the code, test on mobile + desktop, check there are no errors. If a bug is found, fix it silently and report "لقيت خطأ وصلحتو". Never repeat the same mistake twice.
+3. **Messenger section (AMIS)**: keep building it end-to-end — images, video, voice, calls, settings — using the platform's own "Smart" internal system; the goal is to lead in modernity, not imitate.
+4. **Golden rule**: after failing the same task 3 times, stop and say "القيسي انا فاشل هنا خاصنا حل اخر".
+5. End every completed task with: "تم التسجيل والمراجعة. جاهز للاختبار".
+
+## Configuration log
+- **GDNA Update - Aug 15, 2026**: AMIS unified (task #131) — one shared `Messenger` component (full/embedded/widget) now powers /messages, the Social tab, and the floating widget. Added: settings (notifications/read receipts with real privacy semantics), per-room mute, delete own message, groups discovery + join, contacts tab, honest "encrypted via server" label, accurate call history (answered only when a call actually connects). Where: `artifacts/gdna-arena/src/components/messenger/Messenger.tsx`, `CommHub.tsx`, `hooks/useCall.ts`, `artifacts/api-server/src/routes/messages.ts`. Why: 3 divergent messenger UIs were confusing; one component = one place to restyle and fix.
 
 ## Gotchas
 

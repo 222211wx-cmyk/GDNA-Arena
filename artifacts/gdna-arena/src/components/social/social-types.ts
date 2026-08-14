@@ -32,6 +32,7 @@ export interface DmRoom {
   members: { userId: number; username: string }[];
   lastMessage?: { content?: string; type: string; createdAt: string } | null;
   unreadCount: number;
+  muted?: boolean;
 }
 
 export interface DmMessage {

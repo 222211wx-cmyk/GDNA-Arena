@@ -45,6 +45,9 @@ export function useCall(user: { id: number; username: string } | null) {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [activePeer,   setActivePeer]   = useState<string | null>(null);
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  const [activeVideo,  setActiveVideo]  = useState(false);
+  // Call-history tracking — lives here (single instance) so it logs exactly once
+  const historyRef = useRef<{ peer: string; video: boolean; start: number; outgoing: boolean; answered: boolean } | null>(null);
   const [onlineUsers,  setOnlineUsers]  = useState<string[]>([]);
   const [activeLives,  setActiveLives]  = useState<LiveStream[]>([]);
   const [currentLiveId, setCurrentLiveId] = useState<string | null>(null);
@@ -244,6 +247,8 @@ export function useCall(user: { id: number; username: string } | null) {
 
       setActivePeer(targetUsername);
       setActiveCallId(callId);
+      setActiveVideo(withVideo);
+      historyRef.current = { peer: targetUsername, video: withVideo, start: Date.now(), outgoing: true, answered: false };
       setCallStatus("calling");
 
       sendWS({ type: "call-offer", to: targetUsername, offer, callId, from: user.username, video: withVideo });
@@ -280,6 +285,7 @@ export function useCall(user: { id: number; username: string } | null) {
 
       setActivePeer(incomingCall.from);
       setActiveCallId(incomingCall.callId);
+      setActiveVideo(withVideo && incomingCall.video);
       setIncomingCall(null);
       setCallStatus("active");
 
@@ -381,9 +387,33 @@ export function useCall(user: { id: number; username: string } | null) {
     sendWS({ type: "live-join", liveId });
   }, [createPC, sendWS]);
 
+  // ── Log outgoing calls to history exactly once, with the real call type ────
+  useEffect(() => {
+    if (!user) return;
+    // A call only counts as answered if it actually transitioned to "active" —
+    // ring time is NOT evidence of an answer (rejected/unavailable calls ring too).
+    if (callStatus === "active" && historyRef.current) {
+      historyRef.current.answered = true;
+      historyRef.current.start = Date.now(); // duration = talk time, not ring time
+    }
+    if ((callStatus === "idle" || callStatus === "ended") && historyRef.current) {
+      const { peer, video, start, outgoing, answered } = historyRef.current;
+      historyRef.current = null;
+      if (!outgoing || !peer) return; // only the caller logs, avoids duplicates
+      const durationSec = answered ? Math.floor((Date.now() - start) / 1000) : 0;
+      const status = answered ? "answered" : "missed";
+      const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      fetch(`${base}/api/social/v2/call-history`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calleeUsername: peer, callType: video ? "video" : "audio", status, durationSec }),
+        credentials: "include",
+      }).catch(() => {});
+    }
+  }, [callStatus, user]);
+
   return {
     connected, callStatus, liveStatus, incomingCall,
-    activePeer, onlineUsers, activeLives, currentLiveId,
+    activePeer, activeVideo, onlineUsers, activeLives, currentLiveId,
     localStream, remoteStream, screenSharing,
     callError,
     startCall, answerCall, rejectCall, endCall,

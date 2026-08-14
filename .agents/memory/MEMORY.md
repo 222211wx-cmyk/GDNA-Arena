@@ -12,4 +12,5 @@
 - [Chat attachments](chat-attachments.md) — uploads: server-chosen extension + nosniff (XSS guard), 15/10min rate limit, uploads/chat not persistent in prod.
 - [Rights & Monetization](rights-monetization.md) — content earnings per view/like, sha256 first-owner fingerprints, piracy freeze; only authed non-self likes mint coins; earnings updates must be raw SQL.
 - [Empire Levels & Revenue Split](empire-levels.md) — level from xp (never stored), author-side earnings multipliers, division split must sum 100; Arabic text breaks `\W` regex checks.
+- [AMIS unified messenger](amis-messenger.md) — one shared Messenger component (full/embedded/widget) powers all 3 chat surfaces; mute/settings in raw SQL columns; call-history logs only in useCall.
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.
