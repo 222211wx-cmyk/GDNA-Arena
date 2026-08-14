@@ -15,13 +15,14 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
       setLocation("/social");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -87,6 +88,15 @@ export default function Login() {
                   />
                 </div>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground" data-testid="checkbox-remember-me">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 accent-primary cursor-pointer"
+                />
+                <span>تذكرني — Se souvenir de moi</span>
+              </label>
               <Button
                 type="submit"
                 className="w-full h-12 text-lg font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground neon-glow transition-all duration-300"

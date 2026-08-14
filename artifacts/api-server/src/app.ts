@@ -121,6 +121,9 @@ export const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET ?? "gdna-arena-secret-fallback",
   resave: false,
   saveUninitialized: false,
+  // Netflix-style: every visit slides the expiry window forward, so active
+  // citizens are never asked to log in again.
+  rolling: true,
   cookie: {
     // "auto" + trust proxy: secure cookies on HTTPS (production), plain in dev
     secure: process.env.NODE_ENV === "production" ? "auto" : false,

@@ -70,32 +70,32 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!username || !email || !password) {
-    res.status(400).json({ error: "Username, email, and password are required" });
+    res.status(400).json({ error: "الاسم والبريد وكلمة السر مطلوبون — Nom, email et mot de passe requis" });
     return;
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    res.status(400).json({ error: "صيغة البريد الإلكتروني غير صحيحة" });
+    res.status(400).json({ error: "صيغة البريد الإلكتروني غير صحيحة — Format d'email invalide" });
     return;
   }
   if (username.length < 3 || username.length > 20) {
-    res.status(400).json({ error: "Username must be 3–20 characters" });
+    res.status(400).json({ error: "اسم المستخدم يجب أن يكون بين 3 و20 حرفاً — Nom d'utilisateur: 3 à 20 caractères" });
     return;
   }
   if (password.length < 6) {
-    res.status(400).json({ error: "Password must be at least 6 characters" });
+    res.status(400).json({ error: "كلمة السر يجب أن تكون 6 أحرف على الأقل — Mot de passe: 6 caractères minimum" });
     return;
   }
 
   // ── Username content filter ───────────────────────────────────────────────
   if (hasBlockedKeyword(username)) {
-    res.status(400).json({ error: "Username contains prohibited content." });
+    res.status(400).json({ error: "اسم المستخدم يحتوي على كلمات ممنوعة — Nom d'utilisateur interdit" });
     return;
   }
   // allowTrivial: usernames are short by nature (3–20 chars) — only run the
   // profanity/meme/OpenAI checks, not the 15-char "substance" rule.
   const usernameMod = await moderateText(username, { allowTrivial: true });
   if (!usernameMod.ok) {
-    res.status(400).json({ error: "Username rejected by content filter." });
+    res.status(400).json({ error: "اسم المستخدم رفضه فلتر المحتوى — اختر اسماً آخر | Nom rejeté par le filtre" });
     return;
   }
 
@@ -152,8 +152,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   try {
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   const password = typeof req.body?.password === "string" ? req.body.password : "";
+  // "Se souvenir de moi" — defaults to true: one login, stay in like Netflix
+  const rememberMe = req.body?.rememberMe !== false;
   if (!email || !password) {
-    res.status(400).json({ error: "Email and password are required" });
+    res.status(400).json({ error: "البريد الإلكتروني وكلمة السر مطلوبان — Email et mot de passe requis" });
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: "صيغة البريد الإلكتروني غير صحيحة — Format d'email invalide" });
     return;
   }
 
@@ -165,7 +171,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!user) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "لا يوجد حساب بهذا البريد — سجّل حساباً جديداً | Aucun compte avec cet email" });
     return;
   }
 
@@ -176,12 +182,15 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     valid = false; // malformed legacy hash — treat as invalid, not a crash
   }
   if (!valid) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "كلمة السر غير صحيحة — Mot de passe incorrect" });
     return;
   }
 
   req.session.userId = user.id;
-  req.log.info({ userId: user.id }, "User logged in");
+  // Remember me: 90-day sliding session; otherwise the default 7 days.
+  // Combined with rolling sessions, active citizens never see the login page.
+  if (rememberMe) req.session.cookie.maxAge = 90 * 24 * 60 * 60 * 1000;
+  req.log.info({ userId: user.id, rememberMe }, "User logged in");
   res.json(serializeUser(user));
   } catch (err) {
     req.log.error(err, "Login error");
