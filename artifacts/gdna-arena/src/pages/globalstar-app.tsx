@@ -12,6 +12,7 @@ import News from '@/globalstar/pages/news';
 import Traditions from '@/globalstar/pages/traditions';
 import About from '@/globalstar/pages/about';
 import EarningsPage from '@/globalstar/pages/earnings';
+import AdminWithdrawals from '@/globalstar/pages/admin-withdrawals';
 
 const gsQueryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +40,7 @@ export default function GlobalStarApp() {
               <Route path="/traditions" component={Traditions} />
               <Route path="/about" component={About} />
               <Route path="/earnings" component={EarningsPage} />
+              <Route path="/admin/withdrawals" component={AdminWithdrawals} />
             </Switch>
           </WouterRouter>
         </TooltipProvider>

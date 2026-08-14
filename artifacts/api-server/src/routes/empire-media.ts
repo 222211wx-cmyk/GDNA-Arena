@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { pool } from "@workspace/db";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -325,6 +326,94 @@ router.get("/gs/withdrawals", async (req, res): Promise<void> => {
       [name]
     );
     res.json({ withdrawals: rows });
+  } catch {
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// ─── GET /gifs/search — Giphy proxy (key stays server-side) ──────────────────
+router.get("/gifs/search", async (req, res): Promise<void> => {
+  try {
+    const name = await sessionUsername(req);
+    if (!name) { res.status(401).json({ error: "سجّل الدخول أولاً" }); return; }
+    const key = process.env.GIPHY_API_KEY;
+    if (!key) { res.status(503).json({ error: "خدمة GIF غير مفعّلة بعد — المفتاح غير موجود" }); return; }
+    const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 80) : "";
+    const url = q
+      ? `https://api.giphy.com/v1/gifs/search?api_key=${key}&q=${encodeURIComponent(q)}&limit=24&rating=pg-13`
+      : `https://api.giphy.com/v1/gifs/trending?api_key=${key}&limit=24&rating=pg-13`;
+    const r = await fetch(url);
+    if (!r.ok) { res.status(502).json({ error: "Giphy error" }); return; }
+    const j = await r.json() as any;
+    const gifs = (j.data ?? []).map((g: any) => ({
+      id: g.id,
+      url: g.images?.original?.url,
+      preview: g.images?.fixed_width_small?.url ?? g.images?.fixed_width?.url,
+      title: g.title ?? "",
+    })).filter((g: any) => g.url && g.preview);
+    res.json({ gifs });
+  } catch {
+    res.status(500).json({ error: "GIF search failed" });
+  }
+});
+
+// ─── Admin gate: ADMIN_SECRET header OR session is_admin ─────────────────────
+async function isAdminRequest(req: any): Promise<boolean> {
+  const secret = process.env.ADMIN_SECRET;
+  const header = req.headers["x-admin-secret"];
+  if (secret && typeof header === "string") {
+    const a = Buffer.from(header), b = Buffer.from(secret);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+  }
+  const userId = (req.session as any)?.userId;
+  if (!userId) return false;
+  try {
+    const { rows } = await pool.query(`SELECT is_admin FROM users WHERE id=$1`, [userId]);
+    return rows[0]?.is_admin === true;
+  } catch { return false; }
+}
+
+// ─── GET /gs/admin/withdrawals — list ALL withdrawal requests ────────────────
+router.get("/gs/admin/withdrawals", async (req, res): Promise<void> => {
+  try {
+    if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
+    const { rows } = await pool.query(
+      `SELECT * FROM gs_withdrawals ORDER BY
+         CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+         requested_at DESC`
+    );
+    res.json({ withdrawals: rows });
+  } catch {
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// ─── PATCH /gs/admin/withdrawals/:id — update status ─────────────────────────
+router.patch("/gs/admin/withdrawals/:id", async (req, res): Promise<void> => {
+  try {
+    if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
+    const id = parseInt(req.params.id, 10);
+    const status = req.body?.status;
+    // State machine: pending → approved|rejected, approved → paid. Nothing else.
+    const ALLOWED_FROM: Record<string, string[]> = {
+      approved: ["pending"],
+      rejected: ["pending"],
+      paid: ["approved"],
+    };
+    const from = ALLOWED_FROM[status];
+    if (isNaN(id) || !from) {
+      res.status(400).json({ error: "Invalid id or status" }); return;
+    }
+    const { rows } = await pool.query(
+      `UPDATE gs_withdrawals SET status=$1 WHERE id=$2 AND status = ANY($3) RETURNING *`,
+      [status, id, from]
+    );
+    if (!rows[0]) {
+      const { rows: exists } = await pool.query(`SELECT status FROM gs_withdrawals WHERE id=$1`, [id]);
+      if (!exists[0]) { res.status(404).json({ error: "Not found" }); return; }
+      res.status(409).json({ error: `لا يمكن الانتقال من '${exists[0].status}' إلى '${status}'` }); return;
+    }
+    res.json({ withdrawal: rows[0] });
   } catch {
     res.status(500).json({ error: "Failed" });
   }

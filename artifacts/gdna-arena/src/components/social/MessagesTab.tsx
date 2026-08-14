@@ -132,6 +132,10 @@ export default function MessagesTab({ user, st, dir }: Props) {
   const [uploading,   setUploading]   = useState(false);
   const [showEmoji,   setShowEmoji]   = useState(false);
   const [emojiGroup,  setEmojiGroup]  = useState(0);
+  const [showGif,     setShowGif]     = useState(false);
+  const [gifQuery,    setGifQuery]    = useState("");
+  const [gifs,        setGifs]        = useState<{ id: string; url: string; preview: string; title: string }[]>([]);
+  const [gifLoading,  setGifLoading]  = useState(false);
   const [pending,     setPending]     = useState<{ file: File; previewUrl: string | null } | null>(null);
   const [dragOver,    setDragOver]    = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -263,6 +267,31 @@ export default function MessagesTab({ user, st, dir }: Props) {
         { fileUrl: j.url, type: "file", content: j.kind === "image" ? "[Image]" : `📁 ${j.name}` };
       await sendMessage(undefined, body);
     } finally { setUploading(false); }
+  }
+
+  // ── GIF search (Giphy via server proxy) ─────────────────────────────────────
+  async function searchGifs(q: string) {
+    setGifLoading(true);
+    try {
+      const r = await fetch(api(`/api/gifs/search?q=${encodeURIComponent(q)}`), { credentials: "include" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setToast(j.error ?? "فشل البحث عن GIF ❌"); setGifs([]); return; }
+      setGifs(j.gifs ?? []);
+    } catch { setToast("فشل البحث عن GIF ❌"); }
+    finally { setGifLoading(false); }
+  }
+
+  function toggleGif() {
+    setShowGif(v => {
+      const next = !v;
+      if (next) { setShowEmoji(false); if (gifs.length === 0) searchGifs(""); }
+      return next;
+    });
+  }
+
+  async function sendGif(url: string) {
+    setShowGif(false);
+    await sendMessage(undefined, { fileUrl: url, type: "file", content: "[GIF]" });
   }
 
   // Stage a file for preview before sending (WhatsApp-style)
@@ -567,6 +596,33 @@ export default function MessagesTab({ user, st, dir }: Props) {
                 </div>
               )}
 
+              {/* GIF panel — Giphy search */}
+              {showGif && (
+                <div style={{ borderTop: `1px solid ${GOLD}08` }}>
+                  <div style={{ display: "flex", gap: 6, padding: "8px 12px 4px", alignItems: "center" }}>
+                    <input value={gifQuery} onChange={e => setGifQuery(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && searchGifs(gifQuery)}
+                      placeholder="🎬 قلب على GIF…" dir={dir}
+                      style={{ flex: 1, background: "#111", border: `1px solid ${GOLD}15`, borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none" }} />
+                    <button onClick={() => searchGifs(gifQuery)} disabled={gifLoading}
+                      style={{ background: `${GOLD}25`, border: "none", borderRadius: 8, padding: "6px 12px", color: GOLD, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                      {gifLoading ? "⏳" : "بحث"}
+                    </button>
+                  </div>
+                  <div style={{ padding: "4px 12px 8px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 4, maxHeight: 160, overflowY: "auto" }}>
+                    {gifs.map(g => (
+                      <button key={g.id} onClick={() => sendGif(g.url)} title={g.title}
+                        style={{ background: "#111", border: `1px solid ${GOLD}10`, borderRadius: 6, padding: 0, cursor: "pointer", overflow: "hidden", height: 70 }}>
+                        <img src={g.preview} alt={g.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      </button>
+                    ))}
+                    {!gifLoading && gifs.length === 0 && (
+                      <p style={{ gridColumn: "1/-1", margin: 0, fontSize: 12, color: "#666", textAlign: "center", padding: 8 }}>ما كاين حتى GIF — جرب كلمة أخرى</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Attachment preview before sending */}
               {pending && (
                 <div style={{ padding: "10px 14px", borderTop: `1px solid ${GOLD}08`, display: "flex", gap: 10, alignItems: "center" }}>
@@ -609,12 +665,13 @@ export default function MessagesTab({ user, st, dir }: Props) {
                   ["📎", st.attach_gallery ?? "معرض الصور والفيديو", () => galleryRef.current?.click()],
                   ["📷", st.attach_camera ?? "كاميرا",               () => cameraRef.current?.click()],
                   ["👤", st.attach_contact ?? "جهات الاتصال",         pickContact],
-                  ["😀", st.attach_emoji ?? "ايموجي",                 () => setShowEmoji(v => !v)],
+                  ["😀", st.attach_emoji ?? "ايموجي",                 () => { setShowGif(false); setShowEmoji(v => !v); }],
+                  ["🎬", "GIF",                                        toggleGif],
                   ["📁", st.attach_file ?? "ملفات",                   () => fileRef.current?.click()],
                 ] as [string, string, () => void][]).map(([icon, title, fn]) => (
                   <button key={icon} onClick={fn} title={title} disabled={uploading}
                     style={{ width: 32, height: 32, borderRadius: "50%", border: "none", cursor: "pointer",
-                      background: icon === "😀" && showEmoji ? `${GOLD}25` : "#1a1a1a", fontSize: 15,
+                      background: (icon === "😀" && showEmoji) || (icon === "🎬" && showGif) ? `${GOLD}25` : "#1a1a1a", fontSize: 15,
                       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                       opacity: uploading ? 0.5 : 1 }}>
                     {icon}
