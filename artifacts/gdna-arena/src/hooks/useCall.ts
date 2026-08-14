@@ -70,6 +70,13 @@ export function useCall(user: { id: number; username: string } | null) {
     errorTimerRef.current = setTimeout(() => setCallError(null), 5000);
   };
 
+  // ── Ring timeout: give up on unanswered outgoing calls after ~45s ─────────
+  const RING_TIMEOUT_MS = 45_000;
+  const ringTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearRingTimer = () => {
+    if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
+  };
+
   const sendWS = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
@@ -137,6 +144,7 @@ export function useCall(user: { id: number; username: string } | null) {
 
         // ── Call accepted (caller side) ────────────────────────────────────
         if (msg.type === "call-accepted" && pcRef.current) {
+          clearRingTimer();
           await pcRef.current.setRemoteDescription(msg.answer);
           setCallStatus("active");
         }
@@ -148,6 +156,9 @@ export function useCall(user: { id: number; username: string } | null) {
 
         // ── Call rejected / ended ──────────────────────────────────────────
         if (msg.type === "call-rejected" || msg.type === "call-ended") {
+          clearRingTimer();
+          // Callee side: caller gave up while we were ringing — hide the banner.
+          setIncomingCall(null);
           setCallStatus("ended");
           pcRef.current?.close();
           localStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -155,6 +166,7 @@ export function useCall(user: { id: number; username: string } | null) {
         }
 
         if (msg.type === "call-busy" || msg.type === "call-unavailable") {
+          clearRingTimer();
           showCallError(msg.type === "call-busy"
             ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
             : "📴 المواطن غير متصل بالإمبراطورية حالياً — راسله وسيصله إشعار");
@@ -252,6 +264,23 @@ export function useCall(user: { id: number; username: string } | null) {
       setCallStatus("calling");
 
       sendWS({ type: "call-offer", to: targetUsername, offer, callId, from: user.username, video: withVideo });
+
+      // Give up automatically if the callee never answers.
+      clearRingTimer();
+      ringTimerRef.current = setTimeout(() => {
+        ringTimerRef.current = null;
+        // Only fire if we're still waiting on this same call attempt.
+        sendWS({ type: "call-end", to: targetUsername, callId });
+        const pc = pcRef.current;
+        pcRef.current = null; // detach BEFORE close so the state handler ignores it
+        pc?.close();
+        localStreamRef.current?.getTracks().forEach(t => t.stop());
+        localStreamRef.current = null;
+        setLocalStream(null);
+        showCallError("📵 لم يتم الرد — حاول مرة أخرى لاحقاً");
+        setCallStatus("ended");
+        setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 1500);
+      }, RING_TIMEOUT_MS);
     } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
       const name = (err as Error)?.name ?? "";
@@ -324,6 +353,7 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── End active call ───────────────────────────────────────────────────────
   const endCall = useCallback(() => {
+    clearRingTimer();
     if (activePeer && activeCallId) sendWS({ type: "call-end", to: activePeer, callId: activeCallId });
     pcRef.current?.close();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
