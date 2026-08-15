@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Coins, Zap, ArrowLeft, Trophy, X, Crosshair } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 const COLOR = "#f97316";
