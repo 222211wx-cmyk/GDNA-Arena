@@ -4,6 +4,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { db, dmRooms, dmRoomMembers, dmMessages, usersTable, pool as _pool } from "@workspace/db";
+import { gcsChatStorage, getChatObject, chatObjectStream, migrateLegacyChatUploads } from "../lib/chatStorage";
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
 
@@ -19,8 +20,10 @@ export function isValidAttachmentUrl(url: string): boolean {
 }
 
 // ── Chat attachment uploads (gallery, camera, files, voice notes) ─────────────
-const chatUploadsDir = path.join(process.cwd(), "uploads", "chat");
-if (!fs.existsSync(chatUploadsDir)) fs.mkdirSync(chatUploadsDir, { recursive: true });
+// Attachments live in Replit App Storage (GCS bucket) so they survive
+// production republishes. The legacy local dir is kept read-only as a
+// fallback for files uploaded before the migration.
+const legacyChatUploadsDir = path.join(process.cwd(), "uploads", "chat");
 
 // Strict MIME → extension matrix. The stored extension is ALWAYS chosen by the
 // server from this map — never from the client filename — so active content
@@ -39,13 +42,20 @@ const MIME_EXT: Record<string, string> = {
 // Types safe to render inline; everything else is forced to download
 const INLINE_SAFE = /^(image\/(jpeg|png|gif|webp)|video\/|audio\/)/;
 
+const mimeForExt = (ext: string): string =>
+  Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] ?? "application/octet-stream";
+
+// One-time, idempotent rescue of any pre-migration files still on local disk.
+// Runs in the background at boot; already-migrated objects are skipped.
+migrateLegacyChatUploads(legacyChatUploadsDir, mimeForExt).catch(e =>
+  console.error("Legacy chat upload migration error:", e));
+
+// Uploads STREAM directly into the bucket (no memory buffering, no local disk).
+// Filename/extension is ALWAYS server-chosen from MIME_EXT — never the client name.
 const chatUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, chatUploadsDir),
-    filename: (_req, file, cb) => {
-      const ext = MIME_EXT[file.mimetype] ?? ".bin";
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-    },
+  storage: gcsChatStorage((mimetype) => {
+    const ext = MIME_EXT[mimetype] ?? ".bin";
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
   }),
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
   fileFilter: (_req, file, cb) => {
@@ -73,7 +83,12 @@ router.post("/messages/upload", (req, res): void => {
     res.status(429).json({ error: "تجاوزت الحد المسموح من الملفات — حاول بعد قليل ⏳" }); return;
   }
   chatUpload.single("file")(req, res, (err) => {
-    if (err) { res.status(400).json({ error: err.message ?? "Upload failed" }); return; }
+    if (err) {
+      const status = err.code === "LIMIT_FILE_SIZE" || err.message?.includes("غير مسموح") ? 400 : 500;
+      if (status === 500) console.error("Chat attachment upload to object storage failed:", err);
+      res.status(status).json({ error: status === 500 ? "فشل رفع الملف — حاول مرة أخرى" : (err.message ?? "Upload failed") });
+      return;
+    }
     if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
     const mime = req.file.mimetype;
     const kind = mime.startsWith("image/") ? "image"
@@ -89,20 +104,44 @@ router.post("/messages/upload", (req, res): void => {
 });
 
 // GET /messages/files/:name — serve an uploaded attachment (login required)
-router.get("/messages/files/:name", (req, res): void => {
+router.get("/messages/files/:name", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Login required" }); return; }
   const name = req.params.name;
   if (!/^[A-Za-z0-9._-]+$/.test(name)) { res.status(400).json({ error: "Bad name" }); return; }
-  const filePath = path.join(chatUploadsDir, name);
-  if (!filePath.startsWith(chatUploadsDir) || !fs.existsSync(filePath)) {
+
+  // Content-Type derives from the server-chosen extension only; never sniff.
+  const mime = mimeForExt(path.extname(name).toLowerCase());
+  const setSecurityHeaders = () => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    if (!INLINE_SAFE.test(mime)) res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  };
+
+  try {
+    const file = await getChatObject(name);
+    if (file) {
+      setSecurityHeaders();
+      chatObjectStream(file)
+        .on("error", (e) => {
+          console.error("Chat attachment stream error:", e);
+          if (!res.headersSent) res.status(500).json({ error: "Read failed" });
+          else res.destroy();
+        })
+        .pipe(res);
+      return;
+    }
+  } catch (e) {
+    console.error("Chat attachment lookup failed:", e);
+    res.status(500).json({ error: "Storage unavailable" }); return;
+  }
+
+  // Legacy fallback: files uploaded before the object-storage migration
+  const filePath = path.join(legacyChatUploadsDir, name);
+  if (!filePath.startsWith(legacyChatUploadsDir) || !fs.existsSync(filePath)) {
     res.status(404).json({ error: "Not found" }); return;
   }
-  // Content-Type derives from the server-chosen extension only; never sniff.
-  const ext = path.extname(name).toLowerCase();
-  const mime = Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] ?? "application/octet-stream";
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Content-Type", mime);
-  if (!INLINE_SAFE.test(mime)) res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  setSecurityHeaders();
   res.sendFile(filePath);
 });
 
