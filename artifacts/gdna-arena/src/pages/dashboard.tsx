@@ -161,6 +161,109 @@ function SmartWidget() {
   );
 }
 
+// ── Imperial Council Reports Widget (admins only) ─────────────────────────────
+type CouncilReport = {
+  id: number;
+  headline: string;
+  report: {
+    state_of_empire?: string;
+    predictions?: string[];
+    research?: string[];
+    directives?: string[];
+  };
+  created_at: string;
+};
+
+function CouncilReportsWidget() {
+  const [reports, setReports] = useState<CouncilReport[] | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/governor/council-reports", { credentials: "include" })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { reports: CouncilReport[] } | null) => {
+        if (d?.reports) {
+          setReports(d.reports);
+          setOpenId(d.reports[0]?.id ?? null);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  if (!reports || reports.length === 0) return null;
+
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("ar-MA", { year: "numeric", month: "long", day: "numeric" });
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
+      <Card className="bg-card/50 border-yellow-500/30 overflow-hidden">
+        <CardContent className="p-6" dir="rtl" lang="ar">
+          <div className="flex items-center gap-3 mb-1">
+            <span className="text-xl">🏛️</span>
+            <h3 className="text-sm uppercase tracking-widest text-yellow-500 font-bold">
+              تقارير المجلس الإمبراطوري
+            </h3>
+            <span className="mr-auto text-[10px] uppercase tracking-widest text-muted-foreground border border-yellow-500/30 rounded px-2 py-0.5">
+              ADMIN ONLY
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            التقرير اليومي لمجلس الذكاء — حالة الإمبراطورية، التنبؤات، البحوث والتوجيهات
+          </p>
+          <div className="space-y-2">
+            {reports.map((r) => {
+              const open = openId === r.id;
+              return (
+                <div key={r.id} className={`rounded-lg border ${open ? "border-yellow-500/40 bg-yellow-500/5" : "border-white/10 bg-white/[0.02]"}`}>
+                  <button
+                    onClick={() => setOpenId(open ? null : r.id)}
+                    className="w-full text-right p-3 flex items-center gap-3 cursor-pointer"
+                    data-testid={`button-council-report-${r.id}`}
+                  >
+                    <span className="text-yellow-500 text-xs shrink-0">{open ? "▲" : "▼"}</span>
+                    <span className="flex-1 text-sm font-semibold leading-snug">{r.headline}</span>
+                    <span className="text-[11px] text-muted-foreground shrink-0">{fmtDate(r.created_at)}</span>
+                  </button>
+                  {open && (
+                    <div className="px-4 pb-4 text-sm leading-7 text-foreground/90 space-y-3">
+                      {r.report.state_of_empire && <p className="m-0">{r.report.state_of_empire}</p>}
+                      {!!r.report.predictions?.length && (
+                        <div>
+                          <b className="text-yellow-500">🔮 التنبؤات:</b>
+                          <ul className="mt-1 pr-5 list-disc space-y-0.5">
+                            {r.report.predictions.map((p, i) => <li key={i}>{p}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {!!r.report.research?.length && (
+                        <div>
+                          <b className="text-yellow-500">🔬 البحوث الجماعية:</b>
+                          <ul className="mt-1 pr-5 list-disc space-y-0.5">
+                            {r.report.research.map((p, i) => <li key={i}>{p}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {!!r.report.directives?.length && (
+                        <div>
+                          <b className="text-yellow-500">⚔️ التوجيهات نحو الريادة:</b>
+                          <ul className="mt-1 pr-5 list-disc space-y-0.5">
+                            {r.report.directives.map((p, i) => <li key={i}>{p}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 // ── Archon Identity Widget ────────────────────────────────────────────────────
 const ARCHETYPES_DASH: Record<string, { color: string; symbol: string; ar: string }> = {
   "THE SOVEREIGN":   { color: "#C9A84C", symbol: "♔", ar: "السيد المطلق" },
@@ -583,6 +686,9 @@ export default function Dashboard() {
           </Card>
         </motion.div>
       </div>
+
+      {/* ── Imperial Council Reports (admins only) ───────────────────── */}
+      {user.isAdmin && <CouncilReportsWidget />}
 
       {/* ── Archon Empire Identity ────────────────────────────────────── */}
       <ArchonIdentityWidget />

@@ -65,6 +65,7 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
     gamesPlayed: user.gamesPlayed,
     wins: user.wins,
     canClaimDaily: canClaimDaily(user.lastDailyReward),
+    isAdmin: user.isAdmin === true,
   };
 }
 

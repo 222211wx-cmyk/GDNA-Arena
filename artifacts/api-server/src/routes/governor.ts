@@ -101,13 +101,21 @@ router.post("/governor/consult", async (req, res): Promise<void> => {
 });
 
 // ── GET /governor/council-reports — تقارير مجلس الذكاء للإدارة ────────────────
+// Admin-only: council reports are internal administration intelligence.
 router.get("/governor/council-reports", async (req, res): Promise<void> => {
-  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
   const { pool } = await import("@workspace/db");
   if (!pool) { res.json({ reports: [] }); return; }
   try {
+    const { rows: adminRows } = await pool.query(
+      `SELECT is_admin FROM users WHERE id=$1`, [userId]);
+    if (adminRows[0]?.is_admin !== true) {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
     const { rows } = await pool.query(
-      `SELECT id, headline, report, created_at FROM council_reports ORDER BY created_at DESC LIMIT 5`);
+      `SELECT id, headline, report, created_at FROM council_reports ORDER BY created_at DESC LIMIT 30`);
     res.json({ reports: rows });
   } catch {
     res.json({ reports: [] });
