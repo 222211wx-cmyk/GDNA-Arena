@@ -61,6 +61,7 @@ import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import CinemaPage   from "@/pages/cinema";
+import AdminRevenuePage from "@/pages/admin-revenue";
 
 const queryClient = new QueryClient();
 
@@ -116,6 +117,7 @@ function PageWrapper() {
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />
           <Route path="/wallet" component={Wallet} />
+          <Route path="/admin/revenue" component={AdminRevenuePage} />
           <Route component={NotFound} />
         </Switch>
       </ErrorBoundary>

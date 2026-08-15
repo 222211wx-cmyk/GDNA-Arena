@@ -1316,6 +1316,7 @@ ensureTables()
   .then(() => autoSeedTestUsers())
   .then(() => import("./routes/stars").then(m => m.ensureStarsSystem()))
   .then(() => import("./routes/rights").then(m => m.ensureRightsTables()))
+  .then(() => import("./routes/ppo").then(m => m.ensurePpoTables()))
   .then(() => {
     startHonorAlertJob();
     startWelcomeBroadcastJob();
