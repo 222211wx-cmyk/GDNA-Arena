@@ -15,8 +15,7 @@ import type { File as GcsFile } from "@google-cloud/storage";
 //  • Views earn coins via monetization_settings (content_type 'clip').
 
 const router: IRouter = Router();
-const MIN_DURATION_SEC = 60;        // owner update: 1 minute minimum
-const MAX_DURATION_SEC = 24 * 3600; // owner update: 24 hours maximum
+const MIN_DURATION_SEC = 60; // owner rule: 1 minute minimum — NO maximum (any chrono above 1 min)
 const MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB per clip
 const ALLOWED = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 const EXT: Record<string, string> = { "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov" };
@@ -155,11 +154,6 @@ router.post("/clips", uploadLimiter, (req, res): void => {
       if (!Number.isFinite(durationSec) || durationSec < MIN_DURATION_SEC) {
         cleanup();
         res.status(400).json({ error: "Durée minimale: 1 minute. Les clips de moins d'1 min sont interdits." });
-        return;
-      }
-      if (durationSec > MAX_DURATION_SEC) {
-        cleanup();
-        res.status(400).json({ error: "Durée maximale: 24 heures." });
         return;
       }
       const { rows: urows } = await requirePool().query(`SELECT username FROM users WHERE id=$1`, [userId]);
