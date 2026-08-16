@@ -136,7 +136,8 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
         </div>
         <div className="text-[11px] leading-relaxed rounded-lg border p-3 space-y-1" style={{ borderColor: "#C9A84C30", color: "#d4c391" }}>
           <p>⏱️ المدة: <b>دقيقتين (2:00) على الأقل</b> — بلا حد أقصى، حتى 25 ساعة.</p>
-          <p className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 shrink-0" /> حقوق الملكية الفكرية محمية: غير صاحب العمل (منتج، مغني، لاعب...) عندو الحق فالنشر — كل ملف كيتسجل ببصمة رقمية.</p>
+          <p className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 shrink-0" /> حقوق الملكية الفكرية محمية: التسجيلة الأصلية (الأوريجينال) لصاحبها وحدو — كل ملف كيتسجل ببصمة رقمية، والنسخة طبق الأصل كترفض.</p>
+          <p>📱 التسجيل بالهاتف أو الكاميرا ديالك مسموح بالنشر — بشرط ما يكونش نفس الكرونو ديال الأصلية (ما شي نسخة مطابقة).</p>
         </div>
         <input type="file" accept="video/mp4,video/webm,video/quicktime"
           onChange={e => pick(e.target.files?.[0] ?? null)} disabled={busy}
