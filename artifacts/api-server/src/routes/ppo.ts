@@ -150,11 +150,11 @@ router.post("/ppo/beneficiaries", async (req, res): Promise<void> => {
     }
     const u = await requirePool().query(`SELECT id FROM users WHERE id=$1`, [uid]);
     if (!u.rows[0]) { res.status(404).json({ error: "المواطن غير موجود" }); return; }
-    const { rows } = await requirePool().query(
+    const row = await withPpoLock(async client => (await client.query(
       `INSERT INTO ppo_beneficiaries (user_id, role, share_rate) VALUES ($1,$2,$3)
        ON CONFLICT (user_id) DO UPDATE SET role=EXCLUDED.role, share_rate=EXCLUDED.share_rate, status='active'
-       RETURNING *`, [uid, role.trim(), rate]);
-    res.json({ beneficiary: rows[0] });
+       RETURNING *`, [uid, role.trim(), rate])).rows[0]);
+    res.json({ beneficiary: row });
   } catch (e) { console.error("[ppo] add beneficiary:", e); res.status(500).json({ error: "Failed" }); }
 });
 
@@ -177,9 +177,10 @@ router.patch("/ppo/beneficiaries/:id", async (req, res): Promise<void> => {
     }
     if (!sets.length) { res.status(400).json({ error: "Nothing to update" }); return; }
     vals.push(id);
-    const { rows } = await requirePool().query(`UPDATE ppo_beneficiaries SET ${sets.join(",")} WHERE id=$${vals.length} RETURNING *`, vals);
-    if (!rows[0]) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ beneficiary: rows[0] });
+    const row = await withPpoLock(async client =>
+      (await client.query(`UPDATE ppo_beneficiaries SET ${sets.join(",")} WHERE id=$${vals.length} RETURNING *`, vals)).rows[0]);
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ beneficiary: row });
   } catch (e) { console.error("[ppo] patch beneficiary:", e); res.status(500).json({ error: "Failed" }); }
 });
 
@@ -189,7 +190,9 @@ router.delete("/ppo/beneficiaries/:id", async (req, res): Promise<void> => {
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const id = parseInt(req.params.id);
     if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-    await requirePool().query(`DELETE FROM ppo_beneficiaries WHERE id=$1`, [id]);
+    // Soft delete: payout history stays reconcilable; re-adding the same user
+    // reactivates the row (upsert), preserving total_earned.
+    await withPpoLock(client => client.query(`UPDATE ppo_beneficiaries SET status='removed' WHERE id=$1`, [id]));
     res.json({ ok: true });
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -228,22 +231,34 @@ router.post("/ppo/distribute", async (req, res): Promise<void> => {
       return;
     }
 
-    const rev = await totalRevenue();
-    const distributed = num((await client.query(`SELECT COALESCE(SUM(total_profit),0) AS s FROM ppo_distributions`)).rows[0].s);
-    const profitPool = num(rev.total - distributed);
-    if (profitPool <= 0) {
+    // Read revenue through THIS transaction's connection (consistent snapshot).
+    const rev = await totalRevenue(client);
+    const distributedC = toCents((await client.query(`SELECT COALESCE(SUM(total_profit),0) AS s FROM ppo_distributions`)).rows[0].s);
+    const poolC = toCents(rev.total) - distributedC; // exact integer cents
+    if (poolC <= 0) {
       await client.query("ROLLBACK");
       res.status(400).json({ error: "ما كاين حتى ربح جديد للتوزيع — كلشي تقسم من قبل" });
       return;
     }
 
+    // Allocate in integer cents; hand the rounding residual deterministically
+    // to the largest share (first row after sort) so items always sum exactly.
+    const sorted = [...bens].sort((a, b) => parseFloat(b.share_rate) - parseFloat(a.share_rate) || a.id - b.id);
+    const cents = sorted.map(b => Math.floor((poolC * parseFloat(b.share_rate)) / 100));
+    cents[0] += poolC - cents.reduce((s, c) => s + c, 0);
+    if (cents.some(c => c < 0) || cents.reduce((s, c) => s + c, 0) !== poolC) {
+      await client.query("ROLLBACK");
+      res.status(500).json({ error: "خطأ حسابي — التوزيع توقف بلا تسجيل" });
+      return;
+    }
+
     const { rows: dRows } = await client.query(
       `INSERT INTO ppo_distributions (period, total_profit, created_by) VALUES ($1,$2,$3) RETURNING *`,
-      [period, profitPool, (req.session as any)?.userId ?? null]);
+      [period, poolC / 100, (req.session as any)?.userId ?? null]);
     const dist = dRows[0];
     const items = [];
-    for (const b of bens) {
-      const amount = num((profitPool * parseFloat(b.share_rate)) / 100);
+    for (let k = 0; k < sorted.length; k++) {
+      const b = sorted[k]; const amount = cents[k] / 100;
       await client.query(
         `INSERT INTO ppo_distribution_items (distribution_id, user_id, role, share_rate, amount) VALUES ($1,$2,$3,$4,$5)`,
         [dist.id, b.user_id, b.role, b.share_rate, amount]);
@@ -251,7 +266,7 @@ router.post("/ppo/distribute", async (req, res): Promise<void> => {
       items.push({ userId: b.user_id, role: b.role, shareRate: parseFloat(b.share_rate), amount });
     }
     await client.query("COMMIT");
-    res.json({ report: { id: dist.id, period, totalProfit: profitPool, distributions: items, timestamp: dist.created_at } });
+    res.json({ report: { id: dist.id, period, totalProfit: poolC / 100, distributions: items, timestamp: dist.created_at } });
   } catch (e) {
     try { await client.query("ROLLBACK"); } catch { /* noop */ }
     console.error("[ppo] distribute:", e);
@@ -267,8 +282,10 @@ router.get("/ppo/balance/:userId", async (req, res): Promise<void> => {
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const uid = parseInt(req.params.userId);
     if (!Number.isInteger(uid)) { res.status(400).json({ error: "Invalid userId" }); return; }
-    const { rows } = await requirePool().query(`SELECT total_earned FROM ppo_beneficiaries WHERE user_id=$1`, [uid]);
-    res.json({ balance: num(rows[0]?.total_earned ?? 0) });
+    // Ledger-derived: computed from immutable distribution items, so it stays
+    // correct even if the beneficiary row was removed and re-added.
+    const { rows } = await requirePool().query(`SELECT COALESCE(SUM(amount),0) AS s FROM ppo_distribution_items WHERE user_id=$1`, [uid]);
+    res.json({ balance: num(rows[0].s) });
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 

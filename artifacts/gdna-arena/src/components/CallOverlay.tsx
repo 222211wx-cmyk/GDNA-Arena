@@ -183,7 +183,7 @@ export default function CallOverlay({
       {/* Remote video / avatar */}
       <div className="flex-1 relative flex items-center justify-center">
         {remoteStream ? (
-          <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" muted={speakerOff} />
+          <video id="remote-player" ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" muted={speakerOff} />
         ) : (
           <div className="text-center space-y-4">
             <div className="w-28 h-28 rounded-full mx-auto flex items-center justify-center font-black text-5xl text-black"
@@ -212,7 +212,7 @@ export default function CallOverlay({
 
         {/* Local video (PiP) */}
         {localStream && hasVideo && !videoOff && (
-          <div className="absolute bottom-4 right-4 w-28 h-20 rounded-xl overflow-hidden border-2"
+          <div id="local-player" className="absolute bottom-4 right-4 w-28 h-20 rounded-xl overflow-hidden border-2"
             style={{ borderColor: "#C9A84C50" }}>
             <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           </div>
