@@ -8,7 +8,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const BASE = import.meta.env.BASE_URL;
 const api = (p: string) => `${BASE}api${p}`;
-const MIN_SEC = 120;
+const MIN_SEC = 60;        // owner update: 1 minute minimum
+const MAX_SEC = 24 * 3600; // owner update: 24 hours maximum
 
 interface Clip {
   id: number; user_id: number; username: string; title: string;
@@ -98,7 +99,8 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
     v.onloadedmetadata = () => {
       URL.revokeObjectURL(url);
       setDuration(v.duration);
-      if (v.duration < MIN_SEC) setError("⏱️ شرط النشر: الكليب خاصو يكون دقيقتين (2:00) على الأقل");
+      if (v.duration < MIN_SEC) setError("Durée minimale: 1 minute. Les clips de moins d'1 min sont interdits.");
+      else if (v.duration > MAX_SEC) setError("Durée maximale: 24 heures.");
     };
     v.onerror = () => { URL.revokeObjectURL(url); setError("ما قدرناش نقراو الفيديو"); };
     v.src = url;
@@ -135,16 +137,17 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
           <button onClick={() => !busy && onClose()} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
         <div className="text-[11px] leading-relaxed rounded-lg border p-3 space-y-1" style={{ borderColor: "#C9A84C30", color: "#d4c391" }}>
-          <p>⏱️ المدة: <b>دقيقتين (2:00) على الأقل</b> — بلا حد أقصى، حتى 25 ساعة.</p>
+          <p>⏱️ Durée: <b>Minimum 1 min</b> · Maximum 24 heures.</p>
           <p className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 shrink-0" /> حقوق الملكية الفكرية محمية: التسجيلة الأصلية (الأوريجينال) لصاحبها وحدو — كل ملف كيتسجل ببصمة رقمية، والنسخة طبق الأصل كترفض.</p>
           <p>📱 التسجيل بالهاتف أو الكاميرا ديالك مسموح بالنشر — بشرط ما يكونش نفس الكرونو ديال الأصلية (ما شي نسخة مطابقة).</p>
         </div>
         <input type="file" accept="video/mp4,video/webm,video/quicktime"
           onChange={e => pick(e.target.files?.[0] ?? null)} disabled={busy}
           className="w-full text-xs text-gray-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-yellow-400/10 file:text-yellow-400" />
+        <p className="text-sm text-yellow-400">⚠️ Minimum 1 minute. Max 24 heures.</p>
         {file && duration !== null && (
           <p className="text-xs font-mono" style={{ color: duration >= MIN_SEC ? "#22c55e" : "#ef4444" }}>
-            المدة: {fmtDur(Math.floor(duration))} {duration >= MIN_SEC ? "✅" : "❌ أقل من 2:00"}
+            Durée: {fmtDur(Math.floor(duration))} {duration >= MIN_SEC && duration <= MAX_SEC ? "✅" : "❌"}
           </p>
         )}
         <input value={title} onChange={e => setTitle(e.target.value)} maxLength={120} dir="auto" disabled={busy}
@@ -204,7 +207,7 @@ export default function ClipsPage() {
           )}
         </div>
         <p className="text-[11px] font-mono" style={{ color: "#C9A84C99" }}>
-          ⏱️ 2:00 على الأقل · بلا حد أقصى · 🛡️ حقوق الملكية محفوظة لصاحب العمل
+          Durée: Minimum 1 min · Pas de limite maximale · Droits d'auteur réservés à l'employeur
         </p>
 
         {loading ? (
