@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { name: "CINEMA",   emoji: "🎬",  icon: <Film      size={15} />,  path: "/cinema",           highlight: false },
   { name: "NEWS",     emoji: "📰",  icon: <Newspaper size={15} />,  path: "/news",             highlight: false },
   { name: "HERITAGE", emoji: "🏛️", icon: <Landmark  size={15} />,  path: "/chronicle",        highlight: false },
+  { name: "CLIPS",    emoji: "🎬",  icon: <Film      size={15} />,  path: "/clips",            highlight: false },
   { name: "SOCIAL",   emoji: "💬",  icon: <MessageSquare size={15} />, path: "/social",   highlight: false },
   { name: "MESSAGES", emoji: "✉️",  icon: <Mail          size={15} />, path: "/messages", highlight: false },
   { name: "AMIS",     emoji: "👥",  icon: <User          size={15} />, path: "/friends",  highlight: false },

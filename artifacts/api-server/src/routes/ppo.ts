@@ -96,14 +96,15 @@ async function withPpoLock<T>(fn: (client: any) => Promise<T>): Promise<T> {
 // Total revenue pool across all sources (clips + posts + chat tabs).
 // Accepts the querying handle so a distribution reads through its own
 // transaction (consistent snapshot), while read-only callers pass the pool.
-async function totalRevenue(q: { query: (sql: string) => Promise<any> } = requirePool()): Promise<{ uploads: number; posts: number; rooms: number; total: number }> {
+async function totalRevenue(q: { query: (sql: string) => Promise<any> } = requirePool()): Promise<{ uploads: number; posts: number; rooms: number; clips: number; total: number }> {
   const { rows } = await q.query(`
     SELECT
       COALESCE((SELECT SUM(earnings) FROM gs_uploads), 0)  AS uploads,
       COALESCE((SELECT SUM(earnings) FROM pulse_posts), 0) AS posts,
-      COALESCE((SELECT SUM(revenue) FROM dm_rooms), 0)     AS rooms`);
-  const uploads = num(rows[0].uploads), posts = num(rows[0].posts), rooms = num(rows[0].rooms);
-  return { uploads, posts, rooms, total: num(uploads + posts + rooms) };
+      COALESCE((SELECT SUM(revenue) FROM dm_rooms), 0)     AS rooms,
+      COALESCE((SELECT SUM(earnings) FROM clips), 0)       AS clips`);
+  const uploads = num(rows[0].uploads), posts = num(rows[0].posts), rooms = num(rows[0].rooms), clips = num(rows[0].clips);
+  return { uploads, posts, rooms, clips, total: num(uploads + posts + rooms + clips) };
 }
 
 // ─── GET /ppo/overview — everything the unified admin page needs ─────────────

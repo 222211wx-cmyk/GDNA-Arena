@@ -1317,6 +1317,7 @@ ensureTables()
   .then(() => import("./routes/stars").then(m => m.ensureStarsSystem()))
   .then(() => import("./routes/rights").then(m => m.ensureRightsTables()))
   .then(() => import("./routes/ppo").then(m => m.ensurePpoTables()))
+  .then(() => import("./routes/clips").then(m => m.ensureClipsTables()))
   .then(() => {
     startHonorAlertJob();
     startWelcomeBroadcastJob();

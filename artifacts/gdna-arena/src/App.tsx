@@ -31,6 +31,7 @@ import GlobalStarApp from "@/pages/globalstar-app";
 import LegendsPage from "@/pages/legends";
 import LegendHubPage from "@/pages/legend-hub";
 import PulsePage from "@/pages/pulse";
+import ClipsPage from "@/pages/clips";
 import CitizensPage from "@/pages/citizens";
 import CitizenPage from "@/pages/citizen";
 import EmpireEternalPage from "@/pages/empire-eternal";
@@ -100,6 +101,7 @@ function PageWrapper() {
           <Route path="/legends" component={LegendsPage} />
           <Route path="/legends/:id" component={LegendHubPage} />
           <Route path="/pulse" component={PulsePage} />
+          <Route path="/clips" component={ClipsPage} />
           <Route path="/citizens" component={CitizensPage} />
           <Route path="/citizen/:username" component={CitizenPage} />
           <Route path="/empire-eternal" component={EmpireEternalPage} />
