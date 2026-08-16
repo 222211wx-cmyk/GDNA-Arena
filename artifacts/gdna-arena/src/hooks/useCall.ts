@@ -1,8 +1,42 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  useCall — WebRTC + WebSocket hook for voice/video calls & live stories
+//  useCall — Agora RTC calls + WebSocket signaling for GDNA Arena
+//  Media rides Agora's global relay network (works on strict NATs/firewalls).
+//  The WS layer keeps ring / accept / reject / end + presence + notifications.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useState, useEffect, useCallback } from "react";
+import AgoraRTC from "agora-rtc-sdk-ng";
+import type {
+  IAgoraRTCClient,
+  IMicrophoneAudioTrack,
+  ICameraVideoTrack,
+  ILocalVideoTrack,
+  IRemoteAudioTrack,
+  IRemoteVideoTrack,
+} from "agora-rtc-sdk-ng";
+
+const AGORA_APP_ID = "62585b9b53c44c47baa7600ee5d74e54";
+
+// Fetch a channel-scoped RTC token from the authenticated backend.
+// Returns { appId, token, uid } — token is null while the Agora project runs
+// in App-ID-only mode (no App Certificate configured server-side yet).
+async function fetchAgoraToken(channel: string): Promise<{ appId: string; token: string | null; uid: number | null }> {
+  const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+  // Retry briefly on 403: the caller's call-offer (which registers the call
+  // server-side) races this HTTP request over a separate connection.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const r = await fetch(`${base}/api/rtc/agora-token?channel=${encodeURIComponent(channel)}`, { credentials: "include" });
+      if (r.status === 403) { await new Promise(res => setTimeout(res, 350)); continue; }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      return { appId: data.appId ?? AGORA_APP_ID, token: data.token ?? null, uid: data.uid ?? null };
+    } catch {
+      break;
+    }
+  }
+  return { appId: AGORA_APP_ID, token: null, uid: null };
+}
 
 const BASE_WS = (() => {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -18,7 +52,6 @@ export type LiveStatus  = "idle" | "live" | "ended";
 interface IncomingCall {
   from:   string;
   callId: string;
-  offer:  RTCSessionDescriptionInit;
   video:  boolean;
 }
 
@@ -29,15 +62,24 @@ interface LiveStream {
   domain: string;
 }
 
-const ICE_SERVERS = [
+// STUN-only config for the live-story WebRTC path (calls now use Agora).
+const LIVE_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
 export function useCall(user: { id: number; username: string } | null) {
   const wsRef   = useRef<WebSocket | null>(null);
-  const pcRef   = useRef<RTCPeerConnection | null>(null);
+  const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Agora call engine ──────────────────────────────────────────────────────
+  const agoraRef = useRef<IAgoraRTCClient | null>(null);
+  const localAudioRef  = useRef<IMicrophoneAudioTrack | null>(null);
+  const localVideoRef  = useRef<ICameraVideoTrack | null>(null);
+  const screenTrackRef = useRef<ILocalVideoTrack | null>(null);
+  const remoteAudioRef = useRef<IRemoteAudioTrack | null>(null);
+  const remoteVideoRef = useRef<IRemoteVideoTrack | null>(null);
 
   const [connected,    setConnected]    = useState(false);
   const [callStatus,   setCallStatus]   = useState<CallStatus>("idle");
@@ -45,6 +87,9 @@ export function useCall(user: { id: number; username: string } | null) {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [activePeer,   setActivePeer]   = useState<string | null>(null);
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  // Mirror of the call the user is currently in or being offered — WS handlers
+  // use this ref to IGNORE call events whose callId does not belong to us.
+  const currentCallIdRef = useRef<string | null>(null);
   const [activeVideo,  setActiveVideo]  = useState(false);
   // Call-history tracking — lives here (single instance) so it logs exactly once
   const historyRef = useRef<{ peer: string; video: boolean; start: number; outgoing: boolean; answered: boolean } | null>(null);
@@ -52,15 +97,13 @@ export function useCall(user: { id: number; username: string } | null) {
   const [activeLives,  setActiveLives]  = useState<LiveStream[]>([]);
   const [currentLiveId, setCurrentLiveId] = useState<string | null>(null);
 
-  // Streams
+  // Streams (MediaStream API kept so CallOverlay & live components stay unchanged)
   const localStreamRef  = useRef<MediaStream | null>(null);
-  const remoteStreamRef = useRef<MediaStream | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
   const [localStream,   setLocalStream]   = useState<MediaStream | null>(null);
   const [remoteStream,  setRemoteStream]  = useState<MediaStream | null>(null);
   const [screenSharing, setScreenSharing] = useState(false);
 
-  // ── Error feedback (must come AFTER all stream hooks to preserve hook order) ──
+  // ── Error feedback ─────────────────────────────────────────────────────────
   const [callError,    setCallError]    = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,33 +126,76 @@ export function useCall(user: { id: number; username: string } | null) {
     }
   }, []);
 
-  // ── Create peer connection ─────────────────────────────────────────────────
-  const createPC = useCallback((peerUsername: string, callId: string) => {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    pcRef.current = pc;
+  // ── Rebuild the remote MediaStream from current Agora remote tracks ───────
+  const rebuildRemoteStream = useCallback(() => {
+    const tracks: MediaStreamTrack[] = [];
+    if (remoteAudioRef.current) tracks.push(remoteAudioRef.current.getMediaStreamTrack());
+    if (remoteVideoRef.current) tracks.push(remoteVideoRef.current.getMediaStreamTrack());
+    setRemoteStream(tracks.length > 0 ? new MediaStream(tracks) : null);
+  }, []);
 
-    pc.onicecandidate = (e) => {
-      if (e.candidate) sendWS({ type: "ice-candidate", to: peerUsername, callId, candidate: e.candidate });
-    };
+  // ── Join an Agora channel & publish local media ────────────────────────────
+  const joinAgora = useCallback(async (channel: string, withVideo: boolean) => {
+    const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    agoraRef.current = client;
 
-    pc.ontrack = (e) => {
-      const stream = e.streams[0];
-      remoteStreamRef.current = stream;
-      setRemoteStream(stream);
-    };
+    client.on("user-published", async (remoteUser, mediaType) => {
+      if (agoraRef.current !== client) return; // stale client
+      await client.subscribe(remoteUser, mediaType);
+      if (mediaType === "audio") remoteAudioRef.current = remoteUser.audioTrack ?? null;
+      if (mediaType === "video") remoteVideoRef.current = remoteUser.videoTrack ?? null;
+      rebuildRemoteStream();
+      setCallStatus("active");
+    });
 
-    pc.onconnectionstatechange = () => {
-      // Ignore events from a PC we already discarded (e.g. failed answer cleanup)
-      if (pcRef.current !== pc) return;
-      if (pc.connectionState === "connected") setCallStatus("active");
-      if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
-        setCallStatus("ended");
-        setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); setRemoteStream(null); }, 2000);
-      }
-    };
+    client.on("user-unpublished", (_remoteUser, mediaType) => {
+      if (agoraRef.current !== client) return;
+      if (mediaType === "audio") remoteAudioRef.current = null;
+      if (mediaType === "video") remoteVideoRef.current = null;
+      rebuildRemoteStream();
+    });
 
-    return pc;
-  }, [sendWS]);
+    const { appId, token, uid } = await fetchAgoraToken(channel);
+    await client.join(appId, channel, token, uid);
+
+    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+    localAudioRef.current = audioTrack;
+    let videoTrack: ICameraVideoTrack | null = null;
+    if (withVideo) {
+      try {
+        videoTrack = await AgoraRTC.createCameraVideoTrack();
+        localVideoRef.current = videoTrack;
+      } catch { /* no camera — degrade to audio-only */ }
+    }
+
+    await client.publish(videoTrack ? [audioTrack, videoTrack] : [audioTrack]);
+
+    const ms = new MediaStream([
+      audioTrack.getMediaStreamTrack(),
+      ...(videoTrack ? [videoTrack.getMediaStreamTrack()] : []),
+    ]);
+    localStreamRef.current = ms;
+    setLocalStream(ms);
+  }, [rebuildRemoteStream]);
+
+  // ── Leave Agora & release all media ────────────────────────────────────────
+  const leaveAgora = useCallback(async () => {
+    const client = agoraRef.current;
+    agoraRef.current = null;
+    try { screenTrackRef.current?.close(); } catch { /* already closed */ }
+    try { localAudioRef.current?.close(); } catch { /* already closed */ }
+    try { localVideoRef.current?.close(); } catch { /* already closed */ }
+    screenTrackRef.current = null;
+    localAudioRef.current  = null;
+    localVideoRef.current  = null;
+    remoteAudioRef.current = null;
+    remoteVideoRef.current = null;
+    localStreamRef.current = null;
+    setLocalStream(null);
+    setRemoteStream(null);
+    setScreenSharing(false);
+    if (client) { try { await client.leave(); } catch { /* already left */ } }
+  }, []);
 
   // ── Connect WebSocket ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -138,48 +224,44 @@ export function useCall(user: { id: number; username: string } | null) {
 
         // ── Incoming call ──────────────────────────────────────────────────
         if (msg.type === "call-incoming") {
-          setIncomingCall({ from: msg.from, callId: msg.callId, offer: msg.offer, video: msg.video });
-          setCallStatus("ringing");
+          // Ignore if already in / being offered another call
+          if (!currentCallIdRef.current) {
+            currentCallIdRef.current = msg.callId;
+            setIncomingCall({ from: msg.from, callId: msg.callId, video: msg.video });
+            setCallStatus("ringing");
+          }
         }
 
-        // ── Call accepted (caller side) ────────────────────────────────────
-        if (msg.type === "call-accepted" && pcRef.current) {
+        // ── Call accepted (caller side) — callee joined the Agora channel ──
+        if (msg.type === "call-accepted" && msg.callId === currentCallIdRef.current) {
           clearRingTimer();
-          await pcRef.current.setRemoteDescription(msg.answer);
           setCallStatus("active");
         }
 
-        // ── ICE candidates ─────────────────────────────────────────────────
-        if (msg.type === "ice-candidate" && pcRef.current) {
-          try { await pcRef.current.addIceCandidate(msg.candidate); } catch {}
-        }
-
-        // ── Call rejected / ended ──────────────────────────────────────────
-        if (msg.type === "call-rejected" || msg.type === "call-ended") {
+        // ── Call rejected / ended — only for OUR current call ──────────────
+        if ((msg.type === "call-rejected" || msg.type === "call-ended")
+            && msg.callId === currentCallIdRef.current) {
           clearRingTimer();
+          currentCallIdRef.current = null;
           // Callee side: caller gave up while we were ringing — hide the banner.
           setIncomingCall(null);
           setCallStatus("ended");
-          pcRef.current?.close();
-          localStreamRef.current?.getTracks().forEach(t => t.stop());
-          setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); setLocalStream(null); setRemoteStream(null); }, 2000);
+          void leaveAgora();
+          setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 2000);
         }
 
         if (msg.type === "call-busy" || msg.type === "call-unavailable") {
           clearRingTimer();
+          currentCallIdRef.current = null;
           showCallError(msg.type === "call-busy"
             ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
             : "📴 المواطن غير متصل بالإمبراطورية حالياً — راسله وسيصله إشعار");
-          pcRef.current?.close();
-          pcRef.current = null;
-          localStreamRef.current?.getTracks().forEach(t => t.stop());
-          localStreamRef.current = null;
-          setLocalStream(null);
+          void leaveAgora();
           setCallStatus("ended");
           setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 1500);
         }
 
-        // ── Live events ────────────────────────────────────────────────────
+        // ── Live events (live stories keep the WebRTC path) ────────────────
         if (msg.type === "live-available") {
           setActiveLives(prev => [...prev.filter(l => l.liveId !== msg.liveId), { liveId: msg.liveId, host: msg.host, title: msg.title, domain: msg.domain }]);
         }
@@ -198,7 +280,7 @@ export function useCall(user: { id: number; username: string } | null) {
           sendWS({ type: "live-offer", to: msg.viewer, offer, liveId: msg.liveId });
         }
         if (msg.type === "live-offer") {
-          const pc = createPC(msg.from, msg.liveId);
+          const pc = createLivePC(msg.from, msg.liveId);
           localStreamRef.current?.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current!));
           await pc.setRemoteDescription(msg.offer);
           const answer = await pc.createAnswer();
@@ -209,7 +291,7 @@ export function useCall(user: { id: number; username: string } | null) {
           await pcRef.current.setRemoteDescription(msg.answer);
         }
         if (msg.type === "live-ice" && pcRef.current) {
-          try { await pcRef.current.addIceCandidate(msg.candidate); } catch {}
+          try { await pcRef.current.addIceCandidate(msg.candidate); } catch { /* stale */ }
         }
       };
 
@@ -228,7 +310,19 @@ export function useCall(user: { id: number; username: string } | null) {
       if (pingRef.current) clearInterval(pingRef.current);
       wsRef.current?.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.username]);
+
+  // ── Live-story peer connection (WebRTC, unchanged path) ───────────────────
+  const createLivePC = (peerUsername: string, liveId: string) => {
+    const pc = new RTCPeerConnection({ iceServers: LIVE_ICE_SERVERS });
+    pcRef.current = pc;
+    pc.onicecandidate = (e) => {
+      if (e.candidate) sendWS({ type: "live-ice", to: peerUsername, candidate: e.candidate, liveId });
+    };
+    pc.ontrack = (e) => setRemoteStream(e.streams[0]);
+    return pc;
+  };
 
   // ── Start a call ──────────────────────────────────────────────────────────
   const startCall = useCallback(async (targetUsername: string, withVideo = true) => {
@@ -244,49 +338,48 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("الاتصال بالشبكة منقطع — انتظر ثوانٍ وأعد المحاولة");
       return;
     }
+    // Cryptographically random channel name — unguessable, prevents third
+    // parties from joining active call channels.
+    const callId = `call_${crypto.randomUUID().replace(/-/g, "")}`;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
-      localStreamRef.current = stream;
-      setLocalStream(stream);
+      // Send the offer FIRST — it registers the call server-side, which is
+      // what authorizes our Agora token request for this channel.
+      sendWS({ type: "call-offer", to: targetUsername, offer: null, callId, from: user.username, video: withVideo });
 
-      const callId = `call_${Date.now()}`;
-      const pc = createPC(targetUsername, callId);
-
-      stream.getTracks().forEach(t => pc.addTrack(t, stream));
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
+      currentCallIdRef.current = callId;
       setActivePeer(targetUsername);
       setActiveCallId(callId);
       setActiveVideo(withVideo);
       historyRef.current = { peer: targetUsername, video: withVideo, start: Date.now(), outgoing: true, answered: false };
       setCallStatus("calling");
 
-      sendWS({ type: "call-offer", to: targetUsername, offer, callId, from: user.username, video: withVideo });
+      await joinAgora(callId, withVideo);
 
       // Give up automatically if the callee never answers.
       clearRingTimer();
       ringTimerRef.current = setTimeout(() => {
         ringTimerRef.current = null;
-        // Only fire if we're still waiting on this same call attempt.
         sendWS({ type: "call-end", to: targetUsername, callId });
-        const pc = pcRef.current;
-        pcRef.current = null; // detach BEFORE close so the state handler ignores it
-        pc?.close();
-        localStreamRef.current?.getTracks().forEach(t => t.stop());
-        localStreamRef.current = null;
-        setLocalStream(null);
+        currentCallIdRef.current = null;
+        void leaveAgora();
         showCallError("📵 لم يتم الرد — حاول مرة أخرى لاحقاً");
         setCallStatus("ended");
         setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 1500);
       }, RING_TIMEOUT_MS);
     } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
+      clearRingTimer();
+      // The offer already went out — tell the callee to stop ringing.
+      sendWS({ type: "call-end", to: targetUsername, callId });
+      currentCallIdRef.current = null;
+      setActivePeer(null);
+      setActiveCallId(null);
+      void leaveAgora();
       const name = (err as Error)?.name ?? "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      const code = (err as { code?: string })?.code ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError" || code === "PERMISSION_DENIED") {
         showCallError("🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع");
-      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError" || code === "DEVICE_NOT_FOUND") {
         showCallError("🎤 لا يوجد ميكروفون متصل بالجهاز");
       } else if (name === "NotReadableError") {
         showCallError("🎤 الميكروفون مستخدم من تطبيق آخر — أغلقه وأعد المحاولة");
@@ -295,22 +388,13 @@ export function useCall(user: { id: number; username: string } | null) {
       }
       setCallStatus("idle");
     }
-  }, [callStatus, createPC, sendWS, user]);
+  }, [callStatus, joinAgora, leaveAgora, sendWS, user]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {
     if (!incomingCall) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-
-      const pc = createPC(incomingCall.from, incomingCall.callId);
-      stream.getTracks().forEach(t => pc.addTrack(t, stream));
-
-      await pc.setRemoteDescription(incomingCall.offer);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+      await joinAgora(incomingCall.callId, withVideo && incomingCall.video);
 
       setActivePeer(incomingCall.from);
       setActiveCallId(incomingCall.callId);
@@ -318,35 +402,32 @@ export function useCall(user: { id: number; username: string } | null) {
       setIncomingCall(null);
       setCallStatus("active");
 
-      sendWS({ type: "call-answer", to: incomingCall.from, answer, callId: incomingCall.callId });
+      sendWS({ type: "call-answer", to: incomingCall.from, answer: null, callId: incomingCall.callId });
     } catch (err: unknown) {
       console.error("[CALL] Failed to answer:", err);
       // Tell the caller the answer failed so they don't ring forever.
       sendWS({ type: "call-reject", to: incomingCall.from, callId: incomingCall.callId });
-      // Recover instead of leaving the UI stuck: clean up and go back to idle.
-      const pc = pcRef.current;
-      pcRef.current = null; // detach BEFORE close so the state handler ignores it
-      pc?.close();
-      localStreamRef.current?.getTracks().forEach(t => t.stop());
-      localStreamRef.current = null;
-      setLocalStream(null);
+      currentCallIdRef.current = null;
+      void leaveAgora();
       setIncomingCall(null);
       setCallStatus("idle");
       const name = (err as Error)?.name ?? "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      const code = (err as { code?: string })?.code ?? "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError" || code === "PERMISSION_DENIED") {
         showCallError("🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع");
-      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError" || code === "DEVICE_NOT_FOUND") {
         showCallError("🎤 لا يوجد ميكروفون متصل بالجهاز");
       } else {
         showCallError("تعذّر الرد على المكالمة — أعد المحاولة");
       }
     }
-  }, [incomingCall, createPC, sendWS]);
+  }, [incomingCall, joinAgora, leaveAgora, sendWS]);
 
   // ── Reject call ───────────────────────────────────────────────────────────
   const rejectCall = useCallback(() => {
     if (!incomingCall) return;
     sendWS({ type: "call-reject", to: incomingCall.from, callId: incomingCall.callId });
+    currentCallIdRef.current = null;
     setIncomingCall(null);
     setCallStatus("idle");
   }, [incomingCall, sendWS]);
@@ -355,41 +436,44 @@ export function useCall(user: { id: number; username: string } | null) {
   const endCall = useCallback(() => {
     clearRingTimer();
     if (activePeer && activeCallId) sendWS({ type: "call-end", to: activePeer, callId: activeCallId });
+    currentCallIdRef.current = null;
+    void leaveAgora();
     pcRef.current?.close();
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
     setCallStatus("idle");
     setActivePeer(null);
     setActiveCallId(null);
-    setLocalStream(null);
-    setRemoteStream(null);
-  }, [activePeer, activeCallId, sendWS]);
+  }, [activePeer, activeCallId, leaveAgora, sendWS]);
 
-  // ── Screen share ─────────────────────────────────────────────────────────
+  // ── Screen share (Agora) ──────────────────────────────────────────────────
   const startScreenShare = useCallback(async () => {
-    if (!pcRef.current) return;
+    const client = agoraRef.current;
+    if (!client) return;
     try {
-      const stream = await (navigator.mediaDevices as any).getDisplayMedia({ video: true, audio: false });
-      screenStreamRef.current = stream;
-      const screenTrack = stream.getVideoTracks()[0];
-      const sender = pcRef.current.getSenders().find((s: RTCRtpSender) => s.track?.kind === "video");
-      if (sender) await sender.replaceTrack(screenTrack);
+      const screen = await AgoraRTC.createScreenVideoTrack({}, "disable");
+      screenTrackRef.current = screen;
+      if (localVideoRef.current) await client.unpublish(localVideoRef.current);
+      await client.publish(screen);
       setScreenSharing(true);
-      screenTrack.onended = () => stopScreenShare();
+      screen.on("track-ended", () => { void stopScreenShare(); });
     } catch { /* user cancelled */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopScreenShare = useCallback(async () => {
-    screenStreamRef.current?.getTracks().forEach(t => t.stop());
-    screenStreamRef.current = null;
-    if (pcRef.current && localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      const sender = pcRef.current.getSenders().find((s: RTCRtpSender) => s.track?.kind === "video");
-      if (sender && videoTrack) await sender.replaceTrack(videoTrack);
+    const client = agoraRef.current;
+    const screen = screenTrackRef.current;
+    screenTrackRef.current = null;
+    if (client && screen) {
+      try { await client.unpublish(screen); } catch { /* already gone */ }
+    }
+    screen?.close();
+    if (client && localVideoRef.current) {
+      try { await client.publish(localVideoRef.current); } catch { /* channel closed */ }
     }
     setScreenSharing(false);
   }, []);
 
-  // ── Start live story ──────────────────────────────────────────────────────
+  // ── Start live story (WebRTC path, unchanged) ─────────────────────────────
   const startLive = useCallback(async (title: string, domain: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
@@ -405,6 +489,7 @@ export function useCall(user: { id: number; username: string } | null) {
   const endLive = useCallback(() => {
     sendWS({ type: "live-end" });
     localStreamRef.current?.getTracks().forEach(t => t.stop());
+    localStreamRef.current = null;
     setLocalStream(null);
     setLiveStatus("idle");
     setCurrentLiveId(null);
@@ -412,10 +497,11 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Join a live ───────────────────────────────────────────────────────────
   const joinLive = useCallback(async (liveId: string) => {
-    const pc = createPC("", liveId);
+    const pc = createLivePC("", liveId);
     pcRef.current = pc;
     sendWS({ type: "live-join", liveId });
-  }, [createPC, sendWS]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendWS]);
 
   // ── Log outgoing calls to history exactly once, with the real call type ────
   useEffect(() => {

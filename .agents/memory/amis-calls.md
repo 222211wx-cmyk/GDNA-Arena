@@ -1,9 +1,10 @@
 ---
 name: AMIS call system
-description: WebRTC calls signaling path, production routing constraint, and auth rule
+description: Call media via Agora, signaling constraints, and auth rules
 ---
 
-- Signaling WebSocket MUST live under `/api/ws` — the production deployment router only forwards `/api/*` to the api-server; any other path hits the static frontend and the socket never opens ("شبكة منقطعة" error on every call). **How to apply:** never move realtime endpoints off the `/api` prefix.
-- WS upgrades are authenticated with the shared express-session middleware (exported from app.ts); identity (username) is derived server-side from session userId via DB lookup — client `register` payload identity is never trusted.
-- Client (useCall.ts): answer failures must notify the caller (call-reject) and detach pcRef before pc.close() so the connection-state handler doesn't overwrite the recovered idle state.
-- No TURN server configured (STUN only) — calls may still fail on strict NATs; that would be the next upgrade if citizens report connection drops mid-call.
+- Voice/video call MEDIA runs on Agora RTC, owner-mandated — raw WebRTC + STUN/TURN was removed for calls (live stories still use plain RTCPeerConnection). **Why:** owner explicitly ordered Agora after TURN-based reliability work; do not reintroduce Metered/TURN or manual ICE for calls.
+- Agora channel = crypto-random call id; tokens are issued server-side only when an App Certificate secret is configured, otherwise App-ID-only (testing) mode. **Why:** predictable channel names + tokenless join let strangers eavesdrop — review-rejected once for exactly this. **How to apply:** any new Agora surface must fetch its token from the authenticated backend, never embed credentials beyond the public App ID.
+- Agora tracks are bridged to the existing MediaStream-based call UI rather than Agora's play() API, so UI components stay transport-agnostic.
+- Realtime signaling must stay under the `/api` path prefix — the production router only forwards `/api/*`; anything else silently hits the static frontend. Identity on the socket is always session-derived server-side, and the server only relays answer/reject/end for calls it saw offered, between the recorded participants.
+- Client rule: answer failures must notify the caller and tear down media so the UI recovers to idle; "answered" in call history requires an actual active transition (ring time is not an answer).

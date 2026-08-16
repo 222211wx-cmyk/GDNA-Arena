@@ -8,6 +8,10 @@ import type { Server } from "http";
 import type { RequestHandler } from "express";
 import { pool } from "@workspace/db";
 
+// ── WebRTC type stubs (browser DOM types not present in Node tsconfig) ────────
+interface RTCSessionDescriptionInit { type: string; sdp?: string; }
+interface RTCIceCandidateInit      { candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null; }
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Client {
   ws:       WebSocket;
@@ -19,8 +23,8 @@ interface Client {
 
 type SignalMsg =
   | { type: "register";       userId: number; username: string }
-  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit; callId: string; from: string; video: boolean }
-  | { type: "call-answer";    to: string; answer: RTCSessionDescriptionInit; callId: string }
+  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit | null; callId: string; from: string; video: boolean }
+  | { type: "call-answer";    to: string; answer: RTCSessionDescriptionInit | null; callId: string }
   | { type: "ice-candidate";  to: string; candidate: RTCIceCandidateInit; callId: string }
   | { type: "call-reject";    to: string; callId: string }
   | { type: "call-end";       to: string; callId: string }
@@ -37,6 +41,25 @@ const clients   = new Map<string, Client>();  // username (lower) → client
 
 const byUserId  = new Map<number, Client>();  // userId → client (authenticated only)
 const lives     = new Map<string, { hostUsername: string; title: string; domain: string; startedAt: Date }>();
+
+// Active call state keyed by callId — signaling only relays answer/reject/end
+// for calls it saw offered, and only between the two recorded participants.
+const activeCalls = new Map<string, { caller: string; callee: string; callerId: number | null; calleeId: number | null; startedAt: Date }>();
+
+// Participant authorization for RTC token issuance: a token for channel
+// `callId` is only granted to one of the two recorded call participants.
+export function isCallParticipant(callId: string, userId: number): boolean {
+  const call = activeCalls.get(callId);
+  return !!call && (call.callerId === userId || call.calleeId === userId);
+}
+
+// Periodic sweep: drop call records older than 4h (crash/no-close leftovers)
+setInterval(() => {
+  const cutoff = Date.now() - 4 * 60 * 60 * 1000;
+  for (const [id, call] of activeCalls) {
+    if (call.startedAt.getTime() < cutoff) activeCalls.delete(id);
+  }
+}, 30 * 60 * 1000).unref?.();
 
 function send(ws: WebSocket, data: object) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
@@ -111,6 +134,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         const target = findByUsername(msg.to);
         if (!target) { send(ws, { type: "call-unavailable", to: msg.to }); return; }
         if (target.inCall) { send(ws, { type: "call-busy", to: msg.to }); return; }
+        activeCalls.set(msg.callId, { caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId, startedAt: new Date() });
         send(target.ws, { type: "call-incoming", from: self.username, callId: msg.callId, offer: msg.offer, video: msg.video });
         console.log(`[WS] 📞 ${self.username} → ${msg.to} [${msg.video ? "video" : "audio"}]`);
         return;
@@ -118,11 +142,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
       // ── CALL ANSWER ───────────────────────────────────────────────────────
       if (msg.type === "call-answer") {
+        // Only the recorded callee may answer, and only towards the recorded caller.
+        const call = activeCalls.get(msg.callId);
+        if (!call || call.callee !== self.username || call.caller !== msg.to.toLowerCase()) return;
         const caller = findByUsername(msg.to);
         if (caller) {
           self.inCall = true;
-          const c = clients.get(msg.to.toLowerCase());
-          if (c) c.inCall = true;
+          caller.inCall = true;
           send(caller.ws, { type: "call-accepted", from: self.username, callId: msg.callId, answer: msg.answer });
         }
         return;
@@ -137,15 +163,26 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
       // ── CALL REJECT ───────────────────────────────────────────────────────
       if (msg.type === "call-reject") {
-        const caller = findByUsername(msg.to);
-        if (caller) send(caller.ws, { type: "call-rejected", by: self.username, callId: msg.callId });
+        // Recipient is DERIVED from the recorded call — client "to" is ignored,
+        // so a participant can never target a third party.
+        const call = activeCalls.get(msg.callId);
+        if (!call || (call.callee !== self.username && call.caller !== self.username)) return;
+        activeCalls.delete(msg.callId);
+        const peerName = call.caller === self.username ? call.callee : call.caller;
+        const peer = findByUsername(peerName);
+        if (peer) send(peer.ws, { type: "call-rejected", by: self.username, callId: msg.callId });
         return;
       }
 
       // ── CALL END ──────────────────────────────────────────────────────────
       if (msg.type === "call-end") {
+        // Recipient DERIVED from recorded call state — client "to" is ignored.
+        const call = activeCalls.get(msg.callId);
+        if (!call || (call.callee !== self.username && call.caller !== self.username)) return;
+        activeCalls.delete(msg.callId);
         self.inCall = false;
-        const peer = findByUsername(msg.to);
+        const peerName = call.caller === self.username ? call.callee : call.caller;
+        const peer = findByUsername(peerName);
         if (peer) { peer.inCall = false; send(peer.ws, { type: "call-ended", by: self.username, callId: msg.callId }); }
         return;
       }
@@ -199,7 +236,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "live-ended", liveId: self!.liveId }); });
       }
       clients.delete(self.username);
-      byUserId.delete(self.userId);
+      if (self.userId !== null) byUserId.delete(self.userId);
       const onlineList = Array.from(clients.values()).map(c => c.username);
       wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "online-list", users: onlineList }); });
       console.log(`[WS] 🔴 ${self.username} disconnected (total: ${clients.size})`);

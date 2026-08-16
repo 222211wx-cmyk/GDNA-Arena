@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
-import { pool } from "@workspace/db";
+import { pool as _pool } from "@workspace/db";
+
+// pool is typed Pool | null (unconfigured DB) — PPO routes require a database.
+function requirePool() {
+  if (!_pool) throw new Error("Database not configured");
+  return _pool;
+}
 
 // ─── PPO — نظام توزيع الدخل الملكي الموحد ────────────────────────────────────
 // Integrates with the existing rights/monetization system (gs_uploads views,
@@ -18,7 +24,7 @@ const PPO_LOCK_KEY = 927001; // advisory lock: one distribution at a time
 
 export async function ensurePpoTables(): Promise<void> {
   try {
-    await pool.query(`
+    await requirePool().query(`
       CREATE TABLE IF NOT EXISTS ppo_beneficiaries (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
@@ -61,7 +67,7 @@ async function isAdminRequest(req: any): Promise<boolean> {
   const userId = (req.session as any)?.userId;
   if (!userId) return false;
   try {
-    const { rows } = await pool.query(`SELECT is_admin FROM users WHERE id=$1`, [userId]);
+    const { rows } = await requirePool().query(`SELECT is_admin FROM users WHERE id=$1`, [userId]);
     return rows[0]?.is_admin === true;
   } catch { return false; }
 }
@@ -72,7 +78,7 @@ const toCents = (v: any) => Math.round(parseFloat(String(v)) * 100);
 // Run fn inside a transaction that holds the PPO advisory lock, so beneficiary
 // mutations can never interleave with a running distribution (and vice versa).
 async function withPpoLock<T>(fn: (client: any) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await requirePool().connect();
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [PPO_LOCK_KEY]);
@@ -90,7 +96,7 @@ async function withPpoLock<T>(fn: (client: any) => Promise<T>): Promise<T> {
 // Total revenue pool across all sources (clips + posts + chat tabs).
 // Accepts the querying handle so a distribution reads through its own
 // transaction (consistent snapshot), while read-only callers pass the pool.
-async function totalRevenue(q: { query: (sql: string) => Promise<any> } = pool): Promise<{ uploads: number; posts: number; rooms: number; total: number }> {
+async function totalRevenue(q: { query: (sql: string) => Promise<any> } = requirePool()): Promise<{ uploads: number; posts: number; rooms: number; total: number }> {
   const { rows } = await q.query(`
     SELECT
       COALESCE((SELECT SUM(earnings) FROM gs_uploads), 0)  AS uploads,
@@ -106,13 +112,13 @@ router.get("/ppo/overview", async (req, res): Promise<void> => {
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const [revenue, bens, tabs, clips, dists] = await Promise.all([
       totalRevenue(),
-      pool.query(`SELECT b.*, u.username FROM ppo_beneficiaries b JOIN users u ON u.id=b.user_id WHERE b.status <> 'removed' ORDER BY b.share_rate DESC, b.id`),
-      pool.query(`SELECT id, name, type, revenue FROM dm_rooms ORDER BY revenue DESC, id DESC LIMIT 50`),
-      pool.query(`
+      requirePool().query(`SELECT b.*, u.username FROM ppo_beneficiaries b JOIN users u ON u.id=b.user_id WHERE b.status <> 'removed' ORDER BY b.share_rate DESC, b.id`),
+      requirePool().query(`SELECT id, name, type, revenue FROM dm_rooms ORDER BY revenue DESC, id DESC LIMIT 50`),
+      requirePool().query(`
         (SELECT 'gs_upload' AS kind, id, title, earnings FROM gs_uploads ORDER BY earnings DESC LIMIT 10)
         UNION ALL
         (SELECT 'pulse_post' AS kind, id, LEFT(content, 60) AS title, earnings FROM pulse_posts ORDER BY earnings DESC LIMIT 10)`),
-      pool.query(`
+      requirePool().query(`
         SELECT d.*, COALESCE(json_agg(json_build_object(
             'userId', i.user_id, 'role', i.role, 'shareRate', i.share_rate, 'amount', i.amount)
           ) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
@@ -120,7 +126,7 @@ router.get("/ppo/overview", async (req, res): Promise<void> => {
         LEFT JOIN ppo_distribution_items i ON i.distribution_id = d.id
         GROUP BY d.id ORDER BY d.id DESC LIMIT 20`),
     ]);
-    const distributed = num((await pool.query(`SELECT COALESCE(SUM(total_profit),0) AS s FROM ppo_distributions`)).rows[0].s);
+    const distributed = num((await requirePool().query(`SELECT COALESCE(SUM(total_profit),0) AS s FROM ppo_distributions`)).rows[0].s);
     res.json({
       revenue,
       distributed,
@@ -142,9 +148,9 @@ router.post("/ppo/beneficiaries", async (req, res): Promise<void> => {
     if (!Number.isInteger(uid) || !role || typeof role !== "string" || role.length > 60 || isNaN(rate) || rate < 0 || rate > 100) {
       res.status(400).json({ error: "بيانات غير صالحة (userId, role, shareRate 0-100)" }); return;
     }
-    const u = await pool.query(`SELECT id FROM users WHERE id=$1`, [uid]);
+    const u = await requirePool().query(`SELECT id FROM users WHERE id=$1`, [uid]);
     if (!u.rows[0]) { res.status(404).json({ error: "المواطن غير موجود" }); return; }
-    const { rows } = await pool.query(
+    const { rows } = await requirePool().query(
       `INSERT INTO ppo_beneficiaries (user_id, role, share_rate) VALUES ($1,$2,$3)
        ON CONFLICT (user_id) DO UPDATE SET role=EXCLUDED.role, share_rate=EXCLUDED.share_rate, status='active'
        RETURNING *`, [uid, role.trim(), rate]);
@@ -171,7 +177,7 @@ router.patch("/ppo/beneficiaries/:id", async (req, res): Promise<void> => {
     }
     if (!sets.length) { res.status(400).json({ error: "Nothing to update" }); return; }
     vals.push(id);
-    const { rows } = await pool.query(`UPDATE ppo_beneficiaries SET ${sets.join(",")} WHERE id=$${vals.length} RETURNING *`, vals);
+    const { rows } = await requirePool().query(`UPDATE ppo_beneficiaries SET ${sets.join(",")} WHERE id=$${vals.length} RETURNING *`, vals);
     if (!rows[0]) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ beneficiary: rows[0] });
   } catch (e) { console.error("[ppo] patch beneficiary:", e); res.status(500).json({ error: "Failed" }); }
@@ -183,7 +189,7 @@ router.delete("/ppo/beneficiaries/:id", async (req, res): Promise<void> => {
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const id = parseInt(req.params.id);
     if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-    await pool.query(`DELETE FROM ppo_beneficiaries WHERE id=$1`, [id]);
+    await requirePool().query(`DELETE FROM ppo_beneficiaries WHERE id=$1`, [id]);
     res.json({ ok: true });
   } catch { res.status(500).json({ error: "Failed" }); }
 });
@@ -197,7 +203,7 @@ router.patch("/ppo/tabs/room/:id", async (req, res): Promise<void> => {
     if (!Number.isInteger(id) || isNaN(revenue) || revenue < 0 || revenue > 100000000) {
       res.status(400).json({ error: "revenue غير صالح" }); return;
     }
-    const { rows } = await pool.query(`UPDATE dm_rooms SET revenue=$1 WHERE id=$2 RETURNING id, name, type, revenue`, [revenue, id]);
+    const { rows } = await requirePool().query(`UPDATE dm_rooms SET revenue=$1 WHERE id=$2 RETURNING id, name, type, revenue`, [revenue, id]);
     if (!rows[0]) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ room: rows[0] });
   } catch { res.status(500).json({ error: "Failed" }); }
@@ -205,7 +211,7 @@ router.patch("/ppo/tabs/room/:id", async (req, res): Promise<void> => {
 
 // ─── POST /ppo/distribute — run a distribution (100% rule enforced) ──────────
 router.post("/ppo/distribute", async (req, res): Promise<void> => {
-  const client = await pool.connect();
+  const client = await requirePool().connect();
   try {
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const period = String(req.body?.period ?? "").trim();
@@ -261,7 +267,7 @@ router.get("/ppo/balance/:userId", async (req, res): Promise<void> => {
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const uid = parseInt(req.params.userId);
     if (!Number.isInteger(uid)) { res.status(400).json({ error: "Invalid userId" }); return; }
-    const { rows } = await pool.query(`SELECT total_earned FROM ppo_beneficiaries WHERE user_id=$1`, [uid]);
+    const { rows } = await requirePool().query(`SELECT total_earned FROM ppo_beneficiaries WHERE user_id=$1`, [uid]);
     res.json({ balance: num(rows[0]?.total_earned ?? 0) });
   } catch { res.status(500).json({ error: "Failed" }); }
 });

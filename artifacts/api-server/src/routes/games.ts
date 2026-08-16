@@ -20,10 +20,15 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
   if (raw === "globalstar") { res.status(404).json({ error: "Use /api/games/globalstar/tournament" }); return; }
 
   const game = GAMES[raw];
+  if (!game) { res.status(404).json({ error: "Unknown game" }); return; }
 
-  const clientWin = typeof req.body?.win === "boolean" ? req.body.win : null;
-  const win = clientWin !== null ? clientWin : Math.random() < game.winChance;
-  let coinsEarned: number;
+  // Outcome is always server-determined — never trust req.body.win
+  const win = Math.random() < game.winChance;
+
+  // Server-authoritative reward: win → random in [min, max]; loss → 10% of min
+  const coinsEarned: number = win
+    ? Math.floor(game.minReward + Math.random() * (game.maxReward - game.minReward))
+    : Math.floor(game.minReward * 0.1);
   const xpEarned = Math.round(coinsEarned * 1.2);
 
   let newBalance = coinsEarned;
@@ -37,7 +42,7 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
         balance:     sql`${usersTable.balance} + ${coinsEarned}`,
         xp:          sql`${usersTable.xp} + ${xpEarned}`,
         gamesPlayed: sql`${usersTable.gamesPlayed} + 1`,
-        wins:        isWin ? sql`${usersTable.wins} + 1` : usersTable.wins,
+        wins:        win ? sql`${usersTable.wins} + 1` : usersTable.wins,
       })
       .where(eq(usersTable.id, userId))
       .returning({ balance: usersTable.balance, xp: usersTable.xp, username: usersTable.username });
