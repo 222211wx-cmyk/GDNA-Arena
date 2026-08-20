@@ -3,7 +3,7 @@
  * Handles: feed posts, likes, comments, follow/unfollow, citizen search, global search
  */
 import { Router, type IRouter } from "express";
-import { eq, desc, sql, and, or, ilike, ne } from "drizzle-orm";
+import { eq, desc, sql, and, or, ilike, ne, inArray } from "drizzle-orm";
 import {
   db, pulsePosts, pulsePostLikes, usersTable, postComments, userFollows,
   platformStories, postReactions, savedPosts, callHistory,
@@ -54,6 +54,47 @@ router.get("/social/v2/feed", async (req, res): Promise<void> => {
       .select({ cnt: sql<number>`count(*)::int` })
       .from(postComments).where(eq(postComments.postId, p.id));
     return { ...p, commentCount: cnt ?? 0 };
+  }));
+
+  res.json({ posts: enriched });
+});
+
+// GET /api/social/v2/feed/following
+// Returns visible posts authored by citizens the current user follows.
+router.get("/social/v2/feed/following", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  const requestedLimit = Number(req.query.limit ?? 30);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100)
+    : 30;
+
+  const followedRows = await db
+    .select({ followingId: userFollows.followingId })
+    .from(userFollows)
+    .where(eq(userFollows.followerId, userId));
+  const followedIds = followedRows.map(({ followingId }) => followingId);
+
+  if (followedIds.length === 0) {
+    res.json({ posts: [] });
+    return;
+  }
+
+  const posts = await db.select().from(pulsePosts)
+    .where(and(
+      eq(pulsePosts.isVisible, true),
+      inArray(pulsePosts.userId, followedIds),
+    ))
+    .orderBy(desc(pulsePosts.createdAt))
+    .limit(limit);
+
+  const enriched = await Promise.all(posts.map(async (post) => {
+    const [{ cnt }] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(postComments)
+      .where(eq(postComments.postId, post.id));
+    return { ...post, commentCount: cnt ?? 0 };
   }));
 
   res.json({ posts: enriched });

@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, Image, Video } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
 import FeedCard from "./FeedCard";
 import Avatar from "./Avatar";
 import { GOLD, DOMAIN_ICONS, DOMAINS, timeAgo, api } from "./social-i18n";
@@ -88,18 +89,32 @@ export default function FeedTab({ user, st, dir }: Props) {
   const [showImg,  setShowImg]  = useState(false);
   const [domain,   setDomain]   = useState("general");
   const [filter,   setFilter]   = useState("all");
+  const [feedScope, setFeedScope] = useState<"all" | "following">("all");
   const [loading,  setLoading]  = useState(false);
   const [posting,  setPosting]  = useState(false);
   const [savedSet, setSavedSet] = useState<Set<number>>(new Set());
 
-  const loadFeed = useCallback(async () => {
+  const loadFeed = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const r = await fetch(api("/api/social/v2/feed?limit=40"));
+      const path = feedScope === "following"
+        ? "/api/social/v2/feed/following?limit=40"
+        : "/api/social/v2/feed?limit=40";
+      const r = await fetch(api(path), { credentials: "include", signal });
+      if (!r.ok) {
+        setPosts([]);
+        return;
+      }
       const j = await r.json();
       setPosts(j.posts ?? []);
-    } finally { setLoading(false); }
-  }, []);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setPosts([]);
+      }
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, [feedScope, user?.id]);
 
   const loadSaved = useCallback(async () => {
     if (!user) return;
@@ -108,7 +123,11 @@ export default function FeedTab({ user, st, dir }: Props) {
     setSavedSet(new Set<number>(j.savedIds ?? []));
   }, [user]);
 
-  useEffect(() => { loadFeed(); }, [loadFeed]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadFeed(controller.signal);
+    return () => controller.abort();
+  }, [loadFeed]);
   useEffect(() => { loadSaved(); }, [loadSaved]);
 
   // Detect YouTube ID from a URL
@@ -130,7 +149,9 @@ export default function FeedTab({ user, st, dir }: Props) {
       });
       if (r.ok) {
         const j = await r.json();
-        setPosts(prev => [j.post, ...prev]);
+        if (feedScope === "all") {
+          setPosts(prev => [j.post, ...prev]);
+        }
         setContent(""); setMediaUrl(""); setShowImg(false);
       }
     } finally { setPosting(false); }
@@ -204,6 +225,18 @@ export default function FeedTab({ user, st, dir }: Props) {
       {/* Trending */}
       <TrendingSection st={st} dir={dir} />
 
+      {/* Feed scope */}
+      <div style={{ display: "flex", gap: 6 }}>
+        {(["all", "following"] as const).map(scope => (
+          <Button key={scope} onClick={() => setFeedScope(scope)}
+            size="sm"
+            variant={feedScope === scope ? "default" : "secondary"}
+            aria-pressed={feedScope === scope}>
+            {scope === "all" ? st.all : st.following_only}
+          </Button>
+        ))}
+      </div>
+
       {/* Domain filter */}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
         {["all", ...DOMAINS].map(d => (
@@ -217,7 +250,9 @@ export default function FeedTab({ user, st, dir }: Props) {
       {/* Posts */}
       {loading && <div style={{ textAlign: "center", color: "#444", padding: 40 }}>…</div>}
       {!loading && filtered.length === 0 && (
-        <div style={{ textAlign: "center", color: "#444", padding: 60, fontSize: 14 }}>{st.no_posts}</div>
+        <div style={{ textAlign: "center", color: "#444", padding: 60, fontSize: 14 }}>
+          {feedScope === "following" ? st.no_following_posts : st.no_posts}
+        </div>
       )}
       {filtered.map(post => (
         <FeedCard key={post.id} post={post} user={user} st={st} dir={dir}
