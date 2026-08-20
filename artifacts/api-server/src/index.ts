@@ -3,6 +3,7 @@ import app, { sessionMiddleware } from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import { attachSignalingServer } from "./lib/signaling.js";
+import { smartFortress } from "./server.js";
 import { startHonorAlertJob } from "./jobs/honor-alert.js";
 import { startWelcomeBroadcastJob, runWelcomeBroadcast } from "./jobs/welcome-broadcast.js";
 import { startImperialDecreeJob, runImperialDecree } from "./jobs/imperial-decree.js";
@@ -1319,6 +1320,11 @@ ensureTables()
   .then(() => import("./routes/ppo").then(m => m.ensurePpoTables()))
   .then(() => import("./routes/clips").then(m => m.ensureClipsTables()))
   .then(() => {
+    const fortress = smartFortress.START();
+    logger.info(
+      { bots: fortress.bots.length, autoUpdateMinutes: fortress.autoUpdateMinutes },
+      "GDN-SMART FORTRESS started"
+    );
     startHonorAlertJob();
     startWelcomeBroadcastJob();
     startImperialDecreeJob();

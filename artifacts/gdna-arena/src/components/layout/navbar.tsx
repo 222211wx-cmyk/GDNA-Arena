@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { name: "الساحة",   emoji: "⚔️",  icon: <Gamepad2      size={15} />, path: "/games",    highlight: true  },
   { name: "المتجر",   emoji: "🛒",  icon: <ShoppingBag   size={15} />, path: "/shop",     highlight: true  },
   { name: "المهام",   emoji: "🎯",  icon: <BrainCircuit  size={15} />, path: "/growth",   highlight: true  },
+  { name: "FORTRESS", emoji: "🏰",  icon: <BrainCircuit  size={15} />, path: "/fortress", highlight: true  },
   { name: "SPORT",    emoji: "⚽",  icon: <Trophy    size={15} />,  path: "/sport",            highlight: false },
   { name: "MUSIC",    emoji: "🎵",  icon: <Music     size={15} />,  path: "/music",            highlight: false },
   { name: "CINEMA",   emoji: "🎬",  icon: <Film      size={15} />,  path: "/cinema",           highlight: false },
@@ -137,7 +138,7 @@ export function Navbar() {
         </Link>
 
         {/* ── Desktop nav ── */}
-        <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
+        <nav className="hidden md:flex min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto scrollbar-hide xl:justify-center">
           {NAV_ITEMS.map((item) => {
             const active    = isActive(item.path);
             const featured  = item.highlight && !active;

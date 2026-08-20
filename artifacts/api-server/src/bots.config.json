@@ -1,0 +1,85 @@
+{
+  "systemName": "GDN-SMART FORTRESS",
+  "version": "1.0.0",
+  "autoUpdateMinutes": 30,
+  "bots": [
+    {
+      "id": "aegis",
+      "name": "AEGIS",
+      "title": "Guardian of Discipline",
+      "icon": "🛡️",
+      "focus": "Focus, consistency, and daily execution",
+      "dna": { "discipline": 96, "resilience": 91, "precision": 88 },
+      "challenges": [
+        { "id": "aegis-1", "title": "The silent hour", "description": "Complete one uninterrupted hour on your most important task.", "reward": "+40 XP" },
+        { "id": "aegis-2", "title": "Three non-negotiables", "description": "Choose three priorities and finish them before the day ends.", "reward": "+35 XP" },
+        { "id": "aegis-3", "title": "Distraction lock", "description": "Keep your phone away for 45 minutes while you build something meaningful.", "reward": "+30 XP" }
+      ]
+    },
+    {
+      "id": "archon",
+      "name": "ARCHON",
+      "title": "DNA Architect",
+      "icon": "🧬",
+      "focus": "Identity, self-knowledge, and personal growth",
+      "dna": { "awareness": 97, "growth": 93, "clarity": 90 },
+      "challenges": [
+        { "id": "archon-1", "title": "Identity code", "description": "Write one sentence that describes the person you are becoming.", "reward": "+45 XP" },
+        { "id": "archon-2", "title": "Strength signal", "description": "Use one of your strongest qualities deliberately in a real conversation today.", "reward": "+35 XP" },
+        { "id": "archon-3", "title": "Growth reflection", "description": "Turn one recent setback into three concrete lessons.", "reward": "+40 XP" }
+      ]
+    },
+    {
+      "id": "nexus",
+      "name": "NEXUS",
+      "title": "Strategic Commander",
+      "icon": "♟️",
+      "focus": "Strategy, decision-making, and leadership",
+      "dna": { "strategy": 95, "leadership": 92, "logic": 94 },
+      "challenges": [
+        { "id": "nexus-1", "title": "One decisive move", "description": "Make the decision you have been postponing and write its next action.", "reward": "+45 XP" },
+        { "id": "nexus-2", "title": "Map the win", "description": "Plan the next three steps for one goal that matters this week.", "reward": "+35 XP" },
+        { "id": "nexus-3", "title": "Lead with value", "description": "Help one person progress without expecting anything in return.", "reward": "+40 XP" }
+      ]
+    },
+    {
+      "id": "pulse",
+      "name": "PULSE",
+      "title": "Voice of Influence",
+      "icon": "📡",
+      "focus": "Communication, community, and positive influence",
+      "dna": { "influence": 94, "empathy": 92, "expression": 90 },
+      "challenges": [
+        { "id": "pulse-1", "title": "Share one signal", "description": "Publish one useful insight that can help another citizen grow.", "reward": "+30 XP" },
+        { "id": "pulse-2", "title": "Meaningful connection", "description": "Send a thoughtful message to someone in your network.", "reward": "+25 XP" },
+        { "id": "pulse-3", "title": "Community spark", "description": "Give constructive support to two voices in the Empire.", "reward": "+30 XP" }
+      ]
+    },
+    {
+      "id": "forge",
+      "name": "FORGE",
+      "title": "Builder of Value",
+      "icon": "⚒️",
+      "focus": "Creation, business, and lasting value",
+      "dna": { "creation": 96, "enterprise": 93, "persistence": 91 },
+      "challenges": [
+        { "id": "forge-1", "title": "Build a proof", "description": "Create a small tangible version of an idea you have been holding.", "reward": "+50 XP" },
+        { "id": "forge-2", "title": "Value inventory", "description": "List three skills you can use to solve a real problem for someone.", "reward": "+35 XP" },
+        { "id": "forge-3", "title": "Revenue clarity", "description": "Take one action that makes your next income opportunity more concrete.", "reward": "+40 XP" }
+      ]
+    },
+    {
+      "id": "oracle",
+      "name": "ORACLE",
+      "title": "Keeper of Vision",
+      "icon": "🔮",
+      "focus": "Vision, learning, and long-term perspective",
+      "dna": { "vision": 98, "wisdom": 94, "curiosity": 92 },
+      "challenges": [
+        { "id": "oracle-1", "title": "Future letter", "description": "Write a short note from your future self about the next milestone.", "reward": "+45 XP" },
+        { "id": "oracle-2", "title": "Learn and apply", "description": "Learn one useful idea today and apply it in one real action.", "reward": "+35 XP" },
+        { "id": "oracle-3", "title": "Vision alignment", "description": "Remove one task from your day that does not serve your bigger direction.", "reward": "+30 XP" }
+      ]
+    }
+  ]
+}
