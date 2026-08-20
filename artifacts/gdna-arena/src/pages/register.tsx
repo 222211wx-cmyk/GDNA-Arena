@@ -114,6 +114,17 @@ export default function Register() {
                   />
                 </div>
               </div>
+               <div
+                 className="flex gap-3 rounded-md border border-primary/30 bg-primary/10 p-3 text-xs leading-relaxed text-muted-foreground"
+                 role="note"
+                 data-testid="notice-password-recovery"
+               >
+                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                 <p>
+                   <span dir="rtl" lang="ar">احتفظ بكلمة المرور في مكان آمن: لا يمكن استعادتها عبر البريد الإلكتروني، ولا يمكن تغييرها إلا من الإعدادات أثناء تسجيل الدخول.</span>
+                   <span className="block mt-1" lang="fr">Gardez votre mot de passe en lieu sûr, idéalement dans un gestionnaire : il ne peut pas être récupéré par e-mail et ne peut être modifié que depuis les paramètres, une fois connecté.</span>
+                 </p>
+               </div>
               <Button
                 type="submit"
                 className="w-full h-12 text-lg font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground neon-glow transition-all duration-300"
