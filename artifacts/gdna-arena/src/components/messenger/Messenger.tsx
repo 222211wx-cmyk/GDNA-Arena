@@ -17,6 +17,7 @@ import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
   Camera, Image as ImageIcon, Paperclip, Smile, Send, Newspaper, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
+  FileImage,
 } from "lucide-react";
 import Avatar from "../social/Avatar";
 import { Switch } from "@workspace/gdna-ds/components/ui/switch";
@@ -27,7 +28,6 @@ import { useCallContext } from "../../contexts/CallContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
-
 const BG      = "#0a0a0a";   // app background
 const BG_BAR  = "#111111";   // header / tab bars
 const BG_CHAT = "#050505";   // chat wallpaper
@@ -523,6 +523,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
   useEffect(() => { pendingRef.current = pending; }, [pending]);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef  = useRef<HTMLInputElement>(null);
+  const gifRef     = useRef<HTMLInputElement>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recStreamRef = useRef<MediaStream | null>(null);
@@ -575,9 +576,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
 
   useEffect(() => { loadRooms(); }, [loadRooms]);
 
-  // The shared Messenger can be mounted in more than one surface at once. When
-  // one instance deletes a room, every mounted instance must discard its stale
-  // local copy immediately rather than waiting for its next room-list refresh.
+  // Keep every mounted Messenger surface in sync when one removes a room.
   useEffect(() => {
     const onRoomDeleted = (event: Event) => {
       const roomId = (event as CustomEvent<{ roomId?: number }>).detail?.roomId;
@@ -600,12 +599,46 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
     window.dispatchEvent(new CustomEvent("amis:room-deleted", { detail: { roomId } }));
   }, []);
 
-  // ── Poll messages for active room ───────────────────────────────────────────
+  const appendMessage = useCallback((message: DmMessage) => {
+    setMessages(prev => {
+      if (prev.some(existing => existing.id === message.id)) return prev;
+      return [...prev, message].sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    });
+  }, []);
+
+  // Realtime events come from CallProvider's one authenticated /api/ws
+  // connection. The server has already checked room membership; client-side
+  // room/id checks simply keep this Messenger instance scoped to its open room.
+  useEffect(() => {
+    const onMessage = (event: Event) => {
+      const detail = (event as CustomEvent<{ roomId?: number; message?: DmMessage }>).detail;
+      if (!detail?.message) return;
+      if (detail.roomId === activeRoomIdRef.current) {
+        appendMessage(detail.message);
+        void loadMessages(detail.roomId);
+      }
+      void loadRooms();
+    };
+    const onReconnect = () => {
+      void loadRooms();
+      if (activeRoomIdRef.current !== null) void loadMessages(activeRoomIdRef.current);
+    };
+    window.addEventListener("gdna:chat-message", onMessage);
+    window.addEventListener("gdna:realtime-connected", onReconnect);
+    return () => {
+      window.removeEventListener("gdna:chat-message", onMessage);
+      window.removeEventListener("gdna:realtime-connected", onReconnect);
+    };
+  }, [appendMessage, loadRooms]);
+
+  // REST is for the initial view, reconnect recovery, and a quiet fallback if a
+  // browser misses an event — not the visible delivery mechanism.
   useEffect(() => {
     if (!activeRoom) return;
     loadMessages(activeRoom.id);
     clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => loadMessages(activeRoom.id), 3000);
+    pollRef.current = setInterval(() => loadMessages(activeRoom.id), 30_000);
     return () => clearInterval(pollRef.current);
   }, [activeRoom?.id]);
 
@@ -683,7 +716,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
       });
       if (r.ok) {
         const j = await r.json();
-        if (mountedRef.current && activeRoomIdRef.current === roomId) setMessages(prev => [...prev, j.message]);
+        if (mountedRef.current && activeRoomIdRef.current === roomId) appendMessage(j.message);
         if (!override) { setText(""); if (textRef.current) textRef.current.style.height = "auto"; }
         loadRooms();
       } else {
@@ -759,7 +792,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
     let tooBig = 0;
     for (const f of files) {
       if (f.size > 25 * 1024 * 1024) { tooBig++; continue; }
-      const isMedia = f.type.startsWith("image/") || f.type.startsWith("video/");
+      const isMedia = f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/");
       staged.push({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         file: f,
@@ -847,19 +880,35 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
       rec.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
         recStreamRef.current = null;
+        recorderRef.current = null;
+        setRecording(false);
         if (recCancelledRef.current || !mountedRef.current) return; // unmounted: drop, never upload
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        uploadAndSend(blob, "voice-note");
-        setRecording(false);
+        if (blob.size > 0) {
+          stageFiles([new File([blob], `voice-note-${Date.now()}.webm`, { type: "audio/webm" })]);
+        }
       };
       recStreamRef.current = stream;
       recCancelledRef.current = false;
       rec.start();
       setRecording(true);
-    } catch { setToast("الميكروفون مرفوض ⚠️"); }
+    } catch { setToast("تعذّر الوصول إلى الميكروفون — تحقق من الإذن أو الجهاز ⚠️"); }
   }
 
-  function stopVoiceNote() { recorderRef.current?.stop(); }
+  function stopVoiceNote(discard = false) {
+    recCancelledRef.current = discard;
+    recStreamRef.current?.getTracks().forEach(track => track.stop());
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    else setRecording(false);
+  }
+
+  // A call must take precedence over a voice-note capture. useCall dispatches
+  // this event just before it validates the microphone.
+  useEffect(() => {
+    const stopForCall = () => stopVoiceNote(true);
+    window.addEventListener("gdna:voice-note-stop", stopForCall);
+    return () => window.removeEventListener("gdna:voice-note-stop", stopForCall);
+  });
 
   function autoGrow() {
     const el = textRef.current;
@@ -929,7 +978,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
 
       {/* ── Header: back + avatar + name + call buttons ── */}
       <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        <button onClick={() => { activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); }} title={st.back ?? "Back"}
+        <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); }} title={st.back ?? "Back"}
           style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <BackArrow size={22} />
         </button>
@@ -1042,8 +1091,10 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
                 <div style={{ width: 96, height: 96, borderRadius: 8, overflow: "hidden", border: `1px solid ${p.status === "error" ? "#ef4444" : `${GOLD}30`}`, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {p.previewUrl && p.file.type.startsWith("image/") ? (
                     <img src={p.previewUrl} alt={p.file.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  ) : p.previewUrl ? (
+                  ) : p.previewUrl && p.file.type.startsWith("video/") ? (
                     <video src={p.previewUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
+                  ) : p.previewUrl && p.file.type.startsWith("audio/") ? (
+                    <audio controls src={p.previewUrl} style={{ width: 88, height: 34 }} />
                   ) : (
                     <div style={{ fontSize: 11, color: "#ddd", padding: 6, textAlign: "center", overflow: "hidden", wordBreak: "break-all" }}>📁 {p.file.name.slice(0, 28)}</div>
                   )}
@@ -1115,10 +1166,11 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
 
       {/* Hidden pickers */}
       <input ref={cameraRef}  type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
+      <input ref={gifRef}     type="file" accept="image/gif" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={galleryRef} type="file" multiple accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={fileRef}    type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
 
-      {/* ── Composer: 5 fixed buttons + big RTL textarea + send ── */}
+      {/* ── Composer: explicit Camera, Microphone, and GIF controls ── */}
       <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
         {recording && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px" }}>
@@ -1140,16 +1192,17 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
             <Send size={20} style={dir === "rtl" ? { transform: "scaleX(-1)" } : undefined} />
           </button>
         </div>
-        {/* Row 2: 5 fixed buttons — camera | image | file | voice | emoji */}
+        {/* Row 2: mobile-safe tools — camera | gallery | GIF | file | microphone | emoji */}
         <div style={{ display: "flex", gap: 6, justifyContent: "space-around", marginTop: 8 }}>
           {([
-            [<Camera key="c" size={20} />, st.attach_camera ?? "كاميرا", () => cameraRef.current?.click(), false],
-            [<ImageIcon key="i" size={20} />, st.attach_gallery ?? "صورة", () => galleryRef.current?.click(), false],
+            [<Camera key="c" size={20} />, st.attach_camera ?? "Camera", () => cameraRef.current?.click(), false],
+            [<ImageIcon key="i" size={20} />, st.attach_gallery ?? "Gallery", () => galleryRef.current?.click(), false],
+            [<FileImage key="g" size={20} />, st.attach_gif ?? "GIF", () => gifRef.current?.click(), false],
             [<Paperclip key="f" size={20} />, st.attach_file ?? "فيشي", () => fileRef.current?.click(), false],
-            [recording ? <Square key="m" size={18} /> : <Mic key="m" size={20} />, recording ? (st.stop_recording ?? "وقف") : (st.record_voice ?? "صوت"), () => recording ? stopVoiceNote() : startVoiceNote(), recording],
+            [recording ? <Square key="m" size={18} /> : <Mic key="m" size={20} />, recording ? (st.stop_recording ?? "Stop") : (st.record_voice ?? "Microphone"), () => recording ? stopVoiceNote() : startVoiceNote(), recording],
             [<Smile key="e" size={20} />, st.attach_emoji ?? "ايموجي", () => setShowEmoji(v => !v), showEmoji],
           ] as [React.ReactNode, string, () => void, boolean][]).map(([icon, title, fn, active], idx) => (
-            <button key={idx} onClick={fn} title={title} disabled={uploading}
+            <button key={idx} onClick={fn} title={title} aria-label={title} disabled={uploading}
               style={{ flex: 1, maxWidth: 64, height: 42, borderRadius: 14, border: "none", cursor: "pointer",
                 background: active ? (idx === 3 ? "#ef4444" : `${GOLD}25`) : "#1c1c1c",
                 color: active ? (idx === 3 ? "#fff" : GOLD) : "#bbb",

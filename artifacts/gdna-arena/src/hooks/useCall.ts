@@ -70,6 +70,23 @@ const LIVE_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
+function mediaFailureMessage(err: unknown): string {
+  const name = (err as { name?: string })?.name ?? "";
+  const code = (err as { code?: string })?.code ?? "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError" || code === "PERMISSION_DENIED") {
+    return "🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError" || code === "DEVICE_NOT_FOUND") {
+    return "🎤 لا يوجد ميكروفون متصل بالجهاز";
+  }
+  if (name === "NotReadableError" || name === "AbortError" || code === "DEVICE_BUSY" || code === "DEVICE_IN_USE") {
+    return "🎤 الميكروفون مستخدم من تطبيق أو تسجيل آخر — أغلقه وأعد المحاولة";
+  }
+  if (name === "NotSupportedError") {
+    return "🎤 هذا المتصفح لا يدعم الوصول إلى الميكروفون";
+  }
+  return "🎤 تعذّر الوصول إلى الميكروفون — تأكد من الإذن والجهاز ثم أعد المحاولة";
+}
 export function useCall(user: { id: number; username: string } | null) {
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
@@ -299,15 +316,24 @@ export function useCall(user: { id: number; username: string } | null) {
       };
 
       ws.onmessage = async (e) => {
-        const msg = JSON.parse(e.data as string);
+        let msg: any;
+        try { msg = JSON.parse(e.data as string); } catch { return; }
 
-        if (msg.type === "registered")    { setConnected(true); }
+        if (msg.type === "registered") {
+          setConnected(true);
+          window.dispatchEvent(new Event("gdna:realtime-connected"));
+        }
         if (msg.type === "online-list")   { setOnlineUsers(msg.users); }
         if (msg.type === "pong")          { /* alive */ }
         // Forward notification events to any listeners via CustomEvent so
         // NotificationBell can react without opening a second WS connection.
         if (msg.type === "notification")  {
           window.dispatchEvent(new CustomEvent("gdna:notification", { detail: msg.notification }));
+        }
+        // Messenger instances consume this event rather than opening a second
+        // WebSocket. The message was already filtered to room members by the API.
+        if (msg.type === "chat-message") {
+          window.dispatchEvent(new CustomEvent("gdna:chat-message", { detail: msg }));
         }
 
         // ── Incoming call ──────────────────────────────────────────────────
@@ -385,6 +411,7 @@ export function useCall(user: { id: number; username: string } | null) {
 
       ws.onclose = () => {
         setConnected(false);
+        window.dispatchEvent(new Event("gdna:realtime-disconnected"));
         if (pingRef.current) clearInterval(pingRef.current);
         // Reconnect after 3s
         setTimeout(connect, 3000);
@@ -400,6 +427,12 @@ export function useCall(user: { id: number; username: string } | null) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.username]);
+
+  // A route change or logout must not leave a microphone/camera LED on.
+  useEffect(() => () => {
+    clearRingTimer();
+    void leaveAgora();
+  }, [leaveAgora]);
 
   // ── Live-story peer connection (WebRTC, unchanged path) ───────────────────
   const createLivePC = (peerUsername: string, liveId: string) => {
@@ -426,13 +459,19 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("الاتصال بالشبكة منقطع — انتظر ثوانٍ وأعد المحاولة");
       return;
     }
-    // Cryptographically random channel name — unguessable, prevents third
-    // parties from joining active call channels.
     const callId = `call_${crypto.randomUUID().replace(/-/g, "")}`;
+    let offered = false;
     try {
-      // Send the offer FIRST — it registers the call server-side, which is
-      // what authorizes our Agora token request for this channel.
+      // Stop a voice-note capture in any mounted Messenger before preflighting
+      // the microphone. This event keeps the shared call engine independent
+      // from individual Messenger variants.
+      window.dispatchEvent(new Event("gdna:voice-note-stop"));
+      await validateMicrophone();
+
+      // The device is usable. Register the server-side call before requesting
+      // its channel-scoped Agora token.
       sendWS({ type: "call-offer", to: targetUsername, offer: null, callId, from: user.username, video: withVideo });
+      offered = true;
 
       currentCallIdRef.current = callId;
       setActivePeer(targetUsername);
@@ -457,23 +496,13 @@ export function useCall(user: { id: number; username: string } | null) {
     } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
       clearRingTimer();
-      // The offer already went out — tell the callee to stop ringing.
-      sendWS({ type: "call-end", to: targetUsername, callId });
+      // Only a callee who actually received an offer needs an end signal.
+      if (offered) sendWS({ type: "call-end", to: targetUsername, callId });
       currentCallIdRef.current = null;
       setActivePeer(null);
       setActiveCallId(null);
       void leaveAgora();
-      const name = (err as Error)?.name ?? "";
-      const code = (err as { code?: string })?.code ?? "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError" || code === "PERMISSION_DENIED") {
-        showCallError("🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع");
-      } else if (name === "NotFoundError" || name === "DevicesNotFoundError" || code === "DEVICE_NOT_FOUND") {
-        showCallError("🎤 لا يوجد ميكروفون متصل بالجهاز");
-      } else if (name === "NotReadableError") {
-        showCallError("🎤 الميكروفون مستخدم من تطبيق آخر — أغلقه وأعد المحاولة");
-      } else {
-        showCallError("تعذّر بدء المكالمة — تأكد من إذن الميكروفون");
-      }
+      showCallError(mediaFailureMessage(err));
       setCallStatus("idle");
     }
   }, [callStatus, joinAgora, leaveAgora, sendWS, user]);
@@ -482,6 +511,10 @@ export function useCall(user: { id: number; username: string } | null) {
   const answerCall = useCallback(async (withVideo = true) => {
     if (!incomingCall) return;
     try {
+      // A failed local microphone check is rejected immediately so the caller
+      // is never left ringing while we attempt to join Agora.
+      window.dispatchEvent(new Event("gdna:voice-note-stop"));
+      await validateMicrophone();
       await joinAgora(incomingCall.callId, withVideo && incomingCall.video);
 
       setActivePeer(incomingCall.from);
@@ -499,15 +532,7 @@ export function useCall(user: { id: number; username: string } | null) {
       void leaveAgora();
       setIncomingCall(null);
       setCallStatus("idle");
-      const name = (err as Error)?.name ?? "";
-      const code = (err as { code?: string })?.code ?? "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError" || code === "PERMISSION_DENIED") {
-        showCallError("🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع");
-      } else if (name === "NotFoundError" || name === "DevicesNotFoundError" || code === "DEVICE_NOT_FOUND") {
-        showCallError("🎤 لا يوجد ميكروفون متصل بالجهاز");
-      } else {
-        showCallError("تعذّر الرد على المكالمة — أعد المحاولة");
-      }
+      showCallError(mediaFailureMessage(err));
     }
   }, [incomingCall, joinAgora, leaveAgora, sendWS]);
 
@@ -626,4 +651,14 @@ export function useCall(user: { id: number; username: string } | null) {
     startLive, endLive, joinLive,
     startScreenShare, stopScreenShare,
   };
+}
+
+async function validateMicrophone(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    const error = new Error("Microphone capture is unavailable");
+    error.name = "NotSupportedError";
+    throw error;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  stream.getTracks().forEach(track => track.stop());
 }

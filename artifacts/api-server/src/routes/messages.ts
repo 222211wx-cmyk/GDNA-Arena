@@ -7,9 +7,31 @@ import { db, dmRooms, dmRoomMembers, dmMessages, usersTable, pool as _pool } fro
 import { gcsChatStorage, getChatObject, chatObjectStream, migrateLegacyChatUploads } from "../lib/chatStorage";
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
+import { broadcastMessageToRoom } from "../lib/signaling";
 
 const router: IRouter = Router();
 const pool = _pool!;
+const CHAT_MODERATION_BUDGET_MS = 300;
+
+// Direct messages must not wait on a variable-latency external moderation
+// request before appearing in the active conversation. validateContent performs
+// its local blocklist, spam, and trivial-content checks synchronously before
+// awaiting OpenAI; after that budget we preserve the guardian's established
+// fail-open behavior for unavailable moderation rather than reintroducing a
+// visible multi-second delivery delay.
+async function validateChatContent(content: string, allowTrivial: boolean) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      validateContent(content, { allowTrivial }),
+      new Promise<{ ok: true }>(resolve => {
+        timer = setTimeout(() => resolve({ ok: true }), CHAT_MODERATION_BUDGET_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 // ── Attachment URL validator ───────────────────────────────────────────────────
 // Accepts https URLs and our own uploaded-attachment paths (/api/messages/files/…)
@@ -368,7 +390,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
 
   if (content) {
     const hasAttachment = Boolean(audioUrl ?? videoUrl ?? fileUrl);
-    const check = await validateContent(content, { allowTrivial: hasAttachment || starPeer !== null });
+    const check = await validateChatContent(content, hasAttachment || starPeer !== null);
     if (!check.ok) { res.status(400).json({ error: check.reason }); return; }
   }
 
@@ -410,6 +432,11 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
     generateStarReply(roomId, starPeer.def, starPeer.id, me.username, content.trim()).catch(() => {});
   }
 
+  // The persisted message is delivered through the authenticated signaling
+  // channel to the room members resolved above on the server. Failure to push
+  // must not turn a saved message into a failed send; REST recovery remains.
+  void broadcastMessageToRoom(roomId, msg).catch(error =>
+    console.error("Chat realtime broadcast failed:", error));
   res.status(201).json({ message: msg, xpEarned });
 });
 

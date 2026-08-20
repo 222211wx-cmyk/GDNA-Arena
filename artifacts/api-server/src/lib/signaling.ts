@@ -37,14 +37,16 @@ type SignalMsg =
   | { type: "ping" };
 
 // ── In-memory registry ────────────────────────────────────────────────────────
-const clients   = new Map<string, Client>();  // username (lower) → client
-
-const byUserId  = new Map<number, Client>();  // userId → client (authenticated only)
+const clients   = new Map<string, Set<Client>>();  // username (lower) → every active socket
+const byUserId  = new Map<number, Set<Client>>();  // authenticated userId → every active socket
 const lives     = new Map<string, { hostUsername: string; title: string; domain: string; startedAt: Date }>();
 
 // Active call state keyed by callId — signaling only relays answer/reject/end
 // for calls it saw offered, and only between the two recorded participants.
-const activeCalls = new Map<string, { caller: string; callee: string; callerId: number | null; calleeId: number | null; startedAt: Date }>();
+const activeCalls = new Map<string, {
+  caller: string; callee: string; callerId: number | null; calleeId: number | null;
+  callerSocket: WebSocket; calleeSocket: WebSocket; startedAt: Date;
+}>();
 
 // Participant authorization for RTC token issuance: a token for channel
 // `callId` is only granted to one of the two recorded call participants.
@@ -66,14 +68,71 @@ function send(ws: WebSocket, data: object) {
 }
 
 function findByUsername(username: string): Client | undefined {
-  return clients.get(username.toLowerCase());
+  return Array.from(clients.get(username.toLowerCase()) ?? [])
+    .find(client => client.ws.readyState === WebSocket.OPEN);
+}
+
+function clientsForUsername(username: string): Set<Client> {
+  return clients.get(username.toLowerCase()) ?? new Set<Client>();
+}
+
+function addClient(client: Client) {
+  const named = clients.get(client.username) ?? new Set<Client>();
+  named.add(client);
+  clients.set(client.username, named);
+  if (client.userId !== null) {
+    const identified = byUserId.get(client.userId) ?? new Set<Client>();
+    identified.add(client);
+    byUserId.set(client.userId, identified);
+  }
+}
+
+function removeClient(client: Client) {
+  const named = clients.get(client.username);
+  named?.delete(client);
+  if (named?.size === 0) clients.delete(client.username);
+  if (client.userId !== null) {
+    const identified = byUserId.get(client.userId);
+    identified?.delete(client);
+    if (identified?.size === 0) byUserId.delete(client.userId);
+  }
+}
+
+function onlineUsernames() {
+  return Array.from(clients.keys());
+}
+
+function setUserInCall(username: string, inCall: boolean) {
+  for (const client of clientsForUsername(username)) client.inCall = inCall;
+}
+
+function userIsInCall(username: string): boolean {
+  return Array.from(clientsForUsername(username)).some(client => client.inCall);
+}
+
+function sendToUsername(username: string, data: object) {
+  for (const client of clientsForUsername(username)) send(client.ws, data);
 }
 
 // ── Broadcast a notification payload to a specific authenticated userId ────────
 export function broadcastToUser(userId: number, data: object) {
-  const client = byUserId.get(userId);
-  if (client) send(client.ws, data);
+  for (const client of byUserId.get(userId) ?? []) send(client.ws, data);
 }
+
+// Chat delivery is always resolved from persisted room membership. The client
+// never supplies recipients, which keeps a crafted WebSocket payload from
+// leaking a private room's message to an unrelated citizen.
+export async function broadcastMessageToRoom(roomId: number, message: object): Promise<void> {
+  if (!pool) return;
+  const { rows } = await pool.query<{ user_id: number }>(
+    `SELECT user_id FROM dm_room_members WHERE room_id = $1`,
+    [roomId],
+  );
+  for (const { user_id: userId } of rows) {
+    broadcastToUser(userId, { type: "chat-message", roomId, message });
+  }
+}
+
 export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -114,11 +173,10 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         } catch { /* fall through */ }
         if (!username) { send(ws, { type: "error", message: "Unknown user" }); return; }
         self = { ws, userId: sessionUserId, username, inCall: false, liveId: null };
-        clients.set(username, self);
-        byUserId.set(sessionUserId, self);
+        addClient(self);
         send(ws, { type: "registered", username, onlineCount: clients.size });
         // Broadcast online list
-        const onlineList = Array.from(clients.values()).map(c => c.username);
+        const onlineList = onlineUsernames();
         wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "online-list", users: onlineList }); });
         console.log(`[WS] 🟢 ${username} connected (total: ${clients.size})`);
         return;
@@ -133,8 +191,11 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       if (msg.type === "call-offer") {
         const target = findByUsername(msg.to);
         if (!target) { send(ws, { type: "call-unavailable", to: msg.to }); return; }
-        if (target.inCall) { send(ws, { type: "call-busy", to: msg.to }); return; }
-        activeCalls.set(msg.callId, { caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId, startedAt: new Date() });
+        if (userIsInCall(target.username)) { send(ws, { type: "call-busy", to: msg.to }); return; }
+        activeCalls.set(msg.callId, {
+          caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
+          callerSocket: self.ws, calleeSocket: target.ws, startedAt: new Date(),
+        });
         send(target.ws, { type: "call-incoming", from: self.username, callId: msg.callId, offer: msg.offer, video: msg.video });
         console.log(`[WS] 📞 ${self.username} → ${msg.to} [${msg.video ? "video" : "audio"}]`);
         return;
@@ -147,9 +208,9 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         if (!call || call.callee !== self.username || call.caller !== msg.to.toLowerCase()) return;
         const caller = findByUsername(msg.to);
         if (caller) {
-          self.inCall = true;
-          caller.inCall = true;
-          send(caller.ws, { type: "call-accepted", from: self.username, callId: msg.callId, answer: msg.answer });
+          setUserInCall(self.username, true);
+          setUserInCall(caller.username, true);
+          sendToUsername(caller.username, { type: "call-accepted", from: self.username, callId: msg.callId, answer: msg.answer });
         }
         return;
       }
@@ -169,8 +230,9 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         if (!call || (call.callee !== self.username && call.caller !== self.username)) return;
         activeCalls.delete(msg.callId);
         const peerName = call.caller === self.username ? call.callee : call.caller;
-        const peer = findByUsername(peerName);
-        if (peer) send(peer.ws, { type: "call-rejected", by: self.username, callId: msg.callId });
+        setUserInCall(self.username, false);
+        setUserInCall(peerName, false);
+        sendToUsername(peerName, { type: "call-rejected", by: self.username, callId: msg.callId });
         return;
       }
 
@@ -180,10 +242,10 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         const call = activeCalls.get(msg.callId);
         if (!call || (call.callee !== self.username && call.caller !== self.username)) return;
         activeCalls.delete(msg.callId);
-        self.inCall = false;
         const peerName = call.caller === self.username ? call.callee : call.caller;
-        const peer = findByUsername(peerName);
-        if (peer) { peer.inCall = false; send(peer.ws, { type: "call-ended", by: self.username, callId: msg.callId }); }
+        setUserInCall(self.username, false);
+        setUserInCall(peerName, false);
+        sendToUsername(peerName, { type: "call-ended", by: self.username, callId: msg.callId });
         return;
       }
 
@@ -231,13 +293,22 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
     ws.on("close", () => {
       if (!self) return;
+      // Only calls owned by this exact socket end. Closing an older duplicate
+      // tab cannot tear down a call occurring in a newer one.
+      for (const [callId, call] of activeCalls) {
+        if (call.callerSocket !== ws && call.calleeSocket !== ws) continue;
+        activeCalls.delete(callId);
+        const peerName = call.callerSocket === ws ? call.callee : call.caller;
+        setUserInCall(self.username, false);
+        setUserInCall(peerName, false);
+        sendToUsername(peerName, { type: "call-ended", by: self.username, callId });
+      }
       if (self.liveId) {
         lives.delete(self.liveId);
         wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "live-ended", liveId: self!.liveId }); });
       }
-      clients.delete(self.username);
-      if (self.userId !== null) byUserId.delete(self.userId);
-      const onlineList = Array.from(clients.values()).map(c => c.username);
+      removeClient(self);
+      const onlineList = onlineUsernames();
       wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) send(c, { type: "online-list", users: onlineList }); });
       console.log(`[WS] 🔴 ${self.username} disconnected (total: ${clients.size})`);
     });
