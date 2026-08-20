@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCallContext } from "@/contexts/CallContext";
 
@@ -140,11 +141,75 @@ function CompareHeroCard({ username, profile }: { username: string; profile: Arc
   );
 }
 
+interface CitizenOption { id: number; username: string }
+
+function CitizenPicker({ label, username, citizens, onSelect }: {
+  label: string;
+  username: string;
+  citizens: CitizenOption[];
+  onSelect: (username: string) => void;
+}) {
+  const [query, setQuery] = useState(username);
+  const normalizedQuery = query.trim().toLowerCase();
+  const matches = normalizedQuery
+    ? citizens.filter(c => c.username.toLowerCase().includes(normalizedQuery)).slice(0, 5)
+    : [];
+
+  useEffect(() => setQuery(username), [username]);
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const nextUsername = query.trim();
+    if (nextUsername) onSelect(nextUsername);
+  };
+
+  return (
+    <div className="min-w-0">
+      <label className="mb-1.5 block text-[10px] font-black tracking-[0.2em] text-muted-foreground">
+        {label}
+      </label>
+      <form onSubmit={submit} className="relative">
+        <Input
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+          placeholder="Search citizen"
+          aria-label={`${label} citizen username`}
+          className="h-9 bg-background/60 text-sm"
+        />
+        {matches.length > 0 && query !== username && (
+          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+            {matches.map(citizen => (
+              <button
+                key={citizen.id}
+                type="button"
+                onClick={() => onSelect(citizen.username)}
+                className="block w-full px-3 py-2 text-left text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                {citizen.username}
+              </button>
+            ))}
+          </div>
+        )}
+      </form>
+    </div>
+  );
+}
+
 function ArchonComparePanel({ leftUsername, rightUsername, onClose }: {
   leftUsername: string; rightUsername: string; onClose: () => void;
 }) {
-  const left  = useArchonProfile(leftUsername);
-  const right = useArchonProfile(rightUsername);
+  const [selectedLeftUsername, setSelectedLeftUsername] = useState(leftUsername);
+  const [selectedRightUsername, setSelectedRightUsername] = useState(rightUsername);
+  const [citizens, setCitizens] = useState<CitizenOption[]>([]);
+  const left  = useArchonProfile(selectedLeftUsername);
+  const right = useArchonProfile(selectedRightUsername);
+
+  useEffect(() => {
+    fetch("/api/citizens?limit=200", { credentials: "include" })
+      .then(response => response.ok ? response.json() : { citizens: [] })
+      .then(data => setCitizens(Array.isArray(data.citizens) ? data.citizens : []))
+      .catch(() => setCitizens([]));
+  }, []);
 
   if (left === "loading" || right === "loading") return (
     <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-primary/5 animate-pulse">
@@ -180,28 +245,43 @@ function ArchonComparePanel({ leftUsername, rightUsername, onClose }: {
       </CardHeader>
 
       <CardContent className="p-5 space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <CitizenPicker
+            label="LEFT CITIZEN"
+            username={selectedLeftUsername}
+            citizens={citizens}
+            onSelect={setSelectedLeftUsername}
+          />
+          <CitizenPicker
+            label="RIGHT CITIZEN"
+            username={selectedRightUsername}
+            citizens={citizens}
+            onSelect={setSelectedRightUsername}
+          />
+        </div>
+
         {/* Hero row */}
         <div className="flex items-stretch gap-3">
           {left !== "none"
-            ? <CompareHeroCard username={leftUsername} profile={left} />
-            : <CompareLockedCard username={leftUsername} />}
+            ? <CompareHeroCard username={selectedLeftUsername} profile={left} />
+            : <CompareLockedCard username={selectedLeftUsername} />}
           <div className="flex items-center justify-center shrink-0">
             <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-sm border border-primary/40 bg-primary/10 text-primary">
               VS
             </div>
           </div>
           {right !== "none"
-            ? <CompareHeroCard username={rightUsername} profile={right} />
-            : <CompareLockedCard username={rightUsername} />}
+            ? <CompareHeroCard username={selectedRightUsername} profile={right} />
+            : <CompareLockedCard username={selectedRightUsername} />}
         </div>
 
         {bothReady && (
           <>
             {/* Wins tally */}
             <div className="flex items-center justify-center gap-4 text-xs font-black">
-              <span style={{ color: leftInfo!.color }}>{leftUsername} leads in {leftWins}</span>
+              <span style={{ color: leftInfo!.color }}>{selectedLeftUsername} leads in {leftWins}</span>
               <span className="text-muted-foreground">·</span>
-              <span style={{ color: rightInfo!.color }}>{rightUsername} leads in {rightWins}</span>
+              <span style={{ color: rightInfo!.color }}>{selectedRightUsername} leads in {rightWins}</span>
             </div>
 
             {/* Dimension bars */}
