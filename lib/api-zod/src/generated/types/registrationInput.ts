@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RegisterBody {
+export interface RegistrationInput {
   /**
      * @minLength 3
      * @maxLength 20

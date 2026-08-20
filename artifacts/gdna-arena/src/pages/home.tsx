@@ -425,25 +425,28 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.65 }}
-            className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2 lg:grid-cols-3"
+            className="w-full pt-2"
             dir="rtl"
           >
-            {HOME_BOTS.map((bot) => (
-              <Card key={bot.name} className="border-primary/25 bg-card/70 text-start shadow-none">
-                <CardContent className="flex min-h-32 flex-col gap-2 p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-lg" aria-hidden="true">
-                      {bot.icon}
-                    </span>
-                    <h2 className="text-sm font-black tracking-wide text-foreground" dir="ltr">{bot.name}</h2>
-                  </div>
-                  <p className="min-h-5 text-xs font-medium text-muted-foreground">{bot.description}</p>
-                  <Button asChild size="sm" className="mt-auto w-full font-bold">
-                    <Link href="/fortress">ابدأ التحدي</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+            <p className="mb-3 text-center text-xs font-bold tracking-[0.2em] text-primary">بوتات المركز الذكي</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {HOME_BOTS.map((bot) => (
+                <Card key={bot.name} className="border-primary/25 bg-card/70 text-start shadow-none">
+                  <CardContent className="flex min-h-32 flex-col gap-2 p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-lg" aria-hidden="true">
+                        {bot.icon}
+                      </span>
+                      <h2 className="text-sm font-black tracking-wide text-foreground" dir="ltr">{bot.name}</h2>
+                    </div>
+                    <p className="min-h-5 text-xs font-medium text-muted-foreground">{bot.description}</p>
+                    <Button asChild size="sm" className="mt-auto w-full font-bold">
+                      <Link href="/fortress">ابدأ التحدي</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </motion.div>
         </div>
 

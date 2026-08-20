@@ -3,10 +3,12 @@ import bcrypt from "bcrypt";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
-import { pool } from "@workspace/db";
+import { pool as nullablePool } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { isAdultForGames, normalizeBirthDate } from "../lib/age";
+
+const pool = nullablePool!;
 
 // FINAL OWNER DECISION (Aug 2026): citizen auth is username + password only.
 // No citizen email input, email verification, recovery codes, or mail provider.

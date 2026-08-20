@@ -36,9 +36,9 @@ import type {
   GsVoteResult,
   HealthStatus,
   LeaderboardResponse,
-  LoginBody,
+  LoginInput,
   PlayResult,
-  RegisterBody,
+  RegistrationInput,
   SuccessResponse,
   TransactionsResponse
 } from './api.schemas';
@@ -158,14 +158,14 @@ export const getRegisterUrl = () => {
 /**
  * @summary Register a new player
  */
-export const register = async (registerBody: RegisterBody, options?: RequestInit): Promise<AuthUser> => {
+export const register = async (registrationInput: RegistrationInput, options?: RequestInit): Promise<AuthUser> => {
 
   return customFetch<AuthUser>(getRegisterUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(registerBody)
+    body: JSON.stringify(registrationInput)
   }
 );}
 
@@ -173,8 +173,8 @@ export const register = async (registerBody: RegisterBody, options?: RequestInit
 
 
 export const getRegisterMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: BodyType<RegisterBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: BodyType<RegisterBody>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: BodyType<RegistrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: BodyType<RegistrationInput>}, TContext> => {
 
 const mutationKey = ['register'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -186,7 +186,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof register>>, {data: BodyType<RegisterBody>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof register>>, {data: BodyType<RegistrationInput>}> = (props) => {
           const {data} = props ?? {};
 
           return  register(data,requestOptions)
@@ -200,18 +200,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type RegisterMutationResult = NonNullable<Awaited<ReturnType<typeof register>>>
-    export type RegisterMutationBody = BodyType<RegisterBody>
+    export type RegisterMutationBody = BodyType<RegistrationInput>
     export type RegisterMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Register a new player
  */
 export const useRegister = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: BodyType<RegisterBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof register>>, TError,{data: BodyType<RegistrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof register>>,
         TError,
-        {data: BodyType<RegisterBody>},
+        {data: BodyType<RegistrationInput>},
         TContext
       > => {
       return useMutation(getRegisterMutationOptions(options));
@@ -228,14 +228,14 @@ export const getLoginUrl = () => {
 /**
  * @summary Login
  */
-export const login = async (loginBody: LoginBody, options?: RequestInit): Promise<AuthUser> => {
+export const login = async (loginInput: LoginInput, options?: RequestInit): Promise<AuthUser> => {
 
   return customFetch<AuthUser>(getLoginUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(loginBody)
+    body: JSON.stringify(loginInput)
   }
 );}
 
@@ -243,8 +243,8 @@ export const login = async (loginBody: LoginBody, options?: RequestInit): Promis
 
 
 export const getLoginMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginBody>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginInput>}, TContext> => {
 
 const mutationKey = ['login'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -256,7 +256,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, {data: BodyType<LoginBody>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, {data: BodyType<LoginInput>}> = (props) => {
           const {data} = props ?? {};
 
           return  login(data,requestOptions)
@@ -270,18 +270,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>
-    export type LoginMutationBody = BodyType<LoginBody>
+    export type LoginMutationBody = BodyType<LoginInput>
     export type LoginMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Login
  */
 export const useLogin = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof login>>,
         TError,
-        {data: BodyType<LoginBody>},
+        {data: BodyType<LoginInput>},
         TContext
       > => {
       return useMutation(getLoginMutationOptions(options));

@@ -17,7 +17,7 @@ export interface SuccessResponse {
   message: string;
 }
 
-export interface RegisterBody {
+export interface RegistrationInput {
   /**
      * @minLength 3
      * @maxLength 20
@@ -29,7 +29,7 @@ export interface RegisterBody {
   birthDate: string;
 }
 
-export interface LoginBody {
+export interface LoginInput {
   username: string;
   password: string;
   rememberMe?: boolean;
