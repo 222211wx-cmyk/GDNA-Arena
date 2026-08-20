@@ -16,7 +16,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
-  Camera, Image as ImageIcon, Paperclip, Smile, Send, Newspaper, Plus, ArrowLeft, ArrowRight,
+  Camera, Image as ImageIcon, Paperclip, Smile, Send, Newspaper, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
 } from "lucide-react";
 import Avatar from "../social/Avatar";
 import { Switch } from "@workspace/gdna-ds/components/ui/switch";
@@ -374,10 +374,12 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate }: {
 }
 
 // ── Appels ────────────────────────────────────────────────────────────────────
-function AppelsTab({ st, user, onNewCall }: {
+function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection }: {
   st: Record<string, string>;
   user: { id: number; username: string };
   onNewCall: () => void;
+  connectionTest: "idle" | "testing" | "ready" | "unstable" | "failed";
+  onTestConnection: () => void;
 }) {
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -392,6 +394,13 @@ function AppelsTab({ st, user, onNewCall }: {
   const peer = (r: CallRecord) => r.callerId === user.id ? r.calleeUsername : r.callerUsername;
   const statusLabel = (s: string) =>
     s === "missed" ? (st.call_missed ?? "Missed") : s === "answered" ? (st.call_answered ?? "Answered") : (st.call_ended ?? "Ended");
+  const connectionResult = connectionTest === "ready"
+    ? { label: "Agora path ready for a call", className: "border-chart-3/40 bg-chart-3/10 text-chart-3" }
+    : connectionTest === "unstable"
+      ? { label: "Network is unstable — call quality may be affected", className: "border-primary/40 bg-primary/10 text-primary" }
+      : connectionTest === "failed"
+        ? { label: "Unable to reach Agora — try another network", className: "border-destructive/40 bg-destructive/10 text-destructive" }
+        : null;
 
   function statusIcon(r: CallRecord) {
     if (r.status === "missed")   return <PhoneMissed size={14} style={{ color: "#ef4444" }} />;
@@ -401,6 +410,25 @@ function AppelsTab({ st, user, onNewCall }: {
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
+      <div className="mb-3 rounded-xl border border-border bg-card p-3">
+        <div className="flex items-center gap-2">
+          <Wifi className="h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-sm font-bold text-card-foreground">Call connection</p>
+            <p className="m-0 text-xs text-muted-foreground">Check your Agora call path before dialing.</p>
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={onTestConnection} disabled={connectionTest === "testing"}>
+            {connectionTest === "testing" && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
+            {connectionTest === "testing" ? "Testing…" : "Test connection"}
+          </Button>
+        </div>
+        {connectionResult && (
+          <div className={`mt-3 flex items-center gap-2 rounded-md border px-2.5 py-2 text-xs font-semibold ${connectionResult.className}`}>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-current" aria-hidden="true" />
+            <span>{connectionResult.label}</span>
+          </div>
+        )}
+      </div>
       <button onClick={onNewCall}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#22c55e12", border: "1px solid #22c55e30", borderRadius: 12, cursor: "pointer", marginBottom: 10 }}>
         <Phone size={18} style={{ color: "#22c55e" }} />
@@ -1237,7 +1265,15 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
           </>
         )}
 
-        {tab === "appels" && <AppelsTab st={st} user={user} onNewCall={() => setShowContacts("call")} />}
+        {tab === "appels" && (
+          <AppelsTab
+            st={st}
+            user={user}
+            onNewCall={() => setShowContacts("call")}
+            connectionTest={call.connectionTest}
+            onTestConnection={call.testConnection}
+          />
+        )}
 
         {/* ── Fixed bottom tab bar ── */}
         <div style={{ display: "flex", background: BG_BAR, borderTop: `1px solid ${GOLD}15`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>

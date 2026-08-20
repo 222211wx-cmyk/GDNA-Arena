@@ -10,6 +10,7 @@ import type {
   IAgoraRTCClient,
   IMicrophoneAudioTrack,
   ICameraVideoTrack,
+  ILocalAudioTrack,
   ILocalVideoTrack,
   IRemoteAudioTrack,
   IRemoteVideoTrack,
@@ -48,6 +49,7 @@ const BASE_WS = (() => {
 
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
 export type LiveStatus  = "idle" | "live" | "ended";
+export type ConnectionTestStatus = "idle" | "testing" | "ready" | "unstable" | "failed";
 
 interface IncomingCall {
   from:   string;
@@ -72,6 +74,7 @@ export function useCall(user: { id: number; username: string } | null) {
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const preflightClientRef = useRef<IAgoraRTCClient | null>(null);
 
   // ── Agora call engine ──────────────────────────────────────────────────────
   const agoraRef = useRef<IAgoraRTCClient | null>(null);
@@ -105,6 +108,7 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Error feedback ─────────────────────────────────────────────────────────
   const [callError,    setCallError]    = useState<string | null>(null);
+  const [connectionTest, setConnectionTest] = useState<ConnectionTestStatus>("idle");
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showCallError = (msg: string) => {
@@ -125,6 +129,90 @@ export function useCall(user: { id: number; username: string } | null) {
       wsRef.current.send(JSON.stringify(data));
     }
   }, []);
+
+  // ── Pre-call Agora quality test ───────────────────────────────────────────
+  // Agora computes this last-mile metric from bitrate, packet loss, RTT, and
+  // jitter. It measures the same network path calls use without opening a real
+  // call or requesting microphone/camera permission.
+  const testConnection = useCallback(async () => {
+    if (connectionTest === "testing") return;
+    if (!user) {
+      setConnectionTest("failed");
+      return;
+    }
+
+    if (preflightClientRef.current) {
+      try { await preflightClientRef.current.leave(); } catch { /* already disconnected */ }
+      preflightClientRef.current = null;
+    }
+    setConnectionTest("testing");
+    let client: IAgoraRTCClient | null = null;
+    let silentTrack: ILocalAudioTrack | null = null;
+    let audioContext: AudioContext | null = null;
+    let oscillator: OscillatorNode | null = null;
+
+    try {
+      const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      const response = await fetch(`${base}/api/rtc/preflight-token`, { credentials: "include" });
+      if (!response.ok) throw new Error(`Agora preflight unavailable: HTTP ${response.status}`);
+
+      const data = await response.json() as { appId?: string; token?: string | null; uid?: number | null; channel?: string };
+      if (!data.channel) {
+        throw new Error("Agora preflight channel is unavailable");
+      }
+
+      client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+      const activeClient = client;
+      preflightClientRef.current = activeClient;
+      await activeClient.join(data.appId ?? AGORA_APP_ID, data.channel, data.token ?? null, data.uid ?? null);
+
+      // Publish a silent track so Agora can calculate meaningful uplink quality
+      // without prompting for the citizen's microphone.
+      audioContext = new AudioContext();
+      await audioContext.resume();
+      const destination = audioContext.createMediaStreamDestination();
+      oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      gain.gain.value = 0;
+      oscillator.connect(gain).connect(destination);
+      oscillator.start();
+      const sourceTrack = destination.stream.getAudioTracks()[0];
+      if (!sourceTrack) throw new Error("Unable to create preflight audio track");
+      silentTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: sourceTrack, encoderConfig: "speech_low_quality" });
+      await activeClient.publish(silentTrack);
+
+      const result = await new Promise<ConnectionTestStatus>((resolve) => {
+        let complete = false;
+        const finish = (status: ConnectionTestStatus) => {
+          if (complete) return;
+          complete = true;
+          window.clearTimeout(timeout);
+          resolve(status);
+        };
+
+        const timeout = window.setTimeout(() => finish("failed"), 8_000);
+        activeClient.on("connection-state-change", state => {
+          if (state === "DISCONNECTED" || state === "DISCONNECTING") finish("failed");
+        });
+        activeClient.on("network-quality", quality => {
+          const uplink = quality.uplinkNetworkQuality;
+          if (uplink === 1 || uplink === 2) finish("ready");
+          if (uplink === 3 || uplink === 4) finish("unstable");
+          if (uplink === 5 || uplink === 6) finish("failed");
+        });
+      });
+      setConnectionTest(result);
+    } catch (error) {
+      console.warn("[CALL] Agora preflight failed:", error);
+      setConnectionTest("failed");
+    } finally {
+      try { oscillator?.stop(); } catch { /* already stopped */ }
+      try { silentTrack?.close(); } catch { /* already closed */ }
+      try { await client?.leave(); } catch { /* already left */ }
+      if (audioContext) void audioContext.close();
+      if (preflightClientRef.current === client) preflightClientRef.current = null;
+    }
+  }, [connectionTest, user]);
 
   // ── Rebuild the remote MediaStream from current Agora remote tracks ───────
   const rebuildRemoteStream = useCallback(() => {
@@ -532,7 +620,9 @@ export function useCall(user: { id: number; username: string } | null) {
     activePeer, activeVideo, onlineUsers, activeLives, currentLiveId,
     localStream, remoteStream, screenSharing,
     callError,
+    connectionTest,
     startCall, answerCall, rejectCall, endCall,
+    testConnection,
     startLive, endLive, joinLive,
     startScreenShare, stopScreenShare,
   };
