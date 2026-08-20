@@ -29,7 +29,7 @@ export interface DmRoom {
   type: string;   // direct | group
   icon?: string;
   createdAt: string;
-  members: { userId: number; username: string }[];
+  members: { userId: number; username: string; lastReadAt?: string | null }[];
   lastMessage?: { content?: string; type: string; createdAt: string } | null;
   unreadCount: number;
   muted?: boolean;

@@ -167,19 +167,25 @@ async function unreadCount(roomId: number, userId: number, lastReadAt: Date | nu
   return r?.cnt ?? 0;
 }
 
-// Privacy: members who disabled read receipts must never expose their read
-// cursor to other members. Their own cursor is kept for the viewer themself
-// (it only drives their private unread badge).
+// Privacy: read cursors are only useful when both sides have receipts enabled.
+// A member who disables receipts neither shares their cursor nor sees peers'
+// cursors. Their own cursor is kept for the viewer themself (it only drives
+// their private unread badge).
 type MemberRow = typeof dmRoomMembers.$inferSelect;
 async function hideReadCursors<T extends MemberRow>(members: T[], viewerId: number): Promise<T[]> {
   const otherIds = members.map(m => m.userId).filter(id => id !== viewerId);
   if (otherIds.length === 0) return members;
   const r = await pool.query(
-    `SELECT user_id FROM dm_user_settings WHERE user_id = ANY($1) AND read_receipts = false`,
-    [otherIds]);
-  const hidden = new Set<number>(r.rows.map((row: { user_id: number }) => row.user_id));
-  if (hidden.size === 0) return members;
-  return members.map(m => hidden.has(m.userId) ? { ...m, lastReadAt: null } : m);
+    `SELECT user_id, read_receipts FROM dm_user_settings WHERE user_id = ANY($1)`,
+    [[viewerId, ...otherIds]]);
+  const receiptsByUser = new Map<number, boolean>(
+    r.rows.map((row: { user_id: number; read_receipts: boolean }) => [row.user_id, row.read_receipts]));
+  const viewerShares = receiptsByUser.get(viewerId) ?? true;
+  return members.map(m => {
+    if (m.userId === viewerId) return m;
+    const peerShares = receiptsByUser.get(m.userId) ?? true;
+    return viewerShares && peerShares ? m : { ...m, lastReadAt: null };
+  });
 }
 
 // ── GET /messages/rooms — list my rooms ───────────────────────────────────────

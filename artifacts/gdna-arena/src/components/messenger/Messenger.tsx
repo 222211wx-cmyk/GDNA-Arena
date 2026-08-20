@@ -527,7 +527,12 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
     const j = await r.json();
     // Only commit if this room is still the active one (guards stale responses
     // from a previously opened room resolving late) and we're still mounted.
-    if (mountedRef.current && activeRoomIdRef.current === roomId) setMessages(j.messages ?? []);
+    if (mountedRef.current && activeRoomIdRef.current === roomId) {
+      setMessages(j.messages ?? []);
+      if (Array.isArray(j.members)) {
+        setActiveRoom(prev => prev?.id === roomId ? { ...prev, members: j.members } : prev);
+      }
+    }
   }
 
   async function openRoom(room: DmRoom) {
@@ -880,6 +885,10 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
             </div>
             {group.msgs.map(msg => {
               const mine = msg.username === user.username;
+              const seen = mine && activeRoom.members.some(member =>
+                member.userId !== user.id &&
+                member.lastReadAt != null &&
+                new Date(member.lastReadAt).getTime() >= new Date(msg.createdAt).getTime());
               return (
                 <div key={msg.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6, position: "relative" }}>
                   <div style={{ maxWidth: "78%", background: mine ? GOLD : BUBBLE_OTHER, borderRadius: mine ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "8px 12px 6px", userSelect: "text", WebkitUserSelect: "text", position: "relative", boxShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
@@ -901,6 +910,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
                     )}
                     <p style={{ margin: "3px 0 0", fontSize: 10.5, color: mine ? "#00000060" : "#ffffff35", textAlign: "end" }}>
                       {clockTime(msg.createdAt)}
+                      {seen && <span aria-label="Seen" title="Seen" style={{ marginInlineStart: 5, fontSize: 12, fontWeight: 900, letterSpacing: -1 }}>✓✓</span>}
                     </p>
                   </div>
                   <button onClick={e => { e.stopPropagation(); setMenuMsgId(v => v === msg.id ? null : msg.id); }}
