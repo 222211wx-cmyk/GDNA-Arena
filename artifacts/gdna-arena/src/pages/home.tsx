@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import {
   Crown, Flame, Users, Swords, ArrowRight, ChevronRight,
 } from "lucide-react";
@@ -49,6 +51,15 @@ const PORTALS = [
   { icon: Flame,  label: "EMPIRE PULSE",   path: "/pulse",    accent: "#FF4444", desc: "Live social feed" },
   { icon: Users,  label: "CITIZENS",       path: "/citizens", accent: "#22C55E", desc: "Browse the empire" },
   { icon: Swords, label: "GLOBAL ARENA",  path: "/games",    accent: "#00D4FF", desc: "Battle for glory" },
+];
+
+const HOME_BOTS = [
+  { name: "GDN-SMART", icon: "🧠", description: "مساعدك الذكي لتحديات اليوم" },
+  { name: "GDN-FIT", icon: "💪", description: "تحديات الرياضة والقوة" },
+  { name: "GDN-CINE", icon: "🎬", description: "تحديات السينما والأساطير" },
+  { name: "GDN-ARENA", icon: "⚔️", description: "تحديات الساحة والمنافسة" },
+  { name: "GDN-TO", icon: "🤝", description: "تحديات التواصل والتأثير" },
+  { name: "GDN-MUSIC", icon: "🎵", description: "تحديات الموسيقى والإبداع" },
 ];
 
 // ── Animated green grid background ───────────────────────────────────────────
@@ -408,6 +419,31 @@ export default function Home() {
                 </button>
               </Link>
             )}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.65 }}
+            className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2 lg:grid-cols-3"
+            dir="rtl"
+          >
+            {HOME_BOTS.map((bot) => (
+              <Card key={bot.name} className="border-primary/25 bg-card/70 text-start shadow-none">
+                <CardContent className="flex min-h-32 flex-col gap-2 p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-lg" aria-hidden="true">
+                      {bot.icon}
+                    </span>
+                    <h2 className="text-sm font-black tracking-wide text-foreground" dir="ltr">{bot.name}</h2>
+                  </div>
+                  <p className="min-h-5 text-xs font-medium text-muted-foreground">{bot.description}</p>
+                  <Button asChild size="sm" className="mt-auto w-full font-bold">
+                    <Link href="/fortress">ابدأ التحدي</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
           </motion.div>
         </div>
 
