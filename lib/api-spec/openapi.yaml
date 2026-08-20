@@ -384,23 +384,24 @@ components:
           type: string
           minLength: 3
           maxLength: 20
-        email:
-          type: string
-          format: email
         password:
           type: string
           minLength: 6
-      required: [username, email, password]
+        birthDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+      required: [username, password, birthDate]
 
     LoginBody:
       type: object
       properties:
-        email:
+        username:
           type: string
-          format: email
         password:
           type: string
-      required: [email, password]
+        rememberMe:
+          type: boolean
+      required: [username, password]
 
     AuthUser:
       type: object
@@ -408,8 +409,6 @@ components:
         id:
           type: integer
         username:
-          type: string
-        email:
           type: string
         balance:
           type: integer
@@ -421,7 +420,12 @@ components:
           type: integer
         canClaimDaily:
           type: boolean
-      required: [id, username, email, balance, xp, gamesPlayed, wins, canClaimDaily]
+        isAdmin:
+          type: boolean
+        isAdult:
+          type: boolean
+          nullable: true
+      required: [id, username, balance, xp, gamesPlayed, wins, canClaimDaily, isAdult]
 
     LeaderboardPlayer:
       type: object

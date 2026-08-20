@@ -24,7 +24,6 @@ export default function RegisterScreen() {
   const { register } = useAuth();
 
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,14 +31,14 @@ export default function RegisterScreen() {
   const [showPass, setShowPass] = useState(false);
 
   const handleRegister = async () => {
-    if (!username || !email || !birthDate || !password) { setError('All fields are required.'); return; }
+    if (!username || !birthDate || !password) { setError('All fields are required.'); return; }
     if (username.length < 3) { setError('Username must be at least 3 characters.'); return; }
     if (!isValidBirthDate(birthDate)) { setError('Use a valid birth date in YYYY-MM-DD format.'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setError('');
     setLoading(true);
     try {
-      await register(username.trim(), email.trim().toLowerCase(), password, birthDate);
+      await register(username.trim(), password, birthDate);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Registration failed');
@@ -83,18 +82,6 @@ export default function RegisterScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             maxLength={20}
-          />
-
-          <Text style={s.label}>EMAIL</Text>
-          <TextInput
-            style={s.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="citizen@gdna.empire"
-            placeholderTextColor={colors.mutedForeground}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
           />
 
           <Text style={s.label}>DATE OF BIRTH — ALL AGES WELCOME</Text>

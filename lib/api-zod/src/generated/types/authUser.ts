@@ -9,10 +9,11 @@
 export interface AuthUser {
   id: number;
   username: string;
-  email: string;
   balance: number;
   xp: number;
   gamesPlayed: number;
   wins: number;
   canClaimDaily: boolean;
+  isAdmin?: boolean;
+  isAdult: boolean | null;
 }

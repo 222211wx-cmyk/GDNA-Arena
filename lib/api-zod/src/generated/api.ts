@@ -24,23 +24,25 @@ export const registerBodyUsernameMax = 20;
 
 export const registerBodyPasswordMin = 6;
 
+export const registerBodyBirthDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 
 
 export const RegisterBody = zod.object({
   "username": zod.string().min(registerBodyUsernameMin).max(registerBodyUsernameMax),
-  "email": zod.string().email(),
-  "password": zod.string().min(registerBodyPasswordMin)
+  "password": zod.string().min(registerBodyPasswordMin),
+  "birthDate": zod.string().regex(registerBodyBirthDateRegExp)
 })
 
 export const RegisterResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "email": zod.string(),
   "balance": zod.number(),
   "xp": zod.number(),
   "gamesPlayed": zod.number(),
   "wins": zod.number(),
-  "canClaimDaily": zod.boolean()
+  "canClaimDaily": zod.boolean(),
+  "isAdmin": zod.boolean().optional(),
+  "isAdult": zod.boolean().nullable()
 })
 
 
@@ -48,19 +50,21 @@ export const RegisterResponse = zod.object({
  * @summary Login
  */
 export const LoginBody = zod.object({
-  "email": zod.string().email(),
-  "password": zod.string()
+  "username": zod.string(),
+  "password": zod.string(),
+  "rememberMe": zod.boolean().optional()
 })
 
 export const LoginResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "email": zod.string(),
   "balance": zod.number(),
   "xp": zod.number(),
   "gamesPlayed": zod.number(),
   "wins": zod.number(),
-  "canClaimDaily": zod.boolean()
+  "canClaimDaily": zod.boolean(),
+  "isAdmin": zod.boolean().optional(),
+  "isAdult": zod.boolean().nullable()
 })
 
 
@@ -78,12 +82,13 @@ export const LogoutResponse = zod.object({
 export const GetMeResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
-  "email": zod.string(),
   "balance": zod.number(),
   "xp": zod.number(),
   "gamesPlayed": zod.number(),
   "wins": zod.number(),
-  "canClaimDaily": zod.boolean()
+  "canClaimDaily": zod.boolean(),
+  "isAdmin": zod.boolean().optional(),
+  "isAdult": zod.boolean().nullable()
 })
 
 

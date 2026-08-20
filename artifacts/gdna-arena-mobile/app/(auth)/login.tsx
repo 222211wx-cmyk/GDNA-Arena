@@ -15,18 +15,18 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) { setError('Enter email and password.'); return; }
+    if (!username || !password) { setError('Enter your player name and password.'); return; }
     setError('');
     setLoading(true);
     try {
-      await login(email.trim().toLowerCase(), password);
+      await login(username.trim(), password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Login failed');
@@ -63,14 +63,13 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          <Text style={s.label}>Email</Text>
+          <Text style={s.label}>PLAYER NAME</Text>
           <TextInput
             style={s.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="citizen@gdna.empire"
+            value={username}
+            onChangeText={setUsername}
+            placeholder="YourEmpireName"
             placeholderTextColor={colors.mutedForeground}
-            keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
           />

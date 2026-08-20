@@ -7,8 +7,8 @@ const USER_KEY = '@gdna_user';
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string, birthDate: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string, birthDate: string) => Promise<void>;
   submitBirthDate: (birthDate: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -46,14 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const data = await apiPost<AuthUser>('/auth/login', { email, password });
+  const login = async (username: string, password: string) => {
+    const data = await apiPost<AuthUser>('/auth/login', { username, password });
     setUser(data);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
   };
 
-  const register = async (username: string, email: string, password: string, birthDate: string) => {
-    const data = await apiPost<AuthUser>('/auth/register', { username, email, password, birthDate });
+  const register = async (username: string, password: string, birthDate: string) => {
+    const data = await apiPost<AuthUser>('/auth/register', { username, password, birthDate });
     setUser(data);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
   };

@@ -5,25 +5,24 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
-import { Lock, Mail, AlertCircle } from "lucide-react";
+import { Lock, User, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [showForgotHint, setShowForgotHint] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
     try {
-      await login(email, password, rememberMe);
+      await login(username, password, rememberMe);
       setLocation("/social");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -58,18 +57,19 @@ export default function Login() {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs uppercase tracking-widest text-muted-foreground">Email</Label>
+                <Label htmlFor="username" className="text-xs uppercase tracking-widest text-muted-foreground">Player Name</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
+                  <User className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="player@gdna.network"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="username"
+                    type="text"
+                    placeholder="YourEmpireName"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
                     required
-                    data-testid="input-email"
+                    autoComplete="username"
+                    data-testid="input-username"
                   />
                 </div>
               </div>
@@ -85,6 +85,7 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
                     required
+                    autoComplete="current-password"
                     data-testid="input-password"
                   />
                 </div>
@@ -106,19 +107,6 @@ export default function Login() {
               >
                 {isLoading ? "Authenticating..." : "Login"}
               </Button>
-              <button
-                type="button"
-                onClick={() => setShowForgotHint((v) => !v)}
-                className="w-full text-center text-sm text-primary hover:underline"
-                data-testid="button-forgot-password"
-              >
-                نسيت كلمة السر؟ — Mot de passe oublié ?
-              </button>
-              {showForgotHint && (
-                <div className="p-3 rounded-md bg-primary/10 border border-primary/30 text-primary text-sm text-center" data-testid="text-forgot-hint">
-                  🔐 تقدر تبدل كلمة السر مباشرة من صفحة الملف الشخصي (الإعدادات) بعد الدخول
-                </div>
-              )}
               <p className="text-center text-sm text-muted-foreground">
                 No account?{" "}
                 <Link href="/register" className="text-primary hover:underline font-semibold">

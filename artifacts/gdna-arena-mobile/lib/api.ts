@@ -86,7 +86,6 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 export interface AuthUser {
   id: number;
   username: string;
-  email: string;
   balance: number;
   xp: number;
   gamesPlayed: number;

@@ -98,7 +98,6 @@ export default function ProfileScreen() {
           <Text style={[s.avatarLetter, { color: rank.color }]}>{user.username[0].toUpperCase()}</Text>
         </View>
         <Text style={s.username}>{user.username}</Text>
-        <Text style={s.email}>{user.email}</Text>
         <View style={[s.rankBadge, { borderColor: rank.color }]}>
           <Ionicons name="shield" size={12} color={rank.color} />
           <Text style={[s.rankBadgeText, { color: rank.color }]}>{rank.label} CITIZEN</Text>
@@ -188,7 +187,6 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   avatarLetter: { fontSize: 40, fontFamily: 'Inter_700Bold' },
   username: { fontSize: 24, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 4 },
-  email: { fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', marginBottom: 10 },
   rankBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     borderWidth: 1, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,

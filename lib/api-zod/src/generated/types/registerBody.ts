@@ -12,7 +12,8 @@ export interface RegisterBody {
      * @maxLength 20
      */
   username: string;
-  email: string;
   /** @minLength 6 */
   password: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  birthDate: string;
 }

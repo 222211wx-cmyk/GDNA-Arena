@@ -14,7 +14,6 @@ export const usersTable = pgTable("users", {
   wins: integer("wins").notNull().default(0),
   lastDailyReward: timestamp("last_daily_reward", { withTimezone: true }),
   lastDmXpAt: timestamp("last_dm_xp_at", { withTimezone: true }), // DM XP cooldown cursor
-  emailVerified: boolean("email_verified").notNull().default(false),
   isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

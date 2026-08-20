@@ -5,14 +5,13 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
-import { Lock, Mail, User, AlertCircle, CalendarDays } from "lucide-react";
+import { Lock, User, AlertCircle, CalendarDays } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Register() {
   const [, setLocation] = useLocation();
   const { register } = useAuth();
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [error, setError] = useState("");
@@ -23,7 +22,7 @@ export default function Register() {
     setError("");
     setIsLoading(true);
     try {
-      await register(username, email, password, birthDate);
+      await register(username, password, birthDate);
       setLocation("/social");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -71,23 +70,8 @@ export default function Register() {
                     required
                     minLength={3}
                     maxLength={20}
+                    autoComplete="username"
                     data-testid="input-username"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs uppercase tracking-widest text-muted-foreground">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="player@gdna.network"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
-                    required
-                    data-testid="input-email"
                   />
                 </div>
               </div>

@@ -3,7 +3,6 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from "
 export interface AuthUser {
   id: number;
   username: string;
-  email: string;
   balance: number;
   xp: number;
   gamesPlayed: number;
@@ -16,8 +15,8 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
-  register: (username: string, email: string, password: string, birthDate: string) => Promise<void>;
+  login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
+  register: (username: string, password: string, birthDate: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -47,24 +46,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser().finally(() => setLoading(false));
   }, []);
 
-  const login = async (email: string, password: string, rememberMe = true) => {
+  const login = async (username: string, password: string, rememberMe = true) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, password, rememberMe }),
+      body: JSON.stringify({ username, password, rememberMe }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Login failed");
     setUser(data);
   };
 
-  const register = async (username: string, email: string, password: string, birthDate: string) => {
+  const register = async (username: string, password: string, birthDate: string) => {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ username, email, password, birthDate }),
+      body: JSON.stringify({ username, password, birthDate }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Registration failed");

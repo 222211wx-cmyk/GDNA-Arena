@@ -100,10 +100,9 @@ if (pool) {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false;
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uniq ON users (LOWER(email));
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uniq ON users (LOWER(username));
-    -- FINAL OWNER DECISION: no email verification. Everyone is verified.
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT true;
-    ALTER TABLE users ALTER COLUMN email_verified SET DEFAULT true;
-    UPDATE users SET email_verified = true WHERE email_verified = false;
+    -- Citizen accounts use username + password only. Remove obsolete mail
+    -- verification state and code tables permanently.
+    ALTER TABLE users DROP COLUMN IF EXISTS email_verified;
     DROP TABLE IF EXISTS email_verification_codes;
     DROP TABLE IF EXISTS password_reset_codes;
     -- AMIS unified messenger: per-conversation mute + per-user messenger settings
@@ -115,9 +114,8 @@ if (pool) {
       updated_at timestamptz NOT NULL DEFAULT now()
     );
   `).then(() => {
-    // Bootstrap admin access: grant is_admin to emails listed in ADMIN_EMAILS
-    // (comma-separated). Needed because production DB writes can only happen
-    // from the running app — there is no manual SQL path to prod.
+    // Legacy admin bootstrap remains independent from citizen authentication.
+    // It sends no mail and does not make email part of register/login.
     const adminEmails = (process.env.ADMIN_EMAILS ?? "")
       .split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
     if (adminEmails.length && pool) {
@@ -126,6 +124,7 @@ if (pool) {
         [adminEmails]
       ).then(r => { if (r.rowCount) logger.info(`Granted admin to ${r.rowCount} account(s)`); });
     }
+    return undefined;
   }).catch((err) => logger.error(err, "Failed to create session table / auth indexes"));
 }
 // Never run production with a forgeable fallback secret — refuse to start.
