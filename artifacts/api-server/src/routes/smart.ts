@@ -21,7 +21,7 @@ function requireAuth(req: any, res: any, next: any) {
 }
 
 // ── GET /api/smart/status — fast module status snapshot ───────────────────────
-router.get("/smart/status", requireAuth, async (req: any, res) => {
+router.get("/smart/status", requireAuth, async (req: any, res): Promise<void> => {
   const userId = req.session.userId as number;
   try {
     const [user] = await db
@@ -29,7 +29,10 @@ router.get("/smart/status", requireAuth, async (req: any, res) => {
       .from(usersTable)
       .where(eq(usersTable.id, userId));
 
-    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
 
     // Parallel queries across all modules
     const [
@@ -198,7 +201,7 @@ router.get("/smart/status", requireAuth, async (req: any, res) => {
 });
 
 // ── GET /api/smart/analysis — full AI analysis with recommendations ────────────
-router.get("/smart/analysis", requireAuth, async (req: any, res) => {
+router.get("/smart/analysis", requireAuth, async (req: any, res): Promise<void> => {
   const userId = req.session.userId as number;
   try {
     // Reuse status data
@@ -208,7 +211,8 @@ router.get("/smart/analysis", requireAuth, async (req: any, res) => {
     const statusData = await statusRes.json() as any;
 
     if (!statusData?.citizen) {
-      return res.status(500).json({ error: "Failed to fetch status data" });
+      res.status(500).json({ error: "Failed to fetch status data" });
+      return;
     }
 
     const { citizen, modules, overallScore, systemStatus } = statusData;

@@ -113,16 +113,20 @@ if (pool) {
       read_receipts boolean NOT NULL DEFAULT true,
       updated_at timestamptz NOT NULL DEFAULT now()
     );
-  `).then(() => {
+  `).then(async () => {
     // Legacy admin bootstrap remains independent from citizen authentication.
     // It sends no mail and does not make email part of register/login.
+    // Bootstrap admin access: grant is_admin to emails listed in ADMIN_EMAILS
+    // (comma-separated). Needed because production DB writes can only happen
+    // from the running app — there is no manual SQL path to prod.
     const adminEmails = (process.env.ADMIN_EMAILS ?? "")
       .split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
     if (adminEmails.length && pool) {
-      return pool.query(
+      const result = await pool.query(
         `UPDATE users SET is_admin = true WHERE LOWER(email) = ANY($1) AND is_admin = false`,
         [adminEmails]
-      ).then(r => { if (r.rowCount) logger.info(`Granted admin to ${r.rowCount} account(s)`); });
+      );
+      if (result.rowCount) logger.info(`Granted admin to ${result.rowCount} account(s)`);
     }
     return undefined;
   }).catch((err) => logger.error(err, "Failed to create session table / auth indexes"));

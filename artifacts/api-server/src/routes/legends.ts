@@ -30,7 +30,7 @@ router.get("/legends/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const [legend] = await db.select({ domain: legendsTable.domain }).from(legendsTable)
-    .where(eq(legendsTable.id, legendId)).limit(1);
+    .where(eq(legendsTable.id, id)).limit(1);
   if (!legend) { res.status(404).json({ error: "Legend not found" }); return; }
   const debates = await db.select().from(legendDebatesTable)
     .where(eq(legendDebatesTable.legendId, id)).orderBy(desc(legendDebatesTable.createdAt)).limit(50);
@@ -51,7 +51,7 @@ router.post("/legends/:id/debate", async (req, res): Promise<void> => {
   if (hasBlockedKeyword(message)) {
     res.status(400).json({ error: "Message contains prohibited content." }); return;
   }
-  const mod = await moderateText(content);
+  const mod = await moderateText(message);
   if (!mod.ok) { res.status(400).json({ error: `Blocked (${mod.reason}).` }); return; }
 
   let username = "Anonymous";
