@@ -5,5 +5,11 @@ set -e
 # may lag behind package.json — never use --frozen-lockfile here.
 pnpm install --no-frozen-lockfile
 
-# NOTE: no drizzle-kit push step — this project applies schema via raw DDL that
-# runs on api-server startup (see artifacts/api-server/src/app.ts).
+# Apply committed, versioned migrations after merged code introduces a new table
+# or column. Migrations are non-interactive and never infer destructive changes
+# from legacy tables that intentionally live outside the Drizzle schema.
+if [ -n "${DATABASE_URL:-}" ]; then
+  pnpm --filter @workspace/db run migrate
+else
+  echo "Skipping dev database migrations: DATABASE_URL is not set."
+fi

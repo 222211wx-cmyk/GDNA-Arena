@@ -1,11 +1,12 @@
-import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
 
 export const dmRooms = pgTable("dm_rooms", {
   id: serial("id").primaryKey(),
   name: text("name"),                      // null for 1-on-1 DMs
   type: text("type").notNull().default("direct"), // direct | group
-  icon: text("icon").default("👥"),
+  icon: text("icon").default("💬"),
   createdBy: integer("created_by"),
+  revenue: numeric("revenue", { precision: 14, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -17,6 +18,7 @@ export const dmRoomMembers = pgTable("dm_room_members", {
   joinedAt: timestamp("joined_at").notNull().defaultNow(),
   // Per-member read cursor: messages created after this timestamp are "unread" for this member
   lastReadAt: timestamp("last_read_at"),
+  muted: boolean("muted").notNull().default(false),
 });
 
 export const dmMessages = pgTable("dm_messages", {

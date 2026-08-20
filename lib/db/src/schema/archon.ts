@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, jsonb, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 
 // ── Archon Initiation Sessions ────────────────────────────────────────────────
 export const archonSessionsTable = pgTable("archon_sessions", {
@@ -48,5 +48,8 @@ export const pillarCompletionsTable = pgTable("pillar_completions", {
   pillar:      text("pillar").notNull(),                    // "mens" | "vis" | "anima" | "legatum"
   dateKey:     text("date_key").notNull(),                  // UTC date e.g. "2026-08-13"
   streak:      integer("streak").notNull().default(1),      // streak at time of completion
-  createdAt:   timestamp("created_at").defaultNow(),
-});
+  createdAt:   timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  dailyCompletionUnique: unique("pillar_completions_user_id_pillar_date_key_key")
+    .on(t.userId, t.pillar, t.dateKey),
+}));

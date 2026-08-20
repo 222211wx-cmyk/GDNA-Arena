@@ -1,4 +1,5 @@
-import { pgTable, text, serial, integer, timestamp, boolean, date } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, serial, integer, timestamp, boolean, date, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,8 +16,20 @@ export const usersTable = pgTable("users", {
   lastDailyReward: timestamp("last_daily_reward", { withTimezone: true }),
   lastDmXpAt: timestamp("last_dm_xp_at", { withTimezone: true }), // DM XP cooldown cursor
   isAdmin: boolean("is_admin").notNull().default(false),
+  honorCount: integer("honor_count").notNull().default(0),
+  isMuted: boolean("is_muted").notNull().default(false),
+  honorTitle: text("honor_title").notNull().default("Citizen"),
+  isTrending: boolean("is_trending").notNull().default(false),
+  honorAlertSent: boolean("honor_alert_sent").notNull().default(false),
+  welcomeBroadcastSent: boolean("welcome_broadcast_sent").default(false),
+  imperialDecreeSent: boolean("imperial_decree_sent").default(false),
+  lastSeenAt: timestamp("last_seen_at").defaultNow(),
+  isStar: boolean("is_star").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  emailLowerUnique: uniqueIndex("users_email_lower_uniq").on(sql`lower(${t.email})`),
+  usernameLowerUnique: uniqueIndex("users_username_lower_uniq").on(sql`lower(${t.username})`),
+}));
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({
   id: true,

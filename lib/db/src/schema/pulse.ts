@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, numeric, uniqueIndex } from "drizzle-orm/pg-core";
 
 // Social posts feed
 export const pulsePosts = pgTable("pulse_posts", {
@@ -30,6 +30,7 @@ export const pulseEvents = pgTable("pulse_events", {
   icon: text("icon").notNull().default("🌍"),
   color: text("color").notNull().default("#C9A84C"),
   impactScore: integer("impact_score").notNull().default(50), // 0-100
+  notifiedLive: boolean("notified_live").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -39,4 +40,6 @@ export const pulsePostLikes = pgTable("pulse_post_likes", {
   postId: integer("post_id").notNull(),
   voterIp: text("voter_ip").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  postAndVoterUnique: uniqueIndex("uq_pulse_post_likes").on(t.postId, t.voterIp),
+}));

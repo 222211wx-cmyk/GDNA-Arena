@@ -1,4 +1,5 @@
-import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, serial, text, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 
 export const legendsTable = pgTable("legends", {
   id: serial("id").primaryKey(),
@@ -9,9 +10,9 @@ export const legendsTable = pgTable("legends", {
   score: integer("score").notNull().default(0),
   imageUrl: text("image_url"),
   peakYear: integer("peak_year"),
-  bio: text("bio"),           // jsonb stored as text, parsed in app
-  videos: text("videos"),    // jsonb
-  stats: text("stats"),      // jsonb
+  bio: jsonb("bio"),
+  videos: jsonb("videos").default(sql`'[]'::jsonb`),
+  stats: jsonb("stats"),
   isActive: boolean("is_active").notNull().default(true),
   lastUpdated: timestamp("last_updated").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -62,6 +63,7 @@ export const legendArenaEventsTable = pgTable("legend_arena_events", {
   externalUrl: text("external_url"),
   eventDate: text("event_date").notNull(),
   isLive: boolean("is_live").notNull().default(false),
+  notifiedLive: boolean("notified_live").notNull().default(false),
   icon: text("icon").notNull().default("🎓"),
   coinsReward: integer("coins_reward").notNull().default(50),
   createdAt: timestamp("created_at").notNull().defaultNow(),

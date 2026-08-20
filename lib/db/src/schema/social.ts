@@ -9,7 +9,9 @@ export const postReactions = pgTable("post_reactions", {
   voterIp:   text("voter_ip").notNull(),
   reaction:  text("reaction").notNull().default("❤️"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (t) => ({ uniq: unique().on(t.postId, t.voterIp) }));
+}, (t) => ({
+  uniq: unique("post_reactions_post_id_voter_ip_key").on(t.postId, t.voterIp),
+}));
 
 // Comments on feed posts
 export const postComments = pgTable("post_comments", {
@@ -27,7 +29,9 @@ export const userFollows = pgTable("user_follows", {
   followerId:  integer("follower_id").notNull(),
   followingId: integer("following_id").notNull(),
   createdAt:   timestamp("created_at").notNull().defaultNow(),
-}, (t) => ({ uniq: unique().on(t.followerId, t.followingId) }));
+}, (t) => ({
+  uniq: unique("user_follows_follower_id_following_id_key").on(t.followerId, t.followingId),
+}));
 
 // Saved / bookmarked posts
 export const savedPosts = pgTable("saved_posts", {
@@ -35,7 +39,9 @@ export const savedPosts = pgTable("saved_posts", {
   userId:    integer("user_id").notNull(),
   postId:    integer("post_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (t) => ({ uniq: unique().on(t.userId, t.postId) }));
+}, (t) => ({
+  uniq: unique("saved_posts_user_id_post_id_key").on(t.userId, t.postId),
+}));
 
 // Call history
 export const callHistory = pgTable("call_history", {

@@ -1,4 +1,5 @@
-import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, serial, text, integer, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
@@ -11,4 +12,8 @@ export const notifications = pgTable("notifications", {
   linkPath: text("link_path"),             // optional deep-link
   sourceRef: text("source_ref"),           // event-specific dedup key e.g. "pulse_events:42"
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  userSourceUnique: uniqueIndex("notifications_user_source_uniq")
+    .on(t.userId, t.sourceRef)
+    .where(sql`${t.sourceRef} IS NOT NULL`),
+}));
