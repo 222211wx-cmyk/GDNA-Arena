@@ -8,7 +8,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string, birthDate: string) => Promise<void>;
+  submitBirthDate: (birthDate: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateBalance: (newBalance: number) => void;
@@ -51,10 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
   };
 
-  const register = async (username: string, email: string, password: string) => {
-    const data = await apiPost<AuthUser>('/auth/register', { username, email, password });
+  const register = async (username: string, email: string, password: string, birthDate: string) => {
+    const data = await apiPost<AuthUser>('/auth/register', { username, email, password, birthDate });
     setUser(data);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
+  };
+
+  const submitBirthDate = async (birthDate: string) => {
+    await apiPost('/auth/birth-date', { birthDate });
+    await refreshUser();
   };
 
   const logout = async () => {
@@ -80,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, refreshUser, updateBalance }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, submitBirthDate, logout, refreshUser, updateBalance }}>
       {children}
     </AuthContext.Provider>
   );

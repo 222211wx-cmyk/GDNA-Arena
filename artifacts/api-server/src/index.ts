@@ -932,6 +932,7 @@ async function ensureTables() {
       )
     `);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_count" integer NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "birth_date" date`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_muted" boolean NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "honor_title" text NOT NULL DEFAULT 'Citizen'`);
     await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_trending" boolean NOT NULL DEFAULT false`);

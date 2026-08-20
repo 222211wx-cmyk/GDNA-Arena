@@ -132,7 +132,7 @@ export default function LegalPage() {
                 </h3>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   {[
-                    { label: lang==="ar" ? "الحد الأدنى للعمر" : "Minimum Age", value: `${country.minAge}+` },
+                    { label: lang==="ar" ? "سن قسم الألعاب" : "Games Minimum Age", value: "18+" },
                     { label: "GDPR", value: country.gdpr ? "✅" : "—" },
                     { label: "CCPA", value: country.ccpa ? "✅" : "—" },
                     { label: lang==="ar" ? "موافقة الكوكيز" : "Cookie Consent", value: country.cookieConsentRequired ? "✅ Required" : "Optional" },
@@ -166,8 +166,8 @@ export default function LegalPage() {
                 </LegalClause>
                 <LegalClause n={2} title={lang==="ar" ? "الأهلية" : "Eligibility"}>
                   {lang==="ar"
-                    ? `يجب أن يكون عمرك ${country.minAge} سنة على الأقل لاستخدام المنصة في ${country.name}.`
-                    : `You must be at least ${country.minAge} years old to use this platform in ${country.name} (${country.laws[0]}).`}
+                    ? "جميع الأعمار يمكنها استخدام المنصة. قسم الألعاب وحده يتطلب +18 حسب قوانين بلدك."
+                    : "The platform is open to all ages. Only the Games section requires users to be 18+ under local law."}
                 </LegalClause>
                 <LegalClause n={3} title={lang==="ar" ? "العملة الافتراضية" : "Virtual Currency"}>
                   {disclaimer}
@@ -239,7 +239,7 @@ export default function LegalPage() {
                     { name: "gdna_lang",    type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "تفضيل اللغة" : "Language preference", canReject: false },
                     { name: "gdna_country", type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "إعداد الامتثال القانوني" : "Legal compliance setup", canReject: false },
                     { name: "gdna_consent", type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "تتبع موافقتك" : "Consent tracking", canReject: false },
-                    { name: "gdna_age_ok",  type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "التحقق من العمر" : "Age verification", canReject: false },
+                    { name: "gdna_age_ok",  type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "التحقق من عمر قسم الألعاب" : "Games age verification", canReject: false },
                     { name: "_analytics",   type: lang==="ar" ? "اختياري" : "Analytics", purpose: lang==="ar" ? "تحسين الأداء" : "Performance improvement", canReject: true },
                   ].map(c => (
                     <div key={c.name} className="border border-gray-800 rounded-xl p-4 flex items-start justify-between gap-4">

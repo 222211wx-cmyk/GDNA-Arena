@@ -1,9 +1,50 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, sql, desc } from "drizzle-orm";
 import { db, usersTable, transactionsTable } from "@workspace/db";
 import { pushNotification } from "./notifications";
+import { isAdultForGames } from "../lib/age";
 
 const router: IRouter = Router();
+
+async function requireAdultPlayer(req: Request, res: Response): Promise<number | null> {
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({
+      code: "GAMES_LOGIN_REQUIRED",
+      error: "هذا القسم يتطلب +18 حسب قوانين بلدك. سجّل الدخول أولاً.",
+    });
+    return null;
+  }
+
+  const [user] = await db
+    .select({ birthDate: usersTable.birthDate })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  if (!user) {
+    res.status(401).json({ code: "GAMES_LOGIN_REQUIRED", error: "الحساب غير موجود" });
+    return null;
+  }
+
+  const isAdult = isAdultForGames(user.birthDate);
+  if (isAdult === null) {
+    res.status(428).json({
+      code: "GAMES_BIRTH_DATE_REQUIRED",
+      error: "هذا القسم يتطلب +18 حسب قوانين بلدك. سجّل تاريخ ميلادك أولاً.",
+    });
+    return null;
+  }
+  if (!isAdult) {
+    res.status(403).json({
+      code: "GAMES_18_PLUS",
+      error: "هذا القسم يتطلب +18 حسب قوانين بلدك",
+    });
+    return null;
+  }
+
+  return userId;
+}
 
 // ── Standard 3 games ──────────────────────────────────────────────────────────
 const GAMES: Record<string, { name: string; minReward: number; maxReward: number; winChance: number }> = {
@@ -14,13 +55,15 @@ const GAMES: Record<string, { name: string; minReward: number; maxReward: number
 
 // ── Standard play: 3 games ─────────────────────────────────────────────────────
 router.post("/games/:gameId/play", async (req, res): Promise<void> => {
-  const userId = req.session?.userId ?? null;
   const raw = Array.isArray(req.params.gameId) ? req.params.gameId[0] : req.params.gameId;
 
   if (raw === "globalstar") { res.status(404).json({ error: "Use /api/games/globalstar/tournament" }); return; }
 
   const game = GAMES[raw];
   if (!game) { res.status(404).json({ error: "Unknown game" }); return; }
+
+  const userId = await requireAdultPlayer(req, res);
+  if (!userId) return;
 
   // Outcome is always server-determined — never trust req.body.win
   const win = Math.random() < game.winChance;
@@ -34,9 +77,7 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
   let newBalance = coinsEarned;
   let newXp = xpEarned;
 
-  // Only persist if user is logged in
-  if (userId) {
-    const [updated] = await db
+  const [updated] = await db
       .update(usersTable)
       .set({
         balance:     sql`${usersTable.balance} + ${coinsEarned}`,
@@ -47,17 +88,17 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
       .where(eq(usersTable.id, userId))
       .returning({ balance: usersTable.balance, xp: usersTable.xp, username: usersTable.username });
 
-    await db.insert(transactionsTable).values({
+  await db.insert(transactionsTable).values({
       userId,
       amount: coinsEarned,
       type: win ? "win" : "participation",
       description: `${game.name} — ${win ? "Victory" : "Defeat"} (+${coinsEarned} coins)`,
     });
 
-    newBalance = updated.balance;
-    newXp = updated.xp;
-    req.log.info({ userId, game: raw, win, coinsEarned }, "Game played");
-    void pushNotification({
+  newBalance = updated.balance;
+  newXp = updated.xp;
+  req.log.info({ userId, game: raw, win, coinsEarned }, "Game played");
+  void pushNotification({
       userId,
       type: win ? "coins_earned" : "xp_earned",
       title: win ? `🎮 Victory in ${game.name}!` : `🎮 ${game.name} — Keep Going!`,
@@ -66,8 +107,7 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
         : `+${xpEarned} XP earned for participating. Every match counts.`,
       icon: win ? "🏆" : "🎮",
       linkPath: "/games",
-    });
-  }
+  });
 
   res.json({
     win, coinsEarned, xpEarned, newBalance, newXp,
@@ -77,7 +117,8 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
 
 // ── GlobalStar Tournament: غربل غربل ─────────────────────────────────────────
 router.post("/games/globalstar/tournament", async (req, res): Promise<void> => {
-  const userId = req.session?.userId ?? null;
+  const userId = await requireAdultPlayer(req, res);
+  if (!userId) return;
 
   // Weighted placement: ~12% top-10, 88% finish 11-100
   let placement: number;
@@ -101,9 +142,7 @@ router.post("/games/globalstar/tournament", async (req, res): Promise<void> => {
   let newXp = xpEarned;
   let username = "CITIZEN";
 
-  // Only persist if user is logged in
-  if (userId) {
-    const [updated] = await db
+  const [updated] = await db
       .update(usersTable)
       .set({
         balance:     sql`${usersTable.balance} + ${coinsEarned}`,
@@ -114,28 +153,27 @@ router.post("/games/globalstar/tournament", async (req, res): Promise<void> => {
       .where(eq(usersTable.id, userId))
       .returning({ balance: usersTable.balance, xp: usersTable.xp, username: usersTable.username });
 
-    await db.insert(transactionsTable).values({
+  await db.insert(transactionsTable).values({
       userId,
       amount: coinsEarned,
       type: isWin ? "win" : "participation",
       description: `GlobalStar Tournament — Rank #${placement} (+${coinsEarned} coins)`,
     });
 
-    newBalance = updated.balance;
-    newXp = updated.xp;
-    username = updated.username;
-    req.log.info({ userId, placement, coinsEarned, tier }, "GlobalStar tournament played");
+  newBalance = updated.balance;
+  newXp = updated.xp;
+  username = updated.username;
+  req.log.info({ userId, placement, coinsEarned, tier }, "GlobalStar tournament played");
 
-    const tierEmoji = tier === "champion" ? "🥇" : tier === "elite" ? "🥈" : tier === "legend" ? "🥉" : "⭐";
-    void pushNotification({
+  const tierEmoji = tier === "champion" ? "🥇" : tier === "elite" ? "🥈" : tier === "legend" ? "🥉" : "⭐";
+  void pushNotification({
       userId,
       type: "coins_earned",
       title: `${tierEmoji} Tournament — Rank #${placement}`,
       body: `+${coinsEarned} Coins & +${xpEarned} XP earned in the GlobalStar Tournament.`,
       icon: tierEmoji,
       linkPath: "/games/globalstar/ranking",
-    });
-  }
+  });
 
   // Pull top 10 leaderboard for display
   const top10 = await db

@@ -475,14 +475,6 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
     };
   }, []);
 
-  // Hide the global WhatsApp float while the fullscreen chat portal is open.
-  useEffect(() => {
-    if (variant !== "full" || !activeRoom) return;
-    const els = document.querySelectorAll<HTMLElement>(".whatsapp-float");
-    els.forEach(el => { el.dataset.prevDisplay = el.style.display; el.style.display = "none"; });
-    return () => els.forEach(el => { el.style.display = el.dataset.prevDisplay ?? ""; delete el.dataset.prevDisplay; });
-  }, [variant, activeRoom?.id]);
-
   // Keep the view pinned to the newest message when the mobile keyboard
   // opens/closes (visualViewport resize) so the screen doesn't "jump".
   useEffect(() => {

@@ -15,3 +15,4 @@
 - [AMIS unified messenger](amis-messenger.md) — one shared Messenger component (full/embedded/widget) powers all 3 chat surfaces; mute/settings in raw SQL columns; call-history logs only in useCall.
 - [Empire CLIPS rules](empire-clips.md) — Reels tab at /clips: min 1:00 / max 24h (French copy), sha256 first-owner publishing, GCS storage, req.ip-only view minting into PPO pool.
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.
+- [Games age policy](games-age-policy.md) — registration and all non-game sections are open to every age; only Games is 18+, enforced by persisted DOB on both UI and API.

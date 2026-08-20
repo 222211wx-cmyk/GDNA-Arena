@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, ActivityIndicator, Modal,
+  Platform, ActivityIndicator, Modal, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -126,16 +126,20 @@ const modalStyles = StyleSheet.create({
 export default function GamesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, updateBalance } = useAuth();
+  const { user, updateBalance, submitBirthDate } = useAuth();
   const [playing, setPlaying] = useState<string | null>(null);
   const [result, setResult] = useState<PlayResult | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [birthDate, setBirthDate] = useState('');
+  const [savingBirthDate, setSavingBirthDate] = useState(false);
+  const [ageError, setAgeError] = useState('');
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const s = styles(colors);
 
   const playGame = async (gameId: string) => {
-    if (!user || playing) return;
+    if (!user || user.isAdult !== true || playing) return;
+    setAgeError('');
     setPlaying(gameId);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
@@ -154,11 +158,31 @@ export default function GamesScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     } catch (e) {
+      const message = e instanceof Error ? e.message : '';
+      if (message.includes('هذا القسم يتطلب +18')) {
+        setAgeError('هذا القسم يتطلب +18 حسب قوانين بلدك');
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setPlaying(null);
     }
   };
+
+  const saveBirthDate = async () => {
+    setAgeError('');
+    setSavingBirthDate(true);
+    try {
+      await submitBirthDate(birthDate);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      setAgeError(e instanceof Error ? e.message : 'تعذر التحقق من العمر');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSavingBirthDate(false);
+    }
+  };
+
+  const canPlay = user?.isAdult === true;
 
   return (
     <View style={s.root}>
@@ -175,8 +199,56 @@ export default function GamesScreen() {
         </View>
         <Text style={s.subtitle}>Play · Win · Earn Crypto Coins</Text>
 
-        {/* Game cards */}
-        {GAMES.map(game => (
+        <View style={s.ageBanner}>
+          <Ionicons name="warning" size={18} color={colors.primary} />
+          <Text style={s.ageBannerText}>هذا القسم يتطلب +18 حسب قوانين بلدك</Text>
+        </View>
+
+        {!canPlay ? (
+          <View style={s.ageCard}>
+            <Ionicons
+              name={user?.isAdult === false ? 'lock-closed' : 'calendar'}
+              size={34}
+              color={user?.isAdult === false ? colors.destructive : colors.primary}
+            />
+            {user?.isAdult === false ? (
+              <>
+                <Text style={s.ageTitle}>الدخول إلى الألعاب ممنوع لأقل من 18 سنة</Text>
+                <Text style={s.ageBody}>باقي أقسام الإمبراطورية متاحة لك بدون شرط السن.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={s.ageTitle}>أدخل تاريخ ميلادك لمرة واحدة</Text>
+                <Text style={s.ageBody}>التسجيل متاح لجميع الأعمار. التحقق يخص قسم الألعاب فقط.</Text>
+                <TextInput
+                  style={s.birthDateInput}
+                  value={birthDate}
+                  onChangeText={setBirthDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="numbers-and-punctuation"
+                  autoCapitalize="none"
+                  maxLength={10}
+                  testID="games-birth-date"
+                />
+                <TouchableOpacity
+                  style={[s.verifyButton, (!birthDate || savingBirthDate) && s.verifyButtonDisabled]}
+                  onPress={saveBirthDate}
+                  disabled={!birthDate || savingBirthDate}
+                  activeOpacity={0.8}
+                  testID="verify-games-age"
+                >
+                  {savingBirthDate ? (
+                    <ActivityIndicator color={colors.primaryForeground} />
+                  ) : (
+                    <Text style={s.verifyButtonText}>تحقق من العمر</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+            {ageError ? <Text style={s.ageError}>{ageError}</Text> : null}
+          </View>
+        ) : GAMES.map(game => (
           <View key={game.id} style={[s.gameCard, { borderColor: game.color + '33' }]}>
             {/* Top accent line */}
             <View style={[s.accentLine, { backgroundColor: game.color }]} />
@@ -225,10 +297,12 @@ export default function GamesScreen() {
         ))}
 
         {/* Info banner */}
-        <View style={s.infoBanner}>
-          <MaterialCommunityIcons name="information" size={16} color={colors.mutedForeground} />
-          <Text style={s.infoText}>Each game awards coins and XP. Win to climb the empire leaderboard.</Text>
-        </View>
+        {canPlay ? (
+          <View style={s.infoBanner}>
+            <MaterialCommunityIcons name="information" size={16} color={colors.mutedForeground} />
+            <Text style={s.infoText}>Each game awards coins and XP. Win to climb the empire leaderboard.</Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <ResultModal
@@ -255,6 +329,46 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   balanceText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#ffd700' },
   subtitle: { fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', paddingHorizontal: 20, marginBottom: 24 },
+  ageBanner: {
+    marginHorizontal: 16, marginBottom: 16, padding: 14, flexDirection: 'row',
+    alignItems: 'center', gap: 8, backgroundColor: colors.secondary,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.primary,
+  },
+  ageBannerText: {
+    flex: 1, color: colors.primary, fontFamily: 'Inter_700Bold',
+    fontSize: 14, textAlign: 'right', writingDirection: 'rtl',
+  },
+  ageCard: {
+    marginHorizontal: 16, padding: 22, alignItems: 'center', gap: 12,
+    backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border,
+  },
+  ageTitle: {
+    color: colors.foreground, fontSize: 17, fontFamily: 'Inter_700Bold',
+    textAlign: 'center', writingDirection: 'rtl',
+  },
+  ageBody: {
+    color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular',
+    lineHeight: 20, textAlign: 'center', writingDirection: 'rtl',
+  },
+  birthDateInput: {
+    width: '100%', backgroundColor: colors.secondary, borderRadius: 10,
+    borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14,
+    paddingVertical: 12, fontSize: 15, fontFamily: 'Inter_400Regular',
+    color: colors.foreground, textAlign: 'center',
+  },
+  verifyButton: {
+    width: '100%', backgroundColor: colors.primary, borderRadius: 12,
+    minHeight: 48, alignItems: 'center', justifyContent: 'center',
+  },
+  verifyButtonDisabled: { opacity: 0.6 },
+  verifyButtonText: {
+    color: colors.primaryForeground, fontFamily: 'Inter_700Bold',
+    fontSize: 14, writingDirection: 'rtl',
+  },
+  ageError: {
+    color: colors.destructive, fontFamily: 'Inter_500Medium',
+    fontSize: 12, textAlign: 'center', writingDirection: 'rtl',
+  },
   gameCard: {
     marginHorizontal: 16, marginBottom: 16, backgroundColor: colors.card,
     borderRadius: 16, borderWidth: 1, overflow: 'hidden',

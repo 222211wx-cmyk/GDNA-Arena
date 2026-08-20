@@ -5,7 +5,7 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
-import { Lock, Mail, User, AlertCircle } from "lucide-react";
+import { Lock, Mail, User, AlertCircle, CalendarDays } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Register() {
@@ -14,6 +14,7 @@ export default function Register() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -22,7 +23,7 @@ export default function Register() {
     setError("");
     setIsLoading(true);
     try {
-      await register(username, email, password);
+      await register(username, email, password, birthDate);
       setLocation("/social");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -89,6 +90,27 @@ export default function Register() {
                     data-testid="input-email"
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="birthDate" className="text-xs uppercase tracking-widest text-muted-foreground">
+                  Date of Birth — all ages welcome
+                </Label>
+                <div className="relative">
+                  <CalendarDays className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
+                  <Input
+                    id="birthDate"
+                    type="date"
+                    value={birthDate}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
+                    required
+                    data-testid="input-birth-date"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Registration is open to every age. Only Games requires 18+.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-xs uppercase tracking-widest text-muted-foreground">Password</Label>

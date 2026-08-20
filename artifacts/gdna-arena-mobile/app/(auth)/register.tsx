@@ -10,6 +10,14 @@ import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
+function isValidBirthDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return value <= today && parsed.getUTCFullYear() >= 1900;
+}
+
 export default function RegisterScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -17,19 +25,21 @@ export default function RegisterScreen() {
 
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
 
   const handleRegister = async () => {
-    if (!username || !email || !password) { setError('All fields are required.'); return; }
+    if (!username || !email || !birthDate || !password) { setError('All fields are required.'); return; }
     if (username.length < 3) { setError('Username must be at least 3 characters.'); return; }
+    if (!isValidBirthDate(birthDate)) { setError('Use a valid birth date in YYYY-MM-DD format.'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setError('');
     setLoading(true);
     try {
-      await register(username.trim(), email.trim().toLowerCase(), password);
+      await register(username.trim(), email.trim().toLowerCase(), password, birthDate);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Registration failed');
@@ -86,6 +96,20 @@ export default function RegisterScreen() {
             autoCapitalize="none"
             autoCorrect={false}
           />
+
+          <Text style={s.label}>DATE OF BIRTH — ALL AGES WELCOME</Text>
+          <TextInput
+            style={s.input}
+            value={birthDate}
+            onChangeText={setBirthDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.mutedForeground}
+            keyboardType="numbers-and-punctuation"
+            autoCapitalize="none"
+            maxLength={10}
+            testID="input-birth-date"
+          />
+          <Text style={s.ageNote}>Registration is open to every age. Only Games requires 18+.</Text>
 
           <Text style={s.label}>PASSWORD</Text>
           <View style={s.passwordRow}>
@@ -159,6 +183,10 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   errorText: { fontSize: 13, color: colors.destructive, fontFamily: 'Inter_400Regular', flex: 1 },
   label: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, marginBottom: 6, letterSpacing: 1 },
+  ageNote: {
+    fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground,
+    lineHeight: 16, marginTop: -8, marginBottom: 16,
+  },
   input: {
     backgroundColor: colors.secondary, borderRadius: 10, borderWidth: 1, borderColor: colors.border,
     paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,

@@ -1,67 +1,63 @@
-/**
- * AGE GATE
- * Full-screen overlay for countries that require age verification.
- * BYPASSED on /login, /register, /legal — visitors must always be
- * able to register or log in even before completing age check.
- */
+/** Games-only 18+ gate. Every non-game section remains open to all ages. */
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useLegal } from "@/contexts/LegalContext";
 import { useLang } from "@/contexts/LangContext";
-
-// Paths that should never be blocked by the age gate
-const FREE_PATHS = ["/login", "/register", "/legal"];
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
+import { Label } from "@workspace/gdna-ds/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 
 export default function AgeGate() {
-  const { country, ageVerified, setAgeVerified } = useLegal();
+  const { country } = useLegal();
+  const { user, loading, refreshUser } = useAuth();
   const { lang } = useLang();
-  const [location] = useLocation();
-  const [denied, setDenied] = useState(false);
+  const [location, setLocation] = useLocation();
+  const [birthDate, setBirthDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const isRTL = lang === "ar";
 
-  // Never block login / register / legal
-  const isFree = FREE_PATHS.some(p => location === p || location.startsWith(p + "/"));
-  if (isFree) return null;
-
-  // Only show if country requires it and user hasn't verified yet
-  if (!country.ageGateRequired || ageVerified) return null;
+  const isGamesRoute = location === "/games" || location.startsWith("/games/");
+  if (!isGamesRoute || (!loading && user?.isAdult === true)) return null;
 
   const T = {
     title:  {
-      en: `Age Verification Required`,
-      ar: `التحقق من العمر مطلوب`,
-      fr: `Vérification d'âge requise`,
-      es: `Verificación de edad requerida`,
-      de: `Altersverifizierung erforderlich`,
+      en: "Games are 18+",
+      ar: "قسم الألعاب +18",
+      fr: "Jeux réservés aux 18+",
+      es: "Juegos solo para mayores de 18",
+      de: "Spiele nur ab 18",
     },
     body:   {
-      en: `This platform requires users to be at least ${country.minAge} years old in ${country.name} (${country.laws[0]}).`,
-      ar: `تشترط هذه المنصة أن يكون المستخدم بعمر ${country.minAge} سنة على الأقل في ${country.name} (${country.laws[0]}).`,
-      fr: `Cette plateforme exige que les utilisateurs aient au moins ${country.minAge} ans en ${country.name} (${country.laws[0]}).`,
-      es: `Esta plataforma requiere que los usuarios tengan al menos ${country.minAge} años en ${country.name} (${country.laws[0]}).`,
-      de: `Diese Plattform erfordert ein Mindestalter von ${country.minAge} Jahren in ${country.name} (${country.laws[0]}).`,
+      en: "This section requires 18+ under the laws of your country.",
+      ar: "هذا القسم يتطلب +18 حسب قوانين بلدك",
+      fr: "Cette section est réservée aux 18+ selon les lois de votre pays.",
+      es: "Esta sección requiere ser mayor de 18 años según las leyes de tu país.",
+      de: "Dieser Bereich ist gemäß den Gesetzen Ihres Landes erst ab 18 Jahren zugänglich.",
     },
-    yes:    {
-      en: `I am ${country.minAge}+ years old`,
-      ar: `عمري ${country.minAge} سنة أو أكثر`,
-      fr: `J'ai ${country.minAge} ans ou plus`,
-      es: `Tengo ${country.minAge} años o más`,
-      de: `Ich bin ${country.minAge}+ Jahre alt`,
+    dateLabel: {
+      en: "Enter your date of birth once",
+      ar: "أدخل تاريخ ميلادك لمرة واحدة",
+      fr: "Saisissez votre date de naissance une seule fois",
+      es: "Introduce tu fecha de nacimiento una vez",
+      de: "Geben Sie einmalig Ihr Geburtsdatum ein",
     },
-    no:     {
-      en: `I am under ${country.minAge}`,
-      ar: `عمري أقل من ${country.minAge}`,
-      fr: `J'ai moins de ${country.minAge} ans`,
-      es: `Tengo menos de ${country.minAge} años`,
-      de: `Ich bin unter ${country.minAge}`,
+    save: {
+      en: "Verify age",
+      ar: "تحقق من العمر",
+      fr: "Vérifier l'âge",
+      es: "Verificar edad",
+      de: "Alter prüfen",
     },
     denied: {
-      en: `Access restricted. This platform is not available for users under ${country.minAge} in ${country.name}.`,
-      ar: `الوصول مقيّد. هذه المنصة غير متاحة لمن هم دون ${country.minAge} سنة في ${country.name}.`,
-      fr: `Accès restreint. Cette plateforme n'est pas disponible pour les moins de ${country.minAge} ans en ${country.name}.`,
-      es: `Acceso restringido. Esta plataforma no está disponible para menores de ${country.minAge} años en ${country.name}.`,
-      de: `Zugang eingeschränkt. Diese Plattform ist für Nutzer unter ${country.minAge} Jahren in ${country.name} nicht verfügbar.`,
+      en: "Access to Games is blocked for users under 18. All other sections remain available.",
+      ar: "تم منع الدخول إلى الألعاب لمن هم أقل من 18 سنة. باقي الأقسام متاحة لك.",
+      fr: "L'accès aux Jeux est bloqué aux moins de 18 ans. Toutes les autres sections restent accessibles.",
+      es: "El acceso a Juegos está bloqueado para menores de 18 años. Las demás secciones siguen disponibles.",
+      de: "Der Spielezugang ist für unter 18-Jährige gesperrt. Alle anderen Bereiche bleiben verfügbar.",
     },
     loginHint: {
       en: `Already have an account?`,
@@ -91,10 +87,39 @@ export default function AgeGate() {
       es: `Crear cuenta`,
       de: `Konto erstellen`,
     },
+    back: {
+      en: "Back to the Empire",
+      ar: "الرجوع إلى الإمبراطورية",
+      fr: "Retour à l'Empire",
+      es: "Volver al Imperio",
+      de: "Zurück zum Imperium",
+    },
   };
 
   const t = (k: keyof typeof T): string =>
     (T[k] as Record<string, string>)[lang] ?? (T[k] as Record<string, string>)["en"];
+
+  const saveBirthDate = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      const response = await fetch("/api/auth/birth-date", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ birthDate }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Age verification failed");
+      await refreshUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Age verification failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isDenied = user?.isAdult === false;
 
   return (
     <div
@@ -104,40 +129,52 @@ export default function AgeGate() {
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="max-w-md w-full border border-yellow-500/30 rounded-2xl bg-gray-950 p-8 text-center"
+        className="max-w-md w-full"
       >
-        <div className="text-5xl mb-4">{country.flag}</div>
-        <h2 className="text-white font-black text-2xl mb-3">{t("title")}</h2>
-
-        {denied ? (
-          <p className="text-red-400 text-sm leading-relaxed mt-4">{t("denied")}</p>
-        ) : (
-          <>
-            <p className="text-gray-400 text-sm leading-relaxed mb-6">{t("body")}</p>
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => setAgeVerified(true)}
-                className="w-full bg-yellow-500 text-black font-bold py-3 rounded-xl hover:bg-yellow-400 transition-all"
-              >
-                {t("yes")}
-              </button>
-              <button
-                onClick={() => setDenied(true)}
-                className="w-full border border-gray-700 text-gray-400 font-semibold py-3 rounded-xl hover:border-gray-500 transition-all"
-              >
-                {t("no")}
-              </button>
-            </div>
-
-            {/* Auth shortcuts — always accessible below the gate */}
-            <div className="mt-6 pt-5 border-t border-gray-800 flex items-center justify-center gap-4 text-xs">
-              <span className="text-gray-600">{t("loginHint")}</span>
-              <a href="/login"    className="text-yellow-400 hover:text-yellow-300 font-semibold underline transition-colors">{t("loginLink")}</a>
-              <span className="text-gray-700">·</span>
-              <a href="/register" className="text-yellow-400 hover:text-yellow-300 font-semibold underline transition-colors">{t("registerLink")}</a>
-            </div>
-          </>
-        )}
+        <Card className="border-primary/30 bg-card text-center">
+          <CardHeader>
+            <div className="text-5xl">{country.flag}</div>
+            <CardTitle className="text-2xl font-black">{t("title")}</CardTitle>
+            <p className="text-primary font-bold">{t("body")}</p>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {loading ? (
+              <p className="text-muted-foreground text-sm">...</p>
+            ) : isDenied ? (
+              <>
+                <p className="text-destructive text-sm leading-relaxed">{t("denied")}</p>
+                <Button className="w-full" onClick={() => setLocation("/")}>{t("back")}</Button>
+              </>
+            ) : !user ? (
+              <>
+                <div className="flex flex-col gap-3">
+                  <Button onClick={() => setLocation("/login")}>{t("loginLink")}</Button>
+                  <Button variant="outline" onClick={() => setLocation("/register")}>{t("registerLink")}</Button>
+                  <Button variant="ghost" onClick={() => setLocation("/")}>{t("back")}</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2 text-start">
+                  <Label htmlFor="games-birth-date">{t("dateLabel")}</Label>
+                  <Input
+                    id="games-birth-date"
+                    type="date"
+                    value={birthDate}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(event) => setBirthDate(event.target.value)}
+                    data-testid="games-birth-date"
+                  />
+                </div>
+                {error && <p className="text-destructive text-sm">{error}</p>}
+                <Button className="w-full" disabled={!birthDate || saving} onClick={saveBirthDate}>
+                  {saving ? "..." : t("save")}
+                </Button>
+                <Button className="w-full" variant="ghost" onClick={() => setLocation("/")}>{t("back")}</Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </motion.div>
     </div>
   );

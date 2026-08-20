@@ -5,7 +5,6 @@ import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
-import { useLegal } from "@/contexts/LegalContext";
 import { useLocation, Link } from "wouter";
 import GameExitButton from "@/components/GameExitButton";
 import { Play, Trophy, X, Coins, Zap, Crown, Shield, Medal } from "lucide-react";
@@ -395,7 +394,6 @@ function TournamentModal({
 export default function Games() {
   const { user, refreshUser } = useAuth();
   const { t, lang } = useLang();
-  const { country } = useLegal();
   const [, setLocation] = useLocation();
   const [showTournament, setShowTournament] = useState(false);
 
@@ -429,18 +427,18 @@ export default function Games() {
   };
 
   const GAMING_WARN: Record<string, string> = {
-    en: "⚠️ Gaming regulations apply in your country. GDNA Arena coins are virtual only — no real monetary value. Play responsibly.",
-    ar: "⚠️ Gaming regulations of your country apply. GDNA Arena coins are virtual only — no real monetary value. Play responsibly.",
-    fr: "⚠️ Les réglementations sur les jeux s'appliquent dans votre pays. Les coins GDNA Arena sont virtuels uniquement — aucune valeur monétaire réelle.",
-    es: "⚠️ Las regulaciones de juegos aplican en tu país. Las monedas GDNA Arena son solo virtuales — sin valor monetario real.",
-    de: "⚠️ In Ihrem Land gelten Spielvorschriften. GDNA Arena Coins sind rein virtuell — kein realer Geldwert.",
+    en: "⚠️ This section requires 18+ under the laws of your country.",
+    ar: "⚠️ هذا القسم يتطلب +18 حسب قوانين بلدك",
+    fr: "⚠️ Cette section est réservée aux 18+ selon les lois de votre pays.",
+    es: "⚠️ Esta sección requiere ser mayor de 18 años según las leyes de tu país.",
+    de: "⚠️ Dieser Bereich ist gemäß den Gesetzen Ihres Landes erst ab 18 Jahren zugänglich.",
   };
 
   return (
     <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-7xl mx-auto space-y-12">
 
-      {/* Gaming warning — restricted countries only */}
-      {country.gamingWarning && (
+      {/* Games-only 18+ warning */}
+      {
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
           dir={lang === "ar" ? "rtl" : "ltr"}
           className="mt-4 border border-orange-500/30 bg-orange-950/30 rounded-xl px-5 py-3 flex items-start gap-3">
@@ -454,7 +452,7 @@ export default function Games() {
             </Link>
           </div>
         </motion.div>
-      )}
+      }
 
       {/* Header */}
       <div className="text-center space-y-4 pt-8">

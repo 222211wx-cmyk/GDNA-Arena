@@ -10,13 +10,14 @@ export interface AuthUser {
   wins: number;
   canClaimDaily: boolean;
   isAdmin?: boolean;
+  isAdult: boolean | null;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string, birthDate: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -58,12 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data);
   };
 
-  const register = async (username: string, email: string, password: string) => {
+  const register = async (username: string, email: string, password: string, birthDate: string) => {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ username, email, password }),
+      body: JSON.stringify({ username, email, password, birthDate }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Registration failed");

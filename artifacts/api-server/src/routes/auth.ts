@@ -5,6 +5,7 @@ import { db, usersTable } from "@workspace/db";
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
+import { isAdultForGames, normalizeBirthDate } from "../lib/age";
 
 // FINAL OWNER DECISION (Aug 2026): login is email + password ONLY.
 // No email verification codes, no Twilio/SMS, no external mail provider.
@@ -66,6 +67,7 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
     wins: user.wins,
     canClaimDaily: canClaimDaily(user.lastDailyReward),
     isAdmin: user.isAdmin === true,
+    isAdult: isAdultForGames(user.birthDate),
   };
 }
 
@@ -74,8 +76,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   const password = typeof req.body?.password === "string" ? req.body.password : "";
-  if (!username || !email || !password) {
-    res.status(400).json({ error: "الاسم والبريد وكلمة السر مطلوبون — Nom, email et mot de passe requis" });
+  const birthDate = normalizeBirthDate(req.body?.birthDate);
+  if (!username || !email || !password || !birthDate) {
+    res.status(400).json({ error: "الاسم والبريد وكلمة السر وتاريخ الميلاد مطلوبون — Tous les champs sont requis" });
     return;
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -129,7 +132,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   try {
     [user] = await db
       .insert(usersTable)
-      .values({ username, email, passwordHash })
+      .values({ username, email, passwordHash, birthDate })
       .returning();
   } catch (err: any) {
     if (err?.code === "23505" || err?.cause?.code === "23505") {
@@ -153,6 +156,49 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error(err, "Register error");
     res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
+  }
+});
+
+// Existing citizens set their birth date once. Registration remains open to
+// every age; the value is used only by the Games 18+ access rule.
+router.post("/auth/birth-date", async (req, res): Promise<void> => {
+  try {
+    const userId = req.session?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "سجّل الدخول أولاً — Login required" });
+      return;
+    }
+
+    const birthDate = normalizeBirthDate(req.body?.birthDate);
+    if (!birthDate) {
+      res.status(400).json({ error: "تاريخ الميلاد غير صالح — Date de naissance invalide" });
+      return;
+    }
+
+    const [existing] = await db
+      .select({ birthDate: usersTable.birthDate })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "الحساب غير موجود — Account not found" });
+      return;
+    }
+    if (existing.birthDate) {
+      res.status(409).json({ error: "تم تسجيل تاريخ الميلاد من قبل — Birth date already recorded" });
+      return;
+    }
+
+    await db
+      .update(usersTable)
+      .set({ birthDate })
+      .where(eq(usersTable.id, userId));
+
+    res.json({ saved: true, isAdult: isAdultForGames(birthDate) });
+  } catch (err) {
+    req.log.error(err, "Birth date registration error");
+    res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى" });
   }
 });
 
