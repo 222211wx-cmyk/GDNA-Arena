@@ -33,6 +33,18 @@ const BG_BAR  = "#111111";   // header / tab bars
 const BG_CHAT = "#050505";   // chat wallpaper
 const BUBBLE_OTHER = "#1e1e1e";
 
+// Server rate limit: 15 uploads / 10 minutes — mirror it client-side for a friendly message.
+const UPLOAD_BATCH_LIMIT = 15;
+
+// A file staged in the pre-send preview strip.
+interface PendingFile {
+  id: string;
+  file: File;
+  previewUrl: string | null;
+  status: "staged" | "uploading" | "error";
+  progress: number; // 0–100 (upload phase only)
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, [onDone]);
@@ -439,10 +451,12 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
   const [uploading,   setUploading]   = useState(false);
   const [showEmoji,   setShowEmoji]   = useState(false);
   const [emojiGroup,  setEmojiGroup]  = useState(0);
-  const [pending,     setPending]     = useState<{ file: File; previewUrl: string | null } | null>(null);
+  const [pending,     setPending]     = useState<PendingFile[]>([]);
   const [dragOver,    setDragOver]    = useState(false);
   const [menuMsgId,   setMenuMsgId]   = useState<number | null>(null);
   const [isMobile,    setIsMobile]    = useState(typeof window !== "undefined" && window.innerWidth < 640);
+  const pendingRef = useRef<PendingFile[]>([]);
+  useEffect(() => { pendingRef.current = pending; }, [pending]);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef  = useRef<HTMLInputElement>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
@@ -607,62 +621,126 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
     navigator.clipboard?.writeText(t).then(() => setToast(st.copied ?? "Copied!")).catch(() => {});
   }
 
-  async function uploadAndSend(file: File | Blob, fallbackName = "attachment") {
-    if (!activeRoom || uploading) return;
-    setUploading(true);
-    try {
+  // Upload one file/blob with real progress events (XHR — fetch has no upload progress).
+  function uploadWithProgress(file: File | Blob, fallbackName: string, onProgress: (pct: number) => void) {
+    return new Promise<{ ok: boolean; status: number; json: any }>((resolve) => {
       const fd = new FormData();
       fd.append("file", file, file instanceof File ? file.name : `${fallbackName}.webm`);
-      const r = await fetch(api("/api/messages/upload"), { method: "POST", body: fd, credentials: "include" });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        setToast(j.error ?? "فشل رفع الملف ❌");
-        return;
-      }
-      const j = await r.json() as { url: string; kind: string; name: string };
-      const body =
-        j.kind === "audio" ? { audioUrl: j.url, type: "audio" } :
-        j.kind === "video" ? { videoUrl: j.url, type: "video" } :
-        { fileUrl: j.url, type: "file", content: j.kind === "image" ? "[Image]" : `📁 ${j.name}` };
-      await sendMessage(body);
-    } finally { setUploading(false); }
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", api("/api/messages/upload"));
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+      xhr.onload = () => {
+        let json: any = {};
+        try { json = JSON.parse(xhr.responseText); } catch { /* non-JSON error body */ }
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json });
+      };
+      xhr.onerror = () => resolve({ ok: false, status: 0, json: {} });
+      xhr.send(fd);
+    });
   }
 
-  function stageFile(f: File) {
-    if (f.size > 25 * 1024 * 1024) { setToast("الحد الأقصى 25MB ⚠️"); return; }
-    if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
-    const isMedia = f.type.startsWith("image/") || f.type.startsWith("video/");
-    setPending({ file: f, previewUrl: isMedia ? URL.createObjectURL(f) : null });
+  async function uploadAndSend(file: File | Blob, fallbackName = "attachment", onProgress: (pct: number) => void = () => {}) {
+    if (!activeRoom) return false;
+    const r = await uploadWithProgress(file, fallbackName, onProgress);
+    if (!r.ok) {
+      setToast(r.status === 429
+        ? (r.json.error ?? (st.upload_limit ?? "تجاوزت الحد المسموح من الملفات — حاول بعد قليل ⏳"))
+        : (r.json.error ?? "فشل رفع الملف ❌"));
+      return false;
+    }
+    const j = r.json as { url: string; kind: string; name: string };
+    const body =
+      j.kind === "audio" ? { audioUrl: j.url, type: "audio" } :
+      j.kind === "video" ? { videoUrl: j.url, type: "video" } :
+      { fileUrl: j.url, type: "file", content: j.kind === "image" ? "[Image]" : `📁 ${j.name}` };
+    await sendMessage(body);
+    return true;
+  }
+
+  // Stage one or more files into the pre-send preview strip.
+  function stageFiles(files: File[]) {
+    if (!files.length) return;
+    const staged: PendingFile[] = [];
+    let tooBig = 0;
+    for (const f of files) {
+      if (f.size > 25 * 1024 * 1024) { tooBig++; continue; }
+      const isMedia = f.type.startsWith("image/") || f.type.startsWith("video/");
+      staged.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file: f,
+        previewUrl: isMedia ? URL.createObjectURL(f) : null,
+        status: "staged",
+        progress: 0,
+      });
+    }
+    if (tooBig) setToast("الحد الأقصى 25MB ⚠️");
+    setPending(prev => {
+      const room = UPLOAD_BATCH_LIMIT - prev.length;
+      if (staged.length > room) {
+        setToast(st.upload_limit_batch ?? `يمكن إرسال ${UPLOAD_BATCH_LIMIT} ملفاً كحد أقصى كل 10 دقائق 📎`);
+        staged.slice(room).forEach(p => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
+      }
+      return [...prev, ...staged.slice(0, Math.max(0, room))];
+    });
   }
 
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (f) stageFile(f);
+    stageFiles(files);
   }
 
+  // Upload every staged file sequentially with per-file progress, then clear.
   async function confirmPending() {
-    if (!pending) return;
-    const p = pending;
-    setPending(null);
-    if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-    await uploadAndSend(p.file);
+    if (uploading) return;
+    setUploading(true);
+    try {
+      // Snapshot the queue; new stages during upload wait for the next batch.
+      const queue = pendingRef.current.filter(p => p.status !== "uploading");
+      for (const item of queue) {
+        // Skip files the user removed while earlier ones were uploading.
+        if (!pendingRef.current.some(p => p.id === item.id)) continue;
+        setPending(prev => prev.map(p => p.id === item.id ? { ...p, status: "uploading", progress: 0 } : p));
+        const ok = await uploadAndSend(item.file, "attachment",
+          pct => setPending(prev => prev.map(p => p.id === item.id ? { ...p, progress: pct } : p)));
+        if (ok) {
+          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+          setPending(prev => prev.filter(p => p.id !== item.id));
+        } else {
+          setPending(prev => prev.map(p => p.id === item.id ? { ...p, status: "error", progress: 0 } : p));
+          // Rate-limited: stop hammering the server; remaining files stay staged.
+          break;
+        }
+      }
+    } finally { setUploading(false); }
+  }
+
+  function removePending(id: string) {
+    setPending(prev => {
+      const item = prev.find(p => p.id === id);
+      if (item?.status === "uploading") return prev; // can't cancel mid-flight
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter(p => p.id !== id);
+    });
   }
 
   function cancelPending() {
-    if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
-    setPending(null);
+    setPending(prev => {
+      prev.forEach(p => { if (p.previewUrl && p.status !== "uploading") URL.revokeObjectURL(p.previewUrl); });
+      return prev.filter(p => p.status === "uploading");
+    });
   }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault(); setDragOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f && activeRoom) stageFile(f);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length && activeRoom) stageFiles(files);
   }
 
   function onPaste(e: React.ClipboardEvent) {
-    const f = Array.from(e.clipboardData.files ?? [])[0];
-    if (f) { e.preventDefault(); stageFile(f); }
+    const files = Array.from(e.clipboardData.files ?? []);
+    if (files.length) { e.preventDefault(); stageFiles(files); }
   }
 
   async function startVoiceNote() {
@@ -855,33 +933,61 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
         <div ref={endRef} />
       </div>
 
-      {/* ── Attachment preview ── */}
-      {pending && (
-        <div style={{ padding: "10px 14px", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-          {pending.previewUrl && pending.file.type.startsWith("image/") ? (
-            <img src={pending.previewUrl} alt="preview" style={{ maxWidth: 110, maxHeight: 110, borderRadius: 8, border: `1px solid ${GOLD}30` }} />
-          ) : pending.previewUrl ? (
-            <video src={pending.previewUrl} style={{ maxWidth: 130, maxHeight: 110, borderRadius: 8, border: `1px solid ${GOLD}30` }} muted />
-          ) : (
-            <div style={{ background: "#1a1a1a", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#ddd" }}>📁 {pending.file.name}</div>
-          )}
-          <div style={{ flex: 1, fontSize: 12, color: "#888", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {pending.file.name} · {(pending.file.size / 1024 / 1024).toFixed(1)}MB
+      {/* ── Attachment preview strip (multi-file, per-file progress) ── */}
+      {pending.length > 0 && (
+        <div style={{ padding: "10px 14px", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+            {pending.map(p => (
+              <div key={p.id} style={{ position: "relative", flexShrink: 0, width: 96 }}>
+                <div style={{ width: 96, height: 96, borderRadius: 8, overflow: "hidden", border: `1px solid ${p.status === "error" ? "#ef4444" : `${GOLD}30`}`, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {p.previewUrl && p.file.type.startsWith("image/") ? (
+                    <img src={p.previewUrl} alt={p.file.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : p.previewUrl ? (
+                    <video src={p.previewUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
+                  ) : (
+                    <div style={{ fontSize: 11, color: "#ddd", padding: 6, textAlign: "center", overflow: "hidden", wordBreak: "break-all" }}>📁 {p.file.name.slice(0, 28)}</div>
+                  )}
+                  {p.status === "uploading" && (
+                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 8 }}>
+                      <span style={{ color: GOLD, fontSize: 13, fontWeight: 800 }}>{p.progress}%</span>
+                      <div style={{ width: 64, height: 4, borderRadius: 2, background: "#333" }}>
+                        <div style={{ width: `${p.progress}%`, height: "100%", borderRadius: 2, background: GOLD, transition: "width .2s" }} />
+                      </div>
+                    </div>
+                  )}
+                  {p.status === "error" && (
+                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: "#ef4444", fontSize: 12, fontWeight: 800 }}>
+                      ⚠️
+                    </div>
+                  )}
+                </div>
+                {p.status !== "uploading" && (
+                  <button onClick={() => removePending(p.id)} title="إلغاء"
+                    style={{ position: "absolute", top: -6, insetInlineEnd: -6, width: 22, height: 22, borderRadius: "50%", background: "#1a1a1a", border: `1px solid ${GOLD}30`, color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                    <X size={12} />
+                  </button>
+                )}
+                <div style={{ fontSize: 10, color: "#888", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.file.name} · {(p.file.size / 1024 / 1024).toFixed(1)}MB
+                </div>
+              </div>
+            ))}
           </div>
-          <button onClick={confirmPending} disabled={uploading} title={st.send}
-            style={{ width: 42, height: 42, borderRadius: "50%", background: GOLD, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Send size={18} />
-          </button>
-          <button onClick={cancelPending} title="إلغاء"
-            style={{ width: 34, height: 34, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#ef4444", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <X size={15} />
-          </button>
-        </div>
-      )}
-
-      {uploading && (
-        <div style={{ padding: "6px 14px", background: BG_BAR, fontSize: 12, color: GOLD, flexShrink: 0 }}>
-          ⏳ {st.uploading ?? "جاري رفع الملف…"}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+            <div style={{ flex: 1, fontSize: 12, color: uploading ? GOLD : "#888" }}>
+              {uploading
+                ? `⏳ ${st.uploading ?? "جاري رفع الملف…"} (${pending.filter(p => p.status === "uploading").length ? pending.findIndex(p => p.status === "uploading") + 1 : pending.length}/${pending.length})`
+                : `${pending.length} 📎`}
+            </div>
+            <button onClick={confirmPending} disabled={uploading || pending.every(p => p.status === "uploading")} title={st.send}
+              style={{ width: 42, height: 42, borderRadius: "50%", background: uploading ? "#1c1c1c" : GOLD, border: "none", color: uploading ? "#555" : "#000", cursor: uploading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Send size={18} />
+            </button>
+            <button onClick={cancelPending} disabled={uploading} title="إلغاء"
+              style={{ width: 34, height: 34, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#ef4444", cursor: uploading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: uploading ? 0.5 : 1 }}>
+              <X size={15} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -909,8 +1015,8 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
 
       {/* Hidden pickers */}
       <input ref={cameraRef}  type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
-      <input ref={galleryRef} type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
-      <input ref={fileRef}    type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
+      <input ref={galleryRef} type="file" multiple accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
+      <input ref={fileRef}    type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
 
       {/* ── Composer: 5 fixed buttons + big RTL textarea + send ── */}
       <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
