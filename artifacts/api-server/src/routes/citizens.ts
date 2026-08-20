@@ -125,6 +125,14 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
     [user.id]
   );
 
+  // Following list (latest 20)
+  const { rows: followingRows } = await pool.query(
+    `SELECT u.id, u.username, u.xp FROM "user_follows" uf
+     JOIN "users" u ON u.id = uf.following_id
+     WHERE uf.follower_id = $1 ORDER BY uf.created_at DESC LIMIT 20`,
+    [user.id]
+  );
+
   // Who honored this citizen (latest 5)
   const { rows: honorRows } = await pool.query(
     `SELECT u.username FROM "citizen_honor" ch
@@ -171,6 +179,7 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
     achievements,
     violations: violRows,
     followers: followerRows,
+    following: followingRows,
     earned: achievements.filter(a => a.earned).length,
     total: achievements.length,
   });

@@ -482,6 +482,7 @@ export default function CitizenPage() {
     citizen: Citizen; recentPosts: Post[]; achievements: Achievement[];
     violations: { reason: string; severity: string }[];
     followers: FollowerItem[];
+    following: FollowerItem[];
     earned: number; total: number;
   } | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -494,6 +495,7 @@ export default function CitizenPage() {
   const [followLoading,   setFollowLoading]   = useState(false);
   const [followerCount,   setFollowerCount]   = useState(0);
   const [showFollowers,   setShowFollowers]   = useState(false);
+  const [showFollowing,   setShowFollowing]   = useState(false);
   const [showCompare,     setShowCompare]     = useState(false);
 
   async function openDM(targetUsername: string) {
@@ -586,7 +588,7 @@ export default function CitizenPage() {
     </div>
   );
 
-  const { citizen, recentPosts, achievements, violations, followers, earned, total } = data;
+  const { citizen, recentPosts, achievements, violations, followers, following, earned, total } = data;
   const domMeta = DOMAIN_META[citizen.specialty] ?? DOMAIN_META.general;
   const winRate = citizen.gamesPlayed > 0 ? Math.round((citizen.wins / citizen.gamesPlayed) * 100) : 0;
   const joinDate = new Date(citizen.createdAt).toLocaleDateString("en", { month: "long", year: "numeric" });
@@ -667,10 +669,12 @@ export default function CitizenPage() {
                   <span className="text-muted-foreground">Followers</span>
                 </button>
                 <span className="text-muted-foreground/40">·</span>
-                <div className="flex items-center gap-1.5">
+                <button onClick={() => setShowFollowing(v => !v)}
+                  className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+                  style={{ color: showFollowing ? "#C9A84C" : undefined }}>
                   <span className="font-black" style={{ color: "#C9A84C" }}>{citizen.followingCount.toLocaleString()}</span>
                   <span className="text-muted-foreground">Following</span>
-                </div>
+                </button>
               </div>
 
               <XpBar xp={citizen.xp} />
@@ -788,6 +792,38 @@ export default function CitizenPage() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-3">No followers yet</p>
+            )}
+          </motion.div>
+        )}
+
+        {/* Following list — shown when toggled */}
+        {showFollowing && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            className="mt-4 p-4 rounded-2xl border"
+            style={{ borderColor: "#C9A84C30", background: "#C9A84C05" }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-black tracking-widest" style={{ color: "#C9A84C" }}>
+                👥 FOLLOWING ({citizen.followingCount.toLocaleString()})
+              </div>
+              <button onClick={() => setShowFollowing(false)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors">✕</button>
+            </div>
+            {following && following.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {following.map(f => (
+                  <Link key={f.id} href={`/citizen/${f.username}`}>
+                    <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-card border border-border/50 hover:border-primary/40 transition-colors cursor-pointer font-bold">
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-black"
+                        style={{ background: "#C9A84C" }}>
+                        {f.username.slice(0, 1).toUpperCase()}
+                      </span>
+                      {f.username}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-3">Not following anyone yet</p>
             )}
           </motion.div>
         )}
