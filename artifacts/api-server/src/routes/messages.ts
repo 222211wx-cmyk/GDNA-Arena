@@ -456,6 +456,62 @@ router.delete("/messages/rooms/:roomId/messages/:msgId", async (req, res): Promi
   res.json({ deleted: true });
 });
 
+// ── DELETE /messages/rooms/:roomId — leave/delete a conversation ──────────────
+router.delete("/messages/rooms/:roomId", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const roomId = parseInt(req.params.roomId);
+  if (isNaN(roomId)) { res.status(400).json({ error: "Invalid room ID" }); return; }
+
+  // Lock the room while changing its membership. This makes simultaneous exits
+  // safe: the last person leaving a direct conversation removes the now-orphaned
+  // room and its messages, while the other participant keeps their own membership
+  // and conversation until they choose to leave as well.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: roomRows } = await client.query<{ type: string }>(
+      `SELECT type FROM dm_rooms WHERE id = $1 FOR UPDATE`,
+      [roomId],
+    );
+    const room = roomRows[0];
+    if (!room) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Room not found" }); return;
+    }
+
+    const { rowCount } = await client.query(
+      `DELETE FROM dm_room_members WHERE room_id = $1 AND user_id = $2`,
+      [roomId, userId],
+    );
+    if (rowCount === 0) {
+      await client.query("ROLLBACK");
+      res.status(403).json({ error: "Access denied — not a member of this room" }); return;
+    }
+
+    let roomDeleted = false;
+    if (room.type === "direct") {
+      const { rows: remainingRows } = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM dm_room_members WHERE room_id = $1`,
+        [roomId],
+      );
+      if ((remainingRows[0]?.count ?? 0) === 0) {
+        await client.query(`DELETE FROM dm_messages WHERE room_id = $1`, [roomId]);
+        await client.query(`DELETE FROM dm_rooms WHERE id = $1`, [roomId]);
+        roomDeleted = true;
+      }
+    }
+
+    await client.query("COMMIT");
+    res.json({ deleted: true, roomDeleted });
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch { /* transaction already finished */ }
+    throw error;
+  } finally {
+    client.release();
+  }
+});
+
 // ── POST /messages/rooms/:id/mute — mute/unmute a conversation ────────────────
 router.post("/messages/rooms/:id/mute", async (req, res): Promise<void> => {
   const userId = req.session?.userId;

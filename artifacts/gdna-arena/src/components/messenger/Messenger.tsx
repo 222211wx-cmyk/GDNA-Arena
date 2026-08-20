@@ -83,15 +83,17 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, showToast }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
   onMuteChanged: (roomId: number, muted: boolean) => void;
+  onRoomDeleted: (roomId: number) => void;
   showToast: (m: string) => void;
 }) {
   const [settings, setSettings] = useState<MsgSettings | null>(null);
   const [muted, setMuted] = useState(activeRoom?.muted ?? false);
+  const [deletingConversation, setDeletingConversation] = useState(false);
 
   useEffect(() => { setMuted(activeRoom?.muted ?? false); }, [activeRoom?.muted]);
 
@@ -122,6 +124,26 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, showToast }: {
     if (r?.ok) { onMuteChanged(activeRoom.id, next); showToast(st.settings_saved ?? "Saved ✅"); }
   }
 
+  async function deleteConversation() {
+    if (!activeRoom || deletingConversation) return;
+    const confirmMessage = st.delete_conversation_confirm
+      ?? "Delete this conversation from your messages? The other member keeps their copy.";
+    if (!window.confirm(confirmMessage)) return;
+
+    setDeletingConversation(true);
+    const r = await fetch(api(`/api/messages/rooms/${activeRoom.id}`), {
+      method: "DELETE", credentials: "include",
+    }).catch(() => null);
+    if (r?.ok) {
+      onRoomDeleted(activeRoom.id);
+      showToast(st.conversation_deleted ?? "Conversation deleted");
+    } else {
+      const j = await r?.json().catch(() => ({} as { error?: string }));
+      showToast(j?.error ?? "❌");
+    }
+    setDeletingConversation(false);
+  }
+
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
       style={{ position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -142,6 +164,20 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, showToast }: {
             {activeRoom && (
               <ToggleRow label={`${st.mute_conv ?? "Mute conversation"} · ${activeRoom.type === "group" ? (activeRoom.name ?? "Group") : ""}`.trim()}
                 value={muted} onChange={toggleMute} />
+            )}
+            {activeRoom && (
+              <div className="mt-5 border-t border-border/40 pt-4">
+                <Button type="button" variant="destructive" className="w-full justify-start gap-2"
+                  disabled={deletingConversation} onClick={deleteConversation}>
+                  <Trash2 size={15} />
+                  {deletingConversation
+                    ? (st.deleting_conversation ?? "Deleting conversation…")
+                    : (st.delete_conversation ?? "Delete conversation")}
+                </Button>
+                <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">
+                  {st.delete_conversation_hint ?? "This removes the conversation from your messages only."}
+                </p>
+              </div>
             )}
             <div className="mt-4 flex items-center gap-1.5 text-muted-foreground text-[11px]">
               <Lock size={12} /> {st.server_encrypted ?? "Encrypted via server"}
@@ -511,6 +547,31 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
 
   useEffect(() => { loadRooms(); }, [loadRooms]);
 
+  // The shared Messenger can be mounted in more than one surface at once. When
+  // one instance deletes a room, every mounted instance must discard its stale
+  // local copy immediately rather than waiting for its next room-list refresh.
+  useEffect(() => {
+    const onRoomDeleted = (event: Event) => {
+      const roomId = (event as CustomEvent<{ roomId?: number }>).detail?.roomId;
+      if (typeof roomId !== "number") return;
+      setRooms(prev => prev.filter(room => room.id !== roomId));
+      if (activeRoomIdRef.current === roomId) {
+        activeRoomIdRef.current = null;
+        setActiveRoom(null);
+        setMessages([]);
+        setShowSettings(false);
+        setShowEmoji(false);
+        setMenuMsgId(null);
+      }
+    };
+    window.addEventListener("amis:room-deleted", onRoomDeleted);
+    return () => window.removeEventListener("amis:room-deleted", onRoomDeleted);
+  }, []);
+
+  const removeRoomFromAllSurfaces = useCallback((roomId: number) => {
+    window.dispatchEvent(new CustomEvent("amis:room-deleted", { detail: { roomId } }));
+  }, []);
+
   // ── Poll messages for active room ───────────────────────────────────────────
   useEffect(() => {
     if (!activeRoom) return;
@@ -833,6 +894,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
               setActiveRoom(prev => prev && prev.id === roomId ? { ...prev, muted } : prev);
               loadRooms();
             }}
+            onRoomDeleted={removeRoomFromAllSurfaces}
             showToast={setToast} />
         )}
       </AnimatePresence>
@@ -1212,7 +1274,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
           )}
           {showSettings && !activeRoom && (
             <SettingsPanel st={st} activeRoom={null} onClose={() => setShowSettings(false)}
-              onMuteChanged={() => loadRooms()} showToast={setToast} />
+              onMuteChanged={() => loadRooms()} onRoomDeleted={removeRoomFromAllSurfaces} showToast={setToast} />
           )}
         </AnimatePresence>
 
