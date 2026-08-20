@@ -11,6 +11,7 @@ import {
 import { pool as _pool } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
 import { isValidAttachmentUrl } from "./messages";
+import { pushNotification } from "./notifications";
 
 const pool = _pool!;
 const router: IRouter = Router();
@@ -195,6 +196,18 @@ router.post("/social/v2/follow/:username", async (req, res): Promise<void> => {
 
   try {
     await db.insert(userFollows).values({ followerId: userId, followingId: target.id });
+    const [follower] = await db.select({ username: usersTable.username })
+      .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (follower) {
+      await pushNotification({
+        userId: target.id,
+        type: "follow",
+        title: "New follower",
+        body: `${follower.username} started following you`,
+        icon: "👤",
+        linkPath: `/citizen/${encodeURIComponent(follower.username)}`,
+      });
+    }
     res.json({ following: true });
   } catch {
     res.json({ following: true, alreadyFollowing: true });

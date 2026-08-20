@@ -4,6 +4,7 @@ import {
   db, usersTable, pulsePosts, legendDebatesTable, legendWatchesTable, userFollows,
 } from "@workspace/db";
 import { pool as _pool } from "@workspace/db";
+import { pushNotification } from "./notifications";
 const pool = _pool!;
 
 const router: IRouter = Router();
@@ -215,11 +216,26 @@ router.post("/citizens/:username/follow", async (req, res): Promise<void> => {
 
   try {
     await db.insert(userFollows).values({ followerId: userId, followingId: targetId });
+    const { rows: followerRows } = await pool.query(
+      `SELECT username FROM "users" WHERE id = $1 LIMIT 1`,
+      [userId],
+    );
+    const followerUsername = followerRows[0]?.username;
+    if (followerUsername) {
+      await pushNotification({
+        userId: targetId,
+        type: "follow",
+        title: "New follower",
+        body: `${followerUsername} started following you`,
+        icon: "👤",
+        linkPath: `/citizen/${encodeURIComponent(followerUsername)}`,
+      });
+    }
     res.json({ isFollowing: true });
   } catch (err: any) {
     // Unique constraint violation = already following — treat as success
     if (err?.code === "23505") { res.json({ isFollowing: true, alreadyFollowing: true }); return; }
-    console.error("[FOLLOW] insert error:", err);
+    req.log.error({ err }, "Failed to follow citizen");
     res.status(500).json({ error: "Failed to follow citizen" });
   }
 });
