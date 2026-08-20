@@ -54,12 +54,12 @@ const PORTALS = [
 ];
 
 const HOME_BOTS = [
-  { name: "GDN-SMART", icon: "🧠", description: "مساعدك الذكي لتحديات اليوم" },
-  { name: "GDN-FIT", icon: "💪", description: "تحديات الرياضة والقوة" },
-  { name: "GDN-CINE", icon: "🎬", description: "تحديات السينما والأساطير" },
-  { name: "GDN-ARENA", icon: "⚔️", description: "تحديات الساحة والمنافسة" },
-  { name: "GDN-TO", icon: "🤝", description: "تحديات التواصل والتأثير" },
-  { name: "GDN-MUSIC", icon: "🎵", description: "تحديات الموسيقى والإبداع" },
+  { name: "GDN-SMART", icon: "🧠", description: "المساعد الذكي", path: "/fortress" },
+  { name: "GDN-FIT", icon: "💪", description: "المدرب الرياضي", path: "/sport" },
+  { name: "GDN-CINE", icon: "🎬", description: "السينما", path: "/cinema" },
+  { name: "GDN-ARENA", icon: "⚔️", description: "الألعاب", path: "/games" },
+  { name: "GDN-TO", icon: "🌐", description: "الترجمة", path: "/fortress" },
+  { name: "GDN-MUSIC", icon: "🎵", description: "الموسيقى", path: "/music" },
 ];
 
 // ── Animated green grid background ───────────────────────────────────────────
@@ -414,7 +414,7 @@ export default function Home() {
               <Link href="/hub">
                 <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
                   style={{ background: "#22C55E", color: "#000" }}>
-                  ENTER THE HUB
+                  ادخل إلى المركز
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </Link>
@@ -431,17 +431,20 @@ export default function Home() {
             <p className="mb-3 text-center text-xs font-bold tracking-[0.2em] text-primary">بوتات المركز الذكي</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {HOME_BOTS.map((bot) => (
-                <Card key={bot.name} className="border-primary/25 bg-card/70 text-start shadow-none">
-                  <CardContent className="flex min-h-32 flex-col gap-2 p-4">
-                    <div className="flex items-center gap-2">
-                      <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-lg" aria-hidden="true">
+                <Card key={bot.name} className="overflow-hidden border-primary/25 bg-card/70 text-start shadow-none transition-transform duration-200 hover:-translate-y-1 hover:border-primary/50">
+                  <CardContent className="flex min-h-48 flex-col gap-3 p-3">
+                    <div className="relative grid h-20 place-items-center overflow-hidden rounded-lg border border-border/60 bg-gradient-to-br from-primary/25 via-primary/10 to-background">
+                      <span className="absolute inset-0 bg-[radial-gradient(circle_at_center,hsl(var(--primary)/0.25),transparent_65%)]" aria-hidden="true" />
+                      <span className="relative text-4xl drop-shadow-sm" role="img" aria-label={bot.description}>
                         {bot.icon}
                       </span>
-                      <h2 className="text-sm font-black tracking-wide text-foreground" dir="ltr">{bot.name}</h2>
                     </div>
-                    <p className="min-h-5 text-xs font-medium text-muted-foreground">{bot.description}</p>
+                    <div className="min-w-0">
+                      <h2 className="truncate text-sm font-black tracking-wide text-foreground" dir="ltr">{bot.name}</h2>
+                      <p className="mt-1 truncate text-xs font-medium text-muted-foreground">{bot.description}</p>
+                    </div>
                     <Button asChild size="sm" className="mt-auto w-full font-bold">
-                      <Link href="/fortress">ابدأ التحدي</Link>
+                      <Link href={bot.path}>ابدأ</Link>
                     </Button>
                   </CardContent>
                 </Card>
