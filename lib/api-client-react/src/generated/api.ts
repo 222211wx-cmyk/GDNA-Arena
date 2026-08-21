@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ArenaWithdrawInput,
+  ArenaWithdrawResponse,
   AuthUser,
   DailyRewardResult,
   ErrorResponse,
@@ -579,6 +581,76 @@ export const usePlayGame = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getPlayGameMutationOptions(options));
+    }
+
+export const getSendArenaWithdrawRequestUrl = () => {
+
+
+
+
+  return `/api/messages/arena-withdraw`
+}
+
+/**
+ * @summary Send a game prize request to Arena administration
+ */
+export const sendArenaWithdrawRequest = async (arenaWithdrawInput: ArenaWithdrawInput, options?: RequestInit): Promise<ArenaWithdrawResponse> => {
+
+  return customFetch<ArenaWithdrawResponse>(getSendArenaWithdrawRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(arenaWithdrawInput)
+  }
+);}
+
+
+
+
+export const getSendArenaWithdrawRequestMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendArenaWithdrawRequest>>, TError,{data: BodyType<ArenaWithdrawInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendArenaWithdrawRequest>>, TError,{data: BodyType<ArenaWithdrawInput>}, TContext> => {
+
+const mutationKey = ['sendArenaWithdrawRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendArenaWithdrawRequest>>, {data: BodyType<ArenaWithdrawInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendArenaWithdrawRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendArenaWithdrawRequestMutationResult = NonNullable<Awaited<ReturnType<typeof sendArenaWithdrawRequest>>>
+    export type SendArenaWithdrawRequestMutationBody = BodyType<ArenaWithdrawInput>
+    export type SendArenaWithdrawRequestMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Send a game prize request to Arena administration
+ */
+export const useSendArenaWithdrawRequest = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendArenaWithdrawRequest>>, TError,{data: BodyType<ArenaWithdrawInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendArenaWithdrawRequest>>,
+        TError,
+        {data: BodyType<ArenaWithdrawInput>},
+        TContext
+      > => {
+      return useMutation(getSendArenaWithdrawRequestMutationOptions(options));
     }
 
 export const getClaimDailyRewardUrl = () => {

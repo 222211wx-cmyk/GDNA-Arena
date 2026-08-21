@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Check, Share2, Globe, Crown, Star, ChevronDown } from "lucide-react";
+import { Copy, Check, Globe, Crown, Star, ChevronDown } from "lucide-react";
 
 // ─── رابط الموقع ──────────────────────────────────────────────────────────────
 const SITE_URL = "https://gdna-arena.replit.app";
@@ -333,11 +333,6 @@ export default function InvitePage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const shareWhatsApp = () => {
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(url, "_blank");
-  };
-
   const selectedField = FIELDS.find(f => f.key === field)!;
   const isRTL = lang === "ar";
 
@@ -489,19 +484,13 @@ export default function InvitePage() {
         </AnimatePresence>
 
         {/* ── Action buttons ── */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <button onClick={copyMessage}
             className="flex items-center justify-center gap-2 py-3.5 text-sm font-black uppercase tracking-wider transition-all active:scale-95"
             style={{ background: "#C9A84C", color: "#000" }}>
             {copied
               ? <><Check className="w-4 h-4" /> تم النسخ!</>
               : <><Copy className="w-4 h-4" /> نسخ الرسالة</>}
-          </button>
-          <button onClick={shareWhatsApp}
-            className="flex items-center justify-center gap-2 py-3.5 text-sm font-black uppercase tracking-wider transition-all active:scale-95"
-            style={{ background: "#25D366", color: "#000" }}>
-            <Share2 className="w-4 h-4" />
-            واتساب
           </button>
         </div>
 

@@ -8,10 +8,20 @@ import { gcsChatStorage, getChatObject, chatObjectStream, migrateLegacyChatUploa
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
 import { broadcastMessageToRoom } from "../lib/signaling";
+import {
+  SendArenaWithdrawRequestBody,
+  SendArenaWithdrawRequestResponse,
+} from "@workspace/api-zod";
 
 const router: IRouter = Router();
 const pool = _pool!;
 const CHAT_MODERATION_BUDGET_MS = 300;
+const ARENA_WITHDRAW_GAMES = {
+  "neon-racer": "Neon Racer",
+  "crypto-clash": "Crypto Clash",
+  "arena-strike": "Arena Strike",
+  globalstar: "GlobalStar",
+} as const;
 
 // Direct messages must not wait on a variable-latency external moderation
 // request before appearing in the active conversation. validateContent performs
@@ -284,6 +294,118 @@ router.post("/messages/rooms", async (req, res): Promise<void> => {
     }).returning();
     await db.insert(dmRoomMembers).values({ roomId: room.id, userId: me.id, username: me.username });
     res.status(201).json({ room });
+  }
+});
+
+// ── POST /messages/arena-withdraw — send a fixed prize request to Arena admin ─
+router.post("/messages/arena-withdraw", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  const parsed = SendArenaWithdrawRequestBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid game" });
+    return;
+  }
+
+  const [me] = await db.select().from(usersTable)
+    .where(eq(usersTable.id, userId)).limit(1);
+  if (!me) { res.status(401).json({ error: "Login required" }); return; }
+
+  const [arenaAdmin] = await db.select().from(usersTable)
+    .where(and(eq(usersTable.isAdmin, true), ne(usersTable.id, userId)))
+    .orderBy(usersTable.id)
+    .limit(1);
+  if (!arenaAdmin) {
+    res.status(503).json({ error: "إدارة Arena غير متاحة حالياً" });
+    return;
+  }
+
+  const content = `طلب جائزة من ${ARENA_WITHDRAW_GAMES[parsed.data.gameId]}`;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // Serialize find-or-create by the canonical citizen/admin pair so parallel
+    // requests cannot split the same direct conversation into duplicate rooms.
+    const lockKeyA = Math.min(userId, arenaAdmin.id);
+    const lockKeyB = Math.max(userId, arenaAdmin.id);
+    await client.query(
+      "SELECT pg_advisory_xact_lock($1::integer, $2::integer)",
+      [lockKeyA, lockKeyB],
+    );
+
+    const existingRoom = await client.query<{ id: number }>(
+      `SELECT r.id
+       FROM dm_rooms r
+       JOIN dm_room_members m ON m.room_id = r.id
+       WHERE r.type = 'direct'
+       GROUP BY r.id
+       HAVING COUNT(*) = 2
+          AND COUNT(DISTINCT m.user_id) FILTER (
+            WHERE m.user_id = $1 OR m.user_id = $2
+          ) = 2
+       ORDER BY r.id
+       LIMIT 1`,
+      [userId, arenaAdmin.id],
+    );
+
+    let roomId = existingRoom.rows[0]?.id;
+    if (!roomId) {
+      const createdRoom = await client.query<{ id: number }>(
+        `INSERT INTO dm_rooms (type, created_by)
+         VALUES ('direct', $1)
+         RETURNING id`,
+        [userId],
+      );
+      roomId = createdRoom.rows[0].id;
+
+      await client.query(
+        `INSERT INTO dm_room_members (room_id, user_id, username)
+         VALUES ($1, $2, $3), ($1, $4, $5)`,
+        [roomId, me.id, me.username, arenaAdmin.id, arenaAdmin.username],
+      );
+    }
+
+    const insertedMessage = await client.query(
+      `INSERT INTO dm_messages (room_id, user_id, username, content, type)
+       VALUES ($1, $2, $3, $4, 'text')
+       RETURNING
+         id,
+         room_id AS "roomId",
+         user_id AS "userId",
+         username,
+         content,
+         audio_url AS "audioUrl",
+         video_url AS "videoUrl",
+         file_url AS "fileUrl",
+         type,
+         is_read AS "isRead",
+         created_at AS "createdAt"`,
+      [roomId, userId, me.username, content],
+    );
+
+    await client.query("COMMIT");
+
+    void broadcastMessageToRoom(roomId, insertedMessage.rows[0]).catch(error =>
+      req.log.error({ error, roomId }, "Arena withdrawal message realtime broadcast failed"));
+
+    res.status(201).json(SendArenaWithdrawRequestResponse.parse({
+      ok: true,
+      roomId,
+      content,
+    }));
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      req.log.error({ rollbackError }, "Arena withdrawal transaction rollback failed");
+    }
+    req.log.error({ error, userId }, "Arena withdrawal request failed");
+    res.status(500).json({ error: "تعذر إرسال الطلب" });
+  } finally {
+    client.release();
   }
 });
 

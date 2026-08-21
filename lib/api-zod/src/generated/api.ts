@@ -125,6 +125,20 @@ export const PlayGameResponse = zod.object({
 
 
 /**
+ * @summary Send a game prize request to Arena administration
+ */
+export const SendArenaWithdrawRequestBody = zod.object({
+  "gameId": zod.enum(['neon-racer', 'crypto-clash', 'arena-strike', 'globalstar'])
+})
+
+export const SendArenaWithdrawRequestResponse = zod.object({
+  "ok": zod.boolean(),
+  "roomId": zod.number(),
+  "content": zod.string()
+})
+
+
+/**
  * @summary Claim daily login reward
  */
 export const ClaimDailyRewardResponse = zod.object({

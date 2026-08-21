@@ -10,7 +10,7 @@ import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 
-export default function AgeGate() {
+export default function AgeGate({ active }: { active?: boolean }) {
   const { country } = useLegal();
   const { user, loading, refreshUser } = useAuth();
   const { lang } = useLang();
@@ -20,8 +20,8 @@ export default function AgeGate() {
   const [error, setError] = useState("");
   const isRTL = lang === "ar";
 
-  const isGamesRoute = location === "/games" || location.startsWith("/games/");
-  if (!isGamesRoute || (!loading && user?.isAdult === true)) return null;
+  const isActiveGame = active ?? location.startsWith("/games/");
+  if (!isActiveGame || (!loading && user?.isAdult === true)) return null;
 
   const T = {
     title:  {

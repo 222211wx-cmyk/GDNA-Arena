@@ -11,6 +11,7 @@ tags:
   - name: auth
   - name: leaderboard
   - name: games
+  - name: messages
   - name: rewards
   - name: wallet
   - name: globalstar
@@ -149,6 +150,49 @@ paths:
                 $ref: "#/components/schemas/PlayResult"
         "401":
           description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /messages/arena-withdraw:
+    post:
+      operationId: sendArenaWithdrawRequest
+      tags: [messages]
+      summary: Send a game prize request to Arena administration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArenaWithdrawInput"
+      responses:
+        "201":
+          description: Request sent to Arena administration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArenaWithdrawResponse"
+        "400":
+          description: Invalid game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Arena administration is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Request could not be sent
           content:
             application/json:
               schema:
@@ -469,6 +513,25 @@ components:
         message:
           type: string
       required: [win, coinsEarned, xpEarned, newBalance, newXp, message]
+
+    ArenaWithdrawInput:
+      type: object
+      properties:
+        gameId:
+          type: string
+          enum: [neon-racer, crypto-clash, arena-strike, globalstar]
+      required: [gameId]
+
+    ArenaWithdrawResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        roomId:
+          type: integer
+        content:
+          type: string
+      required: [ok, roomId, content]
 
     DailyRewardResult:
       type: object

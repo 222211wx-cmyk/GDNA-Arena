@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Coins, Zap, ArrowLeft, Trophy, X, Zap as Lightning } from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
+import GameWarning from "@/components/GameWarning";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -113,6 +114,10 @@ export default function NeonRacerGame() {
         </button>
         <div className="flex-1" />
         <div className="font-mono text-xs text-cyan-400/40 tracking-[0.3em]">NEON RACER</div>
+      </div>
+
+      <div className="px-4 pt-4">
+        <GameWarning />
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 select-none">

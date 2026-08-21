@@ -69,6 +69,26 @@ export interface PlayResult {
   message: string;
 }
 
+export type ArenaWithdrawInputGameId = typeof ArenaWithdrawInputGameId[keyof typeof ArenaWithdrawInputGameId];
+
+
+export const ArenaWithdrawInputGameId = {
+  'neon-racer': 'neon-racer',
+  'crypto-clash': 'crypto-clash',
+  'arena-strike': 'arena-strike',
+  globalstar: 'globalstar',
+} as const;
+
+export interface ArenaWithdrawInput {
+  gameId: ArenaWithdrawInputGameId;
+}
+
+export interface ArenaWithdrawResponse {
+  ok: boolean;
+  roomId: number;
+  content: string;
+}
+
 export interface DailyRewardResult {
   coinsEarned: number;
   newBalance: number;

@@ -3,11 +3,15 @@ import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
+import { useSendArenaWithdrawRequest } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { useLocation, Link } from "wouter";
 import GameExitButton from "@/components/GameExitButton";
-import { Play, Trophy, X, Coins, Zap, Crown, Shield, Medal } from "lucide-react";
+import GameWarning from "@/components/GameWarning";
+import AgeGate from "@/components/legal/AgeGate";
+import { Play, Trophy, X, Coins, Zap, Crown, Shield, Medal, MessageSquare } from "lucide-react";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -53,7 +57,9 @@ const GAMES = [
     isTournament: true, isExternal: false,
     color: "#C9A84C",
   },
-];
+] as const;
+
+type ArenaGameId = (typeof GAMES)[number]["id"];
 
 // ── 99 fake tournament players ─────────────────────────────────────────────────
 const CITIZEN_POOL = [
@@ -182,6 +188,7 @@ function TournamentModal({
         </div>
 
         <div className="p-6 space-y-5 min-h-64">
+          <GameWarning />
 
           {/* ── ENTERING ───────────────────────────────────────────────── */}
           {phase === "entering" && (
@@ -394,8 +401,10 @@ function TournamentModal({
 export default function Games() {
   const { user, refreshUser } = useAuth();
   const { t, lang } = useLang();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [showTournament, setShowTournament] = useState(false);
+  const arenaWithdraw = useSendArenaWithdrawRequest();
 
   const saveRecentMatch = (entry: {
     game: string; win: boolean; coins: number; xp: number; time: string;
@@ -412,6 +421,32 @@ export default function Games() {
     setLocation(`/games/${gameId}`);
   };
 
+  const handleArenaWithdraw = (gameId: ArenaGameId) => {
+    if (!user) {
+      setLocation("/login");
+      return;
+    }
+
+    arenaWithdraw.mutate(
+      { data: { gameId } },
+      {
+        onSuccess: (data) => {
+          toast({
+            title: "تم إرسال الطلب إلى Arena",
+            description: data.content,
+          });
+        },
+        onError: () => {
+          toast({
+            title: "تعذر إرسال الطلب",
+            description: "حاول مرة أخرى من قسم الألعاب.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  };
+
   const handleTournamentComplete = async (tournamentCoins?: number, tournamentXp?: number, placement?: number, gameTitle?: string) => {
     if (tournamentCoins !== undefined) {
       saveRecentMatch({
@@ -426,33 +461,8 @@ export default function Games() {
     setShowTournament(false);
   };
 
-  const GAMING_WARN: Record<string, string> = {
-    en: "⚠️ This section requires 18+ under the laws of your country.",
-    ar: "⚠️ هذا القسم يتطلب +18 حسب قوانين بلدك",
-    fr: "⚠️ Cette section est réservée aux 18+ selon les lois de votre pays.",
-    es: "⚠️ Esta sección requiere ser mayor de 18 años según las leyes de tu país.",
-    de: "⚠️ Dieser Bereich ist gemäß den Gesetzen Ihres Landes erst ab 18 Jahren zugänglich.",
-  };
-
   return (
     <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-7xl mx-auto space-y-12">
-
-      {/* Games-only 18+ warning */}
-      {
-        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-          dir={lang === "ar" ? "rtl" : "ltr"}
-          className="mt-4 border border-orange-500/30 bg-orange-950/30 rounded-xl px-5 py-3 flex items-start gap-3">
-          <span className="text-orange-400 text-lg shrink-0">⚠️</span>
-          <div>
-            <p className="text-orange-300 text-sm leading-relaxed">
-              {GAMING_WARN[lang] ?? GAMING_WARN.en}
-            </p>
-            <Link href="/legal" className="text-orange-400/70 hover:text-orange-300 text-xs underline mt-1 inline-block transition-colors">
-              View your legal rights →
-            </Link>
-          </div>
-        </motion.div>
-      }
 
       {/* Header */}
       <div className="text-center space-y-4 pt-8">
@@ -547,6 +557,16 @@ export default function Games() {
                     )}
                   </Button>
 
+                  <Button
+                    variant="outline"
+                    className="w-full h-11 font-bold tracking-wider"
+                    disabled={arenaWithdraw.isPending}
+                    onClick={() => handleArenaWithdraw(game.id)}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    ارسال ويد ارينا
+                  </Button>
+
                   {/* GlobalStar: link to voting hall */}
                   {game.isTournament && (
                     <Link href="/games/globalstar/ranking">
@@ -564,7 +584,7 @@ export default function Games() {
 
       {/* Tournament Modal */}
       <AnimatePresence>
-        {showTournament && (
+        {showTournament && user?.isAdult === true && (
           <>
             <TournamentModal
               user={user}
@@ -576,6 +596,7 @@ export default function Games() {
           </>
         )}
       </AnimatePresence>
+      <AgeGate active={showTournament} />
     </div>
   );
 }

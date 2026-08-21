@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './arenaWithdrawInput';
+export * from './arenaWithdrawInputGameId';
+export * from './arenaWithdrawResponse';
 export * from './authUser';
 export * from './dailyRewardResult';
 export * from './errorResponse';
