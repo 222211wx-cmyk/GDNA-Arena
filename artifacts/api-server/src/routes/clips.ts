@@ -5,10 +5,11 @@ import multer from "multer";
 import { pool } from "@workspace/db";
 import { objectStorageClient } from "../lib/chatStorage";
 import type { File as GcsFile } from "@google-cloud/storage";
+import { logger } from "../lib/logger";
 
 // ─── CLIPS — كليبسز (Reels-style, producer-owned) ────────────────────────────
 // Owner's rules:
-//  • Minimum duration 2 minutes — shorter clips are REJECTED.
+//  • Minimum duration 1 minute — shorter clips are REJECTED.
 //  • No upper limit (even 25 hours).
 //  • Only the owner of the work may publish: every file is sha256-fingerprinted
 //    at upload; first owner wins (same rights system as the rest of the empire).
@@ -51,9 +52,9 @@ export async function ensureClipsTables(): Promise<void> {
       INSERT INTO monetization_settings (content_type, rate, unit)
         VALUES ('clip', 0.01, 'view') ON CONFLICT (content_type) DO NOTHING;
     `);
-    console.log("[clips] tables ready");
+    logger.info("[clips] tables ready");
   } catch (e) {
-    console.error("[clips] table setup failed:", e);
+    logger.error({ err: e }, "[clips] table setup failed");
   }
 }
 
@@ -112,6 +113,20 @@ function requireAuth(req: any, res: any): number | null {
   return userId;
 }
 
+function parseClipId(raw: string | string[]): number | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const id = Number(value);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
+async function isAdmin(userId: number): Promise<boolean> {
+  const { rows } = await requirePool().query<{ is_admin: boolean }>(
+    `SELECT is_admin FROM users WHERE id=$1`, [userId],
+  );
+  return rows[0]?.is_admin === true;
+}
+
 // ─── GET /clips/feed — Reels feed, newest first ──────────────────────────────
 router.get("/clips/feed", async (req, res): Promise<void> => {
   try {
@@ -121,7 +136,7 @@ router.get("/clips/feed", async (req, res): Promise<void> => {
        FROM clips WHERE is_frozen = FALSE ${before ? "AND id < $1" : ""}
        ORDER BY id DESC LIMIT 10`, before ? [before] : []);
     res.json({ clips: rows });
-  } catch (e) { console.error("[clips] feed:", e); res.status(500).json({ error: "Failed" }); }
+  } catch (e) { logger.error({ err: e }, "[clips] feed failed"); res.status(500).json({ error: "Failed" }); }
 });
 
 // Publishing is expensive (up to 2GB streamed to the bucket) — cap it hard.
@@ -187,17 +202,96 @@ router.post("/clips", uploadLimiter, (req, res): void => {
         throw e;
       } finally { client.release(); }
     } catch (e) {
-      console.error("[clips] publish:", e);
+      logger.error({ err: e }, "[clips] publish failed");
       res.status(500).json({ error: "Failed" });
     }
   });
 });
 
+// ─── PATCH /clips/:id — owner may retitle their own clip ──────────────────────
+router.patch("/clips/:id", async (req, res): Promise<void> => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 120) : "";
+  if (!title) { res.status(400).json({ error: "العنوان مطلوب" }); return; }
+
+  try {
+    // Ownership is checked in the UPDATE predicate so a stale feed can never
+    // retitle another citizen's clip.
+    const { rows } = await requirePool().query(
+      `UPDATE clips SET title=$1 WHERE id=$2 AND user_id=$3
+       RETURNING id, user_id, username, title, content_type, duration_sec, views, created_at`,
+      [title, id, userId],
+    );
+    if (!rows[0]) {
+      const exists = await requirePool().query(`SELECT id FROM clips WHERE id=$1`, [id]);
+      res.status(exists.rows[0] ? 403 : 404).json({
+        error: exists.rows[0] ? "لا يمكنك تعديل كليب مواطن آخر" : "الكليب غير موجود",
+      });
+      return;
+    }
+    res.json({ clip: rows[0] });
+  } catch (e) {
+    logger.error({ err: e, clipId: id, userId }, "[clips] title update failed");
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// ─── DELETE /clips/:id — owner or admin removes the clip permanently ──────────
+router.delete("/clips/:id", async (req, res): Promise<void> => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const client = await requirePool().connect();
+  let committed = false;
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ user_id: number; object_name: string }>(
+      `SELECT user_id, object_name FROM clips WHERE id=$1 FOR UPDATE`, [id],
+    );
+    const clip = rows[0];
+    if (!clip) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "الكليب غير موجود" });
+      return;
+    }
+    if (clip.user_id !== userId && !(await isAdmin(userId))) {
+      await client.query("ROLLBACK");
+      res.status(403).json({ error: "لا يمكنك حذف كليب مواطن آخر" });
+      return;
+    }
+
+    // App Storage is deliberately removed before the database commit. If this
+    // fails, the transaction rolls back and the published clip remains intact.
+    await clipFile(clip.object_name).delete({ ignoreNotFound: true });
+    await client.query(`DELETE FROM clip_views WHERE clip_id=$1`, [id]);
+    const deleted = await client.query(`DELETE FROM clips WHERE id=$1 RETURNING id`, [id]);
+    if (!deleted.rows[0]) throw new Error("CLIP_DELETE_RACE");
+
+    // Keep content_fingerprints intact. It is the permanent first-owner record:
+    // removing it would let a later uploader claim the same original work.
+    await client.query("COMMIT");
+    committed = true;
+    res.status(204).end();
+  } catch (e) {
+    if (!committed) await client.query("ROLLBACK").catch(() => {});
+    logger.error({ err: e, clipId: id, userId }, "[clips] delete failed");
+    res.status(500).json({ error: "تعذر حذف الكليب، عاود المحاولة" });
+  } finally {
+    client.release();
+  }
+});
+
 // ─── GET /clips/stream/:id — video streaming with Range support ──────────────
 router.get("/clips/stream/:id", async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id);
-    if (!Number.isInteger(id)) { res.status(400).end(); return; }
+    const id = parseClipId(req.params.id);
+    if (!id) { res.status(400).end(); return; }
     const { rows } = await requirePool().query(`SELECT object_name, content_type, size_bytes, is_frozen FROM clips WHERE id=$1`, [id]);
     const clip = rows[0];
     if (!clip || clip.is_frozen) { res.status(404).end(); return; }
@@ -222,14 +316,14 @@ router.get("/clips/stream/:id", async (req, res): Promise<void> => {
       res.setHeader("Content-Length", size);
       file.createReadStream().on("error", () => res.destroy()).pipe(res);
     }
-  } catch (e) { console.error("[clips] stream:", e); if (!res.headersSent) res.status(500).end(); }
+  } catch (e) { logger.error({ err: e }, "[clips] stream failed"); if (!res.headersSent) res.status(500).end(); }
 });
 
 // ─── POST /clips/:id/view — count a view + mint owner earnings ───────────────
 router.post("/clips/:id/view", async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id);
-    if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+    const id = parseClipId(req.params.id);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     // Viewer identity = proxy-derived req.ip (trust proxy 1) — NEVER the raw
     // X-Forwarded-For header, which any client can forge to mint earnings.
     const ip = req.ip ?? "?";
@@ -255,7 +349,7 @@ router.post("/clips/:id/view", async (req, res): Promise<void> => {
     } finally { client.release(); }
     const { rows } = await requirePool().query(`SELECT views FROM clips WHERE id=$1`, [id]);
     res.json({ views: rows[0]?.views ?? 0 });
-  } catch (e) { console.error("[clips] view:", e); res.status(500).json({ error: "Failed" }); }
+  } catch (e) { logger.error({ err: e }, "[clips] view failed"); res.status(500).json({ error: "Failed" }); }
 });
 
 export default router;

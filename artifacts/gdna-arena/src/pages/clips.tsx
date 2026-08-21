@@ -3,8 +3,18 @@
 // only the owner of the work may publish (sha256 first-owner rights guard).
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clapperboard, Upload, Eye, Play, Pause, Volume2, VolumeX, ShieldCheck, X, Loader2 } from "lucide-react";
+import { Clapperboard, Upload, Eye, Play, Volume2, VolumeX, ShieldCheck, X, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@workspace/gdna-ds/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@workspace/gdna-ds/components/ui/alert-dialog";
+import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL;
 const api = (p: string) => `${BASE}api${p}`;
@@ -21,13 +31,26 @@ function fmtDur(s: number) {
 }
 
 // ── One clip card (autoplays when scrolled into view) ────────────────────────
-function ClipCard({ clip }: { clip: Clip }) {
+function ClipCard({
+  clip, canManage, onUpdated, onDeleted,
+}: {
+  clip: Clip;
+  canManage: boolean;
+  onUpdated: (id: number, title: string) => void;
+  onDeleted: (id: number) => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [views, setViews] = useState(clip.views);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(clip.title);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const counted = useRef(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const el = wrapRef.current, v = videoRef.current;
@@ -45,6 +68,60 @@ function ClipCard({ clip }: { clip: Clip }) {
     io.observe(el);
     return () => io.disconnect();
   }, [clip.id]);
+
+  const saveTitle = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const title = draftTitle.trim();
+    if (!title || saving) return;
+    setSaving(true);
+    try {
+      const response = await fetch(api(`/clips/${clip.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error ?? "تعذر تعديل العنوان");
+      onUpdated(clip.id, data.clip.title);
+      setEditOpen(false);
+      toast({ title: "تم تعديل عنوان الكليب" });
+    } catch (error) {
+      toast({
+        title: "تعذر تعديل العنوان",
+        description: error instanceof Error ? error.message : "عاود المحاولة",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteClip = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(api(`/clips/${clip.id}`), {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error ?? "تعذر حذف الكليب");
+      }
+      setDeleteOpen(false);
+      onDeleted(clip.id);
+      toast({ title: "تم حذف الكليب" });
+    } catch (error) {
+      toast({
+        title: "تعذر حذف الكليب",
+        description: error instanceof Error ? error.message : "عاود المحاولة",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div ref={wrapRef} className="relative h-[80vh] snap-start rounded-2xl overflow-hidden border shrink-0"
@@ -64,11 +141,24 @@ function ClipCard({ clip }: { clip: Clip }) {
         </div>
       </div>
       <div className="absolute top-3 right-3 flex gap-2">
-        <button onClick={() => setMuted(m => !m)}
-          className="w-9 h-9 rounded-full flex items-center justify-center bg-black/60 text-white">
+        <Button type="button" variant="outline" size="icon" onClick={() => setMuted(m => !m)}
+          className="rounded-full bg-background/80 text-foreground" aria-label={muted ? "تشغيل الصوت" : "كتم الصوت"}>
           {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-        </button>
+        </Button>
       </div>
+      {canManage && (
+        <div className="absolute top-3 left-3 flex gap-2">
+          <Button type="button" variant="outline" size="icon" className="bg-background/80 text-foreground"
+            aria-label="تعديل عنوان الكليب"
+            onClick={() => { setDraftTitle(clip.title); setEditOpen(true); }}>
+            <Pencil />
+          </Button>
+          <Button type="button" variant="destructive" size="icon" className="bg-destructive/90"
+            aria-label="حذف الكليب" onClick={() => setDeleteOpen(true)}>
+            <Trash2 />
+          </Button>
+        </div>
+      )}
       {!playing && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="w-16 h-16 rounded-full flex items-center justify-center bg-black/50 border" style={{ borderColor: "#C9A84C" }}>
@@ -76,6 +166,41 @@ function ClipCard({ clip }: { clip: Clip }) {
           </div>
         </div>
       )}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تعديل عنوان الكليب</DialogTitle>
+            <DialogDescription>اختار عنوان واضح لعملك، حتى 120 حرفاً.</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={saveTitle}>
+            <Input value={draftTitle} maxLength={120} dir="auto" autoFocus disabled={saving}
+              onChange={event => setDraftTitle(event.target.value)} aria-label="عنوان الكليب" />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>إلغاء</Button>
+              <Button type="submit" disabled={saving || !draftTitle.trim()}>
+                {saving ? <Loader2 className="animate-spin" /> : <Pencil />} حفظ العنوان
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف الكليب نهائياً؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم حذف الفيديو والمشاهدات من الإمبراطورية. لا يمكن استرجاعه بعد ذلك.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground"
+              disabled={deleting} onClick={event => { event.preventDefault(); void deleteClip(); }}>
+              {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />} حذف نهائياً
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -189,6 +314,14 @@ export default function ClipsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const updateClipTitle = useCallback((id: number, title: string) => {
+    setClips(previous => previous.map(clip => clip.id === id ? { ...clip, title } : clip));
+  }, []);
+
+  const removeClip = useCallback((id: number) => {
+    setClips(previous => previous.filter(clip => clip.id !== id));
+  }, []);
+
   return (
     <div className="min-h-screen pt-20 pb-12" style={{ background: "#050505" }}>
       <div className="max-w-lg mx-auto px-4 space-y-4">
@@ -219,7 +352,10 @@ export default function ClipsPage() {
           </div>
         ) : (
           <div className="space-y-6 snap-y snap-mandatory">
-            {clips.map(c => <ClipCard key={c.id} clip={c} />)}
+            {clips.map(c => (
+              <ClipCard key={c.id} clip={c} canManage={c.user_id === user?.id}
+                onUpdated={updateClipTitle} onDeleted={removeClip} />
+            ))}
             {hasMore && (
               <button onClick={() => load(clips[clips.length - 1]?.id)}
                 className="w-full py-3 rounded-xl border font-bold text-sm" style={{ borderColor: "#C9A84C40", color: "#C9A84C" }}>

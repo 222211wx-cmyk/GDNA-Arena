@@ -9,3 +9,4 @@ description: Owner-mandated publishing rules for the Reels-style clips tab
 - Duration is client-reported (server can't probe video metadata); server enforces the reported value — accepted limitation, noted to owner.
 - Clip media lives in App Storage under `PRIVATE_OBJECT_DIR/clips/` (streamed via multer→GCS with inline sha256, no disk/memory buffering); view earnings ride monetization_settings and roll into the PPO revenue pool.
 - View minting: identity from proxy-derived `req.ip` only (trust proxy 1), dedupe + earnings update in one transaction — raw X-Forwarded-For was review-rejected as forgeable.
+- Deleting a clip removes its App Storage object, clip row, and view records, but **keeps** its SHA-256 fingerprint claim. **Why:** deletion should not let a later uploader seize an original creator's first-owner right. **How to apply:** never delete the related `content_fingerprints` record as part of content deletion.
