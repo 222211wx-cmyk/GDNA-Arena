@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { pool as _pool } from "@workspace/db";
+import { withPpoTransaction } from "../lib/ppo-transaction";
+import { allocatePpoWalletCoins } from "../lib/ppo-wallet-allocation";
 
 // pool is typed Pool | null (unconfigured DB) — PPO routes require a database.
 function requirePool() {
@@ -47,8 +49,13 @@ export async function ensurePpoTables(): Promise<void> {
         user_id INTEGER NOT NULL,
         role TEXT NOT NULL,
         share_rate NUMERIC(6,2) NOT NULL,
-        amount NUMERIC(14,2) NOT NULL
+        amount NUMERIC(14,2) NOT NULL,
+        wallet_amount INTEGER NOT NULL DEFAULT 0,
+        wallet_credited BOOLEAN NOT NULL DEFAULT FALSE
       );
+      ALTER TABLE ppo_distribution_items
+        ADD COLUMN IF NOT EXISTS wallet_amount INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS wallet_credited BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE dm_rooms ADD COLUMN IF NOT EXISTS revenue NUMERIC(14,2) NOT NULL DEFAULT 0;
     `);
     console.log("[ppo] tables ready");
@@ -78,18 +85,15 @@ const toCents = (v: any) => Math.round(parseFloat(String(v)) * 100);
 // Run fn inside a transaction that holds the PPO advisory lock, so beneficiary
 // mutations can never interleave with a running distribution (and vice versa).
 async function withPpoLock<T>(fn: (client: any) => Promise<T>): Promise<T> {
-  const client = await requirePool().connect();
-  try {
-    await client.query("BEGIN");
+  return withPpoTransaction(requirePool(), async client => {
     await client.query("SELECT pg_advisory_xact_lock($1)", [PPO_LOCK_KEY]);
-    const out = await fn(client);
-    await client.query("COMMIT");
-    return out;
-  } catch (e) {
-    try { await client.query("ROLLBACK"); } catch { /* noop */ }
-    throw e;
-  } finally {
-    client.release();
+    return fn(client);
+  });
+}
+
+class PpoDistributionError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
   }
 }
 
@@ -121,7 +125,8 @@ router.get("/ppo/overview", async (req, res): Promise<void> => {
         (SELECT 'pulse_post' AS kind, id, LEFT(content, 60) AS title, earnings FROM pulse_posts ORDER BY earnings DESC LIMIT 10)`),
       requirePool().query(`
         SELECT d.*, COALESCE(json_agg(json_build_object(
-            'userId', i.user_id, 'role', i.role, 'shareRate', i.share_rate, 'amount', i.amount)
+            'userId', i.user_id, 'role', i.role, 'shareRate', i.share_rate, 'amount', i.amount,
+            'walletAmount', i.wallet_amount, 'credited', i.wallet_credited)
           ) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
         FROM ppo_distributions d
         LEFT JOIN ppo_distribution_items i ON i.distribution_id = d.id
@@ -215,65 +220,88 @@ router.patch("/ppo/tabs/room/:id", async (req, res): Promise<void> => {
 
 // ─── POST /ppo/distribute — run a distribution (100% rule enforced) ──────────
 router.post("/ppo/distribute", async (req, res): Promise<void> => {
-  const client = await requirePool().connect();
   try {
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const period = String(req.body?.period ?? "").trim();
     if (!period || period.length > 40) { res.status(400).json({ error: "period مطلوب" }); return; }
 
-    await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock($1)", [PPO_LOCK_KEY]);
+    const report = await withPpoLock(async client => {
+      const { rows: bens } = await client.query(`SELECT * FROM ppo_beneficiaries WHERE status='active' ORDER BY id FOR UPDATE`);
+      const sum = bens.reduce((s: number, b: { share_rate: string }) => s + parseFloat(b.share_rate), 0);
+      if (!bens.length || Math.abs(sum - 100) > 0.01) {
+        throw new PpoDistributionError(400, `قاعدة 100%: مجموع الحصص النشطة ${sum.toFixed(2)}% — خاصو يكون 100% بالضبط`);
+      }
 
-    const { rows: bens } = await client.query(`SELECT * FROM ppo_beneficiaries WHERE status='active' ORDER BY id FOR UPDATE`);
-    const sum = bens.reduce((s, b) => s + parseFloat(b.share_rate), 0);
-    if (!bens.length || Math.abs(sum - 100) > 0.01) {
-      await client.query("ROLLBACK");
-      res.status(400).json({ error: `قاعدة 100%: مجموع الحصص النشطة ${sum.toFixed(2)}% — خاصو يكون 100% بالضبط` });
-      return;
-    }
+      // Read revenue through THIS transaction's connection (consistent snapshot).
+      const rev = await totalRevenue(client);
+      const distributedC = toCents((await client.query(`SELECT COALESCE(SUM(total_profit),0) AS s FROM ppo_distributions`)).rows[0].s);
+      const poolC = toCents(rev.total) - distributedC;
+      if (poolC <= 0) {
+        throw new PpoDistributionError(400, "ما كاين حتى ربح جديد للتوزيع — كلشي تقسم من قبل");
+      }
 
-    // Read revenue through THIS transaction's connection (consistent snapshot).
-    const rev = await totalRevenue(client);
-    const distributedC = toCents((await client.query(`SELECT COALESCE(SUM(total_profit),0) AS s FROM ppo_distributions`)).rows[0].s);
-    const poolC = toCents(rev.total) - distributedC; // exact integer cents
-    if (poolC <= 0) {
-      await client.query("ROLLBACK");
-      res.status(400).json({ error: "ما كاين حتى ربح جديد للتوزيع — كلشي تقسم من قبل" });
-      return;
-    }
+      // Wallet balances are whole coins. Allocate the whole-coin portion of the
+      // available pool once, using largest remainder, so the ledger, each wallet
+      // update, and each transaction record always reconcile exactly. Any
+      // fractional coin remains in the revenue pool for the next distribution.
+      const sorted = [...bens].sort((a, b) => parseFloat(b.share_rate) - parseFloat(a.share_rate) || a.id - b.id);
+      const walletPool = Math.floor(poolC / 100);
+      if (walletPool <= 0) {
+        throw new PpoDistributionError(400, "الربح الحالي أقل من قطعة واحدة — غادي يبقى فالمجمع حتى يكتمل");
+      }
+      const walletAmounts = allocatePpoWalletCoins(walletPool, sorted.map(b => ({
+        id: b.id,
+        shareRate: parseFloat(b.share_rate),
+      })));
 
-    // Allocate in integer cents; hand the rounding residual deterministically
-    // to the largest share (first row after sort) so items always sum exactly.
-    const sorted = [...bens].sort((a, b) => parseFloat(b.share_rate) - parseFloat(a.share_rate) || a.id - b.id);
-    const cents = sorted.map(b => Math.floor((poolC * parseFloat(b.share_rate)) / 100));
-    cents[0] += poolC - cents.reduce((s, c) => s + c, 0);
-    if (cents.some(c => c < 0) || cents.reduce((s, c) => s + c, 0) !== poolC) {
-      await client.query("ROLLBACK");
-      res.status(500).json({ error: "خطأ حسابي — التوزيع توقف بلا تسجيل" });
-      return;
-    }
-
-    const { rows: dRows } = await client.query(
-      `INSERT INTO ppo_distributions (period, total_profit, created_by) VALUES ($1,$2,$3) RETURNING *`,
-      [period, poolC / 100, (req.session as any)?.userId ?? null]);
-    const dist = dRows[0];
-    const items = [];
-    for (let k = 0; k < sorted.length; k++) {
-      const b = sorted[k]; const amount = cents[k] / 100;
-      await client.query(
-        `INSERT INTO ppo_distribution_items (distribution_id, user_id, role, share_rate, amount) VALUES ($1,$2,$3,$4,$5)`,
-        [dist.id, b.user_id, b.role, b.share_rate, amount]);
-      await client.query(`UPDATE ppo_beneficiaries SET total_earned = total_earned + $1 WHERE id=$2`, [amount, b.id]);
-      items.push({ userId: b.user_id, role: b.role, shareRate: parseFloat(b.share_rate), amount });
-    }
-    await client.query("COMMIT");
-    res.json({ report: { id: dist.id, period, totalProfit: poolC / 100, distributions: items, timestamp: dist.created_at } });
+      const { rows: dRows } = await client.query(
+        `INSERT INTO ppo_distributions (period, total_profit, created_by) VALUES ($1,$2,$3) RETURNING *`,
+        [period, walletPool, (req.session as any)?.userId ?? null]);
+      const dist = dRows[0];
+      const items = [];
+      for (let k = 0; k < sorted.length; k++) {
+        const b = sorted[k]; const walletAmount = walletAmounts[k];
+        const amount = walletAmount;
+        await client.query(
+          `INSERT INTO ppo_distribution_items
+            (distribution_id, user_id, role, share_rate, amount, wallet_amount)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [dist.id, b.user_id, b.role, b.share_rate, amount, walletAmount]);
+        await client.query(`UPDATE ppo_beneficiaries SET total_earned = total_earned + $1 WHERE id=$2`, [amount, b.id]);
+        const { rows: walletRows } = await client.query(
+          `UPDATE users SET balance = balance + $1 WHERE id=$2 RETURNING balance`,
+          [walletAmount, b.user_id]);
+        if (!walletRows[0]) {
+          throw new Error(`PPO beneficiary user ${b.user_id} not found`);
+        }
+        await client.query(
+          `INSERT INTO transactions (user_id, amount, type, description)
+           VALUES ($1,$2,'ppo_payout',$3)`,
+          [b.user_id, walletAmount, `PPO payout — ${period} — ${walletAmount} coins credited to wallet`]);
+        await client.query(
+          `UPDATE ppo_distribution_items
+           SET wallet_credited=TRUE
+           WHERE distribution_id=$1 AND user_id=$2`,
+          [dist.id, b.user_id]);
+        items.push({
+          userId: b.user_id,
+          role: b.role,
+          shareRate: parseFloat(b.share_rate),
+          amount,
+          walletAmount,
+          credited: true,
+        });
+      }
+      return { id: dist.id, period, totalProfit: walletPool, distributions: items, timestamp: dist.created_at };
+    });
+    res.json({ report });
   } catch (e) {
-    try { await client.query("ROLLBACK"); } catch { /* noop */ }
+    if (e instanceof PpoDistributionError) {
+      res.status(e.status).json({ error: e.message });
+      return;
+    }
     console.error("[ppo] distribute:", e);
     res.status(500).json({ error: "Failed" });
-  } finally {
-    client.release();
   }
 });
 

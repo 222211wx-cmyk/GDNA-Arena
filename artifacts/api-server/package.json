@@ -7,8 +7,9 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:integration:account-erasure": "node --test tests/auth-delete.integration.test.mjs"
+    "test:ppo": "rm -rf .ppo-test-dist && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .ppo-test-dist src/lib/ppo-transaction.ts src/lib/ppo-wallet-allocation.ts src/lib/ppo-payout.test.ts && node --test .ppo-test-dist/ppo-payout.test.js && rm -rf .ppo-test-dist",
+    "test:integration:account-erasure": "node --test tests/auth-delete.integration.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

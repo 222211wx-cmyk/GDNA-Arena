@@ -14,7 +14,20 @@ const GOLD = "#d4af37";
 type Beneficiary = { id: number; user_id: number; username: string; role: string; share_rate: string; total_earned: string; status: string };
 type RoomTab = { id: number; name: string | null; type: string; revenue: string };
 type ClipTab = { kind: string; id: number; title: string | null; earnings: string };
-type Distribution = { id: number; period: string; total_profit: string; created_at: string; items: { userId: number; role: string; shareRate: string; amount: string }[] };
+type Distribution = {
+  id: number;
+  period: string;
+  total_profit: string;
+  created_at: string;
+  items: {
+    userId: number;
+    role: string;
+    shareRate: string;
+    amount: string;
+    walletAmount?: number;
+    credited?: boolean;
+  }[];
+};
 type Overview = {
   revenue: { uploads: number; posts: number; rooms: number; total: number };
   distributed: number; pool: number;
@@ -232,12 +245,22 @@ export default function AdminRevenuePage() {
             </div>
           </div>
           <div style={card}>
-            <h2 style={{ color: "#eee", fontSize: 16, marginBottom: 10 }}>سجل التوزيعات</h2>
+             <h2 style={{ color: "#eee", fontSize: 16, marginBottom: 4 }}>سجل التوزيعات</h2>
+             <p style={{ color: "#777", fontSize: 12, marginBottom: 10 }}>
+               كل توزيع جديد كيتسجّل فالسجل وكيتم إيداع نصيب كل مواطن مباشرة فالمحفظة ديالو.
+             </p>
             {ov.distributions.map(d => (
               <div key={d.id} style={{ borderBottom: "1px solid #1e1e1e", padding: "8px 0", fontSize: 13 }}>
-                <div style={{ color: GOLD, fontWeight: 700 }}>#{d.id} — {d.period} — {fmt(d.total_profit)} 🪙 <span style={{ color: "#666", fontWeight: 400 }}>{new Date(d.created_at).toLocaleString("fr-MA")}</span></div>
+                 <div data-testid={`text-ppo-distribution-${d.id}`} style={{ color: GOLD, fontWeight: 700 }}>#{d.id} — {d.period} — {fmt(d.total_profit)} 🪙 <span style={{ color: "#666", fontWeight: 400 }}>{new Date(d.created_at).toLocaleString("fr-MA")}</span></div>
                 {d.items.map((i, idx) => (
-                  <div key={idx} style={{ color: "#aaa", paddingRight: 12 }}>👤 #{i.userId} ({i.role}) — {fmt(i.shareRate)}% = <b style={{ color: "#4ade80" }}>{fmt(i.amount)} 🪙</b></div>
+                   <div key={idx} data-testid={`status-ppo-credit-${d.id}-${i.userId}`} style={{ color: "#aaa", paddingRight: 12 }}>
+                     👤 #{i.userId} ({i.role}) — {fmt(i.shareRate)}% = <b style={{ color: "#4ade80" }}>{fmt(i.amount)} 🪙</b>
+                     <span style={{ color: i.credited ? "#4ade80" : "#fbbf24", marginRight: 8 }}>
+                       {i.credited
+                         ? `✅ تودّع فالمحفظة: ${fmt(i.walletAmount ?? Math.round(Number(i.amount)))} 🪙`
+                         : "⏳ مازال ما تودّعش فالمحفظة"}
+                     </span>
+                   </div>
                 ))}
               </div>
             ))}
