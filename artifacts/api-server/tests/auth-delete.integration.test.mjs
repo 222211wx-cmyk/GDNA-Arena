@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const apiBaseUrl = (process.env.API_BASE_URL ?? "http://127.0.0.1:3000/api")
-  .replace(/\/$/, "");
+const apiBaseUrl = (
+  process.env.API_BASE_URL ?? "http://localhost:80/api"
+).replace(/\/$/, "");
 
 function sessionCookie(response) {
   const setCookie = response.headers.get("set-cookie");
