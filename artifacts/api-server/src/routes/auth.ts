@@ -76,9 +76,9 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
 
 router.post("/auth/register", async (req, res): Promise<void> => {
   try {
-  const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+  const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
   const password = typeof req.body?.password === "string" ? req.body.password : "";
-    const birthDate = normalizeBirthDate(req.body?.birthDate);
+  const birthDate = normalizeBirthDate(req.body?.birthDate);
   if (!username || !password || !birthDate) {
     res.status(400).json({ error: "الاسم وكلمة السر وتاريخ الميلاد مطلوبون — Nom, mot de passe et date de naissance requis" });
     return;
@@ -118,7 +118,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   }
 
-    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   // Legacy/system tables still require a unique internal email value. Citizens
   // never provide, receive, or authenticate with this private placeholder.
   const internalEmail = `citizen-${randomUUID()}@gdna.internal`;
@@ -144,21 +144,21 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   );
   disconnectSessionSockets(previousSessionId);
   req.session.userId = user.id;
-  // Remember me: 30-day secure token cookie, renewed on every visit (rolling)
-  // → the citizen enters instantly, like YouTube, until they log out.
-  if (rememberMe) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
-  req.log.info({ userId: user.id, rememberMe }, "User logged in");
-  res.json(serializeUser(user));
+  req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+  req.log.info({ userId: user.id }, "User registered — logged in");
+  sendWelcomeNotification(user.id).catch(() => {});
+  res.status(201).json(serializeUser(user));
   } catch (err) {
-    req.log.error(err, "Login error");
+    req.log.error(err, "Register error");
     res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
   }
 });
 
-// ── POST /auth/change-password — from settings, while logged in ─────────
-router.post("/auth/change-password", async (req, res): Promise<void> => {
+// Existing citizens set their birth date once. Registration remains open to
+// every age; the value is used only by the Games 18+ access rule.
+router.post("/auth/birth-date", async (req, res): Promise<void> => {
   try {
-  const userId = req.session.userId;
+    const userId = req.session?.userId;
     if (!userId) {
       res.status(401).json({ error: "سجّل الدخول أولاً — Login required" });
       return;
@@ -211,13 +211,17 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.id, userId))
+    .where(sql`LOWER(${usersTable.username}) = ${username}`)
+    .orderBy(usersTable.id)
     .limit(1);
-    if (!user) {
-      res.status(401).json({ error: "سجّل الدخول أولاً — Connectez-vous d'abord" });
-      return;
-    }
-    let valid = false;
+
+  if (!user) {
+    // Generic message (same as wrong password) — prevents account enumeration
+    res.status(401).json({ error: "الاسم أو كلمة السر غير صحيحة — Nom ou mot de passe incorrect" });
+    return;
+  }
+
+  let valid = false;
   try {
     valid = await bcrypt.compare(password, user.passwordHash);
   } catch {
@@ -249,7 +253,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 // ── POST /auth/change-password — from settings, while logged in ─────────
 router.post("/auth/change-password", async (req, res): Promise<void> => {
   try {
-  const userId = req.session.userId;
+    const userId = req.session.userId;
     if (!userId) {
       res.status(401).json({ error: "سجّل الدخول أولاً — Connectez-vous d'abord" });
       return;
@@ -261,11 +265,7 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
       return;
     }
 
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, userId))
-    .limit(1);
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
     if (!user) {
       res.status(401).json({ error: "سجّل الدخول أولاً — Connectez-vous d'abord" });
       return;
@@ -285,12 +285,12 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [passwordHash, userId]);
     // Revoke every OTHER session — a stolen session must not survive a
     // password change. The current session is re-established below.
-      const revokedSessions = await client.query<{ sid: string }>(
-        `DELETE FROM user_sessions
-         WHERE (sess->>'userId')::int = $1
-         RETURNING sid`,
-        [userId],
-      );
+    const revokedSessions = await pool.query<{ sid: string }>(
+      `DELETE FROM user_sessions
+       WHERE (sess->>'userId')::int = $1
+       RETURNING sid`,
+      [userId],
+    );
     // Revoke pending-upgrade and fully registered realtime channels for every
     // deleted session before issuing the replacement credential.
     for (const { sid } of revokedSessions.rows) disconnectSessionSockets(sid);
@@ -309,24 +309,42 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {
-    const sessionId = req.sessionID;
-    await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
-    disconnectSessionSockets(sessionId);
-    res.clearCookie("connect.sid", {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-    res.status(401).json({ error: "User not found" });
-    return;
+  const sessionId = req.sessionID;
+  try {
+    await new Promise<void>((resolve, reject) =>
+      req.session.destroy((err) => (err ? reject(err) : resolve()))
+    );
+  } catch (error) {
+    logger.error(error, "Session destroy error — trying direct store revocation");
+    try {
+      // A failed store callback must never leave a valid session behind while
+      // the UI claims logout succeeded.
+      await pool.query(`DELETE FROM user_sessions WHERE sid = $1`, [sessionId]);
+    } catch (fallbackError) {
+      logger.error(fallbackError, "Direct session revocation failed");
+      disconnectSessionSockets(sessionId);
+      res.clearCookie("connect.sid", {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+      res.status(500).json({ error: "تعذر إنهاء الجلسة — حاول مرة أخرى" });
+      return;
+    }
   }
 
-  res.json(serializeUser(user));
+  disconnectSessionSockets(sessionId);
+  res.clearCookie("connect.sid", {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  res.json({ message: "Logged out" });
 });
 
-// ── DELETE /api/auth/me — GDPR right to erasure ───────────────
-router.delete("/auth/me", async (req, res): Promise<void> => {
+router.get("/auth/me", async (req, res): Promise<void> => {
   const userId = req.session.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -359,12 +377,16 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
 // ── DELETE /api/auth/me — GDPR right to erasure ───────────────
 router.delete("/auth/me", async (req, res): Promise<void> => {
   const userId = req.session.userId;
-      const anonymousName = `deleted_user_${userId}_${tombstoneId}`;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
 
-      const anonymousEmail = `${anonymousName}@deleted.gdna.invalid`;
+  try {
+    // Anonymise all user content instead of hard-deleting rows
+    // (preserves referential integrity while erasing PII)
+    const anonymousName = `deleted_user_${userId}`;
     const client = await pool.connect();
-
-      const tombstoneId = randomUUID().replaceAll("-", "");
     let revokedSessionIds: string[] = [];
     try {
       await client.query("BEGIN");
@@ -434,42 +456,3 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
 });
 
 export default router;
-
-      const legalConsentTable = await client.query<{ exists: boolean }>(
-        `SELECT to_regclass('public.user_legal_consents') IS NOT NULL AS exists`,
-      );
-
-      const erased = await client.query(
-        `UPDATE users
-         SET username = $1,
-             email = $2,
-             password_hash = 'DELETED',
-             birth_date = NULL,
-             is_admin = false
-         WHERE id = $3
-         RETURNING id`,
-        [anonymousName, anonymousEmail, userId],
-      );
-
-        const metadata = await client.query<{ compatible: boolean }>(
-          `SELECT COUNT(*) = 2 AS compatible
-           FROM information_schema.columns
-           WHERE table_schema = 'public'
-             AND table_name = $1
-             AND column_name = ANY($2::text[])`,
-          [table, [userIdColumn, usernameColumn]],
-        );
-
-      const cachedIdentityUpdates = [
-        ["pulse_posts", "user_id", "username"],
-        ["legend_debates", "user_id", "username"],
-        ["legend_stories", "user_id", "username"],
-        ["platform_stories", "user_id", "username"],
-        ["celebration_entries", "user_id", "username"],
-        ["post_comments", "user_id", "username"],
-        ["post_reactions", "user_id", "username"],
-        ["dm_room_members", "user_id", "username"],
-        ["dm_messages", "user_id", "username"],
-        ["call_history", "caller_id", "caller_username"],
-        ["call_history", "callee_id", "callee_username"],
-      ] as const;
