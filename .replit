@@ -27,3 +27,19 @@ channel = "stable-25_05"
 [userenv.shared]
 ADMIN_EMAILS = "222211wx@gmail.com"
 GIPHY_API_KEY = "dc6zaT0xFJmzC"
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 19130
+externalPort = 3001
+
+[[ports]]
+localPort = 22842
+externalPort = 3000
+
+[[ports]]
+localPort = 23916
+externalPort = 3002
