@@ -33,20 +33,48 @@ function getHonorTitle(honorCount: number): { title: string; color: string; badg
   return                          { title: "NEW CITIZEN",     color: "#6b7280", badge: "🌱" };
 }
 
-// ── GET /citizens — leaderboard ───────────────────────────────────────────────
+// ── GET /citizens — discoverable citizen list / leaderboard ───────────────────
+// Query params (all optional, all backwards-compatible):
+//   limit  – max rows per page, 1-200, default 50
+//   offset – zero-based page offset for pagination, default 0
+//   sort   – "xp" (default) | "coins" | "honor"
+//   search – case-insensitive username prefix / substring filter
+//
+// Exclusions (server-enforced, never client-controlled):
+//   • is_star = TRUE  → hosted world stars are not citizen-discoverable
+//   • password_hash = 'DELETED' → GDPR-erased accounts are not discoverable
 router.get("/citizens", async (req, res): Promise<void> => {
-  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-  const sort  = req.query.sort === "coins" ? "coins" : req.query.sort === "honor" ? "honor" : "xp";
+  const limit  = Math.min(Math.max(parseInt(req.query.limit  as string) || 50,  1), 200);
+  const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+  const sort   = req.query.sort === "coins" ? "coins" : req.query.sort === "honor" ? "honor" : "xp";
+  const searchValue = typeof req.query.search === "string"
+    ? req.query.search
+    : typeof req.query.q === "string"
+      ? req.query.q
+      : "";
+  const search = searchValue.trim();
 
+  // ORDER BY column is chosen from a safe allow-list — never interpolated from input.
   const orderClause =
     sort === "coins" ? `u.balance DESC`
     : sort === "honor" ? `u.honor_count DESC`
     : `u.xp DESC`;
 
+  // Build the parameterised WHERE clause.
+  // $1 is always the search pattern (ILIKE %…%), $2 = limit, $3 = offset.
+  // Using a single query shape keeps the plan stable in pg's cache.
+  const searchPattern = search.length > 0 ? `%${search}%` : "%";
+
   const { rows } = await pool.query(
-    `SELECT u.id, u.username, u.xp, u.balance, u.games_played, u.wins, u.created_at, u.honor_count, u.is_muted, u.last_seen_at, u.is_star
-     FROM "users" u WHERE COALESCE(u.is_star, FALSE) = FALSE ORDER BY ${orderClause} LIMIT $1`,
-    [limit]
+    `SELECT u.id, u.username, u.xp, u.balance, u.games_played, u.wins, u.created_at,
+            u.honor_count, u.is_muted, u.last_seen_at, u.is_star
+     FROM "users" u
+     WHERE COALESCE(u.is_star, FALSE) = FALSE
+       AND u.password_hash <> 'DELETED'
+       AND u.username ILIKE $1
+     ORDER BY ${orderClause}, u.id ASC
+     LIMIT $2 OFFSET $3`,
+    [searchPattern, limit, offset]
   );
 
   const citizens = rows.map((u: any, i: number) => ({
@@ -56,7 +84,9 @@ router.get("/citizens", async (req, res): Promise<void> => {
     honorCount: parseInt(u.honor_count ?? "0"),
     rank: getRank(parseInt(u.xp ?? "0")),
     honorInfo: getHonorTitle(parseInt(u.honor_count ?? "0")),
-    position: i + 1,
+    // position reflects the global rank including offset so clients can display
+    // continuous leaderboard numbers across pages
+    position: offset + i + 1,
     lastSeenAt: u.last_seen_at ?? null,
   }));
 

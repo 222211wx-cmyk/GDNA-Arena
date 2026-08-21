@@ -89,6 +89,11 @@ export async function getChatObject(name: string): Promise<File | null> {
   return exists ? file : null;
 }
 
+/** Permanently remove one chat attachment from private object storage. */
+export async function deleteChatObject(name: string): Promise<void> {
+  await chatObjectFile(name).delete({ ignoreNotFound: true });
+}
+
 /** Stream a GCS file into an Express response (headers must be set by caller). */
 export function chatObjectStream(file: File): Readable {
   return file.createReadStream();

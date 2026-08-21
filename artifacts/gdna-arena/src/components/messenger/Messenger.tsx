@@ -7,7 +7,7 @@
  * Structure:
  *  - 4 fixed bottom tabs: Discussions | Actus | Communautés | Appels
  *  - Chat = full page: header (avatar+name+call) / messages with date separators /
- *    big RTL-friendly composer with 5 fixed buttons: camera, image, file, voice, emoji
+ *    RTL-friendly composer with + inside the input shell revealing camera/gallery/files/mic/emoji
  *  - No GIPHY. Keyboard-stable (dvh + interactive-widget=resizes-content).
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -17,7 +17,7 @@ import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
   Camera, Image as ImageIcon, Paperclip, Smile, Send, Newspaper, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
-  FileImage,
+  ChevronRight,
 } from "lucide-react";
 import Avatar from "../social/Avatar";
 import { Switch } from "@workspace/gdna-ds/components/ui/switch";
@@ -28,6 +28,7 @@ import { useCallContext } from "../../contexts/CallContext";
 import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
+
 const BG      = "#0a0a0a";   // app background
 const BG_BAR  = "#111111";   // header / tab bars
 const BG_CHAT = "#050505";   // chat wallpaper
@@ -110,7 +111,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch), credentials: "include",
     }).catch(() => null);
-    if (r?.ok) showToast(st.settings_saved ?? "Saved ✅");
+    if (r?.ok) showToast(st.settings_saved ?? "Saved");
   }
 
   async function toggleMute() {
@@ -121,7 +122,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ muted: next }), credentials: "include",
     }).catch(() => null);
-    if (r?.ok) { onMuteChanged(activeRoom.id, next); showToast(st.settings_saved ?? "Saved ✅"); }
+    if (r?.ok) { onMuteChanged(activeRoom.id, next); showToast(st.settings_saved ?? "Saved"); }
   }
 
   async function deleteConversation() {
@@ -139,7 +140,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
       showToast(st.conversation_deleted ?? "Conversation deleted");
     } else {
       const j = await r?.json().catch(() => ({} as { error?: string }));
-      showToast(j?.error ?? "❌");
+      showToast(j?.error ?? "Error");
     }
     setDeletingConversation(false);
   }
@@ -189,8 +190,10 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   );
 }
 
-// ── Contacts panel ────────────────────────────────────────────────────────────
+// ── Contacts panel (server-side search + pagination) ─────────────────────────
 interface Contact { id: number; username: string; lastSeenAt?: string | null }
+
+const CONTACTS_PAGE = 30;
 
 function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
   st: Record<string, string>;
@@ -205,15 +208,66 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    fetch(api("/api/citizens?limit=200"), { credentials: "include" })
-      .then(r => r.json())
-      .then(j => setContacts((j.citizens ?? []).filter((c: Contact) => c.id !== user.id)))
-      .finally(() => setLoading(false));
+  const fetchContacts = useCallback(async (search: string, offset: number, replace: boolean) => {
+    // Abort any previous in-flight search
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    if (replace) setLoading(true);
+    else setLoadingMore(true);
+    setFailed(false);
+
+    try {
+      const params = new URLSearchParams({
+        limit: String(CONTACTS_PAGE),
+        offset: String(offset),
+      });
+      if (search.trim()) params.set("search", search.trim());
+
+      const r = await fetch(api(`/api/citizens?${params}`), {
+        credentials: "include",
+        signal: ctrl.signal,
+      });
+      if (!r.ok) throw new Error("failed");
+      const j = await r.json();
+      const rawList: Contact[] = j.citizens ?? [];
+      const list = rawList.filter((c: Contact) => c.id !== user.id);
+      setContacts(prev => replace ? list : [...prev, ...list]);
+      setHasMore(rawList.length === CONTACTS_PAGE);
+      setPage(offset / CONTACTS_PAGE);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      setFailed(true);
+    } finally {
+      if (abortRef.current === ctrl) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    }
   }, [user.id]);
 
-  const filtered = contacts.filter(c => c.username.toLowerCase().includes(q.toLowerCase()));
+  // Abort the current page/search request when the contacts panel unmounts.
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const t = setTimeout(() => fetchContacts(q, 0, true), 300);
+    return () => clearTimeout(t);
+  }, [q, fetchContacts]);
+
+  function loadMore() {
+    const nextOffset = (page + 1) * CONTACTS_PAGE;
+    fetchContacts(q, nextOffset, false);
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }}
@@ -231,9 +285,26 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
         </div>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 12px" }}>
-        {loading && <p style={{ color: "#444", fontSize: 13, textAlign: "center", padding: 24 }}>…</p>}
-        {!loading && filtered.length === 0 && <p style={{ color: "#444", fontSize: 13, textAlign: "center", marginTop: 24 }}>{st.no_contacts ?? "No citizens found"}</p>}
-        {filtered.map(c => {
+        {loading && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "8px 8px" }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="skeleton" style={{ height: 56, borderRadius: 12 }} />
+            ))}
+          </div>
+        )}
+        {!loading && failed && (
+          <div style={{ textAlign: "center", padding: 24 }}>
+            <p style={{ color: "#666", fontSize: 13, margin: "0 0 12px" }}>{st.no_contacts ?? "Could not load citizens"}</p>
+            <button onClick={() => fetchContacts(q, 0, true)}
+              style={{ background: `${GOLD}20`, border: `1px solid ${GOLD}30`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+              Retry
+            </button>
+          </div>
+        )}
+        {!loading && !failed && contacts.length === 0 && (
+          <p style={{ color: "#444", fontSize: 13, textAlign: "center", marginTop: 24 }}>{st.no_contacts ?? "No citizens found"}</p>
+        )}
+        {contacts.map(c => {
           const online = call.onlineUsers.includes(c.username);
           return (
             <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderBottom: "1px solid #ffffff08" }}>
@@ -265,6 +336,15 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
             </div>
           );
         })}
+        {!loading && hasMore && (
+          <div style={{ textAlign: "center", padding: "12px 0" }}>
+            <button onClick={loadMore} disabled={loadingMore}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${GOLD}15`, border: `1px solid ${GOLD}25`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: loadingMore ? "default" : "pointer", fontSize: 13, fontWeight: 700, opacity: loadingMore ? 0.7 : 1 }}>
+              {loadingMore ? <LoaderCircle size={14} className="animate-spin" /> : <ChevronRight size={14} />}
+              {loadingMore ? "Loading…" : (st.load_more ?? "Load more")}
+            </button>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -290,7 +370,7 @@ function ActusTab({ st }: { st: Record<string, string> }) {
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
       <a href="/pulse" style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}10`, border: `1px solid ${GOLD}25`, borderRadius: 12, textDecoration: "none", marginBottom: 10 }}>
         <Newspaper size={18} style={{ color: GOLD }} />
-        <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>Empire Pulse — {st.open ?? "فتح"}</span>
+        <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>Empire Pulse — {st.open ?? "Open"}</span>
       </a>
       {loading && <p style={{ color: "#444", textAlign: "center", padding: 24 }}>…</p>}
       {failed && <p style={{ color: "#666", textAlign: "center", padding: 24, fontSize: 13 }}>{st.no_messages}</p>}
@@ -352,10 +432,12 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate }: {
         const isMember = myRoomIds.has(g.id);
         return (
           <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 4px", borderBottom: "1px solid #ffffff08" }}>
-            <div style={{ width: 44, height: 44, background: "#222", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{g.icon ?? "👥"}</div>
+            <div style={{ width: 44, height: 44, background: "#222", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+              {g.icon ?? <Users size={20} style={{ color: "#666" }} />}
+            </div>
             <div style={{ flex: 1, overflow: "hidden" }}>
               <p style={{ margin: 0, fontWeight: 700, color: "#fff", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name ?? "Group"}</p>
-              <p style={{ margin: 0, fontSize: 12, color: "#ffffff35" }}>👥 {g.memberCount ?? 0}</p>
+              <p style={{ margin: 0, fontSize: 12, color: "#ffffff35" }}>{g.memberCount ?? 0} members</p>
             </div>
             {isMember ? (
               <Button size="sm" variant="secondary" className="h-8 px-4 text-xs" onClick={() => onOpen(g.id)}>
@@ -536,14 +618,19 @@ function IdentityBoundMessenger({ variant, user }: {
   const [dragOver,    setDragOver]    = useState(false);
   const [menuMsgId,   setMenuMsgId]   = useState<number | null>(null);
   const [isMobile,    setIsMobile]    = useState(typeof window !== "undefined" && window.innerWidth < 640);
+  // Controls the + attachment tray inside the composer
+  const [showAttachTray, setShowAttachTray] = useState(false);
+
   const pendingRef = useRef<PendingFile[]>([]);
   useEffect(() => { pendingRef.current = pending; }, [pending]);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef  = useRef<HTMLInputElement>(null);
-  const gifRef     = useRef<HTMLInputElement>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recStreamRef = useRef<MediaStream | null>(null);
+  // Maps pending item id → its live XHR so individual items can be aborted
+  const xhrMapRef = useRef<Map<string, XMLHttpRequest>>(new Map());
+  const cancelledUploadIdsRef = useRef<Set<string>>(new Set());
   const activeUploadsRef = useRef<Set<XMLHttpRequest>>(new Set());
   const recCancelledRef = useRef(false);
   const chunksRef   = useRef<Blob[]>([]);
@@ -552,6 +639,7 @@ function IdentityBoundMessenger({ variant, user }: {
   const endRef      = useRef<HTMLDivElement>(null);
   const textRef     = useRef<HTMLTextAreaElement>(null);
   const pollRef     = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const attachTrayRef = useRef<HTMLDivElement>(null);
 
   const isWidget = variant === "widget";
 
@@ -560,6 +648,18 @@ function IdentityBoundMessenger({ variant, user }: {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // Close attach tray when clicking outside
+  useEffect(() => {
+    if (!showAttachTray) return;
+    const handler = (e: MouseEvent) => {
+      if (attachTrayRef.current && !attachTrayRef.current.contains(e.target as Node)) {
+        setShowAttachTray(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showAttachTray]);
 
   // Unmount cleanup: stop any live recording (mic!) and drop its delayed upload.
   useEffect(() => {
@@ -571,6 +671,8 @@ function IdentityBoundMessenger({ variant, user }: {
       recStreamRef.current?.getTracks().forEach(t => t.stop());
       for (const xhr of activeUploadsRef.current) xhr.abort();
       activeUploadsRef.current.clear();
+      xhrMapRef.current.clear();
+      cancelledUploadIdsRef.current.clear();
       for (const item of pendingRef.current) {
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       }
@@ -593,6 +695,7 @@ function IdentityBoundMessenger({ variant, user }: {
     const r = await fetch(api("/api/messages/rooms"), { credentials: "include" });
     if (!r.ok) return [];
     const j = await r.json();
+    // Server returns rooms newest-first; preserve that order — never re-sort client-side.
     const list: DmRoom[] = j.rooms ?? [];
     if (mountedRef.current) setRooms(list);
     return list;
@@ -612,6 +715,7 @@ function IdentityBoundMessenger({ variant, user }: {
         setMessages([]);
         setShowSettings(false);
         setShowEmoji(false);
+        setShowAttachTray(false);
         setMenuMsgId(null);
       }
     };
@@ -631,9 +735,8 @@ function IdentityBoundMessenger({ variant, user }: {
     });
   }, []);
 
-  // Realtime events come from CallProvider's one authenticated /api/ws
-  // connection. The server has already checked room membership; client-side
-  // room/id checks simply keep this Messenger instance scoped to its open room.
+  // After a realtime new message, refresh rooms but preserve newest-first order
+  // by relying on the server's ordering from loadRooms (not re-sorting locally).
   useEffect(() => {
     const onMessage = (event: Event) => {
       const detail = (event as CustomEvent<{
@@ -647,6 +750,7 @@ function IdentityBoundMessenger({ variant, user }: {
         appendMessage(detail.message);
         void loadMessages(detail.roomId);
       }
+      // loadRooms returns server-ordered list (newest first); just refresh.
       void loadRooms();
     };
     const onReconnect = () => {
@@ -688,7 +792,8 @@ function IdentityBoundMessenger({ variant, user }: {
   }
 
   async function openRoom(room: DmRoom) {
-    setShowSettings(false); setShowContacts(false); setShowEmoji(false);
+    cancelPending();
+    setShowSettings(false); setShowContacts(false); setShowEmoji(false); setShowAttachTray(false);
     activeRoomIdRef.current = room.id;
     setMessages([]);
     setActiveRoom(room);
@@ -724,7 +829,7 @@ function IdentityBoundMessenger({ variant, user }: {
   async function createGroup() {
     const r = await fetch(api("/api/messages/rooms"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "group", roomName: groupName || "Group", icon: "👥" }), credentials: "include",
+      body: JSON.stringify({ type: "group", roomName: groupName || "Group", icon: "" }), credentials: "include",
     });
     if (r.ok) {
       const j = await r.json();
@@ -734,8 +839,8 @@ function IdentityBoundMessenger({ variant, user }: {
     }
   }
 
-  async function sendMessage(override?: object) {
-    if (!activeRoom || (!text.trim() && !override) || sending) return;
+  async function sendMessage(override?: object): Promise<boolean> {
+    if (!activeRoom || (!text.trim() && !override) || sending) return false;
     setSending(true);
     try {
       const body: object = override ?? { content: text.trim(), type: "text" };
@@ -749,10 +854,15 @@ function IdentityBoundMessenger({ variant, user }: {
         if (mountedRef.current && activeRoomIdRef.current === roomId) appendMessage(j.message);
         if (!override) { setText(""); if (textRef.current) textRef.current.style.height = "auto"; }
         loadRooms();
+        return true;
       } else {
         const j = await r.json().catch(() => ({} as { error?: string }));
         if (j.error) setToast(j.error);
+        return false;
       }
+    } catch {
+      setToast(st.send_failed ?? "Message not sent");
+      return false;
     } finally { setSending(false); }
   }
 
@@ -768,7 +878,7 @@ function IdentityBoundMessenger({ variant, user }: {
       loadRooms();
     } else {
       const j = await r.json().catch(() => ({} as { error?: string }));
-      setToast(j.error ?? "❌");
+      setToast(j.error ?? "Error");
     }
   }
 
@@ -779,11 +889,18 @@ function IdentityBoundMessenger({ variant, user }: {
   }
 
   // Upload one file/blob with real progress events (XHR — fetch has no upload progress).
-  function uploadWithProgress(file: File | Blob, fallbackName: string, onProgress: (pct: number) => void) {
-    return new Promise<{ ok: boolean; status: number; json: any }>((resolve) => {
+  // Returns the XHR so callers can register it in xhrMapRef for per-item cancellation.
+  function uploadWithProgress(
+    file: File | Blob,
+    fallbackName: string,
+    onProgress: (pct: number) => void,
+    onXhr: (xhr: XMLHttpRequest) => void,
+  ) {
+    return new Promise<{ ok: boolean; status: number; json: any; aborted: boolean }>((resolve) => {
       const fd = new FormData();
       fd.append("file", file, file instanceof File ? file.name : `${fallbackName}.webm`);
       const xhr = new XMLHttpRequest();
+      onXhr(xhr);
       activeUploadsRef.current.add(xhr);
       xhr.open("POST", api("/api/messages/upload"));
       xhr.withCredentials = true;
@@ -792,37 +909,53 @@ function IdentityBoundMessenger({ variant, user }: {
         activeUploadsRef.current.delete(xhr);
         let json: any = {};
         try { json = JSON.parse(xhr.responseText); } catch { /* non-JSON error body */ }
-        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json });
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json, aborted: false });
       };
       xhr.onerror = () => {
         activeUploadsRef.current.delete(xhr);
-        resolve({ ok: false, status: 0, json: {} });
+        resolve({ ok: false, status: 0, json: {}, aborted: false });
       };
       xhr.onabort = () => {
         activeUploadsRef.current.delete(xhr);
-        resolve({ ok: false, status: 0, json: {} });
+        resolve({ ok: false, status: 0, json: {}, aborted: true });
       };
       xhr.send(fd);
     });
   }
 
-  async function uploadAndSend(file: File | Blob, fallbackName = "attachment", onProgress: (pct: number) => void = () => {}) {
-    if (!activeRoom) return false;
-    const r = await uploadWithProgress(file, fallbackName, onProgress);
-    if (!mountedRef.current) return false;
+  async function uploadAndSend(
+    file: File | Blob,
+    pendingId: string,
+    fallbackName = "attachment",
+    onProgress: (pct: number) => void = () => {},
+  ): Promise<"sent" | "failed" | "cancelled"> {
+    if (!activeRoom) return "failed";
+    const roomId = activeRoom.id;
+    const r = await uploadWithProgress(file, fallbackName, onProgress, (xhr) => {
+      xhrMapRef.current.set(pendingId, xhr);
+    });
+    xhrMapRef.current.delete(pendingId);
+    if (r.aborted || cancelledUploadIdsRef.current.has(pendingId)) return "cancelled";
+    if (!mountedRef.current) return "cancelled";
     if (!r.ok) {
       setToast(r.status === 429
-        ? (r.json.error ?? (st.upload_limit ?? "تجاوزت الحد المسموح من الملفات — حاول بعد قليل ⏳"))
-        : (r.json.error ?? "فشل رفع الملف ❌"));
-      return false;
+        ? (r.json.error ?? (st.upload_limit ?? "Upload limit reached — please wait a moment"))
+        : (r.json.error ?? "Upload failed"));
+      return "failed";
     }
     const j = r.json as { url: string; kind: string; name: string };
     const body =
       j.kind === "audio" ? { audioUrl: j.url, type: "audio" } :
       j.kind === "video" ? { videoUrl: j.url, type: "video" } :
       { fileUrl: j.url, type: "file", content: j.kind === "image" ? "[Image]" : `📁 ${j.name}` };
-    await sendMessage(body);
-    return true;
+    // Guard: only send the message if the room is still active and the item
+    // wasn't removed or cancelled while the upload was in flight.
+    if (!mountedRef.current || activeRoomIdRef.current !== roomId) return "cancelled";
+    if (cancelledUploadIdsRef.current.has(pendingId) || !pendingRef.current.some(p => p.id === pendingId)) {
+      // Item was removed by the user while uploading — do NOT send the message.
+      return "cancelled";
+    }
+    return await sendMessage(body) ? "sent" : "failed";
   }
 
   // Stage one or more files into the pre-send preview strip.
@@ -841,11 +974,11 @@ function IdentityBoundMessenger({ variant, user }: {
         progress: 0,
       });
     }
-    if (tooBig) setToast("الحد الأقصى 25MB ⚠️");
+    if (tooBig) setToast("Max 25MB per file");
     setPending(prev => {
       const room = UPLOAD_BATCH_LIMIT - prev.length;
       if (staged.length > room) {
-        setToast(st.upload_limit_batch ?? `يمكن إرسال ${UPLOAD_BATCH_LIMIT} ملفاً كحد أقصى كل 10 دقائق 📎`);
+        setToast(st.upload_limit_batch ?? `Max ${UPLOAD_BATCH_LIMIT} files per batch`);
         staged.slice(room).forEach(p => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
       }
       return [...prev, ...staged.slice(0, Math.max(0, room))];
@@ -856,6 +989,7 @@ function IdentityBoundMessenger({ variant, user }: {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     stageFiles(files);
+    setShowAttachTray(false);
   }
 
   // Upload every staged file sequentially with per-file progress, then clear.
@@ -869,13 +1003,24 @@ function IdentityBoundMessenger({ variant, user }: {
         // Skip files the user removed while earlier ones were uploading.
         if (!pendingRef.current.some(p => p.id === item.id)) continue;
         setPending(prev => prev.map(p => p.id === item.id ? { ...p, status: "uploading", progress: 0 } : p));
-        const ok = await uploadAndSend(item.file, "attachment",
-          pct => setPending(prev => prev.map(p => p.id === item.id ? { ...p, progress: pct } : p)));
-        if (ok) {
+        const result = await uploadAndSend(
+          item.file,
+          item.id,
+          "attachment",
+          pct => setPending(prev => prev.map(p => p.id === item.id ? { ...p, progress: pct } : p)),
+        );
+        if (result === "sent") {
+          cancelledUploadIdsRef.current.delete(item.id);
           if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
           setPending(prev => prev.filter(p => p.id !== item.id));
+        } else if (result === "cancelled") {
+          cancelledUploadIdsRef.current.delete(item.id);
+          continue;
         } else {
-          setPending(prev => prev.map(p => p.id === item.id ? { ...p, status: "error", progress: 0 } : p));
+          // If the item was removed/cancelled during upload it's already gone — don't mark error.
+          if (pendingRef.current.some(p => p.id === item.id)) {
+            setPending(prev => prev.map(p => p.id === item.id ? { ...p, status: "error", progress: 0 } : p));
+          }
           // Rate-limited: stop hammering the server; remaining files stay staged.
           break;
         }
@@ -883,20 +1028,28 @@ function IdentityBoundMessenger({ variant, user }: {
     } finally { setUploading(false); }
   }
 
+  // Remove a staged item. If it is actively uploading, abort the XHR first
+  // so the server never completes and no late message is sent.
   function removePending(id: string) {
-    setPending(prev => {
-      const item = prev.find(p => p.id === id);
-      if (item?.status === "uploading") return prev; // can't cancel mid-flight
-      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
-      return prev.filter(p => p.id !== id);
-    });
+    const item = pendingRef.current.find(p => p.id === id);
+    if (!item) return;
+    cancelledUploadIdsRef.current.add(id);
+    const xhr = xhrMapRef.current.get(id);
+    if (xhr) xhr.abort();
+    xhrMapRef.current.delete(id);
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    setPending(prev => prev.filter(p => p.id !== id));
   }
 
   function cancelPending() {
-    setPending(prev => {
-      prev.forEach(p => { if (p.previewUrl && p.status !== "uploading") URL.revokeObjectURL(p.previewUrl); });
-      return prev.filter(p => p.status === "uploading");
+    pendingRef.current.forEach(p => {
+      cancelledUploadIdsRef.current.add(p.id);
+      const xhr = xhrMapRef.current.get(p.id);
+      if (xhr) xhr.abort();
+      xhrMapRef.current.delete(p.id);
+      if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
     });
+    setPending([]);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -911,6 +1064,7 @@ function IdentityBoundMessenger({ variant, user }: {
   }
 
   async function startVoiceNote() {
+    setShowAttachTray(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
@@ -932,7 +1086,7 @@ function IdentityBoundMessenger({ variant, user }: {
       recCancelledRef.current = false;
       rec.start();
       setRecording(true);
-    } catch { setToast("تعذّر الوصول إلى الميكروفون — تحقق من الإذن أو الجهاز ⚠️"); }
+    } catch { setToast("Microphone access denied — check permissions"); }
   }
 
   function stopVoiceNote(discard = false) {
@@ -986,6 +1140,198 @@ function IdentityBoundMessenger({ variant, user }: {
 
   const BackArrow = dir === "rtl" ? ArrowRight : ArrowLeft;
 
+  // ── Composer ─────────────────────────────────────────────────────────────────
+  // The + button lives inside the text-input shell (inset-inline-start).
+  // Tapping it reveals a compact floating tray with 5 tools above the input.
+  // The send button is always visible to the right of the input.
+  // While recording a voice note, the send/tray area switches to record controls.
+
+  const composerEl = (
+    <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
+      {/* Recording indicator */}
+      {recording && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px" }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", animation: "pulse 1s infinite" }} />
+          <span style={{ color: "#ef4444", fontSize: 13, fontWeight: 800 }}>{st.record_voice ?? "Recording…"}</span>
+          <button onClick={() => stopVoiceNote(true)}
+            style={{ marginInlineStart: "auto", background: "none", border: "none", cursor: "pointer", color: "#888", fontSize: 12 }}>
+            {st.stop_recording ?? "Discard"}
+          </button>
+        </div>
+      )}
+
+      {/* Input row: [input-with-plus-inside] [send-or-stop] */}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", position: "relative" }} ref={attachTrayRef}>
+        {/* Attach tray — floats above the composer when open */}
+        <AnimatePresence>
+          {showAttachTray && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              style={{
+                position: "absolute",
+                bottom: "calc(100% + 8px)",
+                insetInlineStart: 0,
+                background: "#181818",
+                border: `1px solid ${GOLD}20`,
+                borderRadius: 14,
+                padding: "6px",
+                display: "flex",
+                gap: 4,
+                zIndex: 50,
+                boxShadow: "0 8px 28px rgba(0,0,0,0.6)",
+              }}>
+              {([
+                [<Camera key="cam" size={19} />, st.attach_camera ?? "Camera", () => cameraRef.current?.click()],
+                [<ImageIcon key="gal" size={19} />, st.attach_gallery ?? "Gallery", () => galleryRef.current?.click()],
+                [<Paperclip key="fil" size={19} />, st.attach_file ?? "Files", () => fileRef.current?.click()],
+                [
+                  recording ? <Square key="rec" size={17} /> : <Mic key="rec" size={19} />,
+                  recording ? (st.stop_recording ?? "Stop") : (st.record_voice ?? "Microphone"),
+                  () => recording ? stopVoiceNote() : startVoiceNote(),
+                ],
+                [<Smile key="emo" size={19} />, st.attach_emoji ?? "Emoji", () => { setShowEmoji(v => !v); setShowAttachTray(false); }],
+              ] as [React.ReactNode, string, () => void][]).map(([icon, label, fn], idx) => (
+                <button
+                  key={idx}
+                  onClick={fn}
+                  title={label}
+                  aria-label={label}
+                  disabled={uploading}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 10,
+                    border: `1px solid ${GOLD}15`,
+                    cursor: "pointer",
+                    background: (idx === 3 && recording) ? "#ef444420" : `${GOLD}10`,
+                    color: (idx === 3 && recording) ? "#ef4444" : GOLD,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    opacity: uploading ? 0.5 : 1,
+                    flexShrink: 0,
+                  }}>
+                  {icon}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Text input shell — + button lives on the leading edge inside the border */}
+        <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end" }}>
+          {/* + button — inset inside the input shell */}
+          <button
+            onClick={() => { setShowAttachTray(v => !v); setShowEmoji(false); }}
+            aria-label="Attach"
+            disabled={recording}
+            style={{
+              position: "absolute",
+              insetInlineStart: 8,
+              bottom: 9,
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              border: `1px solid ${GOLD}30`,
+              background: showAttachTray ? `${GOLD}25` : "#252525",
+              color: showAttachTray ? GOLD : "#888",
+              cursor: recording ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2,
+              flexShrink: 0,
+              transition: "background 0.15s, color 0.15s",
+            }}>
+            <Plus size={15} style={{ transform: showAttachTray ? "rotate(45deg)" : "none", transition: "transform 0.2s" }} />
+          </button>
+
+          <textarea
+            ref={textRef}
+            value={text}
+            rows={1}
+            onChange={e => { setText(e.target.value); autoGrow(); }}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            onPaste={onPaste}
+            onFocus={() => { setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 250); setShowAttachTray(false); }}
+            placeholder={st.type_message}
+            dir="auto"
+            disabled={recording}
+            style={{
+              width: "100%",
+              background: "#1c1c1c",
+              border: `1px solid ${GOLD}20`,
+              borderRadius: 22,
+              // Padding-inline-start leaves room for the + button (28px button + 8px gap + 8px padding = 44px)
+              paddingTop: 11,
+              paddingBottom: 11,
+              paddingInlineStart: 46,
+              paddingInlineEnd: 16,
+              color: "#fff",
+              fontSize: 16,
+              lineHeight: 1.4,
+              outline: "none",
+              minWidth: 0,
+              resize: "none",
+              maxHeight: 120,
+              fontFamily: "inherit",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        {/* Send button (always visible) or Stop-recording */}
+        {recording ? (
+          <button
+            onClick={() => stopVoiceNote(false)}
+            title={st.stop_recording ?? "Stop"}
+            style={{ width: 46, height: 46, borderRadius: "50%", background: "#ef4444", border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Square size={18} />
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              if (pending.length > 0) confirmPending();
+              else sendMessage();
+            }}
+            disabled={(!text.trim() && pending.length === 0) || sending}
+            title={st.send}
+            style={{ width: 46, height: 46, borderRadius: "50%", background: (text.trim() || pending.length > 0) ? GOLD : "#1c1c1c", border: "none", color: (text.trim() || pending.length > 0) ? "#000" : "#555", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Send size={20} style={dir === "rtl" ? { transform: "scaleX(-1)" } : undefined} />
+          </button>
+        )}
+      </div>
+
+      {/* Emoji panel (shown below the input row) */}
+      {showEmoji && (
+        <div style={{ background: BG_BAR, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 4, padding: "4px 4px 0" }}>
+            {EMOJI_GROUPS.map(([icon], i) => (
+              <button key={icon} onClick={() => setEmojiGroup(i)}
+                style={{ background: emojiGroup === i ? `${GOLD}25` : "none", border: "none", fontSize: 17, cursor: "pointer", padding: "4px 10px", borderRadius: 6, lineHeight: 1 }}>
+                {icon}
+              </button>
+            ))}
+            <button onClick={() => setShowEmoji(false)} style={{ marginInlineStart: "auto", background: "none", border: "none", cursor: "pointer", color: "#666", padding: "4px 6px" }}>
+              <X size={14} />
+            </button>
+          </div>
+          <div style={{ padding: "6px 4px 8px", display: "flex", flexWrap: "wrap", gap: 2, maxHeight: 140, overflowY: "auto" }}>
+            {EMOJI_GROUPS[emojiGroup][1].map(e => (
+              <button key={e} onClick={() => { setText(t => t + e); autoGrow(); }}
+                style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", padding: 4, lineHeight: 1 }}>
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   // ── Chat page (full screen when open) ───────────────────────────────────────
   const chatPage = activeRoom && (
     <div
@@ -999,8 +1345,8 @@ function IdentityBoundMessenger({ variant, user }: {
       {/* Drag overlay */}
       {dragOver && (
         <div style={{ position: "absolute", inset: 0, background: "#000000cc", zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
-          <span style={{ fontSize: 40 }}>📎</span>
-          <p style={{ margin: 0, color: GOLD, fontWeight: 800, fontSize: 15 }}>أفلت الملف هنا للإرسال</p>
+          <Paperclip size={40} style={{ color: GOLD, opacity: 0.8 }} />
+          <p style={{ margin: 0, color: GOLD, fontWeight: 800, fontSize: 15 }}>Drop to attach</p>
         </div>
       )}
       <AnimatePresence>
@@ -1018,7 +1364,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
       {/* ── Header: back + avatar + name + call buttons ── */}
       <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); }} title={st.back ?? "Back"}
+        <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); setShowAttachTray(false); }} title={st.back ?? "Back"}
           style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <BackArrow size={22} />
         </button>
@@ -1056,7 +1402,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
       {/* ── Messages with date separators ── */}
       <div style={{ flex: 1, overflowY: "auto", overscrollBehavior: "contain", padding: "12px 12px 4px", display: "flex", flexDirection: "column", gap: 4, WebkitOverflowScrolling: "touch" }}
-        onClick={() => setMenuMsgId(null)}>
+        onClick={() => { setMenuMsgId(null); setShowAttachTray(false); }}>
         {grouped.map(group => (
           <div key={group.label + group.msgs[0]?.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ alignSelf: "center", background: "#1a1a1a", color: "#aaa", fontSize: 11.5, fontWeight: 700, borderRadius: 8, padding: "4px 12px", margin: "8px 0" }}>
@@ -1122,7 +1468,7 @@ function IdentityBoundMessenger({ variant, user }: {
         <div ref={endRef} />
       </div>
 
-      {/* ── Attachment preview strip (multi-file, per-file progress) ── */}
+      {/* ── Attachment preview strip (multi-file, per-file progress + individual cancel) ── */}
       {pending.length > 0 && (
         <div style={{ padding: "10px 14px", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
@@ -1136,7 +1482,10 @@ function IdentityBoundMessenger({ variant, user }: {
                   ) : p.previewUrl && p.file.type.startsWith("audio/") ? (
                     <audio controls src={p.previewUrl} style={{ width: 88, height: 34 }} />
                   ) : (
-                    <div style={{ fontSize: 11, color: "#ddd", padding: 6, textAlign: "center", overflow: "hidden", wordBreak: "break-all" }}>📁 {p.file.name.slice(0, 28)}</div>
+                    <div style={{ fontSize: 11, color: "#ddd", padding: 6, textAlign: "center", overflow: "hidden", wordBreak: "break-all" }}>
+                      <Paperclip size={20} style={{ color: GOLD, display: "block", margin: "0 auto 4px" }} />
+                      {p.file.name.slice(0, 24)}
+                    </div>
                   )}
                   {p.status === "uploading" && (
                     <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 8 }}>
@@ -1148,16 +1497,17 @@ function IdentityBoundMessenger({ variant, user }: {
                   )}
                   {p.status === "error" && (
                     <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: "#ef4444", fontSize: 12, fontWeight: 800 }}>
-                      ⚠️
+                      Error
                     </div>
                   )}
                 </div>
-                {p.status !== "uploading" && (
-                  <button onClick={() => removePending(p.id)} title="إلغاء"
-                    style={{ position: "absolute", top: -6, insetInlineEnd: -6, width: 22, height: 22, borderRadius: "50%", background: "#1a1a1a", border: `1px solid ${GOLD}30`, color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-                    <X size={12} />
-                  </button>
-                )}
+                {/* Remove/cancel — always available; aborts XHR if in-flight */}
+                <button
+                  onClick={() => removePending(p.id)}
+                  title={p.status === "uploading" ? "Cancel upload" : "Remove"}
+                  style={{ position: "absolute", top: -6, insetInlineEnd: -6, width: 22, height: 22, borderRadius: "50%", background: "#1a1a1a", border: `1px solid ${p.status === "uploading" ? "#ef4444" : `${GOLD}30`}`, color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  <X size={12} />
+                </button>
                 <div style={{ fontSize: 10, color: "#888", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {p.file.name} · {(p.file.size / 1024 / 1024).toFixed(1)}MB
                 </div>
@@ -1167,92 +1517,28 @@ function IdentityBoundMessenger({ variant, user }: {
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
             <div style={{ flex: 1, fontSize: 12, color: uploading ? GOLD : "#888" }}>
               {uploading
-                ? `⏳ ${st.uploading ?? "جاري رفع الملف…"} (${pending.filter(p => p.status === "uploading").length ? pending.findIndex(p => p.status === "uploading") + 1 : pending.length}/${pending.length})`
-                : `${pending.length} 📎`}
+                ? `${st.uploading ?? "Uploading…"} (${pending.findIndex(p => p.status === "uploading") + 1}/${pending.length})`
+                : `${pending.length} file${pending.length !== 1 ? "s" : ""} ready`}
             </div>
             <button onClick={confirmPending} disabled={uploading || pending.every(p => p.status === "uploading")} title={st.send}
               style={{ width: 42, height: 42, borderRadius: "50%", background: uploading ? "#1c1c1c" : GOLD, border: "none", color: uploading ? "#555" : "#000", cursor: uploading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Send size={18} />
             </button>
-            <button onClick={cancelPending} disabled={uploading} title="إلغاء"
-              style={{ width: 34, height: 34, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#ef4444", cursor: uploading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: uploading ? 0.5 : 1 }}>
+            <button onClick={cancelPending} title="Cancel all"
+              style={{ width: 34, height: 34, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#ef4444", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <X size={15} />
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Emoji panel ── */}
-      {showEmoji && (
-        <div style={{ background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
-          <div style={{ display: "flex", gap: 4, padding: "6px 12px 0" }}>
-            {EMOJI_GROUPS.map(([icon], i) => (
-              <button key={icon} onClick={() => setEmojiGroup(i)}
-                style={{ background: emojiGroup === i ? `${GOLD}25` : "none", border: "none", fontSize: 17, cursor: "pointer", padding: "4px 10px", borderRadius: 6, lineHeight: 1 }}>
-                {icon}
-              </button>
-            ))}
-          </div>
-          <div style={{ padding: "6px 12px 8px", display: "flex", flexWrap: "wrap", gap: 2, maxHeight: 140, overflowY: "auto" }}>
-            {EMOJI_GROUPS[emojiGroup][1].map(e => (
-              <button key={e} onClick={() => { setText(t => t + e); autoGrow(); }}
-                style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", padding: 4, lineHeight: 1 }}>
-                {e}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Hidden pickers */}
       <input ref={cameraRef}  type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
-      <input ref={gifRef}     type="file" accept="image/gif" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={galleryRef} type="file" multiple accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={fileRef}    type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
 
-      {/* ── Composer: explicit Camera, Microphone, and GIF controls ── */}
-      <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
-        {recording && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px" }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", animation: "pulse 1s infinite" }} />
-            <span style={{ color: "#ef4444", fontSize: 13, fontWeight: 800 }}>{st.record_voice ?? "Recording…"} 🎙️</span>
-          </div>
-        )}
-        {/* Row 1: BIG input + send */}
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <textarea ref={textRef} value={text} rows={1}
-            onChange={e => { setText(e.target.value); autoGrow(); }}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            onPaste={onPaste}
-            onFocus={() => setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 250)}
-            placeholder={st.type_message} dir="auto" disabled={recording}
-            style={{ flex: 1, background: "#1c1c1c", border: `1px solid ${GOLD}20`, borderRadius: 22, padding: "11px 16px", color: "#fff", fontSize: 16, lineHeight: 1.4, outline: "none", minWidth: 80, resize: "none", maxHeight: 120, fontFamily: "inherit" }} />
-          <button onClick={() => sendMessage()} disabled={!text.trim() || sending} title={st.send}
-            style={{ width: 46, height: 46, borderRadius: "50%", background: text.trim() ? GOLD : "#1c1c1c", border: "none", color: text.trim() ? "#000" : "#555", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Send size={20} style={dir === "rtl" ? { transform: "scaleX(-1)" } : undefined} />
-          </button>
-        </div>
-        {/* Row 2: mobile-safe tools — camera | gallery | GIF | file | microphone | emoji */}
-        <div style={{ display: "flex", gap: 6, justifyContent: "space-around", marginTop: 8 }}>
-          {([
-            [<Camera key="c" size={20} />, st.attach_camera ?? "Camera", () => cameraRef.current?.click(), false],
-            [<ImageIcon key="i" size={20} />, st.attach_gallery ?? "Gallery", () => galleryRef.current?.click(), false],
-            [<FileImage key="g" size={20} />, st.attach_gif ?? "GIF", () => gifRef.current?.click(), false],
-            [<Paperclip key="f" size={20} />, st.attach_file ?? "فيشي", () => fileRef.current?.click(), false],
-            [recording ? <Square key="m" size={18} /> : <Mic key="m" size={20} />, recording ? (st.stop_recording ?? "Stop") : (st.record_voice ?? "Microphone"), () => recording ? stopVoiceNote() : startVoiceNote(), recording],
-            [<Smile key="e" size={20} />, st.attach_emoji ?? "ايموجي", () => setShowEmoji(v => !v), showEmoji],
-          ] as [React.ReactNode, string, () => void, boolean][]).map(([icon, title, fn, active], idx) => (
-            <button key={idx} onClick={fn} title={title} aria-label={title} disabled={uploading}
-              style={{ flex: 1, maxWidth: 64, height: 42, borderRadius: 14, border: "none", cursor: "pointer",
-                background: active ? (idx === 3 ? "#ef4444" : `${GOLD}25`) : "#1c1c1c",
-                color: active ? (idx === 3 ? "#fff" : GOLD) : "#bbb",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                opacity: uploading ? 0.5 : 1 }}>
-              {icon}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* ── Composer ── */}
+      {composerEl}
     </div>
   );
 
@@ -1263,7 +1549,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
         {/* ── Top bar ── */}
         <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>AMIS 👑</p>
+          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>AMIS</p>
           <button onClick={() => setShowSettings(true)} title={st.msg_settings ?? "Settings"}
             style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Settings size={18} />
@@ -1292,7 +1578,7 @@ function IdentityBoundMessenger({ variant, user }: {
                     style={{ textAlign: "start", padding: "11px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: "transparent", display: "flex", gap: 12, alignItems: "center", width: "100%", borderBottom: "1px solid #ffffff06" }}>
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       {room.type === "group"
-                        ? <div style={{ width: 48, height: 48, background: "#222", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{room.icon ?? "👥"}</div>
+                        ? <div style={{ width: 48, height: 48, background: "#222", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}><Users size={22} style={{ color: "#666" }} /></div>
                         : <Avatar name={peerName} size={48} />
                       }
                       {isOnline && (
@@ -1314,7 +1600,7 @@ function IdentityBoundMessenger({ variant, user }: {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 2 }}>
                         <p style={{ margin: 0, color: "#ffffff45", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} dir="auto">
                           {room.lastMessage
-                            ? (room.lastMessage.type === "audio" ? "🎤 Voice" : room.lastMessage.type === "file" ? "🖼 Image" : room.lastMessage.type === "video" ? "🎥 Video" : room.lastMessage.content)
+                            ? (room.lastMessage.type === "audio" ? "Voice note" : room.lastMessage.type === "file" ? "Image" : room.lastMessage.type === "video" ? "Video" : room.lastMessage.content)
                             : "—"}
                         </p>
                         {room.unreadCount > 0 && !room.muted && (

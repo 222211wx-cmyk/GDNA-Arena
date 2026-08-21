@@ -4,7 +4,13 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { db, dmRooms, dmRoomMembers, dmMessages, usersTable, pool as _pool } from "@workspace/db";
-import { gcsChatStorage, getChatObject, chatObjectStream, migrateLegacyChatUploads } from "../lib/chatStorage";
+import {
+  gcsChatStorage,
+  getChatObject,
+  deleteChatObject,
+  chatObjectStream,
+  migrateLegacyChatUploads,
+} from "../lib/chatStorage";
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
 import { broadcastMessageToRoom } from "../lib/signaling";
@@ -137,9 +143,28 @@ router.post("/messages/upload", (req, res): void => {
 
 // GET /messages/files/:name — serve an uploaded attachment (login required)
 router.get("/messages/files/:name", async (req, res): Promise<void> => {
-  if (!req.session?.userId) { res.status(401).json({ error: "Login required" }); return; }
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
   const name = req.params.name;
   if (!/^[A-Za-z0-9._-]+$/.test(name)) { res.status(400).json({ error: "Bad name" }); return; }
+
+  // A private attachment is readable only while it belongs to a message in a
+  // room the current citizen is still a member of. Knowing a random filename
+  // is never sufficient authorization.
+  const attachmentUrl = `/api/messages/files/${name}`;
+  const authorized = await pool.query(
+    `SELECT 1
+     FROM dm_messages m
+     JOIN dm_room_members rm ON rm.room_id = m.room_id
+     WHERE rm.user_id = $1
+       AND (m.file_url = $2 OR m.audio_url = $2 OR m.video_url = $2)
+     LIMIT 1`,
+    [userId, attachmentUrl],
+  );
+  if (authorized.rows.length === 0) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
 
   // Content-Type derives from the server-chosen extension only; never sniff.
   const mime = mimeForExt(path.extname(name).toLowerCase());
@@ -220,7 +245,12 @@ async function hideReadCursors<T extends MemberRow>(members: T[], viewerId: numb
   });
 }
 
-// ── GET /messages/rooms — list my rooms ───────────────────────────────────────
+// ── GET /messages/rooms — list my rooms, newest-activity first ────────────────
+// Sort order: descending by the latest message timestamp in each room; rooms
+// with no messages fall back to their creation timestamp so they still appear
+// in a deterministic position rather than floating at an unpredictable spot.
+// Membership authorisation, read-receipt privacy, muted state, and the
+// response shape are preserved exactly as before.
 router.get("/messages/rooms", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
@@ -235,7 +265,22 @@ router.get("/messages/rooms", async (req, res): Promise<void> => {
     `SELECT room_id FROM dm_room_members WHERE user_id = $1 AND muted`, [userId]);
   const mutedSet = new Set<number>(mutedRes.rows.map((r: { room_id: number }) => r.room_id));
 
-  const rooms = await Promise.all(myMemberships.map(async (membership) => {
+  const roomIds = myMemberships.map(m => m.roomId);
+
+  // Fetch the latest-message timestamp for every room in one query.
+  // Rooms with no messages yield NULL — we'll fall back to room.created_at.
+  const latestMsgRes = await pool.query<{ room_id: number; latest_at: Date | null }>(
+    `SELECT room_id, MAX(created_at) AS latest_at
+     FROM dm_messages
+     WHERE room_id = ANY($1)
+     GROUP BY room_id`,
+    [roomIds],
+  );
+  const latestMsgByRoom = new Map<number, Date | null>(
+    latestMsgRes.rows.map((r) => [r.room_id, r.latest_at]),
+  );
+
+  const roomData = await Promise.all(myMemberships.map(async (membership) => {
     const { roomId, lastReadAt } = membership;
     const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
     if (!room) return null;
@@ -245,10 +290,21 @@ router.get("/messages/rooms", async (req, res): Promise<void> => {
       .where(eq(dmMessages.roomId, roomId))
       .orderBy(desc(dmMessages.createdAt)).limit(1);
     const cnt = await unreadCount(roomId, userId, lastReadAt ?? null);
-    return { ...room, members, lastMessage: lastMsg ?? null, unreadCount: cnt, muted: mutedSet.has(roomId) };
+    // Stable sort key: latest message time, or room creation time as fallback.
+    const latestAt = latestMsgByRoom.get(roomId) ?? room.createdAt;
+    return { ...room, members, lastMessage: lastMsg ?? null, unreadCount: cnt, muted: mutedSet.has(roomId), _latestAt: latestAt };
   }));
 
-  res.json({ rooms: rooms.filter(Boolean) });
+  // Sort newest-activity first, then strip the internal sort key before responding.
+  const sorted = (roomData.filter(Boolean) as NonNullable<typeof roomData[number]>[])
+    .sort((a, b) => {
+      const ta = a._latestAt ? new Date(a._latestAt).getTime() : 0;
+      const tb = b._latestAt ? new Date(b._latestAt).getTime() : 0;
+      return (tb - ta) || (b.id - a.id);
+    })
+    .map(({ _latestAt: _unused, ...rest }) => rest);
+
+  res.json({ rooms: sorted });
 });
 
 // ── POST /messages/rooms — create or find DM room ────────────────────────────
@@ -598,9 +654,43 @@ router.delete("/messages/rooms/:roomId/messages/:msgId", async (req, res): Promi
   // Only the author can delete their own message — enforced in the WHERE clause
   const deleted = await db.delete(dmMessages)
     .where(and(eq(dmMessages.id, msgId), eq(dmMessages.roomId, roomId), eq(dmMessages.userId, userId)))
-    .returning({ id: dmMessages.id });
+    .returning({
+      id: dmMessages.id,
+      fileUrl: dmMessages.fileUrl,
+      audioUrl: dmMessages.audioUrl,
+      videoUrl: dmMessages.videoUrl,
+    });
   if (deleted.length === 0) {
     res.status(403).json({ error: "يمكنك حذف رسائلك فقط — Vous ne pouvez supprimer que vos propres messages" }); return;
+  }
+
+  // Deleting an authored attachment also removes the private bytes once no
+  // other message references the same object. Even if storage is temporarily
+  // unavailable, the authorization query above makes the orphan unreadable.
+  const localAttachmentUrls = [deleted[0].fileUrl, deleted[0].audioUrl, deleted[0].videoUrl]
+    .filter((url): url is string => typeof url === "string")
+    .filter(url => /^\/api\/messages\/files\/[A-Za-z0-9._-]+$/.test(url));
+
+  for (const attachmentUrl of new Set(localAttachmentUrls)) {
+    const stillReferenced = await pool.query(
+      `SELECT 1
+       FROM dm_messages
+       WHERE file_url = $1 OR audio_url = $1 OR video_url = $1
+       LIMIT 1`,
+      [attachmentUrl],
+    );
+    if (stillReferenced.rows.length > 0) continue;
+
+    const name = attachmentUrl.slice(attachmentUrl.lastIndexOf("/") + 1);
+    try {
+      await deleteChatObject(name);
+      const legacyPath = path.join(legacyChatUploadsDir, name);
+      if (legacyPath.startsWith(legacyChatUploadsDir) && fs.existsSync(legacyPath)) {
+        fs.unlinkSync(legacyPath);
+      }
+    } catch (error) {
+      console.error("Deleted message attachment cleanup failed:", error);
+    }
   }
   res.json({ deleted: true });
 });
