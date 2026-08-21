@@ -29,6 +29,10 @@ ADMIN_EMAILS = "222211wx@gmail.com"
 GIPHY_API_KEY = "dc6zaT0xFJmzC"
 
 [[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
 localPort = 8081
 externalPort = 8081
 
