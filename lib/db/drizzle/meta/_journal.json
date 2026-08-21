@@ -22,6 +22,34 @@
       "when": 1787257798730,
       "tag": "0002_remove-obsolete-email-verification",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787286665554,
+      "tag": "0003_link-globalstar-player-owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787286928684,
+      "tag": "0004_validate-citizen-dna-owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787286989885,
+      "tag": "0005_enforce-future-citizen-dna-owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787287029745,
+      "tag": "0006_anonymize-orphaned-citizen-dna",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { pgTable, serial, text, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
+import { usersTable } from "./users";
 
 export const gsFiguresTable = pgTable("gs_figures", {
   id: serial("id").primaryKey(),
@@ -59,6 +60,10 @@ export const gsMatchesTable = pgTable("gs_matches", {
 export const gsPlayersTable = pgTable("gs_players", {
   id: serial("id").primaryKey(),
   matchId: integer("match_id").notNull(),
+  // Stable ownership is set only for the authenticated citizen represented by
+  // this snapshot. Bots, stars, and imported/seeded players intentionally
+  // remain null rather than being inferred from a display name.
+  userId: integer("user_id").references(() => usersTable.id),
   username: text("username").notNull(),
   isUser: boolean("is_user").notNull().default(false), // true = real user, false = bot
   score: real("score").notNull().default(0),

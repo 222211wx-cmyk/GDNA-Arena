@@ -96,6 +96,7 @@ export async function encodeCitizenDNA(userId: number): Promise<CitizenDNA | nul
       LEFT JOIN pulse_posts pp ON pp.username = u.username
       LEFT JOIN legend_debates ld ON ld.username = u.username
       WHERE u.id = $1
+         AND u.password_hash <> 'DELETED'
       GROUP BY u.id
     `, [userId]);
 
@@ -220,10 +221,19 @@ Output ONLY the new insight sentence. No explanation.`;
 export async function encodeEmpireGenome(): Promise<EmpireGenome> {
   const [citizenStats, memStats, topDNA] = await Promise.all([
     pool.query(`SELECT COUNT(*)::int AS total, AVG(xp)::float AS avg_xp,
-                       AVG(balance)::float AS avg_balance FROM users`),
+                       AVG(balance)::float AS avg_balance
+                FROM users
+                WHERE password_hash <> 'DELETED'`),
     pool.query(`SELECT COUNT(*)::int AS total_mem,
                        COUNT(DISTINCT domain)::int AS domains FROM neural_memories`),
-    pool.query(`SELECT dna_string FROM citizen_dna ORDER BY generation DESC LIMIT 10`),
+    pool.query(`
+      SELECT cd.dna_string
+      FROM citizen_dna cd
+      JOIN users u ON u.id = cd.citizen_id
+      WHERE u.password_hash <> 'DELETED'
+      ORDER BY cd.generation DESC
+      LIMIT 10
+    `),
   ]);
 
   const stats = citizenStats.rows[0];
@@ -275,7 +285,7 @@ export async function encodeEmpireGenome(): Promise<EmpireGenome> {
 export async function ensureGenomeTables(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS citizen_dna (
-      citizen_id   INTEGER PRIMARY KEY,
+      citizen_id   INTEGER PRIMARY KEY REFERENCES users(id),
       username     TEXT NOT NULL,
       dna_string   CHAR(64) NOT NULL,
       archetype    TEXT NOT NULL DEFAULT 'EMERGING',

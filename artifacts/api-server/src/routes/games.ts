@@ -1,6 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, sql, desc } from "drizzle-orm";
-import { db, usersTable, transactionsTable } from "@workspace/db";
+import {
+  db,
+  gsMatchesTable,
+  gsPlayersTable,
+  transactionsTable,
+  usersTable,
+} from "@workspace/db";
 import { pushNotification } from "./notifications";
 import { isAdultForGames } from "../lib/age";
 
@@ -142,23 +148,45 @@ router.post("/games/globalstar/tournament", async (req, res): Promise<void> => {
   let newXp = xpEarned;
   let username = "CITIZEN";
 
-  const [updated] = await db
-      .update(usersTable)
-      .set({
-        balance:     sql`${usersTable.balance} + ${coinsEarned}`,
-        xp:          sql`${usersTable.xp} + ${xpEarned}`,
-        gamesPlayed: sql`${usersTable.gamesPlayed} + 1`,
-        wins:        isWin ? sql`${usersTable.wins} + 1` : usersTable.wins,
-      })
-      .where(eq(usersTable.id, userId))
-      .returning({ balance: usersTable.balance, xp: usersTable.xp, username: usersTable.username });
+  const updated = await db.transaction(async (tx) => {
+    const [citizen] = await tx
+        .update(usersTable)
+        .set({
+          balance:     sql`${usersTable.balance} + ${coinsEarned}`,
+          xp:          sql`${usersTable.xp} + ${xpEarned}`,
+          gamesPlayed: sql`${usersTable.gamesPlayed} + 1`,
+          wins:        isWin ? sql`${usersTable.wins} + 1` : usersTable.wins,
+        })
+        .where(eq(usersTable.id, userId))
+        .returning({ balance: usersTable.balance, xp: usersTable.xp, username: usersTable.username });
 
-  await db.insert(transactionsTable).values({
+    await tx.insert(transactionsTable).values({
+        userId,
+        amount: coinsEarned,
+        type: isWin ? "win" : "participation",
+        description: `GlobalStar Tournament — Rank #${placement} (+${coinsEarned} coins)`,
+      });
+
+    const [match] = await tx.insert(gsMatchesTable).values({
       userId,
-      amount: coinsEarned,
-      type: isWin ? "win" : "participation",
-      description: `GlobalStar Tournament — Rank #${placement} (+${coinsEarned} coins)`,
+      placement,
+      coinsEarned,
+      xpEarned,
+      tier,
+      isWin,
+    }).returning({ id: gsMatchesTable.id });
+
+    await tx.insert(gsPlayersTable).values({
+      matchId: match.id,
+      userId,
+      username: citizen.username,
+      isUser: true,
+      score: coinsEarned,
+      placement,
     });
+
+    return citizen;
+  });
 
   newBalance = updated.balance;
   newXp = updated.xp;

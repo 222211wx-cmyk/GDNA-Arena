@@ -33,7 +33,11 @@ router.get("/citizen/:id", async (req, res): Promise<void> => {
   try {
     // Try cached first
     const cached = await pool.query(
-      `SELECT * FROM citizen_dna WHERE citizen_id=$1`, [id]
+      `SELECT cd.*
+       FROM citizen_dna cd
+       JOIN users u ON u.id = cd.citizen_id
+       WHERE cd.citizen_id=$1
+         AND u.password_hash <> 'DELETED'`, [id]
     );
     if (cached.rows.length > 0) {
       res.json(cached.rows[0]);
@@ -86,8 +90,9 @@ router.get("/leaderboard", async (_req, res): Promise<void> => {
     const r = await pool.query(
       `SELECT cd.citizen_id, cd.username, cd.archetype, cd.traits,
               cd.generation, cd.evolved_at, u.xp, u.balance
-       FROM citizen_dna cd
-       JOIN users u ON u.id = cd.citizen_id
+        FROM citizen_dna cd
+        JOIN users u ON u.id = cd.citizen_id
+        WHERE u.password_hash <> 'DELETED'
        ORDER BY cd.generation DESC, u.xp DESC
        LIMIT 20`
     );
