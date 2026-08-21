@@ -22,6 +22,50 @@ async function request(path, options = {}) {
   });
 }
 
+test("a citizen can log out and the former session cannot load their account", async () => {
+  const username = `logout${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const password = "disposable-logout-password";
+
+  const registration = await request("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({
+      username,
+      password,
+      birthDate: "1990-01-01",
+    }),
+  });
+  assert.equal(registration.status, 201, await registration.text());
+  const cookie = sessionCookie(registration);
+
+  const logout = await request("/auth/logout", {
+    method: "POST",
+    headers: { cookie },
+  });
+  assert.equal(logout.status, 200, await logout.text());
+  assert.match(
+    logout.headers.get("set-cookie") ?? "",
+    /connect\.sid=;/,
+    "logout must clear the session cookie",
+  );
+
+  const formerSession = await request("/auth/me", {
+    headers: { cookie },
+  });
+  assert.equal(formerSession.status, 401, await formerSession.text());
+
+  const login = await request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  assert.equal(login.status, 200, await login.text());
+
+  const cleanup = await request("/auth/me", {
+    method: "DELETE",
+    headers: { cookie: sessionCookie(login) },
+  });
+  assert.equal(cleanup.status, 200, await cleanup.text());
+});
+
 test("a citizen can erase their account and can no longer log in", async () => {
   const username = `erase${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const password = "disposable-account-password";

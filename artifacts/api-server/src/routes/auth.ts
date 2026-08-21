@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import bcrypt from "bcrypt";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -42,6 +42,12 @@ async function sendWelcomeNotification(userId: number) {
 
 const router: IRouter = Router();
 const SALT_ROUNDS = 10;
+const SESSION_COOKIE_OPTIONS = {
+  path: "/",
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+};
 
 declare module "express-session" {
   interface SessionData {
@@ -72,6 +78,10 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
     isAdmin: user.isAdmin === true,
     isAdult: isAdultForGames(user.birthDate),
   };
+}
+
+function clearSessionCookie(res: Response): void {
+  res.clearCookie("connect.sid", SESSION_COOKIE_OPTIONS);
 }
 
 router.post("/auth/register", async (req, res): Promise<void> => {
@@ -323,24 +333,14 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
     } catch (fallbackError) {
       logger.error(fallbackError, "Direct session revocation failed");
       disconnectSessionSockets(sessionId);
-      res.clearCookie("connect.sid", {
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-      });
+      clearSessionCookie(res);
       res.status(500).json({ error: "تعذر إنهاء الجلسة — حاول مرة أخرى" });
       return;
     }
   }
 
   disconnectSessionSockets(sessionId);
-  res.clearCookie("connect.sid", {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  });
+  clearSessionCookie(res);
   res.json({ message: "Logged out" });
 });
 
@@ -361,12 +361,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     const sessionId = req.sessionID;
     await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
     disconnectSessionSockets(sessionId);
-    res.clearCookie("connect.sid", {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
+    clearSessionCookie(res);
     res.status(401).json({ error: "User not found" });
     return;
   }
@@ -442,12 +437,7 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
     for (const sessionId of revokedSessionIds) disconnectSessionSockets(sessionId);
     disconnectUserSockets(userId);
     await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
-    res.clearCookie("connect.sid", {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
+    clearSessionCookie(res);
     res.json({ message: "Account erased. All personal data has been deleted per GDPR Art. 17." });
   } catch (err) {
     logger.error(err, "GDPR erasure error");
