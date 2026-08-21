@@ -14,19 +14,56 @@ export function getApiBase(): string {
 }
 
 let sessionCookie: string | null = null;
+let sessionGeneration = 0;
+let sessionStorageQueue: Promise<void> = Promise.resolve();
 
-export async function loadSessionCookie(): Promise<void> {
-  sessionCookie = await AsyncStorage.getItem(SESSION_KEY);
+function serializeSessionStorage<T>(operation: () => Promise<T>): Promise<T> {
+  const result = sessionStorageQueue.then(operation, operation);
+  sessionStorageQueue = result.then(() => undefined, () => undefined);
+  return result;
 }
 
-export async function saveSessionCookie(cookie: string): Promise<void> {
-  sessionCookie = cookie;
-  await AsyncStorage.setItem(SESSION_KEY, cookie);
+export async function loadSessionCookie(): Promise<void> {
+  const expectedGeneration = sessionGeneration;
+  await serializeSessionStorage(async () => {
+    const stored = await AsyncStorage.getItem(SESSION_KEY);
+    if (expectedGeneration === sessionGeneration) sessionCookie = stored;
+  });
+}
+
+export async function saveSessionCookie(
+  cookie: string,
+  expectedGeneration = sessionGeneration,
+): Promise<boolean> {
+  // A login response from a request started before logout/account-switch must
+  // never resurrect that previous session in AsyncStorage.
+  if (expectedGeneration !== sessionGeneration) return false;
+  return serializeSessionStorage(async () => {
+    if (expectedGeneration !== sessionGeneration) return false;
+    await AsyncStorage.setItem(SESSION_KEY, cookie);
+    if (expectedGeneration !== sessionGeneration) {
+      // Logout/account-switch happened while the write was in flight.
+      await AsyncStorage.removeItem(SESSION_KEY);
+      return false;
+    }
+    sessionCookie = cookie;
+    return true;
+  });
 }
 
 export async function clearSessionCookie(): Promise<void> {
+  // Increment synchronously so already-running requests are stale before the
+  // asynchronous storage deletion yields.
+  sessionGeneration += 1;
   sessionCookie = null;
-  await AsyncStorage.removeItem(SESSION_KEY);
+  await serializeSessionStorage(() => AsyncStorage.removeItem(SESSION_KEY));
+}
+
+export function beginSessionTransition(): void {
+  // Invalidate stale storage writes without discarding the current cookie.
+  // Login/register must still send it once so the server can rotate and revoke
+  // the prior HTTP session (and its authenticated WebSockets).
+  sessionGeneration += 1;
 }
 
 export function getHeaders(extra?: Record<string, string>): Record<string, string> {
@@ -62,6 +99,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const requestGeneration = sessionGeneration;
   const res = await fetch(`${getApiBase()}${path}`, {
     method: 'POST',
     headers: getHeaders(),
@@ -72,7 +110,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   // Capture session cookie on auth endpoints
   const cookie = extractCookie(res);
   if (cookie && cookie.includes('connect.sid')) {
-    await saveSessionCookie(cookie);
+    await saveSessionCookie(cookie, requestGeneration);
   }
 
   if (!res.ok) {

@@ -25,7 +25,7 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { GOLD, timeAgo, api, SOCIAL_T } from "../social/social-i18n";
 import { useCallContext } from "../../contexts/CallContext";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
 const BG      = "#0a0a0a";   // app background
@@ -494,6 +494,23 @@ export type MessengerVariant = "full" | "embedded" | "widget";
 
 export default function Messenger({ variant = "embedded" }: { variant?: MessengerVariant }) {
   const { user } = useAuth();
+  // A citizen identity is a hard state boundary. Remounting the complete AMIS
+  // surface on login/logout/account switch guarantees that no room, message,
+  // unread count, draft, upload, or panel from the previous citizen survives
+  // for even one rendered frame.
+  return (
+    <IdentityBoundMessenger
+      key={user ? `citizen:${user.id}` : "anonymous"}
+      user={user}
+      variant={variant}
+    />
+  );
+}
+
+function IdentityBoundMessenger({ variant, user }: {
+  variant: MessengerVariant;
+  user: AuthUser | null;
+}) {
   const { lang } = useLang();
   const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const dir = lang === "ar" ? "rtl" : "ltr";
@@ -527,6 +544,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
   const fileRef    = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recStreamRef = useRef<MediaStream | null>(null);
+  const activeUploadsRef = useRef<Set<XMLHttpRequest>>(new Set());
   const recCancelledRef = useRef(false);
   const chunksRef   = useRef<Blob[]>([]);
   const mountedRef  = useRef(true);
@@ -551,6 +569,11 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
       recCancelledRef.current = true;
       try { recorderRef.current?.stop(); } catch { /* already stopped */ }
       recStreamRef.current?.getTracks().forEach(t => t.stop());
+      for (const xhr of activeUploadsRef.current) xhr.abort();
+      activeUploadsRef.current.clear();
+      for (const item of pendingRef.current) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
     };
   }, []);
 
@@ -568,11 +591,12 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
   const loadRooms = useCallback(async (): Promise<DmRoom[]> => {
     if (!user) return [];
     const r = await fetch(api("/api/messages/rooms"), { credentials: "include" });
+    if (!r.ok) return [];
     const j = await r.json();
     const list: DmRoom[] = j.rooms ?? [];
-    setRooms(list);
+    if (mountedRef.current) setRooms(list);
     return list;
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => { loadRooms(); }, [loadRooms]);
 
@@ -612,8 +636,13 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
   // room/id checks simply keep this Messenger instance scoped to its open room.
   useEffect(() => {
     const onMessage = (event: Event) => {
-      const detail = (event as CustomEvent<{ roomId?: number; message?: DmMessage }>).detail;
+      const detail = (event as CustomEvent<{
+        roomId?: number;
+        message?: DmMessage;
+        recipientUserId?: number;
+      }>).detail;
       if (!detail?.message) return;
+      if (typeof detail.recipientUserId === "number" && detail.recipientUserId !== user?.id) return;
       if (detail.roomId === activeRoomIdRef.current) {
         appendMessage(detail.message);
         void loadMessages(detail.roomId);
@@ -630,7 +659,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
       window.removeEventListener("gdna:chat-message", onMessage);
       window.removeEventListener("gdna:realtime-connected", onReconnect);
     };
-  }, [appendMessage, loadRooms]);
+  }, [appendMessage, loadRooms, user?.id]);
 
   // REST is for the initial view, reconnect recovery, and a quiet fallback if a
   // browser misses an event — not the visible delivery mechanism.
@@ -646,6 +675,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
 
   async function loadMessages(roomId: number) {
     const r = await fetch(api(`/api/messages/rooms/${roomId}`), { credentials: "include" });
+    if (!r.ok) return;
     const j = await r.json();
     // Only commit if this room is still the active one (guards stale responses
     // from a previously opened room resolving late) and we're still mounted.
@@ -754,15 +784,24 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
       const fd = new FormData();
       fd.append("file", file, file instanceof File ? file.name : `${fallbackName}.webm`);
       const xhr = new XMLHttpRequest();
+      activeUploadsRef.current.add(xhr);
       xhr.open("POST", api("/api/messages/upload"));
       xhr.withCredentials = true;
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
       xhr.onload = () => {
+        activeUploadsRef.current.delete(xhr);
         let json: any = {};
         try { json = JSON.parse(xhr.responseText); } catch { /* non-JSON error body */ }
         resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json });
       };
-      xhr.onerror = () => resolve({ ok: false, status: 0, json: {} });
+      xhr.onerror = () => {
+        activeUploadsRef.current.delete(xhr);
+        resolve({ ok: false, status: 0, json: {} });
+      };
+      xhr.onabort = () => {
+        activeUploadsRef.current.delete(xhr);
+        resolve({ ok: false, status: 0, json: {} });
+      };
       xhr.send(fd);
     });
   }
@@ -770,6 +809,7 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
   async function uploadAndSend(file: File | Blob, fallbackName = "attachment", onProgress: (pct: number) => void = () => {}) {
     if (!activeRoom) return false;
     const r = await uploadWithProgress(file, fallbackName, onProgress);
+    if (!mountedRef.current) return false;
     if (!r.ok) {
       setToast(r.status === 429
         ? (r.json.error ?? (st.upload_limit ?? "تجاوزت الحد المسموح من الملفات — حاول بعد قليل ⏳"))

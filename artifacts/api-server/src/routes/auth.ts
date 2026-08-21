@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { pool as nullablePool } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { isAdultForGames, normalizeBirthDate } from "../lib/age";
 
@@ -137,9 +138,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
 
   // Simple flow: register → logged in immediately, 30-day remembered session
+  const previousSessionId = req.sessionID;
   await new Promise<void>((resolve, reject) =>
     req.session.regenerate((err) => (err ? reject(err) : resolve()))
   );
+  disconnectSessionSockets(previousSessionId);
   req.session.userId = user.id;
   req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
   req.log.info({ userId: user.id }, "User registered — logged in");
@@ -230,9 +233,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
 
   // Regenerate the session ID after credential verification (anti session-fixation)
+  const previousSessionId = req.sessionID;
   await new Promise<void>((resolve, reject) =>
     req.session.regenerate((err) => (err ? reject(err) : resolve()))
   );
+  disconnectSessionSockets(previousSessionId);
   req.session.userId = user.id;
   // Remember me: 30-day secure token cookie, renewed on every visit (rolling)
   // → the citizen enters instantly, like YouTube, until they log out.
@@ -280,7 +285,16 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [passwordHash, userId]);
     // Revoke every OTHER session — a stolen session must not survive a
     // password change. The current session is re-established below.
-    await pool.query(`DELETE FROM user_sessions WHERE (sess->>'userId')::int = $1`, [userId]);
+    const revokedSessions = await pool.query<{ sid: string }>(
+      `DELETE FROM user_sessions
+       WHERE (sess->>'userId')::int = $1
+       RETURNING sid`,
+      [userId],
+    );
+    // Revoke pending-upgrade and fully registered realtime channels for every
+    // deleted session before issuing the replacement credential.
+    for (const { sid } of revokedSessions.rows) disconnectSessionSockets(sid);
+    disconnectUserSockets(userId);
     await new Promise<void>((resolve, reject) =>
       req.session.regenerate((err) => (err ? reject(err) : resolve()))
     );
@@ -295,8 +309,37 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/logout", async (req, res): Promise<void> => {
-  req.session.destroy((err) => {
-    if (err) logger.error(err, "Session destroy error");
+  const sessionId = req.sessionID;
+  try {
+    await new Promise<void>((resolve, reject) =>
+      req.session.destroy((err) => (err ? reject(err) : resolve()))
+    );
+  } catch (error) {
+    logger.error(error, "Session destroy error — trying direct store revocation");
+    try {
+      // A failed store callback must never leave a valid session behind while
+      // the UI claims logout succeeded.
+      await pool.query(`DELETE FROM user_sessions WHERE sid = $1`, [sessionId]);
+    } catch (fallbackError) {
+      logger.error(fallbackError, "Direct session revocation failed");
+      disconnectSessionSockets(sessionId);
+      res.clearCookie("connect.sid", {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+      res.status(500).json({ error: "تعذر إنهاء الجلسة — حاول مرة أخرى" });
+      return;
+    }
+  }
+
+  disconnectSessionSockets(sessionId);
+  res.clearCookie("connect.sid", {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
   });
   res.json({ message: "Logged out" });
 });
@@ -315,7 +358,15 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     .limit(1);
 
   if (!user) {
-    req.session.destroy(() => {});
+    const sessionId = req.sessionID;
+    await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+    disconnectSessionSockets(sessionId);
+    res.clearCookie("connect.sid", {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
     res.status(401).json({ error: "User not found" });
     return;
   }
@@ -335,20 +386,68 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
     // Anonymise all user content instead of hard-deleting rows
     // (preserves referential integrity while erasing PII)
     const anonymousName = `deleted_user_${userId}`;
-
-    await pool.query(`
-      UPDATE users
-      SET username = $1, email = $2, password_hash = 'DELETED', bio = NULL,
-          avatar = NULL, updated_at = NOW()
-      WHERE id = $3
-    `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
+    const client = await pool.connect();
+    let revokedSessionIds: string[] = [];
+    try {
+      await client.query("BEGIN");
+      await client.query(`
+        UPDATE users
+        SET username = $1, email = $2, password_hash = 'DELETED',
+            birth_date = NULL, last_seen_at = NOW()
+        WHERE id = $3
+      `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
+      // Older deployments may have profile fields that are not in the current
+      // shared schema. Erase them when present without assuming those columns
+      // exist in every environment.
+      const optionalPiiColumns = await client.query<{ column_name: string }>(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'users'
+           AND column_name = ANY(ARRAY['bio', 'avatar', 'avatar_url'])`,
+      );
+      const allowedPiiColumns = optionalPiiColumns.rows
+        .map(({ column_name }) => column_name)
+        .filter((column): column is 'bio' | 'avatar' | 'avatar_url' =>
+          column === 'bio' || column === 'avatar' || column === 'avatar_url',
+        );
+      if (allowedPiiColumns.length > 0) {
+        await client.query(
+          `UPDATE users
+           SET ${allowedPiiColumns.map((column) => `"${column}" = NULL`).join(", ")}
+           WHERE id = $1`,
+          [userId],
+        );
+      }
+      const revokedSessions = await client.query<{ sid: string }>(
+        `DELETE FROM user_sessions
+         WHERE (sess->>'userId')::int = $1
+         RETURNING sid`,
+        [userId],
+      );
+      revokedSessionIds = revokedSessions.rows.map(({ sid }) => sid);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
 
     // Also wipe any stored legal consent rows
     await pool.query(
       `DELETE FROM user_legal_consents WHERE user_id = $1`, [userId]
     ).catch(() => {}); // table may not exist yet — ignore
 
-    req.session.destroy(() => {});
+    for (const sessionId of revokedSessionIds) disconnectSessionSockets(sessionId);
+    disconnectUserSockets(userId);
+    await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+    res.clearCookie("connect.sid", {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
     res.json({ message: "Account erased. All personal data has been deleted per GDPR Art. 17." });
   } catch (err) {
     logger.error(err, "GDPR erasure error");

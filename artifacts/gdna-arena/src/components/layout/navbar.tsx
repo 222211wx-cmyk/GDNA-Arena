@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Search, Trophy, Music, Film, Newspaper, Landmark,
@@ -46,20 +46,31 @@ export function Navbar() {
   const { user, logout } = useAuth();
   const { t, lang, setLang } = useLang();
 
-  // Poll unread DM count every 30 s when logged in
-  const fetchUnread = useCallback(async () => {
-    if (!user) { setUnreadDMs(0); return; }
-    try {
-      const r = await fetch("/api/messages/unread-count", { credentials: "include" });
-      if (r.ok) { const d = await r.json() as { count: number }; setUnreadDMs(d.count ?? 0); }
-    } catch { /* network error — ignore */ }
-  }, [user]);
-
   useEffect(() => {
+    // Unread badges are identity-bound too. Clear synchronously and abort the
+    // previous citizen's request before polling for the new account.
+    setUnreadDMs(0);
+    if (!user) return;
+    const controller = new AbortController();
+    const fetchUnread = async () => {
+      try {
+        const r = await fetch("/api/messages/unread-count", {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (r.ok && !controller.signal.aborted) {
+          const d = await r.json() as { count: number };
+          if (!controller.signal.aborted) setUnreadDMs(d.count ?? 0);
+        }
+      } catch { /* aborted/network error — keep the safe zero state */ }
+    };
     void fetchUnread();
     const t = setInterval(() => void fetchUnread(), 30_000);
-    return () => clearInterval(t);
-  }, [fetchUnread]);
+    return () => {
+      controller.abort();
+      clearInterval(t);
+    };
+  }, [user?.id]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -259,7 +270,14 @@ export function Navbar() {
               </Link>
               <Link href="/wallet"    title={t("wallet")}    className="text-gray-400 hover:text-yellow-400 transition-colors"><Wallet         size={16} /></Link>
               <Link href="/dashboard" title={t("dashboard")} className="text-gray-400 hover:text-yellow-400 transition-colors"><LayoutDashboard size={16} /></Link>
-              <button onClick={logout} title={t("logout")} className="text-gray-400 hover:text-red-400 transition-colors">
+              <button
+                onClick={() => {
+                  void logout().catch(error =>
+                    window.alert(error instanceof Error ? error.message : "Logout failed"));
+                }}
+                title={t("logout")}
+                className="text-gray-400 hover:text-red-400 transition-colors"
+              >
                 <LogOut size={16} />
               </button>
             </div>
@@ -397,7 +415,11 @@ export function Navbar() {
                 className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-gray-300 hover:text-white transition-all">
                 <Wallet size={16} className="text-yellow-400" /> {t("wallet")}
               </Link>
-              <button onClick={() => { logout(); setMobileOpen(false); }}
+              <button onClick={() => {
+                setMobileOpen(false);
+                void logout().catch(error =>
+                  window.alert(error instanceof Error ? error.message : "Logout failed"));
+              }}
                 className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-red-400 w-full hover:bg-red-400/10 transition-all">
                 <LogOut size={16} /> {t("logout")}
               </button>

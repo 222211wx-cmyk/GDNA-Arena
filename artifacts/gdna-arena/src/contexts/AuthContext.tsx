@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 
 export interface AuthUser {
   id: number;
@@ -27,48 +27,71 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const authGenerationRef = useRef(0);
+  const authRequestRef = useRef<AbortController | null>(null);
+
+  const beginAuthRequest = (clearCurrentUser = false) => {
+    authRequestRef.current?.abort();
+    const controller = new AbortController();
+    authRequestRef.current = controller;
+    const generation = ++authGenerationRef.current;
+    if (clearCurrentUser) setUser(null);
+    return { controller, generation };
+  };
 
   const refreshUser = async () => {
+    const { controller, generation } = beginAuthRequest();
     try {
-      const res = await fetch("/api/auth/me", { credentials: "include" });
+      const res = await fetch("/api/auth/me", {
+        credentials: "include",
+        signal: controller.signal,
+      });
+      if (generation !== authGenerationRef.current) return;
       if (res.ok) {
         const data = await res.json();
-        setUser(data);
+        if (generation === authGenerationRef.current) setUser(data);
       } else {
         setUser(null);
       }
-    } catch {
-      setUser(null);
+    } catch (error) {
+      if (generation === authGenerationRef.current && !controller.signal.aborted) {
+        setUser(null);
+      }
     }
   };
 
   useEffect(() => {
     refreshUser().finally(() => setLoading(false));
+    return () => authRequestRef.current?.abort();
   }, []);
 
   const login = async (username: string, password: string, rememberMe = true) => {
+    const { controller, generation } = beginAuthRequest(true);
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ username, password, rememberMe }),
+      signal: controller.signal,
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Login failed");
-    setUser(data);
+    if (generation === authGenerationRef.current) setUser(data);
   };
 
   const register = async (username: string, password: string, birthDate: string) => {
+    const { controller, generation } = beginAuthRequest(true);
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ username, password, birthDate }),
+      signal: controller.signal,
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Registration failed");
     // Simple flow: registered = logged in immediately
-    setUser(data);
+    if (generation === authGenerationRef.current) setUser(data);
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
@@ -84,11 +107,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", {
+    // Hide every identity-bound surface immediately. The server response is
+    // still checked so callers never report a successful logout while the
+    // authenticated session remains alive.
+    const { controller } = beginAuthRequest(true);
+    const res = await fetch("/api/auth/logout", {
       method: "POST",
       credentials: "include",
+      signal: controller.signal,
     });
-    setUser(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: "Logout failed" }));
+      throw new Error(data.error ?? "Logout failed");
+    }
   };
 
   return (

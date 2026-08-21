@@ -1,8 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiPost, apiGet, clearSessionCookie, loadSessionCookie, type AuthUser } from '@/lib/api';
-
-const USER_KEY = '@gdna_user';
+import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
+import {
+  apiPost,
+  apiGet,
+  beginSessionTransition,
+  clearSessionCookie,
+  loadSessionCookie,
+  type AuthUser,
+} from '@/lib/api';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -20,42 +24,49 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const authGenerationRef = useRef(0);
 
   useEffect(() => {
+    const generation = ++authGenerationRef.current;
+    let cancelled = false;
     (async () => {
       await loadSessionCookie();
-      const stored = await AsyncStorage.getItem(USER_KEY);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as AuthUser;
-          setUser(parsed);
-          // Re-verify with server
-          const fresh = await apiGet<AuthUser>('/auth/me').catch(() => null);
-          if (fresh) {
-            setUser(fresh);
-            await AsyncStorage.setItem(USER_KEY, JSON.stringify(fresh));
-          } else {
-            setUser(null);
-            await AsyncStorage.removeItem(USER_KEY);
-          }
-        } catch {
-          setUser(null);
-        }
+      // Never render the cached citizen before the server verifies that the
+      // persisted cookie still belongs to that exact account.
+      const fresh = await apiGet<AuthUser>('/auth/me').catch(() => null);
+      if (cancelled || generation !== authGenerationRef.current) return;
+      if (fresh) {
+        if (!cancelled && generation === authGenerationRef.current) setUser(fresh);
+      } else {
+        setUser(null);
+        await clearSessionCookie();
       }
-      setIsLoading(false);
+      if (!cancelled && generation === authGenerationRef.current) setIsLoading(false);
     })();
+    return () => {
+      cancelled = true;
+      authGenerationRef.current += 1;
+    };
   }, []);
 
   const login = async (username: string, password: string) => {
+    const generation = ++authGenerationRef.current;
+    setUser(null);
+    // Keep the prior cookie for this request only. The server then rotates its
+    // session, revokes old WebSockets, and returns the new account cookie.
+    beginSessionTransition();
     const data = await apiPost<AuthUser>('/auth/login', { username, password });
-    setUser(data);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
+    if (generation !== authGenerationRef.current) return;
+    if (generation === authGenerationRef.current) setUser(data);
   };
 
   const register = async (username: string, password: string, birthDate: string) => {
+    const generation = ++authGenerationRef.current;
+    setUser(null);
+    beginSessionTransition();
     const data = await apiPost<AuthUser>('/auth/register', { username, password, birthDate });
-    setUser(data);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data));
+    if (generation !== authGenerationRef.current) return;
+    if (generation === authGenerationRef.current) setUser(data);
   };
 
   const submitBirthDate = async (birthDate: string) => {
@@ -64,17 +75,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await apiPost('/auth/logout').catch(() => {});
-    await clearSessionCookie();
-    await AsyncStorage.removeItem(USER_KEY);
+    ++authGenerationRef.current;
     setUser(null);
+    // apiPost captures the current cookie synchronously before fetch yields.
+    // Clear the local copy immediately after starting the server-side logout,
+    // so this device cannot reuse it even if the network request fails.
+    const serverLogout = apiPost('/auth/logout');
+    await clearSessionCookie();
+    await serverLogout;
   };
 
   const refreshUser = async () => {
+    const generation = authGenerationRef.current;
     const fresh = await apiGet<AuthUser>('/auth/me').catch(() => null);
-    if (fresh) {
-      setUser(fresh);
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(fresh));
+    if (fresh && generation === authGenerationRef.current) {
+      if (generation === authGenerationRef.current) setUser(fresh);
     }
   };
 
@@ -82,7 +97,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const updated = { ...user, balance: newBalance };
     setUser(updated);
-    AsyncStorage.setItem(USER_KEY, JSON.stringify(updated));
   };
 
   return (

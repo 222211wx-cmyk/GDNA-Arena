@@ -516,8 +516,12 @@ export default function Dashboard() {
   const winRate = user.gamesPlayed > 0 ? Math.round((user.wins / user.gamesPlayed) * 100) : 0;
 
   const handleLogout = async () => {
-    await logout();
-    setLocation("/");
+    try {
+      await logout();
+      setLocation("/");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Logout failed");
+    }
   };
 
   const handleDailyReward = async () => {

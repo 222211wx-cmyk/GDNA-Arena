@@ -73,7 +73,14 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            await logout();
+            try {
+              await logout();
+            } catch (error) {
+              Alert.alert(
+                'Sign out incomplete',
+                error instanceof Error ? error.message : 'Please try again.',
+              );
+            }
           },
         },
       ]

@@ -91,6 +91,8 @@ export function useCall(user: { id: number; username: string } | null) {
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const identityGenerationRef = useRef(0);
   const preflightClientRef = useRef<IAgoraRTCClient | null>(null);
 
   // ── Agora call engine ──────────────────────────────────────────────────────
@@ -304,24 +306,61 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Connect WebSocket ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!user) return;
+    const generation = ++identityGenerationRef.current;
+    let disposed = false;
+    const isCurrent = (ws?: WebSocket) =>
+      !disposed &&
+      generation === identityGenerationRef.current &&
+      (!ws || wsRef.current === ws);
+
+    if (!user) {
+      setConnected(false);
+      setOnlineUsers([]);
+      setActiveLives([]);
+      setIncomingCall(null);
+      setActivePeer(null);
+      setActiveCallId(null);
+      setCallStatus("idle");
+      setLiveStatus("idle");
+      setCurrentLiveId(null);
+      setConnectionTest("idle");
+      currentCallIdRef.current = null;
+      historyRef.current = null;
+      return () => { disposed = true; };
+    }
+
+    const expectedUserId = user.id;
 
     const connect = () => {
+      if (!isCurrent()) return;
       const ws = new WebSocket(BASE_WS);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (!isCurrent(ws)) { ws.close(); return; }
         ws.send(JSON.stringify({ type: "register", userId: user.id, username: user.username }));
         pingRef.current = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" })); }, 25000);
       };
 
       ws.onmessage = async (e) => {
+        if (!isCurrent(ws)) return;
         let msg: any;
         try { msg = JSON.parse(e.data as string); } catch { return; }
 
         if (msg.type === "registered") {
+          // The server derives this value from the session. A mismatch means
+          // this socket was opened during an account transition; never relay
+          // any of its private events into the current React identity.
+          if (msg.userId !== expectedUserId) {
+            ws.close(4002, "Identity changed");
+            return;
+          }
           setConnected(true);
           window.dispatchEvent(new Event("gdna:realtime-connected"));
+        }
+        if (msg.type === "session-ended") {
+          ws.close(4001, "Session ended");
+          return;
         }
         if (msg.type === "online-list")   { setOnlineUsers(msg.users); }
         if (msg.type === "pong")          { /* alive */ }
@@ -361,7 +400,10 @@ export function useCall(user: { id: number; username: string } | null) {
           setIncomingCall(null);
           setCallStatus("ended");
           void leaveAgora();
-          setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 2000);
+          setTimeout(() => {
+            if (!isCurrent(ws)) return;
+            setCallStatus("idle"); setActivePeer(null); setActiveCallId(null);
+          }, 2000);
         }
 
         if (msg.type === "call-busy" || msg.type === "call-unavailable") {
@@ -372,7 +414,10 @@ export function useCall(user: { id: number; username: string } | null) {
             : "📴 المواطن غير متصل بالإمبراطورية حالياً — راسله وسيصله إشعار");
           void leaveAgora();
           setCallStatus("ended");
-          setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 1500);
+          setTimeout(() => {
+            if (!isCurrent(ws)) return;
+            setCallStatus("idle"); setActivePeer(null); setActiveCallId(null);
+          }, 1500);
         }
 
         // ── Live events (live stories keep the WebRTC path) ────────────────
@@ -390,19 +435,25 @@ export function useCall(user: { id: number; username: string } | null) {
         // ── Live WebRTC viewer side ────────────────────────────────────────
         if (msg.type === "live-viewer-joined" && pcRef.current) {
           const offer = await pcRef.current.createOffer();
+          if (!isCurrent(ws) || !pcRef.current) return;
           await pcRef.current.setLocalDescription(offer);
+          if (!isCurrent(ws)) return;
           sendWS({ type: "live-offer", to: msg.viewer, offer, liveId: msg.liveId });
         }
         if (msg.type === "live-offer") {
           const pc = createLivePC(msg.from, msg.liveId);
           localStreamRef.current?.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current!));
           await pc.setRemoteDescription(msg.offer);
+          if (!isCurrent(ws) || pcRef.current !== pc) { pc.close(); return; }
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+          if (!isCurrent(ws) || pcRef.current !== pc) { pc.close(); return; }
           sendWS({ type: "live-answer", to: msg.from, answer, liveId: msg.liveId });
         }
         if (msg.type === "live-answer" && pcRef.current) {
-          await pcRef.current.setRemoteDescription(msg.answer);
+          const pc = pcRef.current;
+          await pc.setRemoteDescription(msg.answer);
+          if (!isCurrent(ws) && pcRef.current === pc) pc.close();
         }
         if (msg.type === "live-ice" && pcRef.current) {
           try { await pcRef.current.addIceCandidate(msg.candidate); } catch { /* stale */ }
@@ -410,11 +461,13 @@ export function useCall(user: { id: number; username: string } | null) {
       };
 
       ws.onclose = () => {
+        if (!isCurrent(ws)) return;
+        wsRef.current = null;
         setConnected(false);
         window.dispatchEvent(new Event("gdna:realtime-disconnected"));
         if (pingRef.current) clearInterval(pingRef.current);
         // Reconnect after 3s
-        setTimeout(connect, 3000);
+        reconnectRef.current = setTimeout(connect, 3000);
       };
 
       ws.onerror = () => ws.close();
@@ -422,11 +475,42 @@ export function useCall(user: { id: number; username: string } | null) {
 
     connect();
     return () => {
+      disposed = true;
       if (pingRef.current) clearInterval(pingRef.current);
-      wsRef.current?.close();
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      pingRef.current = null;
+      reconnectRef.current = null;
+      const ws = wsRef.current;
+      wsRef.current = null;
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+      clearRingTimer();
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      try { pcRef.current?.close(); } catch { /* already closed */ }
+      pcRef.current = null;
+      if (preflightClientRef.current) {
+        void preflightClientRef.current.leave().catch(() => {});
+        preflightClientRef.current = null;
+      }
+      void leaveAgora();
+      currentCallIdRef.current = null;
+      historyRef.current = null;
+      setConnected(false);
+      setOnlineUsers([]);
+      setActiveLives([]);
+      setIncomingCall(null);
+      setActivePeer(null);
+      setActiveCallId(null);
+      setCallStatus("idle");
+      setLiveStatus("idle");
+      setCurrentLiveId(null);
+      setConnectionTest("idle");
+      setCallError(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.username]);
+  }, [user?.id, user?.username, leaveAgora]);
 
   // A route change or logout must not leave a microphone/camera LED on.
   useEffect(() => () => {
