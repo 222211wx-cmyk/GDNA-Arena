@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, numeric, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const dmRooms = pgTable("dm_rooms", {
   id: serial("id").primaryKey(),
@@ -32,5 +32,14 @@ export const dmMessages = pgTable("dm_messages", {
   fileUrl: text("file_url"),               // image/file attachment URL
   type: text("type").notNull().default("text"), // text | audio | video | image | file
   isRead: boolean("is_read").notNull().default(false),
+  replyToId: integer("reply_to_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const dmMessageReactions = pgTable("dm_message_reactions", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull(),
+  userId: integer("user_id").notNull(),
+  reaction: text("reaction").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({ oneReactionPerUser: uniqueIndex("dm_message_reactions_user_message").on(t.messageId, t.userId) }));

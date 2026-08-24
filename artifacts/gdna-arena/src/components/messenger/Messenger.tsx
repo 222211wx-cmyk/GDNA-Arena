@@ -16,9 +16,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
-  Camera, Image as ImageIcon, Paperclip, Smile, Send, Newspaper, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
-  ChevronRight,
+  Camera, Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
+  ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ShieldOff, Shield,
 } from "lucide-react";
+import SolidarityRelay from "./SolidarityRelay";
+import type { GroupRoom } from "../social/social-types";
 import Avatar from "../social/Avatar";
 import { Switch } from "@workspace/gdna-ds/components/ui/switch";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
@@ -84,19 +86,27 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
   onMuteChanged: (roomId: number, muted: boolean) => void;
   onRoomDeleted: (roomId: number) => void;
   showToast: (m: string) => void;
+  onBlockChanged?: (roomId: number, blocked: boolean) => void;
+  /** Fix #2: authenticated user's id so we exclude self when finding peer */
+  currentUserId?: number;
 }) {
   const [settings, setSettings] = useState<MsgSettings | null>(null);
   const [muted, setMuted] = useState(activeRoom?.muted ?? false);
   const [deletingConversation, setDeletingConversation] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(activeRoom?.blockedByMe ?? false);
 
   useEffect(() => { setMuted(activeRoom?.muted ?? false); }, [activeRoom?.muted]);
+  useEffect(() => {
+    setBlockedByMe(activeRoom?.blockedByMe ?? false);
+  }, [activeRoom?.id, activeRoom?.blockedByMe]);
 
   useEffect(() => {
     fetch(api("/api/messages/settings"), { credentials: "include" })
@@ -145,6 +155,29 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
     setDeletingConversation(false);
   }
 
+  // Fix #2: identify peer by excluding the authenticated user's id, not by position.
+  const peerId = activeRoom?.type === "direct"
+    ? activeRoom.members.find(m => m.userId !== undefined && m.userId !== currentUserId)?.userId
+    : undefined;
+  const isBlocked = blockedByMe;
+
+  async function toggleBlock() {
+    if (!peerId || blockBusy) return;
+    const blocking = !isBlocked;
+    if (blocking && !window.confirm(st.block_confirm ?? "Block this citizen?")) return;
+    setBlockBusy(true);
+    const r = await fetch(api(`/api/solidarity/blocks/${peerId}`), {
+      method: blocking ? "POST" : "DELETE", credentials: "include",
+    }).catch(() => null);
+    if (r?.ok) {
+      setBlockedByMe(blocking);
+      showToast(blocking ? (st.block_citizen ?? "Citizen blocked") : (st.unblock_citizen ?? "Citizen unblocked"));
+      // Keep the drawer responsive, then let the parent refresh authoritative room state.
+      if (activeRoom) onBlockChanged?.(activeRoom.id, blocking);
+    }
+    setBlockBusy(false);
+  }
+
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
       style={{ position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -166,8 +199,30 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
               <ToggleRow label={`${st.mute_conv ?? "Mute conversation"} · ${activeRoom.type === "group" ? (activeRoom.name ?? "Group") : ""}`.trim()}
                 value={muted} onChange={toggleMute} />
             )}
-            {activeRoom && (
+            {/* Block/Unblock — direct rooms only */}
+            {activeRoom?.type === "direct" && peerId && (
               <div className="mt-5 border-t border-border/40 pt-4">
+                <Button type="button"
+                  variant={isBlocked ? "outline" : "destructive"}
+                  className="w-full justify-start gap-2"
+                  disabled={blockBusy} onClick={toggleBlock}
+                  data-testid="button-block-citizen">
+                  {isBlocked ? <Shield size={15} /> : <ShieldOff size={15} />}
+                  {blockBusy
+                    ? "…"
+                    : isBlocked
+                      ? (st.unblock_citizen ?? "Unblock citizen")
+                      : (st.block_citizen ?? "Block citizen")}
+                </Button>
+                <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">
+                  {isBlocked
+                    ? "Unblocking restores messaging between you."
+                    : "Blocking prevents new messages from this citizen."}
+                </p>
+              </div>
+            )}
+            {activeRoom && (
+              <div className="mt-4 border-t border-border/40 pt-4">
                 <Button type="button" variant="destructive" className="w-full justify-start gap-2"
                   disabled={deletingConversation} onClick={deleteConversation}>
                   <Trash2 size={15} />
@@ -191,7 +246,20 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
 }
 
 // ── Contacts panel (server-side search + pagination) ─────────────────────────
-interface Contact { id: number; username: string; lastSeenAt?: string | null }
+const SOLIDARITY_STATUS_COLORS: Record<string, string> = {
+  available: "#22c55e",
+  listening: "#3b82f6",
+  seeking:   GOLD,
+  focused:   "#a78bfa",
+  offline:   "#6b7280",
+};
+interface Contact {
+  id: number;
+  username: string;
+  lastSeenAt?: string | null;
+  solidarityStatus?: string | null;
+  solidarityStatusVisible?: boolean;
+}
 
 const CONTACTS_PAGE = 30;
 
@@ -306,15 +374,21 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
         )}
         {contacts.map(c => {
           const online = call.onlineUsers.includes(c.username);
+          const solStatus = c.solidarityStatusVisible !== false ? c.solidarityStatus : null;
+          const statusColor = solStatus ? (SOLIDARITY_STATUS_COLORS[solStatus] ?? "#6b7280") : (online ? "#22c55e" : "#ffffff35");
           return (
             <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderBottom: "1px solid #ffffff08" }}>
               <div style={{ position: "relative", flexShrink: 0 }}>
                 <Avatar name={c.username} size={44} />
-                {online && <div style={{ position: "absolute", bottom: 0, right: 0, width: 11, height: 11, background: "#22c55e", borderRadius: "50%", border: "2px solid #000" }} />}
+                {(online || solStatus) && (
+                  <div style={{ position: "absolute", bottom: 0, right: 0, width: 11, height: 11, background: statusColor, borderRadius: "50%", border: "2px solid #000" }} />
+                )}
               </div>
               <div style={{ flex: 1, overflow: "hidden" }}>
                 <p style={{ margin: 0, fontWeight: 700, color: "#fff", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.username}</p>
-                <p style={{ margin: 0, fontSize: 12, color: online ? "#22c55e" : "#ffffff35" }}>{online ? (st.online ?? "Online") : (st.offline ?? "Offline")}</p>
+                <p style={{ margin: 0, fontSize: 12, color: statusColor }}>
+                  {solStatus ? solStatus : (online ? (st.online ?? "Online") : (st.offline ?? "Offline"))}
+                </p>
               </div>
               {callMode ? (
                 <>
@@ -350,66 +424,40 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
   );
 }
 
-// ── Actus (Empire Pulse feed, read-only) ─────────────────────────────────────
-interface PulsePost { id: number; username: string; content: string; domain?: string; createdAt: string }
+// Actus tab is now SolidarityRelay — imported above
 
-function ActusTab({ st }: { st: Record<string, string> }) {
-  const [posts, setPosts] = useState<PulsePost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    fetch(api("/api/pulse/feed?limit=25"), { credentials: "include" })
-      .then(r => r.json())
-      .then(j => setPosts(j.posts ?? []))
-      .catch(() => setFailed(true))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
-      <a href="/pulse" style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}10`, border: `1px solid ${GOLD}25`, borderRadius: 12, textDecoration: "none", marginBottom: 10 }}>
-        <Newspaper size={18} style={{ color: GOLD }} />
-        <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>Empire Pulse — {st.open ?? "Open"}</span>
-      </a>
-      {loading && <p style={{ color: "#444", textAlign: "center", padding: 24 }}>…</p>}
-      {failed && <p style={{ color: "#666", textAlign: "center", padding: 24, fontSize: 13 }}>{st.no_messages}</p>}
-      {posts.map(p => (
-        <div key={p.id} style={{ display: "flex", gap: 10, padding: "12px 4px", borderBottom: "1px solid #ffffff08" }}>
-          <Avatar name={p.username} size={40} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 14 }}>{p.username}</p>
-              <span style={{ fontSize: 11, color: "#ffffff30", flexShrink: 0 }}>{timeAgo(p.createdAt, st)}</span>
-            </div>
-            <p style={{ margin: "3px 0 0", color: "#d5d5d5", fontSize: 14, lineHeight: 1.5, wordBreak: "break-word" }} dir="auto">{p.content}</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Communautés ───────────────────────────────────────────────────────────────
-interface GroupRoom { id: number; name?: string; type: string; icon?: string; memberCount?: number }
-
-function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate }: {
+// ── Communautés (upgraded assembly nodes) ────────────────────────────────────
+function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay }: {
   st: Record<string, string>;
   myRoomIds: Set<number>;
   onJoined: (roomId: number) => void;
   onOpen: (roomId: number) => void;
   onCreate: () => void;
+  /** Fix #3: navigate to Relay tab scoped to this community */
+  onViewRelay: (roomId: number, roomName: string) => void;
 }) {
   const [groups, setGroups] = useState<GroupRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [joining, setJoining] = useState<number | null>(null);
 
-  useEffect(() => {
-    fetch(api("/api/messages/group-rooms"), { credentials: "include" })
-      .then(r => r.json())
-      .then(j => setGroups(j.rooms ?? []))
-      .finally(() => setLoading(false));
-  }, []);
+  const loadCommunities = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const r = await fetch(api("/api/messages/communities"), { credentials: "include" });
+      if (r.status === 401) { setLoadError(st.login_required ?? "Login required"); return; }
+      if (!r.ok) { setLoadError(`${st.load_error ?? "Could not load communities"} (${r.status})`); return; }
+      const j = await r.json();
+      setGroups(j.communities ?? []);
+    } catch {
+      setLoadError(st.load_error ?? "Could not load communities — check your connection");
+    } finally {
+      setLoading(false);
+    }
+  }, [st]);
+
+  useEffect(() => { loadCommunities(); }, [loadCommunities]);
 
   async function join(roomId: number) {
     setJoining(roomId);
@@ -422,32 +470,72 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate }: {
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
       <button onClick={onCreate}
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}10`, border: `1px solid ${GOLD}25`, borderRadius: 12, cursor: "pointer", marginBottom: 10 }}>
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}10`, border: `1px solid ${GOLD}25`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
         <Plus size={18} style={{ color: GOLD }} />
         <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>{st.new_group ?? "New group"}</span>
       </button>
       {loading && <p style={{ color: "#444", textAlign: "center", padding: 24 }}>…</p>}
-      {!loading && groups.length === 0 && <p style={{ color: "#444", fontSize: 13, textAlign: "center", marginTop: 24 }}>{st.no_messages}</p>}
+      {!loading && loadError && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "32px 16px", textAlign: "center" }}>
+          <p style={{ color: "#ef4444", fontSize: 13, margin: 0 }}>{loadError}</p>
+          <Button variant="outline" size="sm" onClick={loadCommunities}>{st.retry ?? "Retry"}</Button>
+        </div>
+      )}
+      {!loading && !loadError && groups.length === 0 && (
+        <p style={{ color: "#444", fontSize: 13, textAlign: "center", marginTop: 24 }}>{st.no_messages}</p>
+      )}
       {groups.map(g => {
         const isMember = myRoomIds.has(g.id);
         return (
-          <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 4px", borderBottom: "1px solid #ffffff08" }}>
-            <div style={{ width: 44, height: 44, background: "#222", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
-              {g.icon ?? <Users size={20} style={{ color: "#666" }} />}
+          <div key={g.id}
+            className="rounded-xl border border-border/40 bg-card/30 p-3 mb-2 flex items-start gap-3"
+            data-testid={`community-card-${g.id}`}
+          >
+            {/* Identity node */}
+            <div style={{ width: 48, height: 48, background: "#222", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0, border: `1px solid ${GOLD}15` }}>
+              {typeof g.icon === "string" && g.icon ? g.icon : <Users size={22} style={{ color: "#666" }} />}
             </div>
-            <div style={{ flex: 1, overflow: "hidden" }}>
-              <p style={{ margin: 0, fontWeight: 700, color: "#fff", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name ?? "Group"}</p>
-              <p style={{ margin: 0, fontSize: 12, color: "#ffffff35" }}>{g.memberCount ?? 0} members</p>
+            <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
+              <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name ?? "Assembly"}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 3, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "#ffffff40" }}>
+                  <Users size={11} style={{ display: "inline", marginRight: 3 }} />
+                  {g.memberCount ?? 0}
+                </span>
+                {typeof g.activeInitiativeCount === "number" && g.activeInitiativeCount > 0 && (
+                  <span style={{ fontSize: 11, color: GOLD, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
+                    <HandHeart size={11} />
+                    {g.activeInitiativeCount} active
+                  </span>
+                )}
+              </div>
+              <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {isMember ? (
+                  <Button size="sm" variant="secondary" className="h-9 px-4 text-xs flex-1" onClick={() => onOpen(g.id)}>
+                    {st.open ?? "Open"}
+                  </Button>
+                ) : (
+                  <Button size="sm" className="h-9 px-4 text-xs flex-1" disabled={joining === g.id} onClick={() => join(g.id)}>
+                    {joining === g.id ? "…" : (st.join_group ?? "Join")}
+                  </Button>
+                )}
+                {/* Fix #3: solidarity relay for this assembly */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 px-3 text-xs gap-1"
+                  style={{ color: GOLD, borderColor: `${GOLD}30` }}
+                  onClick={() => onViewRelay(g.id, g.name ?? "Assembly")}
+                  aria-label={`Solidarity actions for ${g.name ?? "Assembly"}`}
+                  data-testid={`relay-btn-${g.id}`}
+                >
+                  <HandHeart size={12} />
+                  {typeof g.activeInitiativeCount === "number" && g.activeInitiativeCount > 0
+                    ? g.activeInitiativeCount
+                    : ""}
+                </Button>
+              </div>
             </div>
-            {isMember ? (
-              <Button size="sm" variant="secondary" className="h-8 px-4 text-xs" onClick={() => onOpen(g.id)}>
-                {st.dm ?? "Open"}
-              </Button>
-            ) : (
-              <Button size="sm" className="h-8 px-4 text-xs" disabled={joining === g.id} onClick={() => join(g.id)}>
-                {joining === g.id ? "…" : (st.join_group ?? "Join")}
-              </Button>
-            )}
           </div>
         );
       })}
@@ -566,7 +654,7 @@ type BottomTab = "discussions" | "actus" | "communautes" | "appels";
 
 const TAB_LABELS: Record<BottomTab, string> = {
   discussions: "Discussions",
-  actus: "Actus",
+  actus: "Relay",
   communautes: "Communautés",
   appels: "Appels",
 };
@@ -620,6 +708,11 @@ function IdentityBoundMessenger({ variant, user }: {
   const [isMobile,    setIsMobile]    = useState(typeof window !== "undefined" && window.innerWidth < 640);
   // Controls the + attachment tray inside the composer
   const [showAttachTray, setShowAttachTray] = useState(false);
+  // Task #165: reply + reactions
+  const [replyTo,       setReplyTo]       = useState<DmMessage | null>(null);
+  // Fix #3: community-scoped relay view (null = empire-wide)
+  const [relayRoomId,   setRelayRoomId]   = useState<number | null>(null);
+  const [relayRoomName, setRelayRoomName] = useState<string | null>(null);
 
   const pendingRef = useRef<PendingFile[]>([]);
   useEffect(() => { pendingRef.current = pending; }, [pending]);
@@ -843,7 +936,11 @@ function IdentityBoundMessenger({ variant, user }: {
     if (!activeRoom || (!text.trim() && !override) || sending) return false;
     setSending(true);
     try {
-      const body: object = override ?? { content: text.trim(), type: "text" };
+      const baseBody: Record<string, unknown> = override
+        ? { ...(override as Record<string, unknown>) }
+        : { content: text.trim(), type: "text" };
+      if (!override && replyTo) baseBody.replyToId = replyTo.id;
+      const body = baseBody;
       const roomId = activeRoom.id;
       const r = await fetch(api(`/api/messages/rooms/${roomId}/send`), {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -852,7 +949,7 @@ function IdentityBoundMessenger({ variant, user }: {
       if (r.ok) {
         const j = await r.json();
         if (mountedRef.current && activeRoomIdRef.current === roomId) appendMessage(j.message);
-        if (!override) { setText(""); if (textRef.current) textRef.current.style.height = "auto"; }
+        if (!override) { setText(""); setReplyTo(null); if (textRef.current) textRef.current.style.height = "auto"; }
         loadRooms();
         return true;
       } else {
@@ -886,6 +983,76 @@ function IdentityBoundMessenger({ variant, user }: {
     setMenuMsgId(null);
     const t = msg.content ?? msg.fileUrl ?? msg.audioUrl ?? "";
     navigator.clipboard?.writeText(t).then(() => setToast(st.copied ?? "Copied!")).catch(() => {});
+  }
+
+  async function sendReaction(msg: DmMessage, reaction: "support" | "listen" | "celebrate") {
+    setMenuMsgId(null);
+    if (!activeRoom) return;
+
+    const prevReaction = msg.myReaction as ("support" | "listen" | "celebrate") | null | undefined;
+    const isTogglingOff = prevReaction === reaction; // same reaction → remove it
+    const isSwitch      = !!prevReaction && prevReaction !== reaction; // different → decrement old, increment new
+
+    // Fix #5 — correct optimistic update snapshot for rollback
+    const prevReactions = { ...(msg.reactions ?? { support: 0, listen: 0, celebrate: 0 }) };
+    const prevMyReaction = prevReaction ?? null;
+
+    const optimistic = (key: "support" | "listen" | "celebrate"): number => {
+      const base = prevReactions[key] ?? 0;
+      if (isTogglingOff) {
+        return key === reaction ? Math.max(0, base - 1) : base;
+      }
+      if (isSwitch) {
+        if (key === prevReaction) return Math.max(0, base - 1); // decrement old
+        if (key === reaction)     return base + 1;              // increment new
+        return base;
+      }
+      // No previous reaction → just increment
+      return key === reaction ? base + 1 : base;
+    };
+
+    setMessages(prev => prev.map(m => m.id === msg.id ? {
+      ...m,
+      reactions: {
+        support:   optimistic("support"),
+        listen:    optimistic("listen"),
+        celebrate: optimistic("celebrate"),
+      },
+      myReaction: isTogglingOff ? null : reaction,
+    } : m));
+
+    try {
+      let res: Response;
+      if (isTogglingOff) {
+        res = await fetch(api(`/api/messages/rooms/${activeRoom.id}/messages/${msg.id}/reaction`), {
+          method: "DELETE", credentials: "include",
+        });
+      } else {
+        res = await fetch(api(`/api/messages/rooms/${activeRoom.id}/messages/${msg.id}/reaction`), {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reaction }), credentials: "include",
+        });
+      }
+      // Fix #5: on non-2xx, restore previous state and show feedback
+      if (!res.ok) {
+        setMessages(prev => prev.map(m => m.id === msg.id ? {
+          ...m, reactions: prevReactions, myReaction: prevMyReaction,
+        } : m));
+        setToast(st.send_failed ?? "Could not update reaction — please try again");
+      }
+    } catch {
+      // Fix #5: network failure → restore exact previous state
+      setMessages(prev => prev.map(m => m.id === msg.id ? {
+        ...m, reactions: prevReactions, myReaction: prevMyReaction,
+      } : m));
+      setToast(st.send_failed ?? "Could not update reaction — please try again");
+    }
+  }
+
+  function startReply(msg: DmMessage) {
+    setMenuMsgId(null);
+    setReplyTo(msg);
+    setTimeout(() => textRef.current?.focus(), 100);
   }
 
   // Upload one file/blob with real progress events (XHR — fetch has no upload progress).
@@ -1146,8 +1313,32 @@ function IdentityBoundMessenger({ variant, user }: {
   // The send button is always visible to the right of the input.
   // While recording a voice note, the send/tray area switches to record controls.
 
-  const composerEl = (
+  // composerEl is conditionally replaced by blocked-notice when room is blocked
+  const isRoomBlocked = activeRoom?.blockedByMe || activeRoom?.blocked;
+
+  const composerEl = isRoomBlocked ? (
+    <div style={{ padding: "12px 16px", paddingBottom: "calc(12px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+      <ShieldOff size={15} style={{ color: "#ef4444", flexShrink: 0 }} />
+      <p style={{ margin: 0, fontSize: 13, color: "#ef4444", fontWeight: 600 }}>{st.blocked_notice ?? "You have blocked this citizen."}</p>
+    </div>
+  ) : (
     <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
+      {/* Reply preview bar */}
+      {replyTo && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px", borderBottom: `1px solid ${GOLD}15`, marginBottom: 8 }}>
+          <CornerUpLeft size={13} style={{ color: GOLD, flexShrink: 0 }} />
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: GOLD }}>{st.reply_preview ?? "Replying to"} {replyTo.username}</p>
+            <p style={{ margin: 0, fontSize: 12, color: "#ffffff55", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {replyTo.type === "audio" ? "🎤 Voice note" : replyTo.type === "file" ? "📎 File" : (replyTo.content ?? "—")}
+            </p>
+          </div>
+          <button onClick={() => setReplyTo(null)} title={st.cancel_reply ?? "Cancel reply"}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#666", padding: 4, flexShrink: 0 }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
       {/* Recording indicator */}
       {recording && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px" }}>
@@ -1352,53 +1543,86 @@ function IdentityBoundMessenger({ variant, user }: {
       <AnimatePresence>
         {showSettings && (
           <SettingsPanel st={st} activeRoom={activeRoom} onClose={() => setShowSettings(false)}
+            currentUserId={user?.id}
             onMuteChanged={(roomId, muted) => {
               setRooms(prev => prev.map(r => r.id === roomId ? { ...r, muted } : r));
               setActiveRoom(prev => prev && prev.id === roomId ? { ...prev, muted } : prev);
               loadRooms();
             }}
             onRoomDeleted={removeRoomFromAllSurfaces}
-            showToast={setToast} />
+            showToast={setToast}
+            onBlockChanged={async (roomId, blocked) => {
+              setActiveRoom(prev => prev && prev.id === roomId ? { ...prev, blockedByMe: blocked } : prev);
+              const refreshedRooms = await loadRooms();
+              const refreshedRoom = refreshedRooms.find(room => room.id === roomId);
+              if (refreshedRoom) {
+                setActiveRoom(prev => prev && prev.id === roomId
+                  ? { ...prev, ...refreshedRoom }
+                  : prev);
+              }
+            }} />
         )}
       </AnimatePresence>
 
-      {/* ── Header: back + avatar + name + call buttons ── */}
-      <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); setShowAttachTray(false); }} title={st.back ?? "Back"}
-          style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <BackArrow size={22} />
-        </button>
-        <Avatar name={getPeerName(activeRoom)} size={40} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 16, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {getPeerName(activeRoom)}
-            {activeRoom.muted && <BellOff size={13} style={{ color: "#666", flexShrink: 0 }} />}
-          </p>
-          <p style={{ margin: 0, fontSize: 12, color: "#ffffff40", overflow: "hidden", whiteSpace: "nowrap" }}>
-            <span style={{ color: activeRoom.type === "direct" && call.onlineUsers.includes(getPeerName(activeRoom)) ? "#22c55e" : "#ffffff40" }}>
-              {activeRoom.type === "direct"
-                ? (call.onlineUsers.includes(getPeerName(activeRoom)) ? `● ${st.online}` : st.offline)
-                : (st.groups ?? "Group")}
-            </span>
-          </p>
+      {/* ── Header: back + avatar + name + solidarity status + call buttons ── */}
+      {(() => {
+        const peerMember = activeRoom.type === "direct"
+          ? activeRoom.members.find(m => m.username !== user.username)
+          : undefined;
+        const solStatus = peerMember?.solidarityStatusVisible !== false ? peerMember?.solidarityStatus : null;
+        const statusColor = solStatus
+          ? (SOLIDARITY_STATUS_COLORS[solStatus] ?? "#6b7280")
+          : (call.onlineUsers.includes(getPeerName(activeRoom)) ? "#22c55e" : "#ffffff40");
+        return (
+          <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); setShowAttachTray(false); setReplyTo(null); }} title={st.back ?? "Back"}
+              style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <BackArrow size={22} />
+            </button>
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <Avatar name={getPeerName(activeRoom)} size={40} />
+              {(solStatus || call.onlineUsers.includes(getPeerName(activeRoom))) && (
+                <div style={{ position: "absolute", bottom: 0, right: 0, width: 12, height: 12, background: statusColor, borderRadius: "50%", border: "2px solid #000" }} />
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 16, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {getPeerName(activeRoom)}
+                {activeRoom.muted && <BellOff size={13} style={{ color: "#666", flexShrink: 0 }} />}
+              </p>
+              <p style={{ margin: 0, fontSize: 12, color: statusColor, overflow: "hidden", whiteSpace: "nowrap" }}>
+                {activeRoom.type === "direct"
+                  ? (solStatus ?? (call.onlineUsers.includes(getPeerName(activeRoom)) ? `● ${st.online}` : st.offline))
+                  : (st.groups ?? "Group")}
+              </p>
+            </div>
+            {activeRoom.type === "direct" && !activeRoom.blockedByMe && (
+              <>
+                <button onClick={() => call.startCall(getPeerName(activeRoom), true)} title={st.video_call}
+                  style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Video size={21} />
+                </button>
+                <button onClick={() => call.startCall(getPeerName(activeRoom), false)} title={st.voice_call}
+                  style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Phone size={20} />
+                </button>
+              </>
+            )}
+            <button onClick={() => setShowSettings(true)} title={st.msg_settings ?? "Settings"}
+              style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: "#999", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <MoreVertical size={20} />
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── Blocked notice ── */}
+      {activeRoom.blockedByMe && (
+        <div style={{ background: "#1a1a1a", borderBottom: `1px solid ${GOLD}10`, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+          <ShieldOff size={14} style={{ color: "#ef4444", flexShrink: 0 }} />
+          <p style={{ margin: 0, fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{st.blocked_notice ?? "You have blocked this citizen."}</p>
         </div>
-        {activeRoom.type === "direct" && (
-          <>
-            <button onClick={() => call.startCall(getPeerName(activeRoom), true)} title={st.video_call}
-              style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Video size={21} />
-            </button>
-            <button onClick={() => call.startCall(getPeerName(activeRoom), false)} title={st.voice_call}
-              style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Phone size={20} />
-            </button>
-          </>
-        )}
-        <button onClick={() => setShowSettings(true)} title={st.msg_settings ?? "Settings"}
-          style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: "#999", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <MoreVertical size={20} />
-        </button>
-      </div>
+      )}
 
       {/* ── Messages with date separators ── */}
       <div style={{ flex: 1, overflowY: "auto", overscrollBehavior: "contain", padding: "12px 12px 4px", display: "flex", flexDirection: "column", gap: 4, WebkitOverflowScrolling: "touch" }}
@@ -1414,10 +1638,20 @@ function IdentityBoundMessenger({ variant, user }: {
                 member.userId !== user.id &&
                 member.lastReadAt != null &&
                 new Date(member.lastReadAt).getTime() >= new Date(msg.createdAt).getTime());
+              const hasReactions = msg.reactions && (msg.reactions.support + msg.reactions.listen + msg.reactions.celebrate) > 0;
               return (
                 <div key={msg.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6, position: "relative" }}>
                   <div style={{ maxWidth: "78%", background: mine ? GOLD : BUBBLE_OTHER, borderRadius: mine ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "8px 12px 6px", userSelect: "text", WebkitUserSelect: "text", position: "relative", boxShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
                     {!mine && activeRoom.type === "group" && <p style={{ margin: "0 0 3px", fontSize: 12, fontWeight: 800, color: GOLD }}>{msg.username}</p>}
+                    {/* Reply preview bubble */}
+                    {msg.replyTo && (
+                      <div style={{ background: mine ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.07)", borderInlineStart: `3px solid ${mine ? "#000" : GOLD}`, borderRadius: 6, padding: "4px 8px", marginBottom: 6 }}>
+                        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: mine ? "#000000aa" : GOLD }}>{msg.replyTo.username}</p>
+                        <p style={{ margin: 0, fontSize: 12, color: mine ? "#000000aa" : "#ffffff55", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
+                          {msg.replyTo.type === "audio" ? "🎤 Voice note" : msg.replyTo.type === "file" ? "📎 File" : (msg.replyTo.content ?? "—")}
+                        </p>
+                      </div>
+                    )}
                     {msg.type === "audio" && msg.audioUrl ? (
                       <audio controls src={resolveUrl(msg.audioUrl)} style={{ maxWidth: 220, height: 38 }} />
                     ) : msg.type === "video" && msg.videoUrl ? (
@@ -1437,6 +1671,32 @@ function IdentityBoundMessenger({ variant, user }: {
                       {clockTime(msg.createdAt)}
                       {seen && <span aria-label="Seen" title="Seen" style={{ marginInlineStart: 5, fontSize: 12, fontWeight: 900, letterSpacing: -1 }}>✓✓</span>}
                     </p>
+                    {/* Reactions row */}
+                    {hasReactions && (
+                      <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                        {msg.reactions!.support > 0 && (
+                          <span
+                            onClick={e => { e.stopPropagation(); sendReaction(msg, "support"); }}
+                            style={{ display: "flex", alignItems: "center", gap: 3, background: msg.myReaction === "support" ? `${GOLD}30` : "rgba(255,255,255,0.1)", borderRadius: 10, padding: "2px 7px", cursor: "pointer", fontSize: 11, color: mine ? "#000000aa" : "#fff" }}>
+                            <HandHeart size={10} /> {msg.reactions!.support}
+                          </span>
+                        )}
+                        {msg.reactions!.listen > 0 && (
+                          <span
+                            onClick={e => { e.stopPropagation(); sendReaction(msg, "listen"); }}
+                            style={{ display: "flex", alignItems: "center", gap: 3, background: msg.myReaction === "listen" ? "#3b82f630" : "rgba(255,255,255,0.1)", borderRadius: 10, padding: "2px 7px", cursor: "pointer", fontSize: 11, color: mine ? "#000000aa" : "#fff" }}>
+                            <Ear size={10} /> {msg.reactions!.listen}
+                          </span>
+                        )}
+                        {msg.reactions!.celebrate > 0 && (
+                          <span
+                            onClick={e => { e.stopPropagation(); sendReaction(msg, "celebrate"); }}
+                            style={{ display: "flex", alignItems: "center", gap: 3, background: msg.myReaction === "celebrate" ? "#22c55e30" : "rgba(255,255,255,0.1)", borderRadius: 10, padding: "2px 7px", cursor: "pointer", fontSize: 11, color: mine ? "#000000aa" : "#fff" }}>
+                            <PartyPopper size={10} /> {msg.reactions!.celebrate}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <button onClick={e => { e.stopPropagation(); setMenuMsgId(v => v === msg.id ? null : msg.id); }}
                     style={{ background: "none", border: "none", cursor: "pointer", color: "#555", padding: 2, alignSelf: "center", flexShrink: 0 }}>
@@ -1444,8 +1704,30 @@ function IdentityBoundMessenger({ variant, user }: {
                   </button>
                   {menuMsgId === msg.id && (
                     <div onClick={e => e.stopPropagation()}
-                      className="absolute bottom-full z-30 min-w-[130px] overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+                      className="absolute bottom-full z-30 min-w-[150px] overflow-hidden rounded-md border border-border bg-popover shadow-lg"
                       style={{ insetInlineEnd: mine ? 0 : "auto", insetInlineStart: mine ? "auto" : 8 }}>
+                      {/* Reply */}
+                      <button onClick={() => startReply(msg)}
+                        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold text-popover-foreground hover:bg-accent">
+                        <CornerUpLeft size={12} /> {st.reply ?? "Reply"}
+                      </button>
+                      {/* Reactions */}
+                      <button onClick={() => sendReaction(msg, "support")}
+                        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold text-popover-foreground hover:bg-accent">
+                        <HandHeart size={12} /> {st.react_support ?? "Support"}
+                        {msg.myReaction === "support" && <span className="ml-auto text-[10px] text-muted-foreground">✓</span>}
+                      </button>
+                      <button onClick={() => sendReaction(msg, "listen")}
+                        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold text-popover-foreground hover:bg-accent">
+                        <Ear size={12} /> {st.react_listen ?? "Listen"}
+                        {msg.myReaction === "listen" && <span className="ml-auto text-[10px] text-muted-foreground">✓</span>}
+                      </button>
+                      <button onClick={() => sendReaction(msg, "celebrate")}
+                        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold text-popover-foreground hover:bg-accent">
+                        <PartyPopper size={12} /> {st.react_celebrate ?? "Celebrate"}
+                        {msg.myReaction === "celebrate" && <span className="ml-auto text-[10px] text-muted-foreground">✓</span>}
+                      </button>
+                      <div className="border-t border-border/40" />
                       {(msg.content || msg.fileUrl || msg.audioUrl) && (
                         <button onClick={() => copyMessage(msg)}
                           className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold text-popover-foreground hover:bg-accent">
@@ -1622,7 +1904,15 @@ function IdentityBoundMessenger({ variant, user }: {
           </>
         )}
 
-        {tab === "actus" && <ActusTab st={st} />}
+        {tab === "actus" && (
+          <SolidarityRelay
+            st={{ ...st }}
+            currentUserId={user.id}
+            activeRoomId={relayRoomId}
+            activeRoomName={relayRoomName}
+            onClearRoom={() => { setRelayRoomId(null); setRelayRoomName(null); }}
+          />
+        )}
 
         {tab === "communautes" && (
           <>
@@ -1640,7 +1930,12 @@ function IdentityBoundMessenger({ variant, user }: {
             <CommunautesTab st={st} myRoomIds={new Set(rooms.map(r => r.id))}
               onJoined={roomId => { setTab("discussions"); openRoomById(roomId); }}
               onOpen={roomId => { setTab("discussions"); openRoomById(roomId); }}
-              onCreate={() => setShowGroupNew(true)} />
+              onCreate={() => setShowGroupNew(true)}
+              onViewRelay={(roomId, roomName) => {
+                setRelayRoomId(roomId);
+                setRelayRoomName(roomName);
+                setTab("actus");
+              }} />
           </>
         )}
 
@@ -1658,7 +1953,7 @@ function IdentityBoundMessenger({ variant, user }: {
         <div style={{ display: "flex", background: BG_BAR, borderTop: `1px solid ${GOLD}15`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
           {(Object.keys(TAB_LABELS) as BottomTab[]).map(k => {
             const active = tab === k;
-            const Icon = k === "discussions" ? MessageSquare : k === "actus" ? Newspaper : k === "communautes" ? Users : Phone;
+            const Icon = k === "discussions" ? MessageSquare : k === "actus" ? HandHeart : k === "communautes" ? Users : Phone;
             return (
               <button key={k} onClick={() => { setTab(k); activeRoomIdRef.current = null; setActiveRoom(null); }}
                 style={{ flex: 1, padding: "9px 0 7px", border: "none", cursor: "pointer", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" }}>
@@ -1689,6 +1984,7 @@ function IdentityBoundMessenger({ variant, user }: {
           )}
           {showSettings && !activeRoom && (
             <SettingsPanel st={st} activeRoom={null} onClose={() => setShowSettings(false)}
+              currentUserId={user?.id}
               onMuteChanged={() => loadRooms()} onRoomDeleted={removeRoomFromAllSurfaces} showToast={setToast} />
           )}
         </AnimatePresence>

@@ -210,6 +210,63 @@ async function getMembership(roomId: number, userId: number) {
     .limit(1);
   return row ?? null;
 }
+async function isBlockedPair(a: number, b: number): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM citizen_blocks
+     WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1`,
+    [a, b],
+  );
+  return result.rows.length > 0;
+}
+
+async function directRoomBlocked(roomId: number, userId: number): Promise<boolean> {
+  const members = await pool.query<{ user_id: number }>(
+    "SELECT user_id FROM dm_room_members WHERE room_id=$1", [roomId]);
+  if (members.rows.length !== 2) return false;
+  const peer = members.rows.find(m => m.user_id !== userId)?.user_id;
+  return peer !== undefined && isBlockedPair(userId, peer);
+}
+
+// Member metadata is calculated server-side. In particular, a private
+// solidarity status is never returned to another citizen, and block direction
+// is explicit so clients need not infer it from contact availability.
+type DirectMemberState = MemberRow & {
+  blocked?: boolean;
+  blockedByMe?: boolean;
+  solidarityStatus?: string | null;
+  solidarityStatusVisible?: boolean;
+};
+async function enrichDirectMembers(members: MemberRow[], viewerId: number, direct: boolean): Promise<DirectMemberState[]> {
+  if (!direct) return members;
+  const ids = members.map(m => m.userId);
+  const state = await pool.query<{user_id:number;status:string;status_visible:boolean}>(
+    "SELECT user_id,status,status_visible FROM citizen_solidarity_profiles WHERE user_id = ANY($1)", [ids]);
+  const profiles = new Map(state.rows.map(row => [row.user_id, row]));
+  const peerIds = ids.filter(id => id !== viewerId);
+  let blockedRows: { blocker_id: number; blocked_id: number }[] = [];
+  if (peerIds.length) {
+    blockedRows = (await pool.query<{blocker_id:number;blocked_id:number}>(
+      `SELECT blocker_id,blocked_id FROM citizen_blocks
+       WHERE (blocker_id=$1 AND blocked_id=ANY($2)) OR (blocked_id=$1 AND blocker_id=ANY($2))`,
+      [viewerId, peerIds],
+    )).rows;
+  }
+  return members.map(member => {
+    const p = profiles.get(member.userId);
+    const isViewer = member.userId === viewerId;
+    const blockedByMe = !isViewer && blockedRows.some(row => row.blocker_id === viewerId && row.blocked_id === member.userId);
+    const blocked = !isViewer && blockedRows.some(row =>
+      (row.blocker_id === viewerId && row.blocked_id === member.userId) ||
+      (row.blocked_id === viewerId && row.blocker_id === member.userId));
+    return {
+      ...member,
+      blocked,
+      blockedByMe,
+      solidarityStatusVisible: p?.status_visible ?? true,
+      solidarityStatus: (isViewer || p?.status_visible) ? (p?.status ?? "available") : null,
+    };
+  });
+}
 
 // ── Per-room unread count for one user (messages from others after their cursor)
 async function unreadCount(roomId: number, userId: number, lastReadAt: Date | null): Promise<number> {
@@ -284,15 +341,22 @@ router.get("/messages/rooms", async (req, res): Promise<void> => {
     const { roomId, lastReadAt } = membership;
     const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
     if (!room) return null;
-    const members = await hideReadCursors(
+    const rawMembers = await hideReadCursors(
       await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId)), userId);
+    const members = await enrichDirectMembers(rawMembers, userId, room.type === "direct");
     const [lastMsg] = await db.select().from(dmMessages)
       .where(eq(dmMessages.roomId, roomId))
       .orderBy(desc(dmMessages.createdAt)).limit(1);
     const cnt = await unreadCount(roomId, userId, lastReadAt ?? null);
     // Stable sort key: latest message time, or room creation time as fallback.
     const latestAt = latestMsgByRoom.get(roomId) ?? room.createdAt;
-    return { ...room, members, lastMessage: lastMsg ?? null, unreadCount: cnt, muted: mutedSet.has(roomId), _latestAt: latestAt };
+    const peerState = room.type === "direct" ? members.find(member => member.userId !== userId) : undefined;
+    return {
+      ...room, members, lastMessage: lastMsg ?? null, unreadCount: cnt, muted: mutedSet.has(roomId),
+      blocked: peerState?.blocked ?? false,
+      blockedByMe: peerState?.blockedByMe ?? false,
+      _latestAt: latestAt,
+    };
   }));
 
   // Sort newest-activity first, then strip the internal sort key before responding.
@@ -324,6 +388,9 @@ router.post("/messages/rooms", async (req, res): Promise<void> => {
       .where(eq(usersTable.username, targetUsername)).limit(1);
     if (!target) { res.status(404).json({ error: "Citizen not found" }); return; }
     if (target.id === userId) { res.status(400).json({ error: "Cannot DM yourself" }); return; }
+    if (await isBlockedPair(userId, target.id)) {
+      res.status(403).json({ error: "Direct messaging is unavailable for this citizen" }); return;
+    }
 
     // Return existing DM if one already exists between these two users
     const myDMs = await db.select({ roomId: dmRoomMembers.roomId })
@@ -504,9 +571,10 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
     .where(eq(dmMessages.roomId, roomId))
     .orderBy(desc(dmMessages.createdAt)).limit(60);
 
-  const members = await hideReadCursors(
+  const rawMembers = await hideReadCursors(
     await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId)), userId);
   const [room]  = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
+  const members = await enrichDirectMembers(rawMembers, userId, room?.type === "direct");
 
   // Advance this member's read cursor to the latest fetched message timestamp.
   // The WHERE guard ensures the cursor is strictly monotonic — concurrent reads
@@ -522,7 +590,39 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
       ));
   }
 
-  res.json({ room, messages: msgs.reverse(), members });
+  const ordered = msgs.reverse();
+  const ids = ordered.map(m => m.id);
+  let reactionRows: { message_id: number; reaction: string; user_id: number }[] = [];
+  if (ids.length) {
+    reactionRows = (await pool.query<{message_id:number;reaction:string;user_id:number}>(
+      "SELECT message_id,reaction,user_id FROM dm_message_reactions WHERE message_id = ANY($1)", [ids])).rows;
+  }
+  const replies = new Map<number, { id:number; username:string; content:string|null; type:string }>();
+  const replyIds = ordered.map(m => m.replyToId).filter((id): id is number => id !== null);
+  if (replyIds.length) {
+    const result = await pool.query<{id:number;username:string;content:string|null;type:string}>(
+      "SELECT id,username,content,type FROM dm_messages WHERE room_id=$1 AND id=ANY($2)", [roomId, replyIds]);
+    result.rows.forEach(row => replies.set(row.id, row));
+  }
+  const messages = ordered.map(msg => {
+    const reactions = { support: 0, listen: 0, celebrate: 0 };
+    let myReaction: string | null = null;
+    reactionRows.filter(r => r.message_id === msg.id).forEach(r => {
+      reactions[r.reaction as keyof typeof reactions]++;
+      if (r.user_id === userId) myReaction = r.reaction;
+    });
+    return { ...msg, replyToId: msg.replyToId ?? null, replyTo: msg.replyToId ? replies.get(msg.replyToId) ?? null : null, reactions, myReaction };
+  });
+  const peerState = room?.type === "direct" ? members.find(member => member.userId !== userId) : undefined;
+  res.json({
+    room: room ? {
+      ...room,
+      blocked: peerState?.blocked ?? false,
+      blockedByMe: peerState?.blockedByMe ?? false,
+    } : null,
+    messages,
+    members,
+  });
 });
 
 // ── POST /messages/rooms/:id/send (members only) ──────────────────────────────
@@ -538,8 +638,8 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
     res.status(403).json({ error: "Access denied — not a member of this room" }); return;
   }
 
-  const { content, audioUrl, videoUrl, fileUrl, type = "text" } = req.body as {
-    content?: string; audioUrl?: string; videoUrl?: string; fileUrl?: string; type?: string;
+  const { content, audioUrl, videoUrl, fileUrl, type = "text", replyToId } = req.body as {
+    content?: string; audioUrl?: string; videoUrl?: string; fileUrl?: string; type?: string; replyToId?: number;
   };
 
   if (!content?.trim() && !audioUrl && !videoUrl && !fileUrl) {
@@ -557,6 +657,15 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   // Casual/short messages are allowed there — it's a conversation, not a feed.
   const roomMembers = await db.select({ userId: dmRoomMembers.userId })
     .from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
+  const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
+  if (room?.type === "direct" && await directRoomBlocked(roomId, userId)) {
+    res.status(403).json({ error: "Messaging is unavailable in this conversation" }); return;
+  }
+  if (replyToId !== undefined) {
+    if (!Number.isInteger(replyToId)) { res.status(400).json({ error: "Invalid reply target" }); return; }
+    const reply = await pool.query("SELECT 1 FROM dm_messages WHERE id=$1 AND room_id=$2", [replyToId, roomId]);
+    if (!reply.rows.length) { res.status(400).json({ error: "Reply target is not in this room" }); return; }
+  }
   const otherIds = roomMembers.map(m => m.userId).filter((id): id is number => id !== null && id !== userId);
   let starPeer: { id: number; username: string; def: StarDef } | null = null;
   if (otherIds.length === 1) {
@@ -579,7 +688,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
     roomId, userId, username: me.username,
     content: content?.trim() ?? null,
     audioUrl: audioUrl ?? null, videoUrl: videoUrl ?? null,
-    fileUrl: fileUrl ?? null, type,
+    fileUrl: fileUrl ?? null, type, replyToId: replyToId ?? null,
   }).returning();
 
   // XP reward: atomic conditional UPDATE — only awards when:
@@ -615,7 +724,16 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   // must not turn a saved message into a failed send; REST recovery remains.
   void broadcastMessageToRoom(roomId, msg).catch(error =>
     console.error("Chat realtime broadcast failed:", error));
-  res.status(201).json({ message: msg, xpEarned });
+  res.status(201).json({
+    message: {
+      ...msg,
+      replyToId: msg.replyToId ?? null,
+      replyTo: null,
+      reactions: { support: 0, listen: 0, celebrate: 0 },
+      myReaction: null,
+    },
+    xpEarned,
+  });
 });
 
 // ── GET /messages/unread-count ────────────────────────────────────────────────
@@ -638,6 +756,47 @@ router.get("/messages/unread-count", async (req, res): Promise<void> => {
     count += await unreadCount(m.roomId, userId, m.lastReadAt ?? null);
   }
   res.json({ count });
+});
+
+// ── Message reactions — one current reaction per citizen/message ──────────────
+router.put("/messages/rooms/:roomId/messages/:msgId/reaction", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  const roomId = Number(req.params.roomId), msgId = Number(req.params.msgId);
+  const reaction = req.body?.reaction;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  if (!Number.isInteger(roomId) || !Number.isInteger(msgId) || !["support", "listen", "celebrate"].includes(reaction)) {
+    res.status(400).json({ error: "Invalid reaction" }); return;
+  }
+  if (!await getMembership(roomId, userId)) { res.status(403).json({ error: "Access denied" }); return; }
+  const room = await pool.query<{type:string}>("SELECT type FROM dm_rooms WHERE id=$1", [roomId]);
+  if (room.rows[0]?.type === "direct" && await directRoomBlocked(roomId, userId)) {
+    res.status(403).json({ error: "Reactions are unavailable in this conversation" }); return;
+  }
+  const message = await pool.query("SELECT 1 FROM dm_messages WHERE id=$1 AND room_id=$2", [msgId, roomId]);
+  if (!message.rows.length) { res.status(404).json({ error: "Message not found" }); return; }
+  await pool.query(
+    `INSERT INTO dm_message_reactions (message_id,user_id,reaction) VALUES ($1,$2,$3)
+     ON CONFLICT (message_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction`,
+    [msgId, userId, reaction],
+  );
+  res.json({ reaction });
+});
+
+router.delete("/messages/rooms/:roomId/messages/:msgId/reaction", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  const roomId = Number(req.params.roomId), msgId = Number(req.params.msgId);
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  if (!Number.isInteger(roomId) || !Number.isInteger(msgId) || !await getMembership(roomId, userId)) {
+    res.status(403).json({ error: "Access denied" }); return;
+  }
+  const room = await pool.query<{type:string}>("SELECT type FROM dm_rooms WHERE id=$1", [roomId]);
+  if (room.rows[0]?.type === "direct" && await directRoomBlocked(roomId, userId)) {
+    res.status(403).json({ error: "Reactions are unavailable in this conversation" }); return;
+  }
+  const message = await pool.query("SELECT 1 FROM dm_messages WHERE id=$1 AND room_id=$2", [msgId, roomId]);
+  if (!message.rows.length) { res.status(404).json({ error: "Message not found" }); return; }
+  await pool.query("DELETE FROM dm_message_reactions WHERE message_id=$1 AND user_id=$2", [msgId, userId]);
+  res.json({ reaction: null });
 });
 
 // ── DELETE /messages/rooms/:roomId/messages/:msgId — unsend own message ───────
@@ -807,6 +966,27 @@ router.get("/messages/group-rooms", async (_req, res): Promise<void> => {
     return { ...r, memberCount: members.length };
   }));
   res.json({ rooms: withMembers });
+});
+
+// Authenticated community discovery. Initiative counts deliberately include
+// only open initiatives and are calculated in SQL rather than trusting a
+// client-maintained counter.
+router.get("/messages/communities", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const { rows } = await pool.query(
+    `SELECT r.id, r.name, r.type, r.icon, r.created_by AS "createdBy", r.created_at AS "createdAt",
+            COUNT(DISTINCT m.user_id)::int AS "memberCount",
+            COUNT(DISTINCT i.id) FILTER (WHERE i.status = 'open')::int AS "activeInitiativeCount"
+     FROM dm_rooms r
+     LEFT JOIN dm_room_members m ON m.room_id=r.id
+     LEFT JOIN solidarity_initiatives i ON i.room_id=r.id
+     WHERE r.type='group'
+     GROUP BY r.id
+     ORDER BY r.created_at DESC
+     LIMIT 50`,
+  );
+  res.json({ communities: rows });
 });
 
 export default router;

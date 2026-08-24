@@ -44,6 +44,7 @@ function getHonorTitle(honorCount: number): { title: string; color: string; badg
 //   • is_star = TRUE  → hosted world stars are not citizen-discoverable
 //   • password_hash = 'DELETED' → GDPR-erased accounts are not discoverable
 router.get("/citizens", async (req, res): Promise<void> => {
+  const viewerId = req.session?.userId ?? null;
   const limit  = Math.min(Math.max(parseInt(req.query.limit  as string) || 50,  1), 200);
   const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
   const sort   = req.query.sort === "coins" ? "coins" : req.query.sort === "honor" ? "honor" : "xp";
@@ -67,14 +68,20 @@ router.get("/citizens", async (req, res): Promise<void> => {
 
   const { rows } = await pool.query(
     `SELECT u.id, u.username, u.xp, u.balance, u.games_played, u.wins, u.created_at,
-            u.honor_count, u.is_muted, u.last_seen_at, u.is_star
+             u.honor_count, u.is_muted, u.last_seen_at, u.is_star,
+             CASE WHEN sp.status_visible THEN sp.status ELSE NULL END AS "solidarityStatus"
      FROM "users" u
+      LEFT JOIN citizen_solidarity_profiles sp ON sp.user_id = u.id
      WHERE COALESCE(u.is_star, FALSE) = FALSE
        AND u.password_hash <> 'DELETED'
        AND u.username ILIKE $1
+        AND ($4::integer IS NULL OR NOT EXISTS (
+          SELECT 1 FROM citizen_blocks cb WHERE (cb.blocker_id=$4 AND cb.blocked_id=u.id)
+             OR (cb.blocker_id=u.id AND cb.blocked_id=$4)
+        ))
      ORDER BY ${orderClause}, u.id ASC
      LIMIT $2 OFFSET $3`,
-    [searchPattern, limit, offset]
+    [searchPattern, limit, offset, viewerId]
   );
 
   const citizens = rows.map((u: any, i: number) => ({

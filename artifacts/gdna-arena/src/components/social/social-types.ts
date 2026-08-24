@@ -29,10 +29,27 @@ export interface DmRoom {
   type: string;   // direct | group
   icon?: string;
   createdAt: string;
-  members: { userId: number; username: string; lastReadAt?: string | null }[];
+  members: {
+    userId: number;
+    username: string;
+    lastReadAt?: string | null;
+    solidarityStatus?: string | null;
+    solidarityStatusVisible?: boolean;
+  }[];
   lastMessage?: { content?: string; type: string; createdAt: string } | null;
   unreadCount: number;
   muted?: boolean;
+  blocked?: boolean;
+  blockedByMe?: boolean;
+}
+
+export interface GroupRoom {
+  id: number;
+  name?: string;
+  type: string;
+  icon?: string;
+  memberCount?: number;
+  activeInitiativeCount?: number;
 }
 
 export interface DmMessage {
@@ -46,6 +63,16 @@ export interface DmMessage {
   fileUrl?: string;
   type: string;   // text | audio | file
   createdAt: string;
+  // Task #165 extensions
+  replyToId?: number | null;
+  replyTo?: { id: number; username: string; content?: string; type: string } | null;
+  reactions?: { support: number; listen: number; celebrate: number };
+  myReaction?: "support" | "listen" | "celebrate" | null;
+}
+
+export interface SolidarityStatus {
+  status: "available" | "listening" | "seeking" | "focused" | "offline" | null;
+  statusVisible: boolean;
 }
 
 export interface Story {

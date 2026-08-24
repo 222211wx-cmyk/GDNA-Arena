@@ -12,4 +12,5 @@ export * from "./celebrations";
 // Re-export new legend tables explicitly so routes can import them
 export { legendStoriesTable, legendArenaEventsTable } from "./legends";
 export * from "./social";
+export * from "./solidarity";
 

@@ -789,6 +789,33 @@ async function ensureTables() {
         "is_read" boolean NOT NULL DEFAULT false, "created_at" timestamp DEFAULT now() NOT NULL
       )
     `);
+    await pool.query(`ALTER TABLE "dm_messages" ADD COLUMN IF NOT EXISTS "reply_to_id" integer`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "dm_message_reactions" (
+      "id" serial PRIMARY KEY, "message_id" integer NOT NULL, "user_id" integer NOT NULL,
+      "reaction" text NOT NULL CHECK (reaction IN ('support','listen','celebrate')),
+      "created_at" timestamp NOT NULL DEFAULT now(), UNIQUE ("message_id", "user_id")
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "citizen_blocks" (
+      "id" serial PRIMARY KEY, "blocker_id" integer NOT NULL, "blocked_id" integer NOT NULL,
+      "created_at" timestamp NOT NULL DEFAULT now(), UNIQUE ("blocker_id", "blocked_id"),
+      CHECK ("blocker_id" <> "blocked_id")
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "citizen_solidarity_profiles" (
+      "user_id" integer PRIMARY KEY, "score" integer NOT NULL DEFAULT 0,
+      "initiatives_completed" integer NOT NULL DEFAULT 0, "supports_completed" integer NOT NULL DEFAULT 0,
+      "status" text NOT NULL DEFAULT 'available' CHECK ("status" IN ('available','listening','seeking','focused','offline')),
+      "status_visible" boolean NOT NULL DEFAULT true, "updated_at" timestamp NOT NULL DEFAULT now()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "solidarity_initiatives" (
+      "id" serial PRIMARY KEY, "creator_id" integer NOT NULL, "title" text NOT NULL, "body" text NOT NULL,
+      "domain" text NOT NULL, "room_id" integer, "target_support" integer NOT NULL CHECK ("target_support" >= 3),
+      "status" text NOT NULL DEFAULT 'open' CHECK ("status" IN ('open','completed','cancelled')),
+      "completed_at" timestamp, "created_at" timestamp NOT NULL DEFAULT now()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "solidarity_supports" (
+      "id" serial PRIMARY KEY, "initiative_id" integer NOT NULL, "user_id" integer NOT NULL,
+      "created_at" timestamp NOT NULL DEFAULT now(), UNIQUE ("initiative_id", "user_id")
+    )`);
 
     // ── Notifications table ───────────────────────────────────────────────────
     await pool.query(`

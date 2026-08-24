@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { db, notifications } from "@workspace/db";
 import { broadcastToUser } from "../lib/signaling";
 
@@ -37,7 +37,7 @@ router.post("/notifications/:id/read", async (req, res): Promise<void> => {
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
   const id = parseInt(req.params.id);
   await db.update(notifications).set({ isRead: true })
-    .where(eq(notifications.id, id));
+    .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
   res.json({ ok: true });
 });
 
@@ -51,6 +51,7 @@ export async function pushNotification(params: {
   body: string;
   icon?: string;
   linkPath?: string;
+  sourceRef?: string;
 }) {
   try {
     const [row] = await db.insert(notifications).values({
@@ -60,6 +61,7 @@ export async function pushNotification(params: {
       body: params.body,
       icon: params.icon ?? "⚡",
       linkPath: params.linkPath ?? null,
+      sourceRef: params.sourceRef ?? null,
     }).returning();
     // Real-time push to connected WebSocket client
     if (row) {
