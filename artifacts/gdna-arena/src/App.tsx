@@ -130,13 +130,17 @@ function PageWrapper() {
 }
 
 function Router() {
+  const [location] = useLocation();
+  const isDedicatedMessenger = location === "/messages";
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
       <CoinsDisclaimer />
       <Navbar />
       <PageWrapper />
       <Footer />
-      <GdnAiFloating />
+      {!isDedicatedMessenger && <GdnAiFloating />}
+      {!isDedicatedMessenger && <CommHub />}
       <CookieBanner />
       <AgeGate />
       <GeoBlock />
@@ -159,7 +163,6 @@ function App() {
                 <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                   <Router />
                 </WouterRouter>
-                <CommHub />
                 <Toaster />
               </CallProvider>
             </AuthProvider>

@@ -32,6 +32,16 @@
   animation: page-fade-in 0.25s ease-out both;
 }
 
+/* Horizontal mobile navigation stays swipeable without creating a visible
+   browser scrollbar or making the page feel wider than the viewport. */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Count-up glow pulse ─────────────────────────────────────────────────────── */
 @keyframes count-glow {
   0%, 100% { text-shadow: 0 0 0 transparent; }

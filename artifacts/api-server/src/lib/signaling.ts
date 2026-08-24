@@ -313,6 +313,29 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       if (msg.type === "call-offer") {
         const target = findByUsername(msg.to);
         if (!target) { send(ws, { type: "call-unavailable", to: msg.to }); return; }
+        // Blocking is enforced before busy checks and, critically, before any
+        // call state is created. Both directions are equivalent for contact
+        // safety; identity comes exclusively from authenticated sockets.
+        if (self.userId === null || target.userId === null) {
+          send(ws, { type: "call-unavailable", to: msg.to }); return;
+        }
+        try {
+          const block = await pool!.query(
+            `SELECT 1 FROM citizen_blocks
+             WHERE (blocker_id=$1 AND blocked_id=$2)
+                OR (blocker_id=$2 AND blocked_id=$1)
+             LIMIT 1`,
+            [self.userId, target.userId],
+          );
+          if (block.rows.length) {
+            send(ws, { type: "call-blocked", callId: msg.callId });
+            return;
+          }
+        } catch {
+          // Fail closed: a database outage must not bypass a persisted block.
+          send(ws, { type: "call-unavailable", to: msg.to });
+          return;
+        }
         if (userIsInCall(target.username)) { send(ws, { type: "call-busy", to: msg.to }); return; }
         activeCalls.set(msg.callId, {
           caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,

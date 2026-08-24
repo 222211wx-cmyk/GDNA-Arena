@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, boolean, timestamp, uniqueIndex, date } from "drizzle-orm/pg-core";
 
 export const solidarityInitiatives = pgTable("solidarity_initiatives", {
   id: serial("id").primaryKey(),
@@ -36,3 +36,18 @@ export const citizenBlocks = pgTable("citizen_blocks", {
   blockedId: integer("blocked_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({ uniqueBlock: uniqueIndex("citizen_blocks_unique").on(t.blockerId, t.blockedId) }));
+
+export const solidarityRewardLedger = pgTable("solidarity_reward_ledger", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  initiativeId: integer("initiative_id").notNull(),
+  role: text("role").notNull(),
+  amount: integer("amount").notNull(),
+  rewardDate: date("reward_date").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  permanentReward: uniqueIndex("solidarity_reward_ledger_initiative_role_uniq")
+    .on(t.userId, t.initiativeId, t.role),
+  dailyReward: uniqueIndex("solidarity_reward_ledger_daily_role_uniq")
+    .on(t.userId, t.rewardDate, t.role),
+}));

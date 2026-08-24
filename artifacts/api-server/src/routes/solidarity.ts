@@ -101,10 +101,33 @@ router.post("/solidarity/initiatives/:id/support", async (req, res): Promise<voi
       const done = await c.query("UPDATE solidarity_initiatives SET status='completed',completed_at=now() WHERE id=$1 AND status='open' RETURNING id", [id]);
       completed = done.rows.length > 0;
       if (completed) {
-        await c.query("INSERT INTO citizen_solidarity_profiles (user_id,score,initiatives_completed) VALUES ($1,10,1) ON CONFLICT (user_id) DO UPDATE SET score=citizen_solidarity_profiles.score+10,initiatives_completed=citizen_solidarity_profiles.initiatives_completed+1,updated_at=now()", [initiative.creator_id]);
-        await c.query("UPDATE users SET xp=xp+10 WHERE id=$1", [initiative.creator_id]);
-        await c.query(`INSERT INTO citizen_solidarity_profiles (user_id,score,supports_completed) SELECT user_id,5,1 FROM solidarity_supports WHERE initiative_id=$1 ON CONFLICT (user_id) DO UPDATE SET score=citizen_solidarity_profiles.score+5,supports_completed=citizen_solidarity_profiles.supports_completed+1,updated_at=now()`, [id]);
-        await c.query("UPDATE users SET xp=xp+5 WHERE id IN (SELECT user_id FROM solidarity_supports WHERE initiative_id=$1)", [id]);
+        // Lifetime completion counters are achievements, not rewards: they
+        // increase for every genuine completion even after the daily XP cap.
+        await c.query("INSERT INTO citizen_solidarity_profiles (user_id,initiatives_completed) VALUES ($1,1) ON CONFLICT (user_id) DO UPDATE SET initiatives_completed=citizen_solidarity_profiles.initiatives_completed+1,updated_at=now()", [initiative.creator_id]);
+        await c.query(`INSERT INTO citizen_solidarity_profiles (user_id,supports_completed)
+          SELECT user_id,1 FROM solidarity_supports WHERE initiative_id=$1
+          ON CONFLICT (user_id) DO UPDATE SET supports_completed=citizen_solidarity_profiles.supports_completed+1,updated_at=now()`, [id]);
+
+        // ON CONFLICT covers both permanent initiative idempotency and the UTC
+        // daily role cap. Only ledger rows returned here are reward-eligible.
+        const creatorReward = await c.query<{user_id:number}>(
+          `INSERT INTO solidarity_reward_ledger (user_id,initiative_id,role,amount,reward_date)
+           VALUES ($1,$2,'creator',10,(now() AT TIME ZONE 'UTC')::date)
+           ON CONFLICT DO NOTHING RETURNING user_id`, [initiative.creator_id, id]);
+        if (creatorReward.rows.length) {
+          await c.query("UPDATE citizen_solidarity_profiles SET score=score+10,updated_at=now() WHERE user_id=$1", [initiative.creator_id]);
+          await c.query("UPDATE users SET xp=xp+10 WHERE id=$1", [initiative.creator_id]);
+        }
+        const supporterRewards = await c.query<{user_id:number}>(
+          `INSERT INTO solidarity_reward_ledger (user_id,initiative_id,role,amount,reward_date)
+           SELECT user_id,$1,'supporter',5,(now() AT TIME ZONE 'UTC')::date
+           FROM solidarity_supports WHERE initiative_id=$1
+           ON CONFLICT DO NOTHING RETURNING user_id`, [id]);
+        const rewardedSupporters = supporterRewards.rows.map(row => row.user_id);
+        if (rewardedSupporters.length) {
+          await c.query("UPDATE citizen_solidarity_profiles SET score=score+5,updated_at=now() WHERE user_id=ANY($1)", [rewardedSupporters]);
+          await c.query("UPDATE users SET xp=xp+5 WHERE id=ANY($1)", [rewardedSupporters]);
+        }
         completionRecipients = (await c.query<{user_id:number}>(
           "SELECT user_id FROM solidarity_supports WHERE initiative_id=$1", [id])).rows.map(row => row.user_id);
       }

@@ -92,7 +92,7 @@ const SOLIDARITY_STATUSES = [
 ] as const;
 
 // ── i18n additions exported for social-i18n merge ─────────────────────────────
-export const SOLIDARITY_ST: Record<string, Record<string, string>> = {
+const SOLIDARITY_ST: Record<string, Record<string, string>> = {
   en: {
     relay_title: "Solidarity Relay",
     relay_score: "Solidarity Score",
@@ -100,6 +100,11 @@ export const SOLIDARITY_ST: Record<string, Record<string, string>> = {
     relay_initiatives: "Initiatives",
     relay_supports: "Supports",
     relay_status_label: "Your stance",
+    relay_status_available: "Available",
+    relay_status_listening: "Listening",
+    relay_status_seeking: "Seeking",
+    relay_status_focused: "Focused",
+    relay_status_offline: "Offline",
     relay_status_visible: "Visible to other citizens",
     relay_empty: "No initiatives yet — be the first to rally the empire.",
     relay_create: "Stand with the empire",
@@ -118,7 +123,8 @@ export const SOLIDARITY_ST: Record<string, Record<string, string>> = {
     relay_progress: "of target",
     relay_validation_title: "Title is required",
     relay_validation_body: "Body is required",
-    relay_validation_target: "Target must be at least 1",
+    relay_validation_target: "Target must be a whole number from 3 to 1000",
+    relay_submit_failed: "The initiative could not be launched. Please try again.",
     relay_all_empire: "All empire",
     relay_scoped_to: "Assembly scope",
     // Fix #4 — domain labels
@@ -138,6 +144,11 @@ export const SOLIDARITY_ST: Record<string, Record<string, string>> = {
     relay_initiatives: "المبادرات",
     relay_supports: "الدعم",
     relay_status_label: "موقفك",
+    relay_status_available: "متاح",
+    relay_status_listening: "مستمع",
+    relay_status_seeking: "أبحث عن الدعم",
+    relay_status_focused: "مركّز",
+    relay_status_offline: "غير متصل",
     relay_status_visible: "مرئي للمواطنين الآخرين",
     relay_empty: "لا مبادرات بعد — كن أول من يحشد الإمبراطورية.",
     relay_create: "تضامن مع الإمبراطورية",
@@ -156,7 +167,8 @@ export const SOLIDARITY_ST: Record<string, Record<string, string>> = {
     relay_progress: "من الهدف",
     relay_validation_title: "العنوان مطلوب",
     relay_validation_body: "الوصف مطلوب",
-    relay_validation_target: "الهدف يجب أن يكون 1 على الأقل",
+    relay_validation_target: "الهدف يجب أن يكون عدداً صحيحاً من 3 إلى 1000",
+    relay_submit_failed: "تعذر إطلاق المبادرة. حاول مرة أخرى.",
     relay_all_empire: "كل الإمبراطورية",
     relay_scoped_to: "نطاق الجمعية",
     // Fix #4 — domain labels
@@ -227,7 +239,7 @@ function StatusSelector({
               ? <Loader2 size={14} className="animate-spin" />
               : <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: current.color }} />
             }
-            {current.label}
+            {st[`relay_status_${current.value}`] ?? current.label}
             <ChevronDown size={13} className="text-muted-foreground" />
           </button>
           <AnimatePresence>
@@ -249,7 +261,7 @@ function StatusSelector({
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-semibold text-popover-foreground hover:bg-accent"
                   >
                     <span className="h-2 w-2 rounded-full shrink-0" style={{ background: s.color }} />
-                    {s.label}
+                    {st[`relay_status_${s.value}`] ?? s.label}
                   </button>
                 ))}
               </motion.div>
@@ -415,7 +427,7 @@ function CreateForm({
   st, onCreated, onClose, scopedRoomId,
 }: {
   st: Record<string, string>;
-  onCreated: () => void;
+  onCreated: () => void | Promise<void>;
   onClose: () => void;
   scopedRoomId?: number | null;
 }) {
@@ -431,7 +443,10 @@ function CreateForm({
     const e: Record<string, string> = {};
     if (!title.trim()) e.title  = st.relay_validation_title  ?? "Title is required";
     if (!body.trim())  e.body   = st.relay_validation_body   ?? "Body is required";
-    if (Number(target) < 1) e.target = st.relay_validation_target ?? "Target must be ≥ 1";
+    const parsedTarget = Number(target);
+    if (!Number.isInteger(parsedTarget) || parsedTarget < 3 || parsedTarget > 1000) {
+      e.target = st.relay_validation_target ?? "Target must be a whole number from 3 to 1000";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -451,7 +466,21 @@ function CreateForm({
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload), credentials: "include",
       });
-      if (r.ok) { onCreated(); onClose(); }
+      if (r.ok) {
+        onClose();
+        await onCreated();
+      } else {
+        const responseBody = await r.json().catch(() => ({} as { error?: string }));
+        setErrors(current => ({
+          ...current,
+          form: responseBody.error ?? st.relay_submit_failed ?? "The initiative could not be launched. Please try again.",
+        }));
+      }
+    } catch {
+      setErrors(current => ({
+        ...current,
+        form: st.relay_submit_failed ?? "The initiative could not be launched. Please try again.",
+      }));
     } finally { setSubmitting(false); }
   }
 
@@ -515,7 +544,9 @@ function CreateForm({
         <div className="flex flex-col gap-1 w-32">
           <Input
             type="number"
-            min={1}
+            min={3}
+            max={1000}
+            step={1}
             value={target}
             onChange={e => setTarget(e.target.value)}
             placeholder={st.relay_target_placeholder ?? "Target"}
@@ -537,6 +568,11 @@ function CreateForm({
           : <><HandHeart size={14} />{st.relay_submit ?? "Launch initiative"}</>
         }
       </Button>
+      {errors.form && (
+        <p role="alert" className="text-[11px] text-destructive text-center">
+          {errors.form}
+        </p>
+      )}
     </motion.div>
   );
 }
@@ -545,6 +581,7 @@ function CreateForm({
 interface Props {
   st: Record<string, string>;
   currentUserId: number;
+  lang?: string;
   /** Fix #3: non-null → community-scoped view; null → empire-wide */
   activeRoomId?: number | null;
   /** Fix #3: community name for breadcrumb */
@@ -554,7 +591,7 @@ interface Props {
 }
 
 export default function SolidarityRelay({
-  st, currentUserId, activeRoomId, activeRoomName, onClearRoom,
+  st, currentUserId, lang = "en", activeRoomId, activeRoomName, onClearRoom,
 }: Props) {
   const [profile, setProfile]       = useState<SolidarityProfile | null>(null);
   const [initiatives, setInitiatives] = useState<Initiative[]>([]);
@@ -584,9 +621,14 @@ export default function SolidarityRelay({
     load();
   }, [load]);
 
+  const handleCreated = useCallback(async () => {
+    setShowCreate(false);
+    await load();
+  }, [load]);
+
   // Merged i18n: caller-supplied st takes priority over SOLIDARITY_ST defaults
   const merged: Record<string, string> = {
-    ...(SOLIDARITY_ST.en),
+    ...(SOLIDARITY_ST[lang] ?? SOLIDARITY_ST.en),
     ...st,
   };
 
@@ -662,7 +704,7 @@ export default function SolidarityRelay({
         {showCreate && (
           <CreateForm
             st={merged}
-            onCreated={load}
+            onCreated={handleCreated}
             onClose={() => setShowCreate(false)}
             scopedRoomId={activeRoomId}
           />

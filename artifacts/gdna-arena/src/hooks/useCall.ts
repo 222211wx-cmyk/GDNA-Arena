@@ -406,12 +406,17 @@ export function useCall(user: { id: number; username: string } | null) {
           }, 2000);
         }
 
-        if (msg.type === "call-busy" || msg.type === "call-unavailable") {
+        if (msg.type === "call-busy" || msg.type === "call-unavailable" || msg.type === "call-blocked") {
           clearRingTimer();
           currentCallIdRef.current = null;
-          showCallError(msg.type === "call-busy"
-            ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
-            : "📴 المواطن غير متصل بالإمبراطورية حالياً — راسله وسيصله إشعار");
+          // Callee side safety: if a block denial races an incoming banner, clear it.
+          setIncomingCall(null);
+          showCallError(
+            msg.type === "call-busy"
+              ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
+              : msg.type === "call-blocked"
+                ? "🚫 لا يمكن إجراء هذه المكالمة — التواصل بينكما محجوب"
+                : "📴 المواطن غير متصل بالإمبراطورية حالياً — راسله وسيصله إشعار");
           void leaveAgora();
           setCallStatus("ended");
           setTimeout(() => {

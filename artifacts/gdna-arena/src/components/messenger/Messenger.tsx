@@ -1596,7 +1596,9 @@ function IdentityBoundMessenger({ variant, user }: {
                   : (st.groups ?? "Group")}
               </p>
             </div>
-            {activeRoom.type === "direct" && !activeRoom.blockedByMe && (
+            {/* Suppress call controls whenever the room is blocked in EITHER direction.
+                The server is the security boundary; this only hides affordances. */}
+            {activeRoom.type === "direct" && !activeRoom.blocked && !activeRoom.blockedByMe && (
               <>
                 <button onClick={() => call.startCall(getPeerName(activeRoom), true)} title={st.video_call}
                   style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -1908,6 +1910,7 @@ function IdentityBoundMessenger({ variant, user }: {
           <SolidarityRelay
             st={{ ...st }}
             currentUserId={user.id}
+            lang={lang}
             activeRoomId={relayRoomId}
             activeRoomName={relayRoomName}
             onClearRoom={() => { setRelayRoomId(null); setRelayRoomName(null); }}

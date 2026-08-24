@@ -816,6 +816,14 @@ async function ensureTables() {
       "id" serial PRIMARY KEY, "initiative_id" integer NOT NULL, "user_id" integer NOT NULL,
       "created_at" timestamp NOT NULL DEFAULT now(), UNIQUE ("initiative_id", "user_id")
     )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "solidarity_reward_ledger" (
+      "id" serial PRIMARY KEY, "user_id" integer NOT NULL, "initiative_id" integer NOT NULL,
+      "role" text NOT NULL CHECK ("role" IN ('creator','supporter')),
+      "amount" integer NOT NULL CHECK ("amount" IN (5,10)),
+      "reward_date" date NOT NULL, "created_at" timestamptz NOT NULL DEFAULT now(),
+      UNIQUE ("user_id", "initiative_id", "role"),
+      UNIQUE ("user_id", "reward_date", "role")
+    )`);
 
     // ── Notifications table ───────────────────────────────────────────────────
     await pool.query(`
