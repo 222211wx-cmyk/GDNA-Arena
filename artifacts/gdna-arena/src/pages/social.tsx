@@ -3,11 +3,13 @@
  * All feature logic lives in src/components/social/
  */
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { AnimatePresence, motion } from "framer-motion";
-import { Globe, MessageSquare, BookOpen, Radio, Users, Bell, Search, X } from "lucide-react";
+import { LayoutGrid, Globe, MessageSquare, BookOpen, Radio, Users, Bell, Search, X } from "lucide-react";
 import { useAuth }     from "../contexts/AuthContext";
 import { useLang }     from "../contexts/LangContext";
+import CommunicationMatrix from "../components/social/CommunicationMatrix";
 import FeedTab          from "../components/social/FeedTab";
 import MessagesTab      from "../components/social/MessagesTab";
 import StoriesRow       from "../components/social/StoriesRow";
@@ -17,18 +19,28 @@ import NotificationsTab from "../components/social/NotificationsTab";
 import SearchDropdown   from "../components/social/SearchDropdown";
 import { SOCIAL_T, GOLD } from "../components/social/social-i18n";
 
-type Tab = "feed" | "messages" | "stories" | "live" | "citizens" | "notifications";
+type Tab = "overview" | "feed" | "messages" | "stories" | "live" | "citizens" | "notifications";
 
 export default function SocialPage() {
   const { user } = useAuth();
   const { lang } = useLang();
+  const [, navigate] = useLocation();
   const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const dir = lang === "ar" ? "rtl" : "ltr";
 
-  const [tab,        setTab]        = useState<Tab>("feed");
+  const [tab,        setTab]        = useState<Tab>("overview");
   const [searchQ,    setSearchQ]    = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Submit the header search to the full /search page while retaining the live dropdown.
+  function submitSearch(e?: React.FormEvent) {
+    e?.preventDefault();
+    const q = searchQ.trim();
+    setSearchOpen(false);
+    if (!q) { navigate("/search"); return; }
+    navigate(`/search?q=${encodeURIComponent(q)}`);
+  }
 
   // Close search on outside click
   useEffect(() => {
@@ -42,6 +54,7 @@ export default function SocialPage() {
   }, []);
 
   const TABS: { id: Tab; icon: React.ReactNode; label: string }[] = [
+    { id: "overview",      icon: <LayoutGrid     size={14} />, label: st.overview ?? "Network" },
     { id: "feed",          icon: <Globe          size={14} />, label: st.feed          },
     { id: "messages",      icon: <MessageSquare  size={14} />, label: st.messages      },
     { id: "stories",       icon: <BookOpen       size={14} />, label: st.stories       },
@@ -51,7 +64,19 @@ export default function SocialPage() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#050505", color: "#fff", paddingBottom: 80 }} dir={dir}>
+    <div
+      style={{
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        minHeight: "100vh",
+        overflowX: "hidden",
+        background: "#050505",
+        color: "#fff",
+        paddingBottom: 80,
+      }}
+      dir={dir}
+    >
       {/* Sticky header */}
       <div style={{ background: "rgba(5,5,5,0.96)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${GOLD}15`, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 880, margin: "0 auto", padding: "12px 16px" }}>
@@ -69,26 +94,34 @@ export default function SocialPage() {
             </div>
             {/* Global search */}
             <div ref={searchRef} style={{ flex: 1, position: "relative" }}>
-              <div style={{
+              <form onSubmit={submitSearch} role="search" style={{
                 display: "flex", alignItems: "center",
                 background: "#111", border: `1px solid ${searchOpen ? GOLD : `${GOLD}20`}`,
                 borderRadius: 20, padding: "7px 14px", gap: 8, transition: "border-color 0.2s",
               }}>
-                <Search size={13} style={{ color: "#666", flexShrink: 0 }} />
+                <button type="submit" aria-label={st.search_results ?? "Search"}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#666", padding: 0, display: "flex", flexShrink: 0 }}
+                  data-testid="button-search-submit">
+                  <Search size={13} />
+                </button>
                 <input
                   value={searchQ}
                   onChange={e => { setSearchQ(e.target.value); setSearchOpen(true); }}
                   onFocus={() => setSearchOpen(true)}
                   placeholder={st.search_placeholder}
+                  aria-label={st.search_placeholder}
                   style={{ flex: 1, background: "none", border: "none", color: "#fff", fontSize: 13, outline: "none", minWidth: 0 }}
+                  data-testid="input-search"
                 />
                 {searchQ && (
-                  <button onClick={() => { setSearchQ(""); setSearchOpen(false); }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#666", padding: 0, display: "flex" }}>
+                  <button type="button" onClick={() => { setSearchQ(""); setSearchOpen(false); }}
+                    aria-label={st.back ?? "Clear"}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#666", padding: 0, display: "flex" }}
+                    data-testid="button-search-clear">
                     <X size={13} />
                   </button>
                 )}
-              </div>
+              </form>
               {searchOpen && searchQ.length >= 2 && (
                 <SearchDropdown
                   q={searchQ} st={st} dir={dir}
@@ -99,7 +132,18 @@ export default function SocialPage() {
           </div>
 
           {/* Tab bar */}
-          <div style={{ display: "flex", gap: 2, overflowX: "auto" }}>
+          <div
+            className="scrollbar-hide"
+            style={{
+              display: "flex",
+              width: "100%",
+              maxWidth: "100%",
+              minWidth: 0,
+              gap: 2,
+              overflowX: "auto",
+              overscrollBehaviorX: "contain",
+            }}
+          >
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
                 style={{
@@ -128,6 +172,7 @@ export default function SocialPage() {
           <motion.div key={tab}
             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }} transition={{ duration: 0.13 }}>
+            {tab === "overview"      && <CommunicationMatrix user={user} st={st} dir={dir} />}
             {tab === "feed"          && <FeedTab          user={user} st={st} dir={dir} />}
             {tab === "messages"      && <MessagesTab      user={user} st={st} dir={dir} />}
             {tab === "stories"       && <StoriesRow       user={user} st={st} dir={dir} />}

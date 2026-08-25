@@ -320,7 +320,7 @@ export function Navbar() {
       )}
 
       {/* ── Mobile horizontal nav strip ── */}
-      <div className="md:hidden flex overflow-x-auto gap-1 px-3 py-2 border-t border-gray-800/60 scrollbar-hide">
+      <div className="md:hidden flex w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain gap-1 px-3 py-2 border-t border-gray-800/60 scrollbar-hide">
         {NAV_ITEMS.map((item) => {
           const active   = isActive(item.path);
           const featured = item.highlight && !active;
