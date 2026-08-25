@@ -19,7 +19,7 @@ const TOKEN_TTL_SEC = 60 * 60; // 1h — longer than any realistic call setup + 
 
 function issueAgoraCredentials(channel: string, userId: number) {
   const certificate = process.env.AGORA_APP_CERTIFICATE?.trim();
-  if (!certificate) return { appId: AGORA_APP_ID, token: null, uid: null };
+  if (!certificate) return null;
 
   const token = RtcTokenBuilder.buildTokenWithUid(
     AGORA_APP_ID,
@@ -43,8 +43,13 @@ router.get("/rtc/preflight-token", (req, res): void => {
   }
 
   const channel = `preflight_${randomUUID().replace(/-/g, "")}`;
+  const credentials = issueAgoraCredentials(channel, req.session.userId);
+  if (!credentials) {
+    res.status(503).json({ error: "Secure call service is not configured" });
+    return;
+  }
   res.setHeader("Cache-Control", "no-store");
-  res.json({ channel, ...issueAgoraCredentials(channel, req.session.userId) });
+  res.json({ channel, ...credentials });
 });
 
 router.get("/rtc/agora-token", (req, res): void => {
@@ -68,7 +73,12 @@ router.get("/rtc/agora-token", (req, res): void => {
     return;
   }
 
-  res.json(issueAgoraCredentials(channel, req.session.userId));
+  const credentials = issueAgoraCredentials(channel, req.session.userId);
+  if (!credentials) {
+    res.status(503).json({ error: "Secure call service is not configured" });
+    return;
+  }
+  res.json(credentials);
 });
 
 export default router;

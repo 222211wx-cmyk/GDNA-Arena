@@ -68,6 +68,16 @@ export interface DmMessage {
   replyTo?: { id: number; username: string; content?: string; type: string } | null;
   reactions?: { support: number; listen: number; celebrate: number };
   myReaction?: "support" | "listen" | "celebrate" | null;
+  encrypted?: boolean;
+  decryptionFailed?: boolean;
+  secureAttachment?: {
+    key: string;
+    iv: string;
+    mime: string;
+    name: string;
+    size: number;
+    kind: "image" | "video" | "audio" | "file";
+  };
 }
 
 export interface SolidarityStatus {

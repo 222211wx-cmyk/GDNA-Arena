@@ -30,6 +30,17 @@ import { useCallContext } from "../../contexts/CallContext";
 import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
+import {
+  decryptAttachmentBlob,
+  decryptMessagePayload,
+  encryptAttachmentBlob,
+  encryptMessagePayload,
+  ensureDeviceIdentity,
+  isE2EMessage,
+  type E2ERecipientKey,
+  type SecureAttachmentMetadata,
+  type SecureMessagePayload,
+} from "@/lib/amis-e2ee";
 
 const BG      = "#0a0a0a";   // app background
 const BG_BAR  = "#111111";   // header / tab bars
@@ -236,7 +247,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
               </div>
             )}
             <div className="mt-4 flex items-center gap-1.5 text-muted-foreground text-[11px]">
-              <Lock size={12} /> {st.server_encrypted ?? "Encrypted via server"}
+              <Lock size={12} /> {st.end_to_end_encrypted ?? "End-to-end encrypted on this device"}
             </div>
           </>
         )}
@@ -643,6 +654,107 @@ function resolveUrl(url: string): string {
   return url.startsWith("/api/") ? api(url) : url;
 }
 
+function attachmentLabel(metadata: SecureAttachmentMetadata): string {
+  if (metadata.kind === "audio") return "🎤 Voice note";
+  if (metadata.kind === "video") return "🎥 Video";
+  if (metadata.kind === "image") return "🖼️ Image";
+  return `📁 ${metadata.name}`;
+}
+
+async function decryptMessageForUser(message: DmMessage, userId: number): Promise<DmMessage> {
+  let next = { ...message };
+  if (message.content && isE2EMessage(message.content)) {
+    try {
+      const payload = await decryptMessagePayload(message.content, userId);
+      if (payload?.kind === "text") {
+        next = { ...next, content: payload.text, encrypted: true };
+      } else if (payload?.kind === "attachment") {
+        next = {
+          ...next,
+          content: attachmentLabel(payload.attachment),
+          secureAttachment: payload.attachment,
+          encrypted: true,
+        };
+      }
+    } catch {
+      next = {
+        ...next,
+        content: "🔐 This message belongs to another secure device key",
+        encrypted: true,
+        decryptionFailed: true,
+      };
+    }
+  }
+  if (message.replyTo?.content && isE2EMessage(message.replyTo.content)) {
+    try {
+      const replyPayload = await decryptMessagePayload(message.replyTo.content, userId);
+      next.replyTo = {
+        ...message.replyTo,
+        content: replyPayload?.kind === "text"
+          ? replyPayload.text
+          : replyPayload?.kind === "attachment"
+            ? attachmentLabel(replyPayload.attachment)
+            : "🔐 Encrypted message",
+      };
+    } catch {
+      next.replyTo = { ...message.replyTo, content: "🔐 Encrypted message" };
+    }
+  }
+  return next;
+}
+
+function SecureAttachment({ url, metadata, mine }: {
+  url: string;
+  metadata: SecureAttachmentMetadata;
+  mine: boolean;
+}) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let disposed = false;
+    let createdUrl: string | null = null;
+    void (async () => {
+      try {
+        const response = await fetch(resolveUrl(url), { credentials: "include" });
+        if (!response.ok) throw new Error("Attachment unavailable");
+        const decrypted = await decryptAttachmentBlob(await response.blob(), metadata);
+        if (disposed) return;
+        createdUrl = URL.createObjectURL(decrypted);
+        setObjectUrl(createdUrl);
+      } catch {
+        if (!disposed) setFailed(true);
+      }
+    })();
+    return () => {
+      disposed = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [url, metadata.key, metadata.iv]);
+
+  if (failed) {
+    return <p className="m-0 text-xs text-destructive">🔐 Unable to decrypt attachment</p>;
+  }
+  if (!objectUrl) {
+    return <div className="flex min-h-9 items-center gap-2 text-xs opacity-70"><LoaderCircle size={14} className="animate-spin" />Decrypting…</div>;
+  }
+  if (metadata.kind === "audio") {
+    return <audio controls src={objectUrl} style={{ maxWidth: 220, height: 38 }} />;
+  }
+  if (metadata.kind === "video") {
+    return <video controls src={objectUrl} style={{ maxWidth: 240, maxHeight: 240, borderRadius: 8, display: "block" }} />;
+  }
+  if (metadata.kind === "image") {
+    return <img src={objectUrl} alt={metadata.name} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, display: "block" }} />;
+  }
+  return (
+    <a href={objectUrl} download={metadata.name}
+      style={{ color: mine ? "#000" : GOLD, fontSize: 14, fontWeight: 700, wordBreak: "break-word" }}>
+      📁 {metadata.name}
+    </a>
+  );
+}
+
 const EMOJI_GROUPS: [string, string[]][] = [
   ["😀", ["😀","😃","😄","😁","😂","🤣","😊","😍","🥰","😘","😜","🤪","😎","🤩","🥳","😏","😢","😭","😡","🤬","😱","🥺","😴","🤔","🤫","🤗","😇","🙄","😬","🤯"]],
   ["👍", ["👍","👎","👏","🙏","💪","🤝","✌️","🤞","👊","✊","🖐️","👋","🫡","💅","🤙","👀","🧠","❤️","💛","💚","💙","🖤","💔","💯","✨","🔥","⚡","💥","🎉","🎊"]],
@@ -706,6 +818,7 @@ function IdentityBoundMessenger({ variant, user }: {
   const [dragOver,    setDragOver]    = useState(false);
   const [menuMsgId,   setMenuMsgId]   = useState<number | null>(null);
   const [isMobile,    setIsMobile]    = useState(typeof window !== "undefined" && window.innerWidth < 640);
+  const [e2eReady,     setE2eReady]    = useState(false);
   // Controls the + attachment tray inside the composer
   const [showAttachTray, setShowAttachTray] = useState(false);
   // Task #165: reply + reactions
@@ -733,8 +846,40 @@ function IdentityBoundMessenger({ variant, user }: {
   const textRef     = useRef<HTMLTextAreaElement>(null);
   const pollRef     = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const attachTrayRef = useRef<HTMLDivElement>(null);
+  const e2eRegistrationRef = useRef<Promise<void> | null>(null);
 
   const isWidget = variant === "widget";
+
+  const ensureE2eRegistered = useCallback(async () => {
+    if (!user) throw new Error("Login required");
+    if (!e2eRegistrationRef.current) {
+      e2eRegistrationRef.current = (async () => {
+        const identity = await ensureDeviceIdentity(user.id);
+        const response = await fetch(api("/api/messages/e2e/key"), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId: identity.deviceId, publicKey: identity.publicKey }),
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("Secure device registration failed");
+        setE2eReady(true);
+      })().catch(error => {
+        e2eRegistrationRef.current = null;
+        setE2eReady(false);
+        throw error;
+      });
+    }
+    await e2eRegistrationRef.current;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) {
+      e2eRegistrationRef.current = null;
+      setE2eReady(false);
+      return;
+    }
+    void ensureE2eRegistered().catch(() => {});
+  }, [ensureE2eRegistered, user?.id]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 640);
@@ -785,11 +930,36 @@ function IdentityBoundMessenger({ variant, user }: {
   // ── Load rooms ──────────────────────────────────────────────────────────────
   const loadRooms = useCallback(async (): Promise<DmRoom[]> => {
     if (!user) return [];
+    await ensureDeviceIdentity(user.id);
     const r = await fetch(api("/api/messages/rooms"), { credentials: "include" });
     if (!r.ok) return [];
     const j = await r.json();
     // Server returns rooms newest-first; preserve that order — never re-sort client-side.
-    const list: DmRoom[] = j.rooms ?? [];
+    const list: DmRoom[] = await Promise.all(((j.rooms ?? []) as DmRoom[]).map(async room => {
+      const content = room.lastMessage?.content;
+      if (!content || !isE2EMessage(content)) return room;
+      try {
+        const payload = await decryptMessagePayload(content, user.id);
+        return {
+          ...room,
+          lastMessage: room.lastMessage ? {
+            ...room.lastMessage,
+            content: payload?.kind === "text"
+              ? payload.text
+              : payload?.kind === "attachment"
+                ? attachmentLabel(payload.attachment)
+                : "🔐 Encrypted message",
+          } : room.lastMessage,
+        };
+      } catch {
+        return {
+          ...room,
+          lastMessage: room.lastMessage
+            ? { ...room.lastMessage, content: "🔐 Encrypted message" }
+            : room.lastMessage,
+        };
+      }
+    }));
     if (mountedRef.current) setRooms(list);
     return list;
   }, [user?.id]);
@@ -840,8 +1010,11 @@ function IdentityBoundMessenger({ variant, user }: {
       if (!detail?.message) return;
       if (typeof detail.recipientUserId === "number" && detail.recipientUserId !== user?.id) return;
       if (detail.roomId === activeRoomIdRef.current) {
-        appendMessage(detail.message);
-        void loadMessages(detail.roomId);
+        if (user) {
+          void decryptMessageForUser(detail.message, user.id).then(message => {
+            if (mountedRef.current && detail.roomId === activeRoomIdRef.current) appendMessage(message);
+          });
+        }
       }
       // loadRooms returns server-ordered list (newest first); just refresh.
       void loadRooms();
@@ -874,10 +1047,13 @@ function IdentityBoundMessenger({ variant, user }: {
     const r = await fetch(api(`/api/messages/rooms/${roomId}`), { credentials: "include" });
     if (!r.ok) return;
     const j = await r.json();
+    const decrypted = user
+      ? await Promise.all(((j.messages ?? []) as DmMessage[]).map(message => decryptMessageForUser(message, user.id)))
+      : [];
     // Only commit if this room is still the active one (guards stale responses
     // from a previously opened room resolving late) and we're still mounted.
     if (mountedRef.current && activeRoomIdRef.current === roomId) {
-      setMessages(j.messages ?? []);
+      setMessages(decrypted);
       if (Array.isArray(j.members)) {
         setActiveRoom(prev => prev?.id === roomId ? { ...prev, members: j.members } : prev);
       }
@@ -940,15 +1116,45 @@ function IdentityBoundMessenger({ variant, user }: {
         ? { ...(override as Record<string, unknown>) }
         : { content: text.trim(), type: "text" };
       if (!override && replyTo) baseBody.replyToId = replyTo.id;
-      const body = baseBody;
       const roomId = activeRoom.id;
-      const r = await fetch(api(`/api/messages/rooms/${roomId}/send`), {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body), credentials: "include",
-      });
+      await ensureE2eRegistered();
+      const secureAttachment = baseBody.secureAttachment as SecureAttachmentMetadata | undefined;
+      delete baseBody.secureAttachment;
+      const payload: SecureMessagePayload = secureAttachment
+        ? { kind: "attachment", attachment: secureAttachment }
+        : { kind: "text", text: String(baseBody.content ?? "") };
+      let r: Response | null = null;
+      // A device may register between key fetch and send. On the server's 409,
+      // refetch the authoritative device set and re-wrap once.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const keysResponse = await fetch(api(`/api/messages/rooms/${roomId}/e2e-keys`), {
+          credentials: "include",
+        });
+        if (!keysResponse.ok) throw new Error("Unable to load secure room keys");
+        const keyData = await keysResponse.json() as {
+          keys?: E2ERecipientKey[];
+          missingUserIds?: number[];
+        };
+        if (keyData.missingUserIds?.length || !keyData.keys?.length) {
+          throw new Error("A room member has not enabled secure messaging yet");
+        }
+        const body = {
+          ...baseBody,
+          content: await encryptMessagePayload(payload, keyData.keys),
+        };
+        r = await fetch(api(`/api/messages/rooms/${roomId}/send`), {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body), credentials: "include",
+        });
+        if (r.status !== 409 || attempt === 1) break;
+      }
+      if (!r) throw new Error("Message not sent");
       if (r.ok) {
         const j = await r.json();
-        if (mountedRef.current && activeRoomIdRef.current === roomId) appendMessage(j.message);
+        const decryptedMessage = user
+          ? await decryptMessageForUser(j.message as DmMessage, user.id)
+          : j.message as DmMessage;
+        if (mountedRef.current && activeRoomIdRef.current === roomId) appendMessage(decryptedMessage);
         if (!override) { setText(""); setReplyTo(null); if (textRef.current) textRef.current.style.height = "auto"; }
         loadRooms();
         return true;
@@ -957,8 +1163,8 @@ function IdentityBoundMessenger({ variant, user }: {
         if (j.error) setToast(j.error);
         return false;
       }
-    } catch {
-      setToast(st.send_failed ?? "Message not sent");
+    } catch (error) {
+      setToast(error instanceof Error ? `🔐 ${error.message}` : (st.send_failed ?? "Message not sent"));
       return false;
     } finally { setSending(false); }
   }
@@ -981,7 +1187,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
   function copyMessage(msg: DmMessage) {
     setMenuMsgId(null);
-    const t = msg.content ?? msg.fileUrl ?? msg.audioUrl ?? "";
+    const t = msg.secureAttachment?.name ?? msg.content ?? msg.fileUrl ?? msg.audioUrl ?? "";
     navigator.clipboard?.writeText(t).then(() => setToast(st.copied ?? "Copied!")).catch(() => {});
   }
 
@@ -1098,7 +1304,15 @@ function IdentityBoundMessenger({ variant, user }: {
   ): Promise<"sent" | "failed" | "cancelled"> {
     if (!activeRoom) return "failed";
     const roomId = activeRoom.id;
-    const r = await uploadWithProgress(file, fallbackName, onProgress, (xhr) => {
+    let encryptedAttachment: Awaited<ReturnType<typeof encryptAttachmentBlob>>;
+    try {
+      const originalName = file instanceof File ? file.name : `${fallbackName}.webm`;
+      encryptedAttachment = await encryptAttachmentBlob(file, originalName);
+    } catch {
+      setToast("🔐 Unable to encrypt attachment");
+      return "failed";
+    }
+    const r = await uploadWithProgress(encryptedAttachment.blob, `${fallbackName}.enc`, onProgress, (xhr) => {
       xhrMapRef.current.set(pendingId, xhr);
     });
     xhrMapRef.current.delete(pendingId);
@@ -1110,11 +1324,12 @@ function IdentityBoundMessenger({ variant, user }: {
         : (r.json.error ?? "Upload failed"));
       return "failed";
     }
-    const j = r.json as { url: string; kind: string; name: string };
-    const body =
-      j.kind === "audio" ? { audioUrl: j.url, type: "audio" } :
-      j.kind === "video" ? { videoUrl: j.url, type: "video" } :
-      { fileUrl: j.url, type: "file", content: j.kind === "image" ? "[Image]" : `📁 ${j.name}` };
+    const j = r.json as { url: string };
+    const body = {
+      fileUrl: j.url,
+      type: encryptedAttachment.metadata.kind === "image" ? "file" : encryptedAttachment.metadata.kind,
+      secureAttachment: encryptedAttachment.metadata,
+    };
     // Guard: only send the message if the room is still active and the item
     // wasn't removed or cancelled while the upload was in flight.
     if (!mountedRef.current || activeRoomIdRef.current !== roomId) return "cancelled";
@@ -1590,10 +1805,17 @@ function IdentityBoundMessenger({ variant, user }: {
                 {getPeerName(activeRoom)}
                 {activeRoom.muted && <BellOff size={13} style={{ color: "#666", flexShrink: 0 }} />}
               </p>
-              <p style={{ margin: 0, fontSize: 12, color: statusColor, overflow: "hidden", whiteSpace: "nowrap" }}>
-                {activeRoom.type === "direct"
-                  ? (solStatus ?? (call.onlineUsers.includes(getPeerName(activeRoom)) ? `● ${st.online}` : st.offline))
-                  : (st.groups ?? "Group")}
+              <p style={{ margin: 0, fontSize: 12, color: statusColor, overflow: "hidden", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
+                <Lock size={10} aria-hidden="true" style={{ color: e2eReady ? GOLD : "#666", flexShrink: 0 }} />
+                <span>
+                  {e2eReady
+                    ? (st.end_to_end_short ?? "E2E secured")
+                    : (st.secure_key_loading ?? "Securing…")}
+                  {" · "}
+                  {activeRoom.type === "direct"
+                    ? (solStatus ?? (call.onlineUsers.includes(getPeerName(activeRoom)) ? `● ${st.online}` : st.offline))
+                    : (st.groups ?? "Group")}
+                </span>
               </p>
             </div>
             {/* Suppress call controls whenever the room is blocked in EITHER direction.
@@ -1654,7 +1876,9 @@ function IdentityBoundMessenger({ variant, user }: {
                         </p>
                       </div>
                     )}
-                    {msg.type === "audio" && msg.audioUrl ? (
+                    {msg.secureAttachment && msg.fileUrl ? (
+                      <SecureAttachment url={msg.fileUrl} metadata={msg.secureAttachment} mine={mine} />
+                    ) : msg.type === "audio" && msg.audioUrl ? (
                       <audio controls src={resolveUrl(msg.audioUrl)} style={{ maxWidth: 220, height: 38 }} />
                     ) : msg.type === "video" && msg.videoUrl ? (
                       <video controls src={resolveUrl(msg.videoUrl)} style={{ maxWidth: 240, maxHeight: 240, borderRadius: 8, display: "block" }} />

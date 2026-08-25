@@ -11,6 +11,9 @@ import { pool } from "@workspace/db";
 // ── WebRTC type stubs (browser DOM types not present in Node tsconfig) ────────
 interface RTCSessionDescriptionInit { type: string; sdp?: string; }
 interface RTCIceCandidateInit      { candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null; }
+interface E2eCallEnvelope {
+  devices: Record<string, { wrappedSecret: string; fingerprint: string }>;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Client {
@@ -24,7 +27,7 @@ interface Client {
 
 type SignalMsg =
   | { type: "register";       userId: number; username: string }
-  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit | null; callId: string; from: string; video: boolean }
+  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit | null; callId: string; from: string; video: boolean; e2e?: E2eCallEnvelope }
   | { type: "call-answer";    to: string; answer: RTCSessionDescriptionInit | null; callId: string }
   | { type: "ice-candidate";  to: string; candidate: RTCIceCandidateInit; callId: string }
   | { type: "call-reject";    to: string; callId: string }
@@ -50,7 +53,7 @@ const lives     = new Map<string, { hostUsername: string; title: string; domain:
 // for calls it saw offered, and only between the two recorded participants.
 const activeCalls = new Map<string, {
   caller: string; callee: string; callerId: number | null; calleeId: number | null;
-  callerSocket: WebSocket; calleeSocket: WebSocket; startedAt: Date;
+  callerSocket: WebSocket; calleeSocket: WebSocket | null; startedAt: Date;
 }>();
 
 // Participant authorization for RTC token issuance: a token for channel
@@ -169,6 +172,26 @@ function userIsInCall(username: string): boolean {
 
 function sendToUsername(username: string, data: object) {
   for (const client of clientsForUsername(username)) send(client.ws, data);
+}
+
+async function callEnvelopeMatchesDevices(userId: number, envelope: E2eCallEnvelope | undefined): Promise<boolean> {
+  if (!envelope?.devices || typeof envelope.devices !== "object" || Array.isArray(envelope.devices)) return false;
+  const entries = Object.entries(envelope.devices);
+  if (!entries.length || entries.length > 32) return false;
+  for (const [deviceId, entry] of entries) {
+    if (!/^[A-Za-z0-9_-]{16,80}$/.test(deviceId) ||
+        !entry || typeof entry.wrappedSecret !== "string" ||
+        entry.wrappedSecret.length < 100 || entry.wrappedSecret.length > 1000 ||
+        typeof entry.fingerprint !== "string" ||
+        entry.fingerprint.length < 20 || entry.fingerprint.length > 100) return false;
+  }
+  const result = await pool!.query<{ device_id: string; fingerprint: string }>(
+    `SELECT device_id, fingerprint FROM dm_user_e2ee_keys WHERE user_id=$1`,
+    [userId],
+  );
+  const registered = result.rows.map(row => `${row.device_id}.${row.fingerprint}`).sort();
+  const offered = entries.map(([deviceId, entry]) => `${deviceId}.${entry.fingerprint}`).sort();
+  return registered.length === offered.length && registered.every((value, index) => value === offered[index]);
 }
 
 // ── Broadcast a notification payload to a specific authenticated userId ────────
@@ -337,11 +360,27 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           return;
         }
         if (userIsInCall(target.username)) { send(ws, { type: "call-busy", to: msg.to }); return; }
+        try {
+          if (!await callEnvelopeMatchesDevices(target.userId, msg.e2e)) {
+            send(ws, { type: "call-unavailable", to: msg.to, reason: "secure-device-keys-changed" });
+            return;
+          }
+        } catch {
+          send(ws, { type: "call-unavailable", to: msg.to });
+          return;
+        }
         activeCalls.set(msg.callId, {
           caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
-          callerSocket: self.ws, calleeSocket: target.ws, startedAt: new Date(),
+          callerSocket: self.ws, calleeSocket: null, startedAt: new Date(),
         });
-        send(target.ws, { type: "call-incoming", from: self.username, callId: msg.callId, offer: msg.offer, video: msg.video });
+        sendToUsername(target.username, {
+          type: "call-incoming",
+          from: self.username,
+          callId: msg.callId,
+          offer: msg.offer,
+          video: msg.video,
+          e2e: msg.e2e,
+        });
         console.log(`[WS] 📞 ${self.username} → ${msg.to} [${msg.video ? "video" : "audio"}]`);
         return;
       }
@@ -350,11 +389,17 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       if (msg.type === "call-answer") {
         // Only the recorded callee may answer, and only towards the recorded caller.
         const call = activeCalls.get(msg.callId);
-        if (!call || call.callee !== self.username || call.caller !== msg.to.toLowerCase()) return;
+        if (!call || call.calleeId !== self.userId || call.caller !== msg.to.toLowerCase()) return;
         const caller = findByUsername(msg.to);
         if (caller) {
+          call.calleeSocket = ws;
           setUserInCall(self.username, true);
           setUserInCall(caller.username, true);
+          for (const device of clientsForUsername(self.username)) {
+            if (device.ws !== ws) {
+              send(device.ws, { type: "call-ended", by: self.username, callId: msg.callId });
+            }
+          }
           sendToUsername(caller.username, { type: "call-accepted", from: self.username, callId: msg.callId, answer: msg.answer });
         }
         return;
@@ -362,8 +407,14 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
       // ── ICE CANDIDATE ─────────────────────────────────────────────────────
       if (msg.type === "ice-candidate") {
-        const peer = findByUsername(msg.to);
-        if (peer) send(peer.ws, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+        const call = activeCalls.get(msg.callId);
+        if (!call) return;
+        if (call.callerId === self.userId && call.callee === msg.to.toLowerCase()) {
+          if (call.calleeSocket) send(call.calleeSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+          else sendToUsername(call.callee, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+        } else if (call.calleeId === self.userId && call.caller === msg.to.toLowerCase()) {
+          send(call.callerSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+        }
         return;
       }
 
@@ -372,7 +423,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         // Recipient is DERIVED from the recorded call — client "to" is ignored,
         // so a participant can never target a third party.
         const call = activeCalls.get(msg.callId);
-        if (!call || (call.callee !== self.username && call.caller !== self.username)) return;
+        if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
         activeCalls.delete(msg.callId);
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);
@@ -385,7 +436,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       if (msg.type === "call-end") {
         // Recipient DERIVED from recorded call state — client "to" is ignored.
         const call = activeCalls.get(msg.callId);
-        if (!call || (call.callee !== self.username && call.caller !== self.username)) return;
+        if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
         activeCalls.delete(msg.callId);
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);

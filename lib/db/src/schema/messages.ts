@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, timestamp, numeric, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, numeric, uniqueIndex, jsonb, primaryKey } from "drizzle-orm/pg-core";
 
 export const dmRooms = pgTable("dm_rooms", {
   id: serial("id").primaryKey(),
@@ -43,3 +43,14 @@ export const dmMessageReactions = pgTable("dm_message_reactions", {
   reaction: text("reaction").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({ oneReactionPerUser: uniqueIndex("dm_message_reactions_user_message").on(t.messageId, t.userId) }));
+
+export const dmUserE2eeKeys = pgTable("dm_user_e2ee_keys", {
+  userId: integer("user_id").notNull(),
+  deviceId: text("device_id").notNull(),
+  publicKey: jsonb("public_key").$type<Record<string, unknown>>().notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userDevicePrimaryKey: primaryKey({ columns: [t.userId, t.deviceId] }),
+  userFingerprintUnique: uniqueIndex("dm_user_e2ee_keys_user_fingerprint").on(t.userId, t.fingerprint),
+}));

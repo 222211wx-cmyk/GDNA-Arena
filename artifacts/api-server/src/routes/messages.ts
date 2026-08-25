@@ -3,6 +3,7 @@ import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { createHash } from "crypto";
 import { db, dmRooms, dmRoomMembers, dmMessages, usersTable, pool as _pool } from "@workspace/db";
 import {
   gcsChatStorage,
@@ -22,6 +23,8 @@ import {
 const router: IRouter = Router();
 const pool = _pool!;
 const CHAT_MODERATION_BUDGET_MS = 300;
+const E2E_PREFIX = "e2e:v1:";
+const MAX_E2E_CONTENT_LENGTH = 96_000;
 const ARENA_WITHDRAW_GAMES = {
   "neon-racer": "Neon Racer",
   "crypto-clash": "Crypto Clash",
@@ -76,6 +79,8 @@ const MIME_EXT: Record<string, string> = {
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
   "application/vnd.ms-excel": ".xls",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  // E2E attachments arrive as opaque ciphertext bytes.
+  "application/octet-stream": ".enc",
 };
 // Types safe to render inline; everything else is forced to download
 const INLINE_SAFE = /^(image\/(jpeg|png|gif|webp)|video\/|audio\/)/;
@@ -226,6 +231,198 @@ async function directRoomBlocked(roomId: number, userId: number): Promise<boolea
   const peer = members.rows.find(m => m.user_id !== userId)?.user_id;
   return peer !== undefined && isBlockedPair(userId, peer);
 }
+
+type RsaPublicJwk = {
+  kty: "RSA";
+  n: string;
+  e: string;
+  alg: "RSA-OAEP-256";
+  ext: true;
+  key_ops: ["encrypt", "wrapKey"];
+};
+
+function normalizeRsaPublicJwk(value: unknown): RsaPublicJwk | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const key = value as Record<string, unknown>;
+  if (
+    key.kty !== "RSA" ||
+    typeof key.n !== "string" || key.n.length < 300 || key.n.length > 800 ||
+    typeof key.e !== "string" || key.e.length < 2 || key.e.length > 16 ||
+    !/^[A-Za-z0-9_-]+$/.test(key.n) ||
+    !/^[A-Za-z0-9_-]+$/.test(key.e)
+  ) return null;
+  return {
+    kty: "RSA",
+    n: key.n,
+    e: key.e,
+    alg: "RSA-OAEP-256",
+    ext: true,
+    key_ops: ["encrypt", "wrapKey"],
+  };
+}
+
+function publicKeyFingerprint(key: RsaPublicJwk): string {
+  const canonical = JSON.stringify({ kty: key.kty, n: key.n, e: key.e });
+  return createHash("sha256").update(canonical).digest("base64url");
+}
+
+type E2eEnvelopeRecipient = {
+  userId: number;
+  deviceId: string;
+  fingerprint: string;
+};
+
+function parseE2eEnvelope(value: string): {
+  recipients: E2eEnvelopeRecipient[];
+} | null {
+  if (!value.startsWith(E2E_PREFIX) || value.length > MAX_E2E_CONTENT_LENGTH) return null;
+  const encoded = value.slice(E2E_PREFIX.length);
+  if (!encoded || !/^[A-Za-z0-9_-]+$/.test(encoded)) return null;
+  try {
+    const decoded = Buffer.from(encoded, "base64url").toString("utf8");
+    const envelope = JSON.parse(decoded) as Record<string, unknown>;
+    if (
+      envelope.v !== 1 ||
+      envelope.alg !== "RSA-OAEP-256/A256GCM" ||
+      typeof envelope.iv !== "string" ||
+      typeof envelope.ciphertext !== "string" ||
+      !envelope.keys ||
+      typeof envelope.keys !== "object" ||
+      Array.isArray(envelope.keys)
+    ) return null;
+    const entries = Object.entries(envelope.keys as Record<string, unknown>);
+    if (entries.length === 0 || entries.length > 256) return null;
+    const recipients: E2eEnvelopeRecipient[] = [];
+    for (const [rawRecipient, rawEntry] of entries) {
+      const match = /^(\d+)\.([A-Za-z0-9_-]{16,80})$/.exec(rawRecipient);
+      if (!match) return null;
+      const userId = Number(match[1]);
+      const deviceId = match[2];
+      if (!Number.isInteger(userId) || userId <= 0) return null;
+      if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) return null;
+      const entry = rawEntry as Record<string, unknown>;
+      if (
+        typeof entry.wrappedKey !== "string" ||
+        entry.wrappedKey.length < 100 ||
+        entry.wrappedKey.length > 1000 ||
+        typeof entry.fingerprint !== "string" ||
+        entry.fingerprint.length < 20 ||
+        entry.fingerprint.length > 100
+      ) return null;
+      recipients.push({ userId, deviceId, fingerprint: entry.fingerprint });
+    }
+    return { recipients };
+  } catch {
+    return null;
+  }
+}
+
+// ── Browser E2E public keys ───────────────────────────────────────────────────
+// Only public RSA keys are stored. Private device keys never leave IndexedDB in
+// the citizen's browser, and message/call secrets are opaque to this server.
+router.put("/messages/e2e/key", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const deviceId = typeof req.body?.deviceId === "string" ? req.body.deviceId.trim() : "";
+  if (!/^[A-Za-z0-9_-]{16,80}$/.test(deviceId)) {
+    res.status(400).json({ error: "Invalid E2E device id" }); return;
+  }
+  const publicKey = normalizeRsaPublicJwk(req.body?.publicKey);
+  if (!publicKey) { res.status(400).json({ error: "Invalid E2E public key" }); return; }
+  const fingerprint = publicKeyFingerprint(publicKey);
+  await pool.query(
+    `INSERT INTO dm_user_e2ee_keys (user_id, device_id, public_key, fingerprint, updated_at)
+     VALUES ($1, $2, $3::jsonb, $4, now())
+     ON CONFLICT (user_id, device_id) DO UPDATE
+       SET public_key = EXCLUDED.public_key,
+           fingerprint = EXCLUDED.fingerprint,
+           updated_at = now()`,
+    [userId, deviceId, JSON.stringify(publicKey), fingerprint],
+  );
+  res.json({ deviceId, publicKey, fingerprint });
+});
+
+router.get("/messages/rooms/:id/e2e-keys", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const roomId = Number(req.params.id);
+  if (!Number.isInteger(roomId) || roomId <= 0) {
+    res.status(400).json({ error: "Invalid room ID" }); return;
+  }
+  if (!await getMembership(roomId, userId)) {
+    res.status(403).json({ error: "Access denied — not a member of this room" }); return;
+  }
+  const result = await pool.query<{
+    user_id: number;
+    device_id: string | null;
+    public_key: RsaPublicJwk | null;
+    fingerprint: string | null;
+  }>(
+    `SELECT m.user_id, k.device_id, k.public_key, k.fingerprint
+     FROM dm_room_members m
+     LEFT JOIN dm_user_e2ee_keys k ON k.user_id = m.user_id
+     WHERE m.room_id = $1
+     ORDER BY m.user_id`,
+    [roomId],
+  );
+  res.json({
+    keys: result.rows
+      .filter((row): row is typeof row & { device_id: string; public_key: RsaPublicJwk; fingerprint: string } =>
+        !!row.device_id && !!row.public_key && !!row.fingerprint)
+      .map(row => ({
+        userId: row.user_id,
+        deviceId: row.device_id,
+        publicKey: row.public_key,
+        fingerprint: row.fingerprint,
+      })),
+    missingUserIds: [...new Set(result.rows.filter(row => !row.public_key).map(row => row.user_id))],
+  });
+});
+
+router.get("/messages/e2e/users/:username/key", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const username = String(req.params.username ?? "").trim();
+  if (!username || username.length > 80) {
+    res.status(400).json({ error: "Invalid citizen" }); return;
+  }
+  const target = await pool.query<{
+    id: number;
+    device_id: string | null;
+    public_key: RsaPublicJwk | null;
+    fingerprint: string | null;
+  }>(
+    `SELECT u.id, k.device_id, k.public_key, k.fingerprint
+     FROM users u
+     LEFT JOIN dm_user_e2ee_keys k ON k.user_id = u.id
+     WHERE lower(u.username) = lower($1)
+     ORDER BY k.updated_at DESC`,
+    [username],
+  );
+  const row = target.rows[0];
+  if (!row) { res.status(404).json({ error: "Citizen not found" }); return; }
+  if (await isBlockedPair(userId, row.id)) {
+    res.status(403).json({ error: "Communication is unavailable for this citizen" }); return;
+  }
+  if (!row.public_key || !row.fingerprint || !row.device_id) {
+    res.status(409).json({ error: "Citizen has not enabled secure messaging yet" }); return;
+  }
+  res.json({
+    userId: row.id,
+    keys: target.rows
+      .filter((item): item is typeof item & {
+        device_id: string;
+        public_key: RsaPublicJwk;
+        fingerprint: string;
+      } => !!item.device_id && !!item.public_key && !!item.fingerprint)
+      .map(item => ({
+        userId: item.id,
+        deviceId: item.device_id,
+        publicKey: item.public_key,
+        fingerprint: item.fingerprint,
+      })),
+  });
+});
 
 // Member metadata is calculated server-side. In particular, a private
 // solidarity status is never returned to another citizen, and block direction
@@ -641,6 +838,12 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   const { content, audioUrl, videoUrl, fileUrl, type = "text", replyToId } = req.body as {
     content?: string; audioUrl?: string; videoUrl?: string; fileUrl?: string; type?: string; replyToId?: number;
   };
+  const encryptedEnvelope = typeof content === "string" && content.startsWith(E2E_PREFIX)
+    ? parseE2eEnvelope(content)
+    : null;
+  if (typeof content === "string" && content.startsWith("e2e:") && !encryptedEnvelope) {
+    res.status(400).json({ error: "Invalid encrypted message" }); return;
+  }
 
   if (!content?.trim() && !audioUrl && !videoUrl && !fileUrl) {
     res.status(400).json({ error: "Message content required" }); return;
@@ -657,6 +860,38 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   // Casual/short messages are allowed there — it's a conversation, not a feed.
   const roomMembers = await db.select({ userId: dmRoomMembers.userId })
     .from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
+  if (encryptedEnvelope) {
+    // Re-read registered device keys immediately before insertion. The exact
+    // device+fingerprint set is the send precondition, so a rotation between
+    // the client's key fetch and this request fails with 409 rather than
+    // persisting an undecryptable message.
+    const registered = await pool.query<{
+      user_id: number;
+      device_id: string | null;
+      fingerprint: string | null;
+    }>(
+      `SELECT m.user_id, k.device_id, k.fingerprint
+       FROM dm_room_members m
+       LEFT JOIN dm_user_e2ee_keys k ON k.user_id = m.user_id
+       WHERE m.room_id = $1`,
+      [roomId],
+    );
+    if (registered.rows.some(row => !row.device_id || !row.fingerprint)) {
+      res.status(409).json({ error: "A room member has not enabled secure messaging" }); return;
+    }
+    const currentKeys = registered.rows
+      .map(row => `${row.user_id}.${row.device_id}.${row.fingerprint}`)
+      .sort();
+    const envelopeKeys = encryptedEnvelope.recipients
+      .map(recipient => `${recipient.userId}.${recipient.deviceId}.${recipient.fingerprint}`)
+      .sort();
+    if (
+      currentKeys.length !== envelopeKeys.length ||
+      currentKeys.some((key, index) => key !== envelopeKeys[index])
+    ) {
+      res.status(409).json({ error: "Secure device keys changed; refresh and retry" }); return;
+    }
+  }
   const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
   if (room?.type === "direct" && await directRoomBlocked(roomId, userId)) {
     res.status(403).json({ error: "Messaging is unavailable in this conversation" }); return;
@@ -675,7 +910,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
     if (other && def) starPeer = { id: other.id, username: other.username, def };
   }
 
-  if (content) {
+  if (content && !encryptedEnvelope) {
     const hasAttachment = Boolean(audioUrl ?? videoUrl ?? fileUrl);
     const check = await validateChatContent(content, hasAttachment || starPeer !== null);
     if (!check.ok) { res.status(400).json({ error: check.reason }); return; }
@@ -715,7 +950,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
 
   // ⭐ Stars Hall: the empire's internal intelligence replies in the star's
   // persona — only for citizens holding a real invite entitlement (no cost bypass).
-  if (content?.trim() && starPeer && await hasStarInvite(userId, starPeer.username)) {
+  if (content?.trim() && !encryptedEnvelope && starPeer && await hasStarInvite(userId, starPeer.username)) {
     generateStarReply(roomId, starPeer.def, starPeer.id, me.username, content.trim()).catch(() => {});
   }
 
@@ -723,7 +958,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   // channel to the room members resolved above on the server. Failure to push
   // must not turn a saved message into a failed send; REST recovery remains.
   void broadcastMessageToRoom(roomId, msg).catch(error =>
-    console.error("Chat realtime broadcast failed:", error));
+    req.log.error({ error, roomId }, "Chat realtime broadcast failed"));
   res.status(201).json({
     message: {
       ...msg,
