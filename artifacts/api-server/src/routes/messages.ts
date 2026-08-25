@@ -25,6 +25,8 @@ const pool = _pool!;
 const CHAT_MODERATION_BUDGET_MS = 300;
 const E2E_PREFIX = "e2e:v1:";
 const MAX_E2E_CONTENT_LENGTH = 96_000;
+const MAX_E2E_DEVICES = 8;
+const E2E_DEVICE_TTL = "90 days";
 const ARENA_WITHDRAW_GAMES = {
   "neon-racer": "Neon Racer",
   "crypto-clash": "Crypto Clash",
@@ -330,16 +332,85 @@ router.put("/messages/e2e/key", async (req, res): Promise<void> => {
   const publicKey = normalizeRsaPublicJwk(req.body?.publicKey);
   if (!publicKey) { res.status(400).json({ error: "Invalid E2E public key" }); return; }
   const fingerprint = publicKeyFingerprint(publicKey);
-  await pool.query(
-    `INSERT INTO dm_user_e2ee_keys (user_id, device_id, public_key, fingerprint, updated_at)
-     VALUES ($1, $2, $3::jsonb, $4, now())
-     ON CONFLICT (user_id, device_id) DO UPDATE
-       SET public_key = EXCLUDED.public_key,
-           fingerprint = EXCLUDED.fingerprint,
-           updated_at = now()`,
-    [userId, deviceId, JSON.stringify(publicKey), fingerprint],
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+    await client.query(
+      `DELETE FROM dm_user_e2ee_keys WHERE updated_at < now() - $1::interval`,
+      [E2E_DEVICE_TTL],
+    );
+    const existing = await client.query(
+      `SELECT 1 FROM dm_user_e2ee_keys WHERE user_id=$1 AND device_id=$2`,
+      [userId, deviceId],
+    );
+    if (!existing.rows.length) {
+      const count = await client.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM dm_user_e2ee_keys WHERE user_id=$1`,
+        [userId],
+      );
+      if (Number(count.rows[0]?.count ?? 0) >= MAX_E2E_DEVICES) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "Secure device limit reached; revoke an old device first" });
+        return;
+      }
+    }
+    await client.query(
+      `INSERT INTO dm_user_e2ee_keys (user_id, device_id, public_key, fingerprint, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, now())
+       ON CONFLICT (user_id, device_id) DO UPDATE
+         SET public_key = EXCLUDED.public_key,
+             fingerprint = EXCLUDED.fingerprint,
+             updated_at = now()`,
+      [userId, deviceId, JSON.stringify(publicKey), fingerprint],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
   res.json({ deviceId, publicKey, fingerprint });
+});
+
+router.get("/messages/e2e/devices", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const result = await pool.query(
+    `SELECT device_id, fingerprint, updated_at
+     FROM dm_user_e2ee_keys
+     WHERE user_id=$1 AND updated_at >= now() - $2::interval
+     ORDER BY updated_at DESC`,
+    [userId, E2E_DEVICE_TTL],
+  );
+  res.json({ devices: result.rows });
+});
+
+router.delete("/messages/e2e/devices/:deviceId", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const deviceId = String(req.params.deviceId ?? "");
+  if (!/^[A-Za-z0-9_-]{16,80}$/.test(deviceId)) {
+    res.status(400).json({ error: "Invalid E2E device id" }); return;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+    const removed = await client.query(
+      `DELETE FROM dm_user_e2ee_keys WHERE user_id=$1 AND device_id=$2 RETURNING device_id`,
+      [userId, deviceId],
+    );
+    await client.query("COMMIT");
+    if (!removed.rows.length) { res.status(404).json({ error: "Secure device not found" }); return; }
+    res.status(204).end();
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 });
 
 router.get("/messages/rooms/:id/e2e-keys", async (req, res): Promise<void> => {
@@ -360,10 +431,12 @@ router.get("/messages/rooms/:id/e2e-keys", async (req, res): Promise<void> => {
   }>(
     `SELECT m.user_id, k.device_id, k.public_key, k.fingerprint
      FROM dm_room_members m
-     LEFT JOIN dm_user_e2ee_keys k ON k.user_id = m.user_id
+     LEFT JOIN dm_user_e2ee_keys k
+       ON k.user_id = m.user_id
+      AND k.updated_at >= now() - $2::interval
      WHERE m.room_id = $1
      ORDER BY m.user_id`,
-    [roomId],
+    [roomId, E2E_DEVICE_TTL],
   );
   res.json({
     keys: result.rows
@@ -394,10 +467,12 @@ router.get("/messages/e2e/users/:username/key", async (req, res): Promise<void> 
   }>(
     `SELECT u.id, k.device_id, k.public_key, k.fingerprint
      FROM users u
-     LEFT JOIN dm_user_e2ee_keys k ON k.user_id = u.id
+     LEFT JOIN dm_user_e2ee_keys k
+       ON k.user_id = u.id
+      AND k.updated_at >= now() - $2::interval
      WHERE lower(u.username) = lower($1)
      ORDER BY k.updated_at DESC`,
-    [username],
+    [username, E2E_DEVICE_TTL],
   );
   const row = target.rows[0];
   if (!row) { res.status(404).json({ error: "Citizen not found" }); return; }
@@ -745,9 +820,26 @@ router.post("/messages/rooms/:id/join", async (req, res): Promise<void> => {
   const [me] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-  const already = await getMembership(roomId, userId);
-  if (!already) {
-    await db.insert(dmRoomMembers).values({ roomId, userId, username: me.username });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+    const already = await client.query(
+      `SELECT 1 FROM dm_room_members WHERE room_id=$1 AND user_id=$2`,
+      [roomId, userId],
+    );
+    if (!already.rows.length) {
+      await client.query(
+        `INSERT INTO dm_room_members (room_id, user_id, username) VALUES ($1,$2,$3)`,
+        [roomId, userId, me.username],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
   res.json({ ok: true });
 });
@@ -860,38 +952,6 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   // Casual/short messages are allowed there — it's a conversation, not a feed.
   const roomMembers = await db.select({ userId: dmRoomMembers.userId })
     .from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
-  if (encryptedEnvelope) {
-    // Re-read registered device keys immediately before insertion. The exact
-    // device+fingerprint set is the send precondition, so a rotation between
-    // the client's key fetch and this request fails with 409 rather than
-    // persisting an undecryptable message.
-    const registered = await pool.query<{
-      user_id: number;
-      device_id: string | null;
-      fingerprint: string | null;
-    }>(
-      `SELECT m.user_id, k.device_id, k.fingerprint
-       FROM dm_room_members m
-       LEFT JOIN dm_user_e2ee_keys k ON k.user_id = m.user_id
-       WHERE m.room_id = $1`,
-      [roomId],
-    );
-    if (registered.rows.some(row => !row.device_id || !row.fingerprint)) {
-      res.status(409).json({ error: "A room member has not enabled secure messaging" }); return;
-    }
-    const currentKeys = registered.rows
-      .map(row => `${row.user_id}.${row.device_id}.${row.fingerprint}`)
-      .sort();
-    const envelopeKeys = encryptedEnvelope.recipients
-      .map(recipient => `${recipient.userId}.${recipient.deviceId}.${recipient.fingerprint}`)
-      .sort();
-    if (
-      currentKeys.length !== envelopeKeys.length ||
-      currentKeys.some((key, index) => key !== envelopeKeys[index])
-    ) {
-      res.status(409).json({ error: "Secure device keys changed; refresh and retry" }); return;
-    }
-  }
   const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
   if (room?.type === "direct" && await directRoomBlocked(roomId, userId)) {
     res.status(403).json({ error: "Messaging is unavailable in this conversation" }); return;
@@ -919,12 +979,76 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   const [me] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-  const [msg] = await db.insert(dmMessages).values({
-    roomId, userId, username: me.username,
-    content: content?.trim() ?? null,
-    audioUrl: audioUrl ?? null, videoUrl: videoUrl ?? null,
-    fileUrl: fileUrl ?? null, type, replyToId: replyToId ?? null,
-  }).returning();
+  let msg;
+  if (encryptedEnvelope) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Serializes device registration/revocation and encrypted sends. The
+      // final key-set comparison and INSERT share this transaction.
+      await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+      const registered = await client.query<{
+        user_id: number;
+        device_id: string | null;
+        fingerprint: string | null;
+      }>(
+        `SELECT m.user_id, k.device_id, k.fingerprint
+         FROM dm_room_members m
+         LEFT JOIN dm_user_e2ee_keys k
+           ON k.user_id = m.user_id
+          AND k.updated_at >= now() - $2::interval
+         WHERE m.room_id = $1
+         FOR SHARE OF m`,
+        [roomId, E2E_DEVICE_TTL],
+      );
+      if (registered.rows.some(row => !row.device_id || !row.fingerprint)) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "A room member has not enabled secure messaging" });
+        return;
+      }
+      const currentKeys = registered.rows
+        .map(row => `${row.user_id}.${row.device_id}.${row.fingerprint}`)
+        .sort();
+      const envelopeKeys = encryptedEnvelope.recipients
+        .map(recipient => `${recipient.userId}.${recipient.deviceId}.${recipient.fingerprint}`)
+        .sort();
+      if (
+        currentKeys.length !== envelopeKeys.length ||
+        currentKeys.some((key, index) => key !== envelopeKeys[index])
+      ) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "Secure device keys changed; refresh and retry" });
+        return;
+      }
+      const inserted = await client.query(
+        `INSERT INTO dm_messages
+           (room_id, user_id, username, content, audio_url, video_url, file_url, type, reply_to_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         RETURNING id, room_id AS "roomId", user_id AS "userId", username,
+                   content, audio_url AS "audioUrl", video_url AS "videoUrl",
+                   file_url AS "fileUrl", type, is_read AS "isRead",
+                   reply_to_id AS "replyToId", created_at AS "createdAt"`,
+        [
+          roomId, userId, me.username, content?.trim() ?? null,
+          audioUrl ?? null, videoUrl ?? null, fileUrl ?? null, type, replyToId ?? null,
+        ],
+      );
+      msg = inserted.rows[0];
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  } else {
+    [msg] = await db.insert(dmMessages).values({
+      roomId, userId, username: me.username,
+      content: content?.trim() ?? null,
+      audioUrl: audioUrl ?? null, videoUrl: videoUrl ?? null,
+      fileUrl: fileUrl ?? null, type, replyToId: replyToId ?? null,
+    }).returning();
+  }
 
   // XP reward: atomic conditional UPDATE — only awards when:
   //   1. The room has at least one other member (prevents solo-room farming)
@@ -1103,6 +1227,7 @@ router.delete("/messages/rooms/:roomId", async (req, res): Promise<void> => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
     const { rows: roomRows } = await client.query<{ type: string }>(
       `SELECT type FROM dm_rooms WHERE id = $1 FOR UPDATE`,
       [roomId],

@@ -174,7 +174,10 @@ function sendToUsername(username: string, data: object) {
   for (const client of clientsForUsername(username)) send(client.ws, data);
 }
 
-async function callEnvelopeMatchesDevices(userId: number, envelope: E2eCallEnvelope | undefined): Promise<boolean> {
+function callEnvelopeMatchesDevices(
+  rows: { device_id: string; fingerprint: string }[],
+  envelope: E2eCallEnvelope | undefined,
+): boolean {
   if (!envelope?.devices || typeof envelope.devices !== "object" || Array.isArray(envelope.devices)) return false;
   const entries = Object.entries(envelope.devices);
   if (!entries.length || entries.length > 32) return false;
@@ -185,11 +188,7 @@ async function callEnvelopeMatchesDevices(userId: number, envelope: E2eCallEnvel
         typeof entry.fingerprint !== "string" ||
         entry.fingerprint.length < 20 || entry.fingerprint.length > 100) return false;
   }
-  const result = await pool!.query<{ device_id: string; fingerprint: string }>(
-    `SELECT device_id, fingerprint FROM dm_user_e2ee_keys WHERE user_id=$1`,
-    [userId],
-  );
-  const registered = result.rows.map(row => `${row.device_id}.${row.fingerprint}`).sort();
+  const registered = rows.map(row => `${row.device_id}.${row.fingerprint}`).sort();
   const offered = entries.map(([deviceId, entry]) => `${deviceId}.${entry.fingerprint}`).sort();
   return registered.length === offered.length && registered.every((value, index) => value === offered[index]);
 }
@@ -360,19 +359,35 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           return;
         }
         if (userIsInCall(target.username)) { send(ws, { type: "call-busy", to: msg.to }); return; }
-        try {
-          if (!await callEnvelopeMatchesDevices(target.userId, msg.e2e)) {
+         const lockClient = await pool!.connect();
+         try {
+           await lockClient.query("BEGIN");
+           await lockClient.query("SELECT pg_advisory_xact_lock(47201, 1)");
+           const keyRows = await lockClient.query<{ device_id: string; fingerprint: string }>(
+             `SELECT device_id, fingerprint
+              FROM dm_user_e2ee_keys
+              WHERE user_id=$1 AND updated_at >= now() - interval '90 days'`,
+             [target.userId],
+           );
+           if (!callEnvelopeMatchesDevices(keyRows.rows, msg.e2e)) {
+             await lockClient.query("ROLLBACK");
             send(ws, { type: "call-unavailable", to: msg.to, reason: "secure-device-keys-changed" });
             return;
           }
-        } catch {
+           // Recording the call while holding the same lock used by key
+           // registration/revocation closes the key-check→route race.
+           activeCalls.set(msg.callId, {
+             caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
+             callerSocket: self.ws, calleeSocket: null, startedAt: new Date(),
+           });
+           await lockClient.query("COMMIT");
+         } catch {
+           await lockClient.query("ROLLBACK").catch(() => {});
           send(ws, { type: "call-unavailable", to: msg.to });
           return;
+         } finally {
+           lockClient.release();
         }
-        activeCalls.set(msg.callId, {
-          caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
-          callerSocket: self.ws, calleeSocket: null, startedAt: new Date(),
-        });
         sendToUsername(target.username, {
           type: "call-incoming",
           from: self.username,
