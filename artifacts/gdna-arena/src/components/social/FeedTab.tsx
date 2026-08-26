@@ -9,6 +9,7 @@ import FeedCard from "./FeedCard";
 import Avatar from "./Avatar";
 import { GOLD, DOMAIN_ICONS, DOMAINS, timeAgo, api } from "./social-i18n";
 import type { FeedPost } from "./social-types";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // ── TrendingSection ───────────────────────────────────────────────────────────
 function TrendingSection({ st, dir }: { st: Record<string, string>; dir: string }) {
@@ -83,6 +84,7 @@ interface Props {
 }
 
 export default function FeedTab({ user, st, dir }: Props) {
+  const { isOnline } = useConnectivity();
   const [posts,    setPosts]    = useState<FeedPost[]>([]);
   const [content,  setContent]  = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
@@ -139,7 +141,7 @@ export default function FeedTab({ user, st, dir }: Props) {
   const isYouTube = !!getYouTubeId(mediaUrl);
 
   async function submitPost() {
-    if (!content.trim() || posting || !user) return;
+    if (!content.trim() || posting || !user || !isOnline) return;
     setPosting(true);
     try {
       const r = await fetch(api("/api/social/v2/post"), {
@@ -158,7 +160,7 @@ export default function FeedTab({ user, st, dir }: Props) {
   }
 
   async function toggleSave(postId: number) {
-    if (!user) return;
+    if (!user || !isOnline) return;
     if (savedSet.has(postId)) {
       await fetch(api(`/api/social/v2/post/${postId}/save`), { method: "DELETE", credentials: "include" });
       setSavedSet(prev => { const s = new Set(prev); s.delete(postId); return s; });
@@ -209,7 +211,7 @@ export default function FeedTab({ user, st, dir }: Props) {
                 style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${GOLD}25`, background: showImg ? `${GOLD}20` : "#1a1a1a", color: showImg ? (isYouTube ? "#ef4444" : GOLD) : "#666", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {isYouTube ? <Video size={14} /> : <Image size={14} />}
               </button>
-              <button onClick={submitPost} disabled={!content.trim() || posting}
+              <button onClick={submitPost} disabled={!content.trim() || posting || !isOnline}
                 style={{ padding: "8px 22px", borderRadius: 20, fontWeight: 900, fontSize: 13, border: "none", cursor: "pointer", background: content.trim() ? GOLD : "#333", color: content.trim() ? "#000" : "#666", opacity: posting ? 0.5 : 1 }}>
                 {posting ? "…" : st.post_btn}
               </button>

@@ -2,17 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      if (window.location.hostname === "gdna-arena.replit.app") {
+        window.location.replace(
+          "https://helixly.app" +
+          window.location.pathname +
+          window.location.search +
+          window.location.hash
+        );
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, interactive-widget=resizes-content" />
 
     <!-- Primary Meta -->
     <title>GDNA Arena — Play. Win. Earn Crypto.</title>
     <meta name="description" content="GDNA Arena — the sovereign play-to-earn gaming platform. Compete in 3 arenas, earn real crypto coins, and climb the leaderboard. Powered by GDN-AI." />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#00d4ff" />
+    <meta name="theme-color" content="#C9A84C" />
     <meta name="application-name" content="GDNA Arena" />
 
     <!-- PWA -->
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="%BASE_URL%manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,20 +33,20 @@
     <meta property="og:site_name" content="GDNA Arena" />
     <meta property="og:title" content="GDNA Arena — Play. Win. Earn Crypto." />
     <meta property="og:description" content="The sovereign play-to-earn gaming platform. Compete in 3 arenas, earn real crypto coins, and be guided by GDN-AI — the neural intelligence of the arena." />
-    <meta property="og:image" content="/opengraph.jpg" />
+    <meta property="og:image" content="%BASE_URL%opengraph.jpg" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="GDNA Arena — Play. Win. Earn Crypto." />
     <meta name="twitter:description" content="The sovereign play-to-earn gaming platform powered by GDN-AI neural intelligence." />
-    <meta name="twitter:image" content="/opengraph.jpg" />
+    <meta name="twitter:image" content="%BASE_URL%opengraph.jpg" />
 
     <!-- Icons -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <link rel="apple-touch-icon" sizes="192x192" href="%BASE_URL%icon-192.png" />
 
     <!-- Canonical -->
-    <link rel="canonical" href="https://gdna-arena.replit.app/gdna-arena/" />
+    <link rel="canonical" href="https://helixly.app/" />
 
     <!-- Schema.org JSON-LD -->
     <script type="application/ld+json">
@@ -45,23 +55,23 @@
       "@graph": [
         {
           "@type": "WebSite",
-          "@id": "https://gdna-arena.replit.app/gdna-arena/#website",
-          "url": "https://gdna-arena.replit.app/gdna-arena/",
+          "@id": "https://helixly.app/#website",
+          "url": "https://helixly.app/",
           "name": "GDNA Arena",
           "description": "The sovereign play-to-earn gaming and global voting platform powered by GDN-AI",
           "inLanguage": ["en","ar","fr"],
           "potentialAction": {
             "@type": "SearchAction",
-            "target": "https://gdna-arena.replit.app/gdna-arena/leaderboard",
+            "target": "https://helixly.app/leaderboard",
             "query-input": "required name=search_term_string"
           }
         },
         {
           "@type": "VideoGame",
-          "@id": "https://gdna-arena.replit.app/gdna-arena/#game",
+          "@id": "https://helixly.app/#game",
           "name": "GDNA Arena",
           "description": "Play-to-earn gaming platform: Neon Racer, Crypto Clash, Arena Strike. Earn real crypto coins and climb the leaderboard.",
-          "url": "https://gdna-arena.replit.app/gdna-arena/",
+          "url": "https://helixly.app/",
           "applicationCategory": "Game",
           "operatingSystem": "Web Browser",
           "offers": {
@@ -76,10 +86,10 @@
         },
         {
           "@type": "Organization",
-          "@id": "https://gdna-arena.replit.app/gdna-arena/#org",
+          "@id": "https://helixly.app/#org",
           "name": "GDNA Arena",
-          "url": "https://gdna-arena.replit.app/gdna-arena/",
-          "logo": "https://gdna-arena.replit.app/gdna-arena/favicon.svg",
+          "url": "https://helixly.app/",
+          "logo": "https://helixly.app/icon-512.png",
           "sameAs": []
         }
       ]
@@ -93,6 +103,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="%BASE_URL%src/main.tsx"></script>
   </body>
 </html>

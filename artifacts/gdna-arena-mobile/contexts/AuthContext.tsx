@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   apiPost,
   apiGet,
@@ -7,6 +8,7 @@ import {
   loadSessionCookie,
   type AuthUser,
 } from '@/lib/api';
+import { OfflineError } from '@/contexts/OnlineContext';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -22,6 +24,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const authGenerationRef = useRef(0);
@@ -33,11 +36,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadSessionCookie();
       // Never render the cached citizen before the server verifies that the
       // persisted cookie still belongs to that exact account.
-      const fresh = await apiGet<AuthUser>('/auth/me').catch(() => null);
+      let fresh: AuthUser | null = null;
+      let offline = false;
+      try {
+        fresh = await apiGet<AuthUser>('/auth/me');
+      } catch (error) {
+        offline = error instanceof OfflineError;
+      }
       if (cancelled || generation !== authGenerationRef.current) return;
       if (fresh) {
         if (!cancelled && generation === authGenerationRef.current) setUser(fresh);
-      } else {
+      } else if (!offline) {
         setUser(null);
         await clearSessionCookie();
       }
@@ -55,6 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Keep the prior cookie for this request only. The server then rotates its
     // session, revokes old WebSockets, and returns the new account cookie.
     beginSessionTransition();
+    await queryClient.cancelQueries();
+    queryClient.clear();
     const data = await apiPost<AuthUser>('/auth/login', { username, password });
     if (generation !== authGenerationRef.current) return;
     if (generation === authGenerationRef.current) setUser(data);
@@ -64,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const generation = ++authGenerationRef.current;
     setUser(null);
     beginSessionTransition();
+    await queryClient.cancelQueries();
+    queryClient.clear();
     const data = await apiPost<AuthUser>('/auth/register', { username, password, birthDate });
     if (generation !== authGenerationRef.current) return;
     if (generation === authGenerationRef.current) setUser(data);
@@ -77,6 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     ++authGenerationRef.current;
     setUser(null);
+    beginSessionTransition();
+    await queryClient.cancelQueries();
+    queryClient.clear();
     // apiPost captures the current cookie synchronously before fetch yields.
     // Clear the local copy immediately after starting the server-side logout,
     // so this device cannot reuse it even if the network request fails.

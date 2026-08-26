@@ -4,6 +4,7 @@ import { Send, Bot, Loader2, Zap, Sparkles, ChevronDown } from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { useLang } from "@/contexts/LangContext";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 interface Message {
   role: "user" | "assistant";
@@ -31,6 +32,7 @@ interface GdnAiTerminalProps {
 
 export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
   const { t, lang } = useLang();
+  const { isOnline } = useConnectivity();
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: WELCOME[lang] ?? WELCOME.en },
   ]);
@@ -53,6 +55,16 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
   const sendMessage = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
+    if (!isOnline) {
+      setError(
+        lang === "ar"
+          ? "الذكاء الاصطناعي يحتاج إلى اتصال بالإنترنت."
+          : lang === "fr"
+            ? "L’IA nécessite une connexion Internet."
+            : "AI requires an internet connection.",
+      );
+      return;
+    }
 
     const history = messages
       .filter((m) => !m.streaming)
@@ -156,7 +168,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
       });
       setLoading(false);
     }
-  }, [input, loading, messages]);
+  }, [input, isOnline, lang, loading, messages]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -182,8 +194,12 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
           <span className="text-xs font-mono text-primary/80 tracking-widest uppercase">
             GDN-AI · Neural Grid v3.0
           </span>
-          <span className="flex items-center gap-1 text-[10px] text-green-400 bg-green-400/10 border border-green-400/30 px-2 py-0.5 rounded-full">
-            <Zap className="w-2.5 h-2.5" /> GPT-4o
+          <span className={`flex items-center gap-1 text-[10px] border px-2 py-0.5 rounded-full ${
+            isOnline
+              ? "text-chart-3 bg-chart-3/10 border-chart-3/30"
+              : "text-destructive bg-destructive/10 border-destructive/30"
+          }`}>
+            <Zap className="w-2.5 h-2.5" /> {isOnline ? "GPT-4o" : "Offline"}
           </span>
         </div>
       </div>
@@ -266,6 +282,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
               <button
                 key={q}
                 onClick={() => void sendMessage(q)}
+                disabled={!isOnline}
                 className="text-[11px] px-2.5 py-1.5 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors font-mono"
                 dir="auto"
               >
@@ -285,12 +302,12 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
           onKeyDown={handleKeyDown}
           placeholder={t("chat_placeholder")}
           className="flex-1 h-10 text-sm bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono placeholder:text-muted-foreground/40"
-          disabled={loading}
+          disabled={loading || !isOnline}
           dir="auto"
         />
         <Button
           onClick={() => void sendMessage()}
-          disabled={!input.trim() || loading}
+          disabled={!input.trim() || loading || !isOnline}
           size="sm"
           className="h-10 px-4 bg-primary hover:bg-primary/90 text-black font-bold neon-glow transition-all"
         >

@@ -31,6 +31,7 @@ import { GOLD, timeAgo, api, SOCIAL_T } from "../social/social-i18n";
 import { useCallContext } from "../../contexts/CallContext";
 import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
 import {
   decryptAttachmentBlob,
@@ -90,16 +91,16 @@ function clockTime(iso: string) {
 // ── Settings panel ────────────────────────────────────────────────────────────
 interface MsgSettings { notifications: boolean; readReceipts: boolean }
 
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({ label, value, onChange, disabled = false }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <div className="flex items-center justify-between w-full py-3 px-1 border-b border-border/40">
       <span className="text-foreground text-[13px] font-semibold">{label}</span>
-      <Switch checked={value} onCheckedChange={onChange} />
+      <Switch checked={value} onCheckedChange={onChange} disabled={disabled} />
     </div>
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
@@ -111,6 +112,8 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   currentUserId?: number;
   /** When true, render as an in-flow destination panel (Settings tab) rather than a slide-over overlay. */
   inline?: boolean;
+  isOnline: boolean;
+  onOffline: () => void;
 }) {
   const [settings, setSettings] = useState<MsgSettings | null>(null);
   const [muted, setMuted] = useState(activeRoom?.muted ?? false);
@@ -124,13 +127,24 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   }, [activeRoom?.id, activeRoom?.blockedByMe]);
 
   useEffect(() => {
-    fetch(api("/api/messages/settings"), { credentials: "include" })
+    if (!isOnline) {
+      setSettings(current => current ?? { notifications: true, readReceipts: true });
+      return;
+    }
+    const controller = new AbortController();
+    fetch(api("/api/messages/settings"), { credentials: "include", signal: controller.signal })
       .then(r => r.json())
       .then(j => setSettings({ notifications: j.notifications ?? true, readReceipts: j.readReceipts ?? true }))
-      .catch(() => setSettings({ notifications: true, readReceipts: true }));
-  }, []);
+      .catch(error => {
+        if (!(error instanceof Error && error.name === "AbortError")) {
+          setSettings(current => current ?? { notifications: true, readReceipts: true });
+        }
+      });
+    return () => controller.abort();
+  }, [isOnline]);
 
   async function save(patch: Partial<MsgSettings>) {
+    if (!isOnline) { onOffline(); return; }
     setSettings(s => s ? { ...s, ...patch } : s);
     const r = await fetch(api("/api/messages/settings"), {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -140,6 +154,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   }
 
   async function toggleMute() {
+    if (!isOnline) { onOffline(); return; }
     if (!activeRoom) return;
     const next = !muted;
     setMuted(next);
@@ -151,6 +166,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   }
 
   async function deleteConversation() {
+    if (!isOnline) { onOffline(); return; }
     if (!activeRoom || deletingConversation) return;
     const confirmMessage = st.delete_conversation_confirm
       ?? "Delete this conversation from your messages? The other member keeps their copy.";
@@ -177,6 +193,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   const isBlocked = blockedByMe;
 
   async function toggleBlock() {
+    if (!isOnline) { onOffline(); return; }
     if (!peerId || blockBusy) return;
     const blocking = !isBlocked;
     if (blocking && !window.confirm(st.block_confirm ?? "Block this citizen?")) return;
@@ -214,14 +231,14 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
         {!settings ? <div style={{ textAlign: "center", color: "#444", padding: 32 }}>…</div> : (
           <>
             <ToggleRow label={st.notif_pref ?? "Notifications"} value={settings.notifications}
-              onChange={v => save({ notifications: v })} />
+              onChange={v => save({ notifications: v })} disabled={!isOnline} />
             <p className="mt-0.5 mb-1.5 mx-1 text-[10.5px] text-muted-foreground">{st.notif_hint ?? ""}</p>
             <ToggleRow label={st.read_receipts ?? "Read receipts"} value={settings.readReceipts}
-              onChange={v => save({ readReceipts: v })} />
+              onChange={v => save({ readReceipts: v })} disabled={!isOnline} />
             <p className="mt-0.5 mb-1.5 mx-1 text-[10.5px] text-muted-foreground">{st.receipts_hint ?? ""}</p>
             {activeRoom && (
               <ToggleRow label={`${st.mute_conv ?? "Mute conversation"} · ${activeRoom.type === "group" ? (activeRoom.name ?? "Group") : ""}`.trim()}
-                value={muted} onChange={toggleMute} />
+                value={muted} onChange={toggleMute} disabled={!isOnline} />
             )}
             {/* Block/Unblock — direct rooms only */}
             {activeRoom?.type === "direct" && peerId && (
@@ -229,7 +246,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
                 <Button type="button"
                   variant={isBlocked ? "outline" : "destructive"}
                   className="w-full justify-start gap-2"
-                  disabled={blockBusy} onClick={toggleBlock}
+                  disabled={blockBusy || !isOnline} onClick={toggleBlock}
                   data-testid="button-block-citizen">
                   {isBlocked ? <Shield size={15} /> : <ShieldOff size={15} />}
                   {blockBusy
@@ -248,7 +265,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
             {activeRoom && (
               <div className="mt-4 border-t border-border/40 pt-4">
                 <Button type="button" variant="destructive" className="w-full justify-start gap-2"
-                  disabled={deletingConversation} onClick={deleteConversation}>
+                  disabled={deletingConversation || !isOnline} onClick={deleteConversation}>
                   <Trash2 size={15} />
                   {deletingConversation
                     ? (st.deleting_conversation ?? "Deleting conversation…")
@@ -287,7 +304,7 @@ interface Contact {
 
 const CONTACTS_PAGE = 30;
 
-function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
+function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnline, onOffline }: {
   st: Record<string, string>;
   user: { id: number; username: string };
   title: string;
@@ -295,6 +312,8 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
   onDm: (username: string) => void;
   onCall: (username: string, video: boolean) => void;
   callMode?: boolean;
+  isOnline: boolean;
+  onOffline: () => void;
 }) {
   const call = useCallContext();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -416,17 +435,17 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
               </div>
               {callMode ? (
                 <>
-                  <button onClick={() => { onClose(); onCall(c.username, false); }} title={st.voice_call ?? "Call"}
+                  <button onClick={() => { if (!isOnline) return onOffline(); onClose(); onCall(c.username, false); }} disabled={!isOnline} title={st.voice_call ?? "Call"}
                     style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "#22c55e20", color: "#22c55e", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Phone size={17} />
                   </button>
-                  <button onClick={() => { onClose(); onCall(c.username, true); }} title={st.video_call ?? "Video"}
+                  <button onClick={() => { if (!isOnline) return onOffline(); onClose(); onCall(c.username, true); }} disabled={!isOnline} title={st.video_call ?? "Video"}
                     style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "#3b82f620", color: "#3b82f6", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Video size={17} />
                   </button>
                 </>
               ) : (
-                <button onClick={() => { onClose(); onDm(c.username); }} title={st.dm ?? "DM"}
+                <button onClick={() => { if (!isOnline) return onOffline(); onClose(); onDm(c.username); }} disabled={!isOnline} title={st.dm ?? "DM"}
                   style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: `${GOLD}20`, color: GOLD, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <MessageSquare size={17} />
                 </button>
@@ -451,7 +470,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode }: {
 // Actus tab is now SolidarityRelay — imported above
 
 // ── Communautés (upgraded assembly nodes) ────────────────────────────────────
-function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay }: {
+function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay, isOnline, onOffline }: {
   st: Record<string, string>;
   myRoomIds: Set<number>;
   onJoined: (roomId: number) => void;
@@ -459,6 +478,8 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
   onCreate: () => void;
   /** Open the Solidarity Relay inside Communities. roomId null → empire-wide. */
   onViewRelay: (roomId: number | null, roomName: string | null) => void;
+  isOnline: boolean;
+  onOffline: () => void;
 }) {
   const [groups, setGroups] = useState<GroupRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -466,6 +487,11 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
   const [joining, setJoining] = useState<number | null>(null);
 
   const loadCommunities = useCallback(async () => {
+    if (!isOnline) {
+      setLoading(false);
+      setLoadError(st.offline ?? "Offline");
+      return;
+    }
     setLoading(true);
     setLoadError(null);
     try {
@@ -479,11 +505,12 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
     } finally {
       setLoading(false);
     }
-  }, [st]);
+  }, [isOnline, st]);
 
   useEffect(() => { loadCommunities(); }, [loadCommunities]);
 
   async function join(roomId: number) {
+    if (!isOnline) { onOffline(); return; }
     setJoining(roomId);
     try {
       const r = await fetch(api(`/api/messages/rooms/${roomId}/join`), { method: "POST", credentials: "include" });
@@ -493,7 +520,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
-      <button onClick={onCreate}
+      <button onClick={() => isOnline ? onCreate() : onOffline()} disabled={!isOnline}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}10`, border: `1px solid ${GOLD}25`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
         <Plus size={18} style={{ color: GOLD }} />
         <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>{st.new_group ?? "New group"}</span>
@@ -547,7 +574,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
                     {st.open ?? "Open"}
                   </Button>
                 ) : (
-                  <Button size="sm" className="h-9 px-4 text-xs flex-1" disabled={joining === g.id} onClick={() => join(g.id)}>
+                  <Button size="sm" className="h-9 px-4 text-xs flex-1" disabled={joining === g.id || !isOnline} onClick={() => join(g.id)}>
                     {joining === g.id ? "…" : (st.join_group ?? "Join")}
                   </Button>
                 )}
@@ -576,22 +603,36 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
 }
 
 // ── Appels ────────────────────────────────────────────────────────────────────
-function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection }: {
+function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline }: {
   st: Record<string, string>;
   user: { id: number; username: string };
   onNewCall: () => void;
   connectionTest: "idle" | "testing" | "ready" | "unstable" | "failed";
   onTestConnection: () => void;
+  isOnline: boolean;
+  onOffline: () => void;
 }) {
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(api("/api/social/v2/call-history"), { credentials: "include" })
+    if (!isOnline) {
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setLoading(true);
+    fetch(api("/api/social/v2/call-history"), { credentials: "include", signal: controller.signal })
       .then(r => r.json())
       .then(j => setRecords(j.records ?? []))
+      .catch(error => {
+        if (!(error instanceof Error && error.name === "AbortError")) {
+          // Keep the last successfully loaded records visible.
+        }
+      })
       .finally(() => setLoading(false));
-  }, []);
+    return () => controller.abort();
+  }, [isOnline]);
 
   const peer = (r: CallRecord) => r.callerId === user.id ? r.calleeUsername : r.callerUsername;
   const statusLabel = (s: string) =>
@@ -619,7 +660,7 @@ function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection }: {
             <p className="m-0 text-sm font-bold text-card-foreground">Call connection</p>
             <p className="m-0 text-xs text-muted-foreground">Check your Agora call path before dialing.</p>
           </div>
-          <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={onTestConnection} disabled={connectionTest === "testing"}>
+          <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => isOnline ? onTestConnection() : onOffline()} disabled={connectionTest === "testing" || !isOnline}>
             {connectionTest === "testing" && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
             {connectionTest === "testing" ? "Testing…" : "Test connection"}
           </Button>
@@ -631,7 +672,7 @@ function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection }: {
           </div>
         )}
       </div>
-      <button onClick={onNewCall}
+      <button onClick={() => isOnline ? onNewCall() : onOffline()} disabled={!isOnline}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#22c55e12", border: "1px solid #22c55e30", borderRadius: 12, cursor: "pointer", marginBottom: 10 }}>
         <Phone size={18} style={{ color: "#22c55e" }} />
         <span style={{ color: "#22c55e", fontWeight: 800, fontSize: 14 }}>{st.voice_call ?? "New call"}</span>
@@ -829,6 +870,7 @@ function IdentityBoundMessenger({ variant, user }: {
   const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const dir = lang === "ar" ? "rtl" : "ltr";
   const call = useCallContext();
+  const { isOnline } = useConnectivity();
 
   const [tab,         setTab]         = useState<BottomTab>("chats");
   const [rooms,       setRooms]       = useState<DmRoom[]>([]);
@@ -861,6 +903,16 @@ function IdentityBoundMessenger({ variant, user }: {
   const [showRelay,     setShowRelay]     = useState(false);
   const [relayRoomId,   setRelayRoomId]   = useState<number | null>(null);
   const [relayRoomName, setRelayRoomName] = useState<string | null>(null);
+  const offlineToast = lang === "ar"
+    ? "أنت غير متصل — هذا الإجراء غير متاح الآن"
+    : lang === "fr"
+      ? "Vous êtes hors ligne — cette action est indisponible."
+      : lang === "es"
+        ? "No tienes conexión; esta acción no está disponible."
+        : lang === "de"
+          ? "Sie sind offline – diese Aktion ist nicht verfügbar."
+          : "You are offline — this action is unavailable.";
+  const blockOffline = useCallback(() => setToast(offlineToast), [offlineToast]);
 
   const pendingRef = useRef<PendingFile[]>([]);
   useEffect(() => { pendingRef.current = pending; }, [pending]);
@@ -991,6 +1043,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
   const ensureE2eRegistered = useCallback(async () => {
     if (!user) throw new Error("Login required");
+    if (!isOnline) throw new Error(offlineToast);
     if (!e2eRegistrationRef.current) {
       e2eRegistrationRef.current = (async () => {
         const identity = await ensureDeviceIdentity(user.id);
@@ -1009,7 +1062,7 @@ function IdentityBoundMessenger({ variant, user }: {
       });
     }
     await e2eRegistrationRef.current;
-  }, [user?.id]);
+  }, [isOnline, offlineToast, user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -1078,40 +1131,45 @@ function IdentityBoundMessenger({ variant, user }: {
 
   // ── Load rooms ──────────────────────────────────────────────────────────────
   const loadRooms = useCallback(async (): Promise<DmRoom[]> => {
-    if (!user) return [];
-    await ensureDeviceIdentity(user.id);
-    const r = await fetch(api("/api/messages/rooms"), { credentials: "include" });
-    if (!r.ok) return [];
-    const j = await r.json();
-    // Server returns rooms newest-first; preserve that order — never re-sort client-side.
-    const list: DmRoom[] = await Promise.all(((j.rooms ?? []) as DmRoom[]).map(async room => {
-      const content = room.lastMessage?.content;
-      if (!content || !isE2EMessage(content)) return room;
-      try {
-        const payload = await decryptMessagePayload(content, user.id);
-        return {
-          ...room,
-          lastMessage: room.lastMessage ? {
-            ...room.lastMessage,
-            content: payload?.kind === "text"
-              ? payload.text
-              : payload?.kind === "attachment"
-                ? attachmentLabel(payload.attachment)
-                : "🔐 Encrypted message",
-          } : room.lastMessage,
-        };
-      } catch {
-        return {
-          ...room,
-          lastMessage: room.lastMessage
-            ? { ...room.lastMessage, content: "🔐 Encrypted message" }
-            : room.lastMessage,
-        };
-      }
-    }));
-    if (mountedRef.current) setRooms(list);
-    return list;
-  }, [user?.id]);
+    if (!user || !isOnline) return [];
+    try {
+      await ensureDeviceIdentity(user.id);
+      const r = await fetch(api("/api/messages/rooms"), { credentials: "include" });
+      if (!r.ok) return [];
+      const j = await r.json();
+      // Server returns rooms newest-first; preserve that order — never re-sort client-side.
+      const list: DmRoom[] = await Promise.all(((j.rooms ?? []) as DmRoom[]).map(async room => {
+        const content = room.lastMessage?.content;
+        if (!content || !isE2EMessage(content)) return room;
+        try {
+          const payload = await decryptMessagePayload(content, user.id);
+          return {
+            ...room,
+            lastMessage: room.lastMessage ? {
+              ...room.lastMessage,
+              content: payload?.kind === "text"
+                ? payload.text
+                : payload?.kind === "attachment"
+                  ? attachmentLabel(payload.attachment)
+                  : "🔐 Encrypted message",
+            } : room.lastMessage,
+          };
+        } catch {
+          return {
+            ...room,
+            lastMessage: room.lastMessage
+              ? { ...room.lastMessage, content: "🔐 Encrypted message" }
+              : room.lastMessage,
+          };
+        }
+      }));
+      if (mountedRef.current) setRooms(list);
+      return list;
+    } catch {
+      // Preserve the last successfully loaded room list while disconnected.
+      return [];
+    }
+  }, [isOnline, user?.id]);
 
   useEffect(() => { loadRooms(); }, [loadRooms]);
 
@@ -1193,19 +1251,24 @@ function IdentityBoundMessenger({ variant, user }: {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function loadMessages(roomId: number) {
-    const r = await fetch(api(`/api/messages/rooms/${roomId}`), { credentials: "include" });
-    if (!r.ok) return;
-    const j = await r.json();
-    const decrypted = user
-      ? await Promise.all(((j.messages ?? []) as DmMessage[]).map(message => decryptMessageForUser(message, user.id)))
-      : [];
-    // Only commit if this room is still the active one (guards stale responses
-    // from a previously opened room resolving late) and we're still mounted.
-    if (mountedRef.current && activeRoomIdRef.current === roomId) {
-      setMessages(decrypted);
-      if (Array.isArray(j.members)) {
-        setActiveRoom(prev => prev?.id === roomId ? { ...prev, members: j.members } : prev);
+    if (!isOnline) return;
+    try {
+      const r = await fetch(api(`/api/messages/rooms/${roomId}`), { credentials: "include" });
+      if (!r.ok) return;
+      const j = await r.json();
+      const decrypted = user
+        ? await Promise.all(((j.messages ?? []) as DmMessage[]).map(message => decryptMessageForUser(message, user.id)))
+        : [];
+      // Only commit if this room is still the active one (guards stale responses
+      // from a previously opened room resolving late) and we're still mounted.
+      if (mountedRef.current && activeRoomIdRef.current === roomId) {
+        setMessages(decrypted);
+        if (Array.isArray(j.members)) {
+          setActiveRoom(prev => prev?.id === roomId ? { ...prev, members: j.members } : prev);
+        }
       }
+    } catch {
+      // Keep the currently rendered in-memory messages while disconnected.
     }
   }
 
@@ -1233,6 +1296,7 @@ function IdentityBoundMessenger({ variant, user }: {
   }
 
   async function openDmWith(username: string) {
+    if (!isOnline) { blockOffline(); return; }
     const r = await fetch(api("/api/messages/rooms"), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "direct", targetUsername: username }), credentials: "include",
@@ -1245,6 +1309,7 @@ function IdentityBoundMessenger({ variant, user }: {
   }
 
   async function createGroup() {
+    if (!isOnline) { blockOffline(); return; }
     const r = await fetch(api("/api/messages/rooms"), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "group", roomName: groupName || "Group", icon: "" }), credentials: "include",
@@ -1259,6 +1324,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
   async function sendMessage(override?: object): Promise<boolean> {
     if (!activeRoom || (!text.trim() && !override) || sending) return false;
+    if (!isOnline) { blockOffline(); return false; }
     setSending(true);
     try {
       const baseBody: Record<string, unknown> = override
@@ -1320,6 +1386,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
   async function deleteMessage(msgId: number) {
     if (!activeRoom) return;
+    if (!isOnline) { blockOffline(); return; }
     setMenuMsgId(null);
     const r = await fetch(api(`/api/messages/rooms/${activeRoom.id}/messages/${msgId}`), {
       method: "DELETE", credentials: "include",
@@ -1343,6 +1410,7 @@ function IdentityBoundMessenger({ variant, user }: {
   async function sendReaction(msg: DmMessage, reaction: "support" | "listen" | "celebrate") {
     setMenuMsgId(null);
     if (!activeRoom) return;
+    if (!isOnline) { blockOffline(); return; }
 
     const prevReaction = msg.myReaction as ("support" | "listen" | "celebrate") | null | undefined;
     const isTogglingOff = prevReaction === reaction; // same reaction → remove it
@@ -1418,6 +1486,7 @@ function IdentityBoundMessenger({ variant, user }: {
     onProgress: (pct: number) => void,
     onXhr: (xhr: XMLHttpRequest) => void,
   ) {
+    if (!isOnline) return Promise.resolve({ ok: false, status: 0, json: {}, aborted: false });
     return new Promise<{ ok: boolean; status: number; json: any; aborted: boolean }>((resolve) => {
       const fd = new FormData();
       fd.append("file", file, file instanceof File ? file.name : `${fallbackName}.webm`);
@@ -1452,6 +1521,7 @@ function IdentityBoundMessenger({ variant, user }: {
     onProgress: (pct: number) => void = () => {},
   ): Promise<"sent" | "failed" | "cancelled"> {
     if (!activeRoom) return "failed";
+    if (!isOnline) { blockOffline(); return "failed"; }
     const roomId = activeRoom.id;
     let encryptedAttachment: Awaited<ReturnType<typeof encryptAttachmentBlob>>;
     try {
@@ -1491,6 +1561,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
   // Stage one or more files into the pre-send preview strip.
   function stageFiles(files: File[]) {
+    if (!isOnline) { blockOffline(); return; }
     if (!files.length) return;
     const staged: PendingFile[] = [];
     let tooBig = 0;
@@ -1526,6 +1597,7 @@ function IdentityBoundMessenger({ variant, user }: {
   // Upload every staged file sequentially with per-file progress, then clear.
   async function confirmPending() {
     if (uploading) return;
+    if (!isOnline) { blockOffline(); return; }
     setUploading(true);
     try {
       // Snapshot the queue; new stages during upload wait for the next batch.
@@ -1595,6 +1667,7 @@ function IdentityBoundMessenger({ variant, user }: {
   }
 
   async function startVoiceNote() {
+    if (!isOnline) { blockOffline(); return; }
     setShowAttachTray(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1754,7 +1827,7 @@ function IdentityBoundMessenger({ variant, user }: {
                   onClick={fn}
                   title={label}
                   aria-label={label}
-                  disabled={uploading}
+                  disabled={uploading || (!isOnline && idx < 4)}
                   style={{
                     width: 44,
                     height: 44,
@@ -1782,7 +1855,7 @@ function IdentityBoundMessenger({ variant, user }: {
           <button
             onClick={() => { setShowAttachTray(v => !v); setShowEmoji(false); }}
             aria-label="Attach"
-            disabled={recording}
+            disabled={recording || !isOnline}
             style={{
               position: "absolute",
               insetInlineStart: 8,
@@ -1814,7 +1887,7 @@ function IdentityBoundMessenger({ variant, user }: {
             onFocus={() => { setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 250); setShowAttachTray(false); }}
             placeholder={st.type_message}
             dir="auto"
-            disabled={recording}
+            disabled={recording || !isOnline}
             style={{
               width: "100%",
               background: "#1c1c1c",
@@ -1852,7 +1925,7 @@ function IdentityBoundMessenger({ variant, user }: {
               if (pending.length > 0) confirmPending();
               else sendMessage();
             }}
-            disabled={(!text.trim() && pending.length === 0) || sending}
+            disabled={(!text.trim() && pending.length === 0) || sending || !isOnline}
             title={st.send}
             style={{ width: 46, height: 46, borderRadius: "50%", background: (text.trim() || pending.length > 0) ? GOLD : "#1c1c1c", border: "none", color: (text.trim() || pending.length > 0) ? "#000" : "#555", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Send size={20} style={dir === "rtl" ? { transform: "scaleX(-1)" } : undefined} />
@@ -1907,6 +1980,7 @@ function IdentityBoundMessenger({ variant, user }: {
       <AnimatePresence>
         {showSettings && (
           <SettingsPanel st={st} activeRoom={activeRoom} onClose={() => setShowSettings(false)}
+            isOnline={isOnline} onOffline={blockOffline}
             currentUserId={user?.id}
             onMuteChanged={(roomId, muted) => {
               setRooms(prev => prev.map(r => r.id === roomId ? { ...r, muted } : r));
@@ -1971,11 +2045,11 @@ function IdentityBoundMessenger({ variant, user }: {
                 The server is the security boundary; this only hides affordances. */}
             {activeRoom.type === "direct" && !activeRoom.blocked && !activeRoom.blockedByMe && (
               <>
-                <button onClick={() => call.startCall(getPeerName(activeRoom), true)} title={st.video_call}
+                <button onClick={() => isOnline ? call.startCall(getPeerName(activeRoom), true) : blockOffline()} disabled={!isOnline} title={st.video_call}
                   style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <Video size={21} />
                 </button>
-                <button onClick={() => call.startCall(getPeerName(activeRoom), false)} title={st.voice_call}
+                <button onClick={() => isOnline ? call.startCall(getPeerName(activeRoom), false) : blockOffline()} disabled={!isOnline} title={st.voice_call}
                   style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <Phone size={20} />
                 </button>
@@ -2177,7 +2251,7 @@ function IdentityBoundMessenger({ variant, user }: {
                 ? `${st.uploading ?? "Uploading…"} (${pending.findIndex(p => p.status === "uploading") + 1}/${pending.length})`
                 : `${pending.length} file${pending.length !== 1 ? "s" : ""} ready`}
             </div>
-            <button onClick={confirmPending} disabled={uploading || pending.every(p => p.status === "uploading")} title={st.send}
+            <button onClick={confirmPending} disabled={!isOnline || uploading || pending.every(p => p.status === "uploading")} title={st.send}
               style={{ width: 42, height: 42, borderRadius: "50%", background: uploading ? "#1c1c1c" : GOLD, border: "none", color: uploading ? "#555" : "#000", cursor: uploading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Send size={18} />
             </button>
@@ -2284,7 +2358,7 @@ function IdentityBoundMessenger({ variant, user }: {
               })}
             </div>
             {/* FAB: new chat */}
-            <button onClick={() => setShowContacts("dm")}
+            <button onClick={() => isOnline ? setShowContacts("dm") : blockOffline()} disabled={!isOnline}
               style={{ position: "absolute", bottom: 18, insetInlineEnd: 18, width: 54, height: 54, borderRadius: 16, background: GOLD, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,0,0,0.5)", zIndex: 20 }}>
               <MessageSquare size={23} />
             </button>
@@ -2298,6 +2372,8 @@ function IdentityBoundMessenger({ variant, user }: {
             onNewCall={() => setShowContacts("call")}
             connectionTest={call.connectionTest}
             onTestConnection={call.testConnection}
+            isOnline={isOnline}
+            onOffline={blockOffline}
           />
         )}
 
@@ -2307,7 +2383,7 @@ function IdentityBoundMessenger({ variant, user }: {
               <div className="m-3 rounded-lg border border-border bg-card p-3">
                 <Input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder={st.group_name} dir="auto" className="h-10 text-sm" />
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" className="h-9 flex-1 text-xs" onClick={createGroup}>{st.create_group}</Button>
+                  <Button size="sm" className="h-9 flex-1 text-xs" disabled={!isOnline} onClick={createGroup}>{st.create_group}</Button>
                   <Button size="sm" variant="secondary" className="h-9 px-3" onClick={() => { setShowGroupNew(false); setGroupName(""); }}>
                     <X size={13} />
                   </Button>
@@ -2323,7 +2399,9 @@ function IdentityBoundMessenger({ variant, user }: {
                 setRelayRoomId(roomId ?? null);
                 setRelayRoomName(roomName ?? null);
                 setShowRelay(true);
-              }} />
+              }}
+              isOnline={isOnline}
+              onOffline={blockOffline} />
             {/* Solidarity Relay lives inside the Communities destination */}
             <AnimatePresence>
               {showRelay && (
@@ -2368,6 +2446,8 @@ function IdentityBoundMessenger({ variant, user }: {
             onMuteChanged={() => loadRooms()}
             onRoomDeleted={removeRoomFromAllSurfaces}
             showToast={setToast}
+            isOnline={isOnline}
+            onOffline={blockOffline}
           />
         )}
 
@@ -2414,7 +2494,9 @@ function IdentityBoundMessenger({ variant, user }: {
               callMode={showContacts === "call"}
               onClose={() => setShowContacts(false)}
               onDm={openDmWith}
-              onCall={(u, v) => call.startCall(u, v)} />
+              onCall={(u, v) => isOnline ? call.startCall(u, v) : blockOffline()}
+              isOnline={isOnline}
+              onOffline={blockOffline} />
           )}
         </AnimatePresence>
 

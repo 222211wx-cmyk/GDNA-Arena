@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import { subtle as nativeSubtle } from 'react-native-quick-crypto';
 import { apiDelete, apiGet, apiPut, apiUpload, ApiError, getApiBase, getHeaders, type AuthUser } from './api';
+import { assertNetworkOnline } from '@/contexts/OnlineContext';
 
 const PREFIX = 'e2e:v1:';
 const DEVICE_KEY = 'gdna.e2e.device.v1';
@@ -352,6 +353,7 @@ export async function encryptAndUploadImage(
 
 export async function decryptAttachmentToDataUri(fileUrl: string, metadata: EncryptedAttachment): Promise<string> {
   if (!fileUrl || !validAttachment(metadata) || metadata.kind !== 'image') throw new Error('Invalid encrypted attachment metadata.');
+  assertNetworkOnline();
   const url = fileUrl.startsWith('/api/') ? `${getApiBase().replace(/\/api$/u, '')}${fileUrl}` : fileUrl;
   const response = await fetch(url, { headers: getHeaders(), credentials: 'include' });
   if (!response.ok) throw new Error(`Encrypted attachment download failed: ${response.status}`);

@@ -7,6 +7,7 @@ import { MessageSquare, Share2, Bookmark, BookmarkCheck } from "lucide-react";
 import Avatar from "./Avatar";
 import { GOLD, DOMAIN_ICONS, timeAgo, api } from "./social-i18n";
 import type { FeedPost, Comment } from "./social-types";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 const EMOJIS = ["❤️", "😂", "😮", "😡", "👏"] as const;
 
@@ -32,6 +33,7 @@ function ActionBtn({ icon, label, onClick, active, color, disabled }: {
 
 // ── ReactionBtn ───────────────────────────────────────────────────────────────
 function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: number }) {
+  const { isOnline } = useConnectivity();
   const [open,       setOpen]       = useState(false);
   const [myReaction, setMyReaction] = useState<string | null>(null);
   const [counts,     setCounts]     = useState<Record<string, number>>({});
@@ -51,6 +53,7 @@ function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: n
   }, [postId]);
 
   async function sendReaction(emoji: string) {
+    if (!isOnline) return;
     setOpen(false);
     const prev = myReaction;
     setMyReaction(emoji);
@@ -76,6 +79,7 @@ function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: n
       onMouseLeave={() => { timerRef.current = setTimeout(() => setOpen(false), 300); }}>
       <button
         onClick={() => myReaction ? sendReaction(myReaction) : setOpen(v => !v)}
+        disabled={!isOnline}
         style={{
           display: "flex", alignItems: "center", gap: 5,
           padding: "6px 10px", borderRadius: 8, border: "none", cursor: "pointer",
@@ -103,6 +107,7 @@ function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: n
             }}>
             {EMOJIS.map(e => (
               <button key={e} onClick={() => sendReaction(e)} title={`${counts[e] ?? 0}`}
+                disabled={!isOnline}
                 style={{
                   background: myReaction === e ? "#ffffff20" : "none",
                   border: "none", cursor: "pointer", fontSize: 22,
@@ -131,6 +136,7 @@ interface Props {
 }
 
 export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: Props) {
+  const { isOnline } = useConnectivity();
   const [comments,       setComments]       = useState<Comment[]>([]);
   const [newComment,     setNewComment]     = useState("");
   const [commentsLoaded, setCommentsLoaded] = useState(false);
@@ -139,7 +145,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
   const [shareToast,     setShareToast]     = useState(false);
 
   function handleShare() {
-    navigator.clipboard.writeText(`${window.location.origin}/social#post-${post.id}`).catch(() => {});
+    navigator.clipboard.writeText(`https://helixly.app/social#post-${post.id}`).catch(() => {});
     setShareToast(true);
     setTimeout(() => setShareToast(false), 2000);
   }
@@ -158,7 +164,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
   }
 
   async function sendComment() {
-    if (!newComment.trim() || sending || !user) return;
+    if (!newComment.trim() || sending || !user || !isOnline) return;
     setSending(true);
     try {
       const r = await fetch(api(`/api/social/v2/post/${post.id}/comment`), {
@@ -233,7 +239,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
         <ActionBtn icon={saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
           label={saved ? st.saved : st.save}
           onClick={onSaveToggle} active={saved} color={GOLD}
-          disabled={!user} />
+          disabled={!user || !isOnline} />
       </div>
 
       {/* Comments */}
@@ -265,7 +271,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
                     onKeyDown={e => e.key === "Enter" && sendComment()}
                     placeholder={st.write_comment} dir={dir}
                     style={{ flex: 1, background: "#1a1a1a", border: `1px solid ${GOLD}20`, borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 13, outline: "none" }} />
-                  <button onClick={sendComment} disabled={sending || !newComment.trim()}
+                  <button onClick={sendComment} disabled={sending || !newComment.trim() || !isOnline}
                     style={{ padding: "6px 14px", borderRadius: 8, background: GOLD, border: "none", color: "#000", fontWeight: 800, cursor: "pointer", fontSize: 12, opacity: sending ? 0.5 : 1 }}>
                     {st.send}
                   </button>

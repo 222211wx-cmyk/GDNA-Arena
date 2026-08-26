@@ -9,11 +9,12 @@ import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { OfflineBanner, OnlineProvider } from '@/contexts/OnlineContext';
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+  defaultOptions: { queries: { retry: 1, staleTime: 30_000, networkMode: 'online' } },
 });
 
 function AuthGate() {
@@ -65,13 +66,16 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
-            <KeyboardProvider>
-              <AuthProvider>
-                <RootLayoutNav />
-              </AuthProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+          <OnlineProvider>
+            <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+              <OfflineBanner />
+              <KeyboardProvider>
+                <AuthProvider>
+                  <RootLayoutNav />
+                </AuthProvider>
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </OnlineProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

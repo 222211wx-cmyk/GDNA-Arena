@@ -8,6 +8,7 @@ import {
   Radio, Calendar, Flame, MessageSquare, Eye
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Post {
@@ -141,19 +142,19 @@ function EventsPanel({ events }: { events: Event[] }) {
 }
 
 // ── Post Card ─────────────────────────────────────────────────────────────────
-function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => void }) {
+function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => Promise<boolean> }) {
+  const { isOnline } = useConnectivity();
   const [liked, setLiked] = useState(false);
   const [reported, setReported] = useState(false);
   const domColor = DOMAIN_COLORS[post.domain] ?? "#C9A84C";
 
-  const handleLike = () => {
-    if (liked) return;
-    setLiked(true);
-    onLike(post.id);
+  const handleLike = async () => {
+    if (liked || !isOnline) return;
+    if (await onLike(post.id)) setLiked(true);
   };
 
   const handleReport = async () => {
-    if (reported) return;
+    if (reported || !isOnline) return;
     const reason = window.prompt("⚖️ بلّغ عن سرقة محتوى — علاش هاد المنشور مسروق؟");
     if (!reason?.trim()) return;
     const r = await fetch("/api/rights/report", {
@@ -195,7 +196,7 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => void }
           <p className="text-sm text-foreground/90 leading-relaxed mb-3">{post.content}</p>
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <button onClick={handleLike}
+            <button onClick={() => void handleLike()} disabled={!isOnline || liked}
               className={`flex items-center gap-1.5 text-xs transition-all active:scale-95 ${liked ? "text-red-400" : "text-muted-foreground hover:text-red-400"}`}>
               <Heart className={`w-4 h-4 ${liked ? "fill-red-400" : ""}`} />
               {post.likes + (liked ? 1 : 0)}
@@ -205,7 +206,7 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => void }
                 💰 {earnings.toFixed(2)}
               </span>
             )}
-            <button onClick={() => void handleReport()}
+            <button onClick={() => void handleReport()} disabled={!isOnline || reported}
               className={`text-xs ml-auto transition-all ${reported ? "text-green-400" : "text-muted-foreground/60 hover:text-red-400"}`}
               title="بلّغ عن سرقة محتوى">
               {reported ? "✅ تم التبليغ" : "🚨"}
@@ -220,6 +221,7 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => void }
 // ── Compose Box ────────────────────────────────────────────────────────────────
 function ComposeBox({ onPosted }: { onPosted: () => void }) {
   const { user } = useAuth();
+  const { isOnline } = useConnectivity();
   const [content, setContent] = useState("");
   const [domain, setDomain] = useState("general");
   const [type, setType] = useState("post");
@@ -227,7 +229,7 @@ function ComposeBox({ onPosted }: { onPosted: () => void }) {
   const [xpToast, setXpToast] = useState(false);
 
   const submit = async () => {
-    if (!content.trim() || sending) return;
+    if (!content.trim() || sending || !isOnline) return;
     setSending(true);
     try {
       const res = await fetch("/api/pulse/post", {
@@ -270,7 +272,7 @@ function ComposeBox({ onPosted }: { onPosted: () => void }) {
           {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
         <span className="text-xs text-muted-foreground ml-auto">{content.length}/280</span>
-        <button onClick={() => void submit()} disabled={!content.trim() || sending || !user}
+        <button onClick={() => void submit()} disabled={!content.trim() || sending || !user || !isOnline}
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 active:scale-95 transition-all">
           <Send className="w-3.5 h-3.5" /> {sending ? "Sending..." : "Post"}
         </button>
@@ -322,7 +324,8 @@ export default function PulsePage() {
   }, [loadPosts]);
 
   const handleLike = async (postId: number) => {
-    await fetch(`/api/pulse/post/${postId}/like`, { method: "POST", credentials: "include" });
+    const response = await fetch(`/api/pulse/post/${postId}/like`, { method: "POST", credentials: "include" });
+    return response.ok;
   };
 
   const liveCount = events.filter(e => e.isLive).length;

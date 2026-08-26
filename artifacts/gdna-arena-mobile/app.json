@@ -39,7 +39,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://helixly.app/"
         }
       ],
       "expo-font",

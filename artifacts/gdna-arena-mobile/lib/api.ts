@@ -5,14 +5,41 @@
  */
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { assertNetworkOnline } from '@/contexts/OnlineContext';
 
 const SESSION_KEY = 'gdna.session.cookie';
 
 export function getApiBase(): string {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN;
-  if (domain) return `https://${domain}/api`;
-  // Fallback for local dev
-  return 'http://localhost:3000/api';
+  const configured = process.env.EXPO_PUBLIC_API_ORIGIN ?? process.env.EXPO_PUBLIC_DOMAIN;
+  if (!configured) {
+    if (__DEV__) return 'http://localhost:3000/api';
+    throw new Error('API configuration is missing. Set EXPO_PUBLIC_API_ORIGIN or EXPO_PUBLIC_DOMAIN to a public HTTPS host.');
+  }
+  const withProtocol = /^[a-z][a-z\d+.-]*:\/\//iu.test(configured)
+    ? configured
+    : `https://${configured}`;
+  let url: URL;
+  try {
+    url = new URL(withProtocol);
+  } catch {
+    throw new Error('API configuration is invalid. Provide a valid HTTPS API origin or domain.');
+  }
+  const localHost = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+  if (localHost && !__DEV__) {
+    throw new Error('API configuration must use a public HTTPS host in release builds; localhost is not allowed.');
+  }
+  if (!localHost && url.protocol !== 'https:') {
+    throw new Error('API configuration must use HTTPS outside local development.');
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error('API configuration must be an origin without credentials, query, or fragment.');
+  }
+  const path = url.pathname.replace(/\/+$/u, '');
+  if (process.env.EXPO_PUBLIC_API_ORIGIN) {
+    return `${url.origin}${path === '/api' ? path : `${path}/api`}`;
+  }
+  if (path && path !== '/') throw new Error('EXPO_PUBLIC_DOMAIN must be a hostname without a path.');
+  return `${url.origin}/api`;
 }
 
 export class ApiError extends Error {
@@ -29,13 +56,17 @@ let sessionStorageQueue: Promise<void> = Promise.resolve();
 const sessionStorage = {
   async get(): Promise<string | null> {
     if (Platform.OS === 'web') {
-      return typeof localStorage === 'undefined' ? null : localStorage.getItem(SESSION_KEY);
+      // Browser sessions are carried only by same-origin HttpOnly cookies.
+      // Remove credentials written by older Expo Web builds and never expose
+      // them to script-readable storage again.
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(SESSION_KEY);
+      return null;
     }
     return SecureStore.getItemAsync(SESSION_KEY);
   },
   async set(value: string): Promise<void> {
     if (Platform.OS === 'web') {
-      if (typeof localStorage !== 'undefined') localStorage.setItem(SESSION_KEY, value);
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(SESSION_KEY);
       return;
     }
     await SecureStore.setItemAsync(SESSION_KEY, value, {
@@ -105,7 +136,7 @@ export function getHeaders(extra?: Record<string, string>): Record<string, strin
     'Content-Type': 'application/json',
     ...extra,
   };
-  if (sessionCookie) {
+  if (sessionCookie && Platform.OS !== 'web') {
     h['Cookie'] = sessionCookie;
   }
   return h;
@@ -133,6 +164,7 @@ export async function apiRequest<TResponse, TBody = never>(
   path: string,
   body?: TBody,
 ): Promise<TResponse> {
+  assertNetworkOnline();
   const requestGeneration = sessionGeneration;
   const res = await fetch(`${getApiBase()}${path}`, {
     method,
@@ -146,6 +178,7 @@ export async function apiRequest<TResponse, TBody = never>(
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
+  assertNetworkOnline();
   const res = await fetch(`${getApiBase()}${path}`, {
     method: 'GET',
     headers: getHeaders(),
@@ -159,6 +192,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  assertNetworkOnline();
   const requestGeneration = sessionGeneration;
   const res = await fetch(`${getApiBase()}${path}`, {
     method: 'POST',
@@ -188,6 +222,7 @@ export const apiDelete = <TResponse = void>(path: string) =>
   apiRequest<TResponse>('DELETE', path);
 
 export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  assertNetworkOnline();
   const headers = getHeaders();
   delete headers['Content-Type'];
   const res = await fetch(`${getApiBase()}${path}`, {
@@ -197,8 +232,9 @@ export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
 }
 
 export function createAuthenticatedWebSocket(): WebSocket {
+  assertNetworkOnline();
   const url = getApiBase().replace(/^http/, 'ws').replace(/\/api$/, '/api/ws');
-  const options = sessionCookie ? { headers: { Cookie: sessionCookie } } : undefined;
+  const options = sessionCookie && Platform.OS !== 'web' ? { headers: { Cookie: sessionCookie } } : undefined;
   const NativeWebSocket = WebSocket as unknown as new (
     address: string, protocols?: string | string[], options?: { headers?: Record<string, string> },
   ) => WebSocket;

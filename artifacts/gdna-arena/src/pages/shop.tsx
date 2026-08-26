@@ -3,6 +3,7 @@ import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { useAuth }  from "../contexts/AuthContext";
 import { useLang }  from "../contexts/LangContext";
 import { ShoppingBag, Coins, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 const GOLD = "#FFD700";
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
@@ -16,6 +17,7 @@ interface ShopItem {
 export default function ShopPage() {
   const { user, refreshUser } = useAuth() as any;
   const { lang } = useLang();
+  const { isOnline } = useConnectivity();
   const dir = lang === "ar" ? "rtl" : "ltr";
 
   const [items,       setItems]       = useState<ShopItem[]>([]);
@@ -38,6 +40,7 @@ export default function ShopPage() {
 
   const buy = async (item: ShopItem) => {
     if (!user) return showToast(lang === "ar" ? "يجب تسجيل الدخول أولاً" : "Login required", false);
+    if (!isOnline) return showToast(lang === "ar" ? "أعد الاتصال لإتمام الشراء" : "Reconnect to complete this purchase", false);
     setBuying(item.id);
     try {
       const res = await fetch(api(`/api/shop/buy/${item.id}`), {
@@ -172,7 +175,7 @@ export default function ShopPage() {
 
                       <button
                         onClick={() => !isPurchased && buy(item)}
-                        disabled={isPurchased || isLoading || !canAfford}
+                        disabled={isPurchased || isLoading || !canAfford || !isOnline}
                         style={{
                           padding: "8px 16px", borderRadius: 10, border: "none",
                           fontWeight: 800, fontSize: 13, cursor: isPurchased || !canAfford ? "not-allowed" : "pointer",

@@ -21,19 +21,20 @@ import {
   ensureDeviceIdentity,
   type E2ERecipientKey,
 } from "@/lib/amis-e2ee";
+import { apiPath, websocketUrl } from "@/lib/network";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // Fetch a channel-scoped RTC token from the authenticated backend.
 // The Agora client must not be created until this returns a complete signed
 // configuration sourced from the server's runtime process.env.
 async function fetchAgoraToken(channel: string): Promise<{ appId: string; token: string; uid: number }> {
-  const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
   // 403 can briefly race the WS call registration. 503 means Replit's runtime
   // configuration is not ready yet. Neither condition may start Agora.
   let lastError = "Secure call token unavailable";
   const retryDelayMs = [350, 700, 1_400, 2_000];
   for (let attempt = 0; attempt < retryDelayMs.length; attempt++) {
     try {
-      const r = await fetch(`${base}/api/rtc/agora-token?channel=${encodeURIComponent(channel)}`, { credentials: "include" });
+      const r = await fetch(`${apiPath("/api/rtc/agora-token")}?channel=${encodeURIComponent(channel)}`, { credentials: "include" });
       if (r.status === 403 || r.status === 503) {
         const body = await r.json().catch(() => ({} as { error?: string }));
         lastError = body.error ?? `Secure call token failed: HTTP ${r.status}`;
@@ -68,12 +69,11 @@ async function fetchAgoraToken(channel: string): Promise<{ appId: string; token:
 }
 
 async function fetchAgoraPreflight(): Promise<{ appId: string; token: string; uid: number; channel: string }> {
-  const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
   const retryDelayMs = [400, 800, 1_600, 2_000];
   let lastError = "Agora preflight unavailable";
 
   for (let attempt = 0; attempt < retryDelayMs.length; attempt++) {
-    const response = await fetch(`${base}/api/rtc/preflight-token`, { credentials: "include" });
+    const response = await fetch(apiPath("/api/rtc/preflight-token"), { credentials: "include" });
     const data = await response.json().catch(() => ({})) as {
       appId?: unknown; token?: unknown; uid?: unknown; channel?: unknown; error?: string;
     };
@@ -99,14 +99,6 @@ async function fetchAgoraPreflight(): Promise<{ appId: string; token: string; ui
 
   throw new Error(lastError);
 }
-
-const BASE_WS = (() => {
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  const host  = window.location.host; // includes port if any
-  // /api/ws rides the /api path so it reaches the api-server in BOTH dev and
-  // production (the deployment router only forwards /api/* to the backend).
-  return `${proto}://${host}/api/ws`;
-})();
 
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
 export type LiveStatus  = "idle" | "live" | "ended";
@@ -155,10 +147,13 @@ function mediaFailureMessage(err: unknown): string {
   return "🎤 تعذّر الوصول إلى الميكروفون — تأكد من الإذن والجهاز ثم أعد المحاولة";
 }
 export function useCall(user: { id: number; username: string } | null) {
+  const { isOnline, setRealtimeConnecting, setRealtimeConnected } = useConnectivity();
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const wasConnectedRef = useRef(false);
   const identityGenerationRef = useRef(0);
   const preflightClientRef = useRef<IAgoraRTCClient | null>(null);
 
@@ -225,8 +220,7 @@ export function useCall(user: { id: number; username: string } | null) {
       try {
         const identity = await ensureDeviceIdentity(user.id);
         if (cancelled) return;
-        const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-        await fetch(`${base}/api/messages/e2e/key`, {
+        await fetch(apiPath("/api/messages/e2e/key"), {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceId: identity.deviceId, publicKey: identity.publicKey }),
@@ -245,6 +239,10 @@ export function useCall(user: { id: number; username: string } | null) {
   // call or requesting microphone/camera permission.
   const testConnection = useCallback(async () => {
     if (connectionTest === "testing") return;
+    if (!isOnline) {
+      setConnectionTest("failed");
+      return;
+    }
     if (!user) {
       setConnectionTest("failed");
       return;
@@ -314,7 +312,7 @@ export function useCall(user: { id: number; username: string } | null) {
       if (audioContext) void audioContext.close();
       if (preflightClientRef.current === client) preflightClientRef.current = null;
     }
-  }, [connectionTest, user]);
+  }, [connectionTest, isOnline, user]);
 
   // ── Rebuild the remote MediaStream from current Agora remote tracks ───────
   const rebuildRemoteStream = useCallback(() => {
@@ -410,6 +408,9 @@ export function useCall(user: { id: number; username: string } | null) {
       (!ws || wsRef.current === ws);
 
     if (!user) {
+      setRealtimeConnected();
+      wasConnectedRef.current = false;
+      reconnectAttemptRef.current = 0;
       setConnected(false);
       setOnlineUsers([]);
       setActiveLives([]);
@@ -427,9 +428,29 @@ export function useCall(user: { id: number; username: string } | null) {
 
     const expectedUserId = user.id;
 
+    const clearReconnect = () => {
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    };
+
+    const scheduleReconnect = () => {
+      if (!isCurrent() || !navigator.onLine) return;
+      clearReconnect();
+      const attempt = reconnectAttemptRef.current++;
+      const backoff = Math.min(30_000, 1_000 * 2 ** attempt);
+      const jitter = Math.floor(Math.random() * Math.min(1_000, backoff * 0.25));
+      reconnectRef.current = setTimeout(connect, backoff + jitter);
+    };
+
     const connect = () => {
       if (!isCurrent()) return;
-      const ws = new WebSocket(BASE_WS);
+      if (!navigator.onLine) {
+        setRealtimeConnecting();
+        return;
+      }
+      if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
+      setRealtimeConnecting();
+      const ws = new WebSocket(websocketUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -452,7 +473,14 @@ export function useCall(user: { id: number; username: string } | null) {
             return;
           }
           setConnected(true);
+          reconnectAttemptRef.current = 0;
+          setRealtimeConnected();
           window.dispatchEvent(new Event("gdna:realtime-connected"));
+          if (wasConnectedRef.current) {
+            window.dispatchEvent(new Event("gdna:realtime-reconnected"));
+            window.dispatchEvent(new Event("gdna:realtime-refetch"));
+          }
+          wasConnectedRef.current = true;
         }
         if (msg.type === "session-ended") {
           ws.close(4001, "Session ended");
@@ -565,18 +593,42 @@ export function useCall(user: { id: number; username: string } | null) {
         if (!isCurrent(ws)) return;
         wsRef.current = null;
         setConnected(false);
+        setRealtimeConnecting();
         window.dispatchEvent(new Event("gdna:realtime-disconnected"));
         if (pingRef.current) clearInterval(pingRef.current);
-        // Reconnect after 3s
-        reconnectRef.current = setTimeout(connect, 3000);
+        scheduleReconnect();
       };
 
       ws.onerror = () => ws.close();
     };
 
-    connect();
+    const reconnectImmediately = () => {
+      if (!isCurrent() || !navigator.onLine) return;
+      if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
+      clearReconnect();
+      connect();
+    };
+    const onOnline = () => {
+      window.dispatchEvent(new Event("gdna:realtime-refetch"));
+      reconnectImmediately();
+    };
+    const onOffline = () => {
+      clearReconnect();
+      setRealtimeConnecting();
+      wsRef.current?.close();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") reconnectImmediately();
+    };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    if (isOnline) connect();
     return () => {
       disposed = true;
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (pingRef.current) clearInterval(pingRef.current);
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       pingRef.current = null;
@@ -610,8 +662,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setConnectionTest("idle");
       setCallError(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.username, leaveAgora]);
+  }, [user?.id, user?.username, isOnline, leaveAgora, setRealtimeConnected, setRealtimeConnecting]);
 
   // A route change or logout must not leave a microphone/camera LED on.
   useEffect(() => () => {
@@ -640,6 +691,10 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("يجب تسجيل الدخول أولاً");
       return;
     }
+    if (!isOnline) {
+      showCallError("أنت غير متصل بالشبكة — لا يمكن بدء مكالمة الآن");
+      return;
+    }
     if (wsRef.current?.readyState !== WebSocket.OPEN) {
       showCallError("الاتصال بالشبكة منقطع — انتظر ثوانٍ وأعد المحاولة");
       return;
@@ -653,11 +708,10 @@ export function useCall(user: { id: number; username: string } | null) {
       window.dispatchEvent(new Event("gdna:voice-note-stop"));
       await validateMicrophone();
 
-      const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
        let recipients: E2ERecipientKey[] | null = null;
        for (let attempt = 0; attempt < 3 && !recipients; attempt++) {
         const keyResponse = await fetch(
-          `${base}/api/messages/e2e/users/${encodeURIComponent(targetUsername)}/key`,
+          apiPath(`/api/messages/e2e/users/${encodeURIComponent(targetUsername)}/key`),
           { credentials: "include" },
         );
         if (keyResponse.ok) {
@@ -727,7 +781,7 @@ export function useCall(user: { id: number; username: string } | null) {
         : mediaFailureMessage(err));
       setCallStatus("idle");
     }
-  }, [callStatus, joinAgora, leaveAgora, sendWS, user]);
+  }, [callStatus, isOnline, joinAgora, leaveAgora, sendWS, user]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {
@@ -820,6 +874,10 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Start live story (WebRTC path, unchanged) ─────────────────────────────
   const startLive = useCallback(async (title: string, domain: string) => {
+    if (!isOnline) {
+      showCallError("أنت غير متصل بالشبكة — لا يمكن بدء بث مباشر الآن");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       localStreamRef.current = stream;
@@ -829,7 +887,7 @@ export function useCall(user: { id: number; username: string } | null) {
     } catch (err) {
       console.error("[LIVE] Failed:", err);
     }
-  }, [sendWS]);
+  }, [isOnline, sendWS]);
 
   const endLive = useCallback(() => {
     sendWS({ type: "live-end" });
@@ -842,11 +900,15 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Join a live ───────────────────────────────────────────────────────────
   const joinLive = useCallback(async (liveId: string) => {
+    if (!isOnline) {
+      showCallError("أنت غير متصل بالشبكة — لا يمكن الانضمام إلى البث الآن");
+      return;
+    }
     const pc = createLivePC("", liveId);
     pcRef.current = pc;
     sendWS({ type: "live-join", liveId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sendWS]);
+  }, [isOnline, sendWS]);
 
   // ── Log outgoing calls to history exactly once, with the real call type ────
   useEffect(() => {
@@ -863,8 +925,7 @@ export function useCall(user: { id: number; username: string } | null) {
       if (!outgoing || !peer) return; // only the caller logs, avoids duplicates
       const durationSec = answered ? Math.floor((Date.now() - start) / 1000) : 0;
       const status = answered ? "answered" : "missed";
-      const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-      fetch(`${base}/api/social/v2/call-history`, {
+      fetch(apiPath("/api/social/v2/call-history"), {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ calleeUsername: peer, callType: video ? "video" : "audio", status, durationSec }),
         credentials: "include",

@@ -3,88 +3,88 @@
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/</loc>
+    <loc>https://helixly.app/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://gdna-arena.replit.app/gdna-arena/"/>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://gdna-arena.replit.app/gdna-arena/"/>
-    <xhtml:link rel="alternate" hreflang="fr" href="https://gdna-arena.replit.app/gdna-arena/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://helixly.app/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://helixly.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://helixly.app/"/>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/games</loc>
+    <loc>https://helixly.app/games</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/games/globalstar</loc>
+    <loc>https://helixly.app/games/globalstar</loc>
     <changefreq>hourly</changefreq>
     <priority>0.9</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/leaderboard</loc>
+    <loc>https://helixly.app/leaderboard</loc>
     <changefreq>hourly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/hub</loc>
+    <loc>https://helixly.app/hub</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/chronicle</loc>
+    <loc>https://helixly.app/chronicle</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/empire</loc>
+    <loc>https://helixly.app/empire</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/growth</loc>
+    <loc>https://helixly.app/growth</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/news</loc>
+    <loc>https://helixly.app/news</loc>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/chat</loc>
+    <loc>https://helixly.app/chat</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/legal</loc>
+    <loc>https://helixly.app/legal</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/legal/privacy</loc>
+    <loc>https://helixly.app/legal/privacy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/legal/cookies</loc>
+    <loc>https://helixly.app/legal/cookies</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
-    <loc>https://gdna-arena.replit.app/gdna-arena/legal/gdpr</loc>
+    <loc>https://helixly.app/legal/gdpr</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>

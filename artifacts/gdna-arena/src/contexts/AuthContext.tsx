@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
+import { apiPath } from "@/lib/network";
 
 export interface AuthUser {
   id: number;
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     const { controller, generation } = beginAuthRequest();
     try {
-      const res = await fetch("/api/auth/me", {
+      const res = await fetch(apiPath("/api/auth/me"), {
         credentials: "include",
         signal: controller.signal,
       });
@@ -67,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string, rememberMe = true) => {
     const { controller, generation } = beginAuthRequest(true);
-    const res = await fetch("/api/auth/login", {
+    const res = await fetch(apiPath("/api/auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (username: string, password: string, birthDate: string) => {
     const { controller, generation } = beginAuthRequest(true);
-    const res = await fetch("/api/auth/register", {
+    const res = await fetch(apiPath("/api/auth/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -95,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
-    const res = await fetch("/api/auth/change-password", {
+    const res = await fetch(apiPath("/api/auth/change-password"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -111,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // still checked so callers never report a successful logout while the
     // authenticated session remains alive.
     const { controller } = beginAuthRequest(true);
-    const res = await fetch("/api/auth/logout", {
+    const res = await fetch(apiPath("/api/auth/logout"), {
       method: "POST",
       credentials: "include",
       signal: controller.signal,

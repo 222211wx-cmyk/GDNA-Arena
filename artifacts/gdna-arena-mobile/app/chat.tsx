@@ -11,6 +11,7 @@ import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiBase, getHeaders } from '@/lib/api';
+import { assertNetworkOnline } from '@/contexts/OnlineContext';
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -100,6 +101,7 @@ export default function ChatScreen() {
     const aiId = `a-${Date.now()}`;
 
     try {
+      assertNetworkOnline();
       const res = await fetch(`${getApiBase()}/chat`, {
         method: 'POST',
         headers: getHeaders(),

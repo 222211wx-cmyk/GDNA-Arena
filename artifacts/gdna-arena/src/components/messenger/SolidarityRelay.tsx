@@ -24,6 +24,7 @@ import {
 } from "@workspace/gdna-ds/components/ui/select";
 import Avatar from "../social/Avatar";
 import { GOLD, timeAgo, api } from "../social/social-i18n";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // ── Backend-authoritative domain list ─────────────────────────────────────────
 const RELAY_DOMAINS = [
@@ -191,6 +192,7 @@ function StatusSelector({
   st: Record<string, string>;
   onUpdate: () => void;
 }) {
+  const { isOnline } = useConnectivity();
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -198,6 +200,7 @@ function StatusSelector({
     ?? SOLIDARITY_STATUSES[4];
 
   async function changeStatus(value: string) {
+    if (!isOnline) return;
     setSaving(true);
     setOpen(false);
     await fetch(api("/api/solidarity/status"), {
@@ -210,6 +213,7 @@ function StatusSelector({
   }
 
   async function toggleVisible() {
+    if (!isOnline) return;
     if (!profile) return;
     setSaving(true);
     await fetch(api("/api/solidarity/status"), {
@@ -231,7 +235,7 @@ function StatusSelector({
           <button
             onClick={() => setOpen(v => !v)}
             className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-bold text-card-foreground min-h-[44px]"
-            disabled={saving}
+            disabled={saving || !isOnline}
             aria-haspopup="listbox"
             aria-expanded={open}
           >
@@ -271,7 +275,7 @@ function StatusSelector({
         <button
           onClick={toggleVisible}
           className="flex items-center gap-1.5 text-xs text-muted-foreground min-h-[44px] px-2"
-          disabled={saving || !profile}
+            disabled={saving || !profile || !isOnline}
         >
           <span
             className="inline-block h-3.5 w-3.5 rounded border border-border transition-colors"
@@ -293,6 +297,7 @@ function InitiativeCard({
   st: Record<string, string>;
   onRefresh: () => void;
 }) {
+  const { isOnline } = useConnectivity();
   const [busy, setBusy] = useState(false);
   const pct = Math.min(100, Math.round(
     (initiative.supportCount / Math.max(1, initiative.targetSupport)) * 100
@@ -306,6 +311,7 @@ function InitiativeCard({
   const domainIcon  = RELAY_DOMAIN_ICONS[initiative.domain as RelayDomain] ?? "🌍";
 
   async function toggleSupport() {
+    if (!isOnline) return;
     if (busy) return;
     setBusy(true);
     const method = initiative.supportedByMe ? "DELETE" : "POST";
@@ -317,6 +323,7 @@ function InitiativeCard({
   }
 
   async function cancelInitiative() {
+    if (!isOnline) return;
     if (!window.confirm(st.relay_cancel_confirm ?? "Cancel this initiative? This cannot be undone.")) return;
     setBusy(true);
     await fetch(api(`/api/solidarity/initiatives/${initiative.id}`), {
@@ -391,7 +398,7 @@ function InitiativeCard({
               size="sm"
               variant={initiative.supportedByMe ? "secondary" : "default"}
               className="h-10 flex-1 gap-1.5 text-xs font-bold"
-              disabled={busy}
+              disabled={busy || !isOnline}
               onClick={toggleSupport}
               data-testid={`support-btn-${initiative.id}`}
             >
@@ -409,7 +416,7 @@ function InitiativeCard({
               size="sm"
               variant="outline"
               className="h-10 px-3 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
-              disabled={busy}
+              disabled={busy || !isOnline}
               onClick={cancelInitiative}
             >
               <XCircle size={12} className="mr-1" />
@@ -431,6 +438,7 @@ function CreateForm({
   onClose: () => void;
   scopedRoomId?: number | null;
 }) {
+  const { isOnline } = useConnectivity();
   // Fix #4: first backend domain as default
   const [title, setTitle]       = useState("");
   const [body, setBody]         = useState("");
@@ -452,6 +460,7 @@ function CreateForm({
   }
 
   async function submit() {
+    if (!isOnline) return;
     if (!validate() || submitting) return;
     setSubmitting(true);
     try {
@@ -560,7 +569,7 @@ function CreateForm({
       <Button
         className="h-11 w-full gap-2 font-bold"
         onClick={submit}
-        disabled={submitting}
+        disabled={submitting || !isOnline}
         data-testid="button-launch-initiative"
       >
         {submitting
@@ -593,6 +602,7 @@ interface Props {
 export default function SolidarityRelay({
   st, currentUserId, lang = "en", activeRoomId, activeRoomName, onClearRoom,
 }: Props) {
+  const { isOnline } = useConnectivity();
   const [profile, setProfile]       = useState<SolidarityProfile | null>(null);
   const [initiatives, setInitiatives] = useState<Initiative[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -688,7 +698,8 @@ export default function SolidarityRelay({
       {/* ── Create CTA ── */}
       <div className="px-3 pt-3 shrink-0">
         <button
-          onClick={() => setShowCreate(v => !v)}
+          onClick={() => isOnline && setShowCreate(v => !v)}
+          disabled={!isOnline}
           className="w-full flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-bold min-h-[44px] transition-colors"
           style={{ borderColor: `${GOLD}30`, background: `${GOLD}0a`, color: GOLD }}
           data-testid="button-show-create"

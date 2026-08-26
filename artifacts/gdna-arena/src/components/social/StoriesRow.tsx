@@ -8,6 +8,7 @@ import { X, Clock, Plus } from "lucide-react";
 import Avatar from "./Avatar";
 import { GOLD, DOMAIN_ICONS, DOMAINS, timeAgo, api } from "./social-i18n";
 import type { Story } from "./social-types";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
@@ -30,6 +31,7 @@ function StoryViewer({ story, st, dir, onClose, onLike, liked }: {
   story: Story; st: Record<string, string>; dir: string;
   onClose: () => void; onLike: () => void; liked: boolean;
 }) {
+  const { isOnline } = useConnectivity();
   const [toast, setToast] = useState("");
 
   // Screenshot detection: fire when window loses focus while story is visible
@@ -72,7 +74,7 @@ function StoryViewer({ story, st, dir, onClose, onLike, liked }: {
             <p style={{ color: "#e5e7eb", fontSize: 14, lineHeight: 1.6, margin: "0 0 14px" }} dir={dir}>
               {story.content}
             </p>
-            <button onClick={onLike}
+            <button onClick={onLike} disabled={!isOnline || liked}
               style={{ background: liked ? "#ef444420" : "#1a1a1a", border: `1px solid ${liked ? "#ef4444" : "#333"}`, borderRadius: 8, padding: "8px 18px", color: liked ? "#ef4444" : "#fff", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
               ❤️ {story.likes} {st.like}
             </button>
@@ -93,13 +95,14 @@ function AddStoryModal({ user, st, dir, onClose, onCreated }: {
   onClose: () => void;
   onCreated: (story: Story) => void;
 }) {
+  const { isOnline } = useConnectivity();
   const [content,  setContent]  = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [domain,   setDomain]   = useState("general");
   const [posting,  setPosting]  = useState(false);
 
   async function submit() {
-    if (!content.trim() || posting || !user) return;
+    if (!content.trim() || posting || !user || !isOnline) return;
     setPosting(true);
     try {
       const r = await fetch(api("/api/stories"), {
@@ -143,7 +146,7 @@ function AddStoryModal({ user, st, dir, onClose, onCreated }: {
           style={{ width: "100%", background: "#000", border: `1px solid ${GOLD}20`, borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 12, outline: "none", cursor: "pointer", marginBottom: 14 }}>
           {DOMAINS.map(d => <option key={d} value={d}>{DOMAIN_ICONS[d]} {st[d] ?? d}</option>)}
         </select>
-        <button onClick={submit} disabled={!content.trim() || posting}
+        <button onClick={submit} disabled={!content.trim() || posting || !isOnline}
           style={{ width: "100%", padding: "10px 0", background: content.trim() ? GOLD : "#333", border: "none", borderRadius: 8, color: content.trim() ? "#000" : "#666", fontWeight: 900, cursor: "pointer", fontSize: 14, opacity: posting ? 0.6 : 1 }}>
           {posting ? "…" : st.add_story}
         </button>
@@ -160,6 +163,7 @@ interface Props {
 }
 
 export default function StoriesRow({ user, st, dir }: Props) {
+  const { isOnline } = useConnectivity();
   const [stories,   setStories]   = useState<Story[]>([]);
   const [viewer,    setViewer]    = useState<Story | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -174,7 +178,7 @@ export default function StoriesRow({ user, st, dir }: Props) {
   useEffect(() => { load(); }, [load]);
 
   async function likeStory(storyId: number) {
-    if (likedSet.has(storyId)) return;
+    if (likedSet.has(storyId) || !isOnline) return;
     const r = await fetch(api(`/api/stories/${storyId}/like`), { method: "POST", credentials: "include" });
     const j = await r.json();
     if (!j.alreadyLiked && j.likes != null) {
@@ -190,7 +194,7 @@ export default function StoriesRow({ user, st, dir }: Props) {
       <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
         {/* Add Story button */}
         {user && (
-          <button onClick={() => setShowModal(true)}
+          <button onClick={() => setShowModal(true)} disabled={!isOnline}
             style={{ flexShrink: 0, width: 90, aspectRatio: "9/14", borderRadius: 12, border: `2px dashed ${GOLD}50`, background: "#0d0d0d", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, color: GOLD }}>
             <Plus size={22} />
             <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5 }}>{st.add_story}</span>

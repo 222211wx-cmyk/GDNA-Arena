@@ -1,5 +1,5 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@workspace/gdna-ds/components/ui/toaster";
 import { TooltipProvider } from "@workspace/gdna-ds/components/ui/tooltip";
 import { useEffect } from "react";
@@ -8,6 +8,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
 import { LegalProvider } from "@/contexts/LegalContext";
 import { CallProvider } from "@/contexts/CallContext";
+import { ConnectivityProvider } from "@/contexts/ConnectivityContext";
+import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import CommHub from "@/components/CommHub";
 import CookieBanner from "@/components/legal/CookieBanner";
 import AgeGate from "@/components/legal/AgeGate";
@@ -66,6 +68,18 @@ import CinemaPage   from "@/pages/cinema";
 import AdminRevenuePage from "@/pages/admin-revenue";
 
 const queryClient = new QueryClient();
+
+function RealtimeQuerySync() {
+  const client = useQueryClient();
+  useEffect(() => {
+    const refetch = () => {
+      void client.invalidateQueries();
+    };
+    window.addEventListener("gdna:realtime-refetch", refetch);
+    return () => window.removeEventListener("gdna:realtime-refetch", refetch);
+  }, [client]);
+  return null;
+}
 
 function PageWrapper() {
   const [location] = useLocation();
@@ -155,18 +169,22 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <RealtimeQuerySync />
       <TooltipProvider>
         <LangProvider>
-          <LegalProvider>
-            <AuthProvider>
-              <CallProvider>
-                <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                  <Router />
-                </WouterRouter>
-                <Toaster />
-              </CallProvider>
-            </AuthProvider>
-          </LegalProvider>
+          <ConnectivityProvider>
+            <ConnectivityBanner />
+            <LegalProvider>
+              <AuthProvider>
+                <CallProvider>
+                  <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                    <Router />
+                  </WouterRouter>
+                  <Toaster />
+                </CallProvider>
+              </AuthProvider>
+            </LegalProvider>
+          </ConnectivityProvider>
         </LangProvider>
       </TooltipProvider>
     </QueryClientProvider>

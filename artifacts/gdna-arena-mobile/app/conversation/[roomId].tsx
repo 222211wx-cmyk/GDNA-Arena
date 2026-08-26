@@ -22,6 +22,7 @@ import {
   type SecurePayload,
 } from '@/lib/e2e';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOnline } from '@/contexts/OnlineContext';
 
 type Stored = {
   id: number;
@@ -60,6 +61,7 @@ export default function Conversation() {
   const router = useRouter();
   const inset = useSafeAreaInsets();
   const { user } = useAuth();
+  const { isOnline } = useOnline();
   const queryClient = useQueryClient();
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<Visible[]>([]);
@@ -69,7 +71,7 @@ export default function Conversation() {
   const ping = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const room = useQuery({
-    queryKey: ['room', id],
+    queryKey: ['room', user?.id, id],
     enabled: !!user && Number.isSafeInteger(id) && id > 0,
     queryFn: () => apiGet<Response>(`/messages/rooms/${id}`),
   });
@@ -92,15 +94,31 @@ export default function Conversation() {
   }, [id]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isOnline) return;
     let stopped = false;
+    let reconnectAttempt = 0;
     const clearHeartbeat = () => {
       if (ping.current) clearInterval(ping.current);
       ping.current = null;
     };
+    const scheduleReconnect = (connect: () => void) => {
+      if (stopped || !isOnline) return;
+      const delay = Math.min(30_000, 1_000 * 2 ** Math.min(reconnectAttempt++, 5)) +
+        Math.floor(Math.random() * 500);
+      retry.current = setTimeout(() => {
+        retry.current = null;
+        connect();
+      }, delay);
+    };
     const connect = () => {
-      if (stopped) return;
-      const ws = createAuthenticatedWebSocket();
+      if (stopped || !isOnline) return;
+      let ws: WebSocket;
+      try {
+        ws = createAuthenticatedWebSocket();
+      } catch {
+        scheduleReconnect(connect);
+        return;
+      }
       socket.current = ws;
       ws.onopen = () => {
         if (stopped || socket.current !== ws) return;
@@ -109,11 +127,10 @@ export default function Conversation() {
         ping.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
         }, 25000);
-        void room.refetch();
       };
       ws.onmessage = event => {
         void (async () => {
-          let incoming: { type?: string; roomId?: number; recipientUserId?: number; message?: Stored };
+          let incoming: { type?: string; userId?: number; roomId?: number; recipientUserId?: number; message?: Stored };
           try {
             incoming = JSON.parse(String(event.data)) as typeof incoming;
           } catch {
@@ -122,6 +139,17 @@ export default function Conversation() {
           if (incoming.type === 'session-ended') {
             stopped = true;
             ws.close();
+            return;
+          }
+          if (incoming.type === 'registered') {
+            if (incoming.userId !== user.id) {
+              stopped = true;
+              ws.close(4002, 'Identity changed');
+              return;
+            }
+            reconnectAttempt = 0;
+            await room.refetch();
+            await queryClient.invalidateQueries({ queryKey: ['amis-rooms', user.id] });
             return;
           }
           if (incoming.type !== 'chat-message' || incoming.roomId !== id ||
@@ -138,7 +166,7 @@ export default function Conversation() {
           if (active.current) {
             setMessages(previous => previous.some(item => item.id === message.id) ? previous : [...previous, visible]);
           }
-          await queryClient.invalidateQueries({ queryKey: ['amis-rooms'] });
+          await queryClient.invalidateQueries({ queryKey: ['amis-rooms', user.id] });
         })();
       };
       ws.onerror = () => {
@@ -147,7 +175,7 @@ export default function Conversation() {
       ws.onclose = () => {
         clearHeartbeat();
         if (socket.current === ws) socket.current = null;
-        if (!stopped) retry.current = setTimeout(connect, 3000);
+        if (!stopped) scheduleReconnect(connect);
       };
     };
     connect();
@@ -159,7 +187,7 @@ export default function Conversation() {
       socket.current?.close();
       socket.current = null;
     };
-  }, [id, user, queryClient, room.refetch]);
+  }, [id, user, isOnline, queryClient, room.refetch]);
 
   const send = useMutation({
     mutationFn: (variables: SendVariables) => withKeyRefreshRetry(
@@ -178,7 +206,7 @@ export default function Conversation() {
       setMessages(previous => previous.some(item => item.id === result.message.id)
         ? previous
         : [...previous, { ...result.message, payload: variables.payload }]);
-      void queryClient.invalidateQueries({ queryKey: ['amis-rooms'] });
+      if (user) void queryClient.invalidateQueries({ queryKey: ['amis-rooms', user.id] });
     },
     onError: error => Alert.alert('Secure send failed', error instanceof Error ? error.message : 'Try again'),
   });
@@ -256,13 +284,13 @@ export default function Conversation() {
         paddingBottom: Math.max(inset.bottom, 8),
         flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
       }]}>
-        <Button size="icon" variant="outline" disabled={send.isPending} accessibilityLabel="Send encrypted image" onPress={() => void pickImage()}>
+        <Button size="icon" variant="outline" disabled={!isOnline || send.isPending} accessibilityLabel="Send encrypted image" onPress={() => void pickImage()}>
           <Ionicons name="image-outline" color={colors.foreground} size={20} />
         </Button>
         <Input value={text} onChangeText={setText} multiline placeholder="Encrypted message"
           textAlign={I18nManager.isRTL ? 'right' : 'left'}
           style={[styles.input, { writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr' }]} />
-        <Button size="icon" disabled={!text.trim() || send.isPending} loading={send.isPending} onPress={sendText}>
+        <Button size="icon" disabled={!isOnline || !text.trim() || send.isPending} loading={send.isPending} onPress={sendText}>
           <Ionicons name="send" color={colors.primaryForeground} size={18} />
         </Button>
       </View>

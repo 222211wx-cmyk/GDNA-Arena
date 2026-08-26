@@ -46,31 +46,35 @@ function setupSignalHandlers() {
   process.on('SIGHUP', cleanup);
 }
 
-function stripProtocol(domain) {
-  let urlString = domain.trim();
-
-  if (!/^https?:\/\//i.test(urlString)) {
-    urlString = `https://${urlString}`;
+function publicHttpsHost(value, name) {
+  const urlString = /^https?:\/\//i.test(value.trim())
+    ? value.trim()
+    : `https://${value.trim()}`;
+  let url;
+  try {
+    url = new URL(urlString);
+  } catch {
+    throw new Error(`${name} must be a valid public HTTPS host.`);
   }
-
-  return new URL(urlString).host;
+  const local = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  if (url.protocol !== 'https:' || local || !url.hostname || url.username || url.password ||
+      url.pathname !== '/' || url.search || url.hash) {
+    throw new Error(`${name} must be a public HTTPS host without a path, credentials, query, or fragment.`);
+  }
+  return url.host;
 }
 
 function getDeploymentDomain() {
   if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
-  }
-
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_DEV_DOMAIN);
+    return publicHttpsHost(process.env.REPLIT_INTERNAL_APP_DOMAIN, 'REPLIT_INTERNAL_APP_DOMAIN');
   }
 
   if (process.env.EXPO_PUBLIC_DOMAIN) {
-    return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
+    return publicHttpsHost(process.env.EXPO_PUBLIC_DOMAIN, 'EXPO_PUBLIC_DOMAIN');
   }
 
   console.error(
-    'ERROR: No deployment domain found. Set REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN',
+    'ERROR: A production bundle requires a public HTTPS host. Set REPLIT_INTERNAL_APP_DOMAIN or EXPO_PUBLIC_DOMAIN. Development domains are not accepted.',
   );
   process.exit(1);
 }

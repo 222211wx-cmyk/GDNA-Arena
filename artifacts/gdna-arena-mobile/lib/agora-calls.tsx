@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { PermissionsAndroid, Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { subtle as nativeSubtle } from 'react-native-quick-crypto';
@@ -13,6 +14,7 @@ import {
   type LastmileProbeResult,
 } from 'react-native-agora';
 import { apiGet, apiPost, createAuthenticatedWebSocket, type AuthUser } from './api';
+import { assertNetworkOnline, useOnline } from '@/contexts/OnlineContext';
 import {
   decryptCallSecret,
   encryptCallSecret,
@@ -88,6 +90,8 @@ async function makeOffer(username: string, secret: string): Promise<E2eOffer> {
 }
 
 export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
+  const { isOnline } = useOnline();
+  const queryClient = useQueryClient();
   const [call, setCall] = useState<ActiveCall | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<string | null>(null);
@@ -97,6 +101,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callRef = useRef<ActiveCall | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const closedRef = useRef(false);
   const incomingE2eRef = useRef<E2eOffer | null>(null);
@@ -244,11 +249,26 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   useEffect(() => { signalHandlerRef.current = handleSignal; }, [handleSignal]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isOnline) return;
     closedRef.current = false;
+    const scheduleReconnect = (connect: () => void) => {
+      if (closedRef.current || !isOnline) return;
+      const attempt = reconnectAttemptRef.current++;
+      const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5)) + Math.floor(Math.random() * 500);
+      reconnectRef.current = setTimeout(() => {
+        reconnectRef.current = null;
+        connect();
+      }, delay);
+    };
     const connect = () => {
-      if (closedRef.current) return;
-      const ws = createAuthenticatedWebSocket();
+      if (closedRef.current || !isOnline) return;
+      let ws: WebSocket;
+      try {
+        ws = createAuthenticatedWebSocket();
+      } catch {
+        scheduleReconnect(connect);
+        return;
+      }
       wsRef.current = ws;
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: 'register', userId: user.id, username: user.username }));
@@ -264,6 +284,10 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
             ws.close(4002, 'Identity changed');
             return;
           }
+          if (message.type === 'registered') {
+            reconnectAttemptRef.current = 0;
+            void queryClient.invalidateQueries({ queryKey: ['amis-calls', user.id] });
+          }
           void signalHandlerRef.current(message);
         } catch { /* ignore malformed frames */ }
       };
@@ -275,7 +299,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
           setError('Your session ended. Sign in again.');
           finish('session-ended');
         } else if (!closedRef.current) {
-          reconnectRef.current = setTimeout(connect, 1500);
+          scheduleReconnect(connect);
         }
       };
     };
@@ -283,14 +307,17 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     return () => {
       closedRef.current = true;
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+      reconnectAttemptRef.current = 0;
       if (pingRef.current) clearInterval(pingRef.current);
       pingRef.current = null;
       wsRef.current?.close();
       release();
     };
-  }, [finish, release, user]);
+  }, [finish, isOnline, queryClient, release, user]);
 
   const start = useCallback(async (peer: string, video: boolean) => {
+    assertNetworkOnline();
     if (!user || callRef.current) return;
     setError(null);
     await permissions(video);
@@ -306,6 +333,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   }, [finish, send, user]);
 
   const answer = useCallback(async () => {
+    assertNetworkOnline();
     const current = callRef.current;
     if (!current || !user || !incomingE2eRef.current) return;
     clearTimer();
@@ -338,6 +366,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   const end = useCallback(() => finish('completed', true), [finish]);
 
   const testConnection = useCallback(async () => {
+    assertNetworkOnline();
     setPreflight('Testing Agora last mile…');
     setError(null);
     const credentials = await apiGet<Credentials & { channel: string }>('/rtc/preflight-token');

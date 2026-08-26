@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, Send, Heart, Clock, Mic, Video, Type, Radio, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 interface Story {
   id: number; username: string; content: string;
@@ -43,6 +44,7 @@ function hoursLeft(d: string) {
 }
 
 export default function StoriesPage() {
+  const { isOnline } = useConnectivity();
   const { user } = useAuth();
   const [stories, setStories]       = useState<Story[]>([]);
   const [filter,  setFilter]        = useState("all");
@@ -74,7 +76,7 @@ export default function StoriesPage() {
   }, [load]);
 
   const post = async () => {
-    if (!content.trim() || posting) return;
+    if (!content.trim() || posting || !isOnline) return;
     setPosting(true); setError(null);
     const body: Record<string, string> = { content: content.trim(), type: storyType, domain };
     if (audioUrl.trim()) body.audioUrl = audioUrl.trim();
@@ -96,9 +98,10 @@ export default function StoriesPage() {
   };
 
   const like = async (id: number) => {
-    if (liked.has(id)) return;
+    if (liked.has(id) || !isOnline) return;
+    const response = await fetch(`/api/stories/${id}/like`, { method: "POST", credentials: "include" });
+    if (!response.ok) return;
     setLiked(prev => new Set([...prev, id]));
-    await fetch(`/api/stories/${id}/like`, { method: "POST", credentials: "include" });
     void load();
   };
 
@@ -211,7 +214,7 @@ export default function StoriesPage() {
                 <option value="general">🌍 General</option>
               </select>
               <span className="text-xs text-muted-foreground ml-auto">{content.length}/400</span>
-              <button onClick={() => void post()} disabled={!content.trim() || posting}
+              <button onClick={() => void post()} disabled={!content.trim() || posting || !isOnline}
                 className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-black transition-all active:scale-95 disabled:opacity-40"
                 style={{ background: GREEN, color: "#000" }}>
                 <Send className="w-4 h-4" />
@@ -317,7 +320,7 @@ export default function StoriesPage() {
                       {s.type === "video" && <span className="flex items-center gap-1 text-muted-foreground"><Video className="w-3 h-3" /> Video</span>}
                       {s.type === "text"  && <span className="flex items-center gap-1 text-muted-foreground"><Type className="w-3 h-3" /> Text</span>}
                     </div>
-                    <button onClick={() => void like(s.id)} disabled={isLiked}
+                    <button onClick={() => void like(s.id)} disabled={isLiked || !isOnline}
                       className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all border"
                       style={{ borderColor: isLiked ? "#f4724860" : BORDER_G, color: isLiked ? "#f47248" : "#888", background: isLiked ? "#f4724815" : "transparent" }}>
                       <Heart className={`w-3 h-3 ${isLiked ? "fill-current" : ""}`} />

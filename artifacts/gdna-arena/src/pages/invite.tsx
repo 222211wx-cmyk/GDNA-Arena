@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Copy, Check, Globe, Crown, Star, ChevronDown } from "lucide-react";
 
 // ─── رابط الموقع ──────────────────────────────────────────────────────────────
-const SITE_URL = "https://gdna-arena.replit.app";
-const SITE_SHORT = "gdna-arena.replit.app";
+const SITE_URL = "https://helixly.app";
+const SITE_SHORT = "helixly.app";
 
 // ─── المجالات ─────────────────────────────────────────────────────────────────
 const FIELDS = [
