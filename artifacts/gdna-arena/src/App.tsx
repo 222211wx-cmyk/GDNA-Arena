@@ -11,7 +11,6 @@ import { CallProvider } from "@/contexts/CallContext";
 import { ConnectivityProvider } from "@/contexts/ConnectivityContext";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import { BetaSimulationBanner } from "@/components/BetaSimulationBanner";
-import CommHub from "@/components/CommHub";
 import CookieBanner from "@/components/legal/CookieBanner";
 import AgeGate from "@/components/legal/AgeGate";
 import GeoBlock from "@/components/legal/GeoBlock";
@@ -62,6 +61,7 @@ import GenomePage from "@/pages/genome";
 import SmartPage from "@/pages/smart";
 import FortressPage from "@/pages/fortress";
 import SearchPage from "@/pages/search";
+import AmisPage from "@/pages/amis";
 import { Footer } from "@/components/layout/footer";
 import { GdnAiFloating } from "@/components/GdnAiTerminal";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -134,6 +134,7 @@ function PageWrapper() {
           <Route path="/smart" component={SmartPage} />
           <Route path="/fortress" component={FortressPage} />
           <Route path="/search" component={SearchPage} />
+          <Route path="/amis" component={AmisPage} />
           <Route path="/news" component={NewsPage} />
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />
@@ -148,19 +149,25 @@ function PageWrapper() {
   );
 }
 
+// Module pages own their surface — no floating cross-module shells here.
+const MODULE_ROUTES = ["/messages", "/social", "/amis"];
+
 function Router() {
   const [location] = useLocation();
-  const isDedicatedMessenger = location === "/messages";
+  const isChoiceEntry = location === "/login";
+  const isModulePage = MODULE_ROUTES.some(
+    (r) => location === r || location.startsWith(r + "/"),
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
       <BetaSimulationBanner />
       <CoinsDisclaimer />
-      <Navbar />
+      {!isChoiceEntry && <Navbar />}
       <PageWrapper />
-      <Footer />
-      {!isDedicatedMessenger && <GdnAiFloating />}
-      {!isDedicatedMessenger && <CommHub />}
+      {!isChoiceEntry && <Footer />}
+      {/* Floating AI terminal stays on general pages, off isolated modules. */}
+      {!isModulePage && !isChoiceEntry && <GdnAiFloating />}
       <CookieBanner />
       <AgeGate />
       <GeoBlock />

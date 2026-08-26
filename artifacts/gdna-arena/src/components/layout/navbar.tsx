@@ -26,10 +26,15 @@ const NAV_ITEMS = [
   { name: "NEWS",     emoji: "📰",  icon: <Newspaper size={15} />,  path: "/news",             highlight: false },
   { name: "HERITAGE", emoji: "🏛️", icon: <Landmark  size={15} />,  path: "/chronicle",        highlight: false },
   { name: "CLIPS",    emoji: "🎬",  icon: <Film      size={15} />,  path: "/clips",            highlight: false },
-  { name: "SOCIAL",   emoji: "💬",  icon: <MessageSquare size={15} />, path: "/social",   highlight: false },
-  { name: "MESSAGES", emoji: "✉️",  icon: <Mail          size={15} />, path: "/messages", highlight: false },
-  { name: "AMIS",     emoji: "👥",  icon: <User          size={15} />, path: "/friends",  highlight: false },
   { name: "SMART",    emoji: "🧠",  icon: <BrainCircuit  size={15} />, path: "/smart",    highlight: false },
+];
+
+// ── Four-door modules — exact brand names, no emojis, module-isolated ────────────
+// AMIS is admin-only site control (adminOnly). MESSAGERI and SOCIAL are public.
+const MODULE_ITEMS = [
+  { name: "MESSAGERI - المراسلات", icon: <Mail          size={15} />, path: "/messages", adminOnly: false },
+  { name: "SOCIAL - جهات الاتصال", icon: <MessageSquare size={15} />, path: "/social",   adminOnly: false },
+  { name: "AMIS - لوحة التحكم",     icon: <User          size={15} />, path: "/amis",     adminOnly: true  },
 ];
 
 export function Navbar() {
@@ -167,6 +172,32 @@ export function Navbar() {
                 }`}
               >
                 {item.emoji && <span className="text-base leading-none">{item.emoji}</span>}
+                {item.name}
+                {isDM && unreadDMs > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
+                    {unreadDMs > 9 ? "9+" : unreadDMs}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+
+          {/* Four-door modules — exact brand names, module-isolated */}
+          {MODULE_ITEMS.filter((m) => !m.adminOnly || user?.isAdmin).map((item) => {
+            const active = isActive(item.path);
+            const isDM   = item.path === "/messages";
+            return (
+              <Link
+                key={item.name}
+                href={item.path}
+                data-testid={`nav-module-${item.path.replace("/", "")}`}
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                  active
+                    ? "text-yellow-400 bg-yellow-400/10 border-b-2 border-yellow-400"
+                    : "text-gray-300 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                {item.icon}
                 {item.name}
                 {isDM && unreadDMs > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
@@ -348,6 +379,28 @@ export function Navbar() {
             </Link>
           );
         })}
+        {MODULE_ITEMS.filter((m) => !m.adminOnly || user?.isAdmin).map((item) => {
+          const active = isActive(item.path);
+          const isDM   = item.path === "/messages";
+          return (
+            <Link
+              key={item.name}
+              href={item.path}
+              data-testid={`nav-module-mobile-${item.path.replace("/", "")}`}
+              className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                active ? "text-yellow-400 bg-yellow-400/10" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              {item.icon}
+              {item.name}
+              {isDM && unreadDMs > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
+                  {unreadDMs > 9 ? "9+" : unreadDMs}
+                </span>
+              )}
+            </Link>
+          );
+        })}
         <Link
           href="/press"
           onClick={() => setMobileOpen(false)}
@@ -394,6 +447,27 @@ export function Navbar() {
               </Link>
             );
           })}
+
+          {/* Four-door modules */}
+          <div className="pt-2 border-t border-gray-800 space-y-1">
+            {MODULE_ITEMS.filter((m) => !m.adminOnly || user?.isAdmin).map((item) => {
+              const active = isActive(item.path);
+              return (
+                <Link
+                  key={item.name}
+                  href={item.path}
+                  onClick={() => setMobileOpen(false)}
+                  data-testid={`nav-module-menu-${item.path.replace("/", "")}`}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
+                    active ? "text-yellow-400 bg-yellow-400/10" : "text-gray-300 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  {item.icon}
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
 
           {/* Growth / AI */}
           <div className="pt-2 border-t border-gray-800">

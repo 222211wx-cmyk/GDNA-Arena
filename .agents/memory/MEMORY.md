@@ -19,3 +19,4 @@
 - [Games age policy](games-age-policy.md) — registration and all non-game sections are open to every age; only Games is 18+, enforced by persisted DOB on both UI and API.
 - [Expo native module boundaries](expo-native-module-boundaries.md) — native-only Expo dependencies need web façades; use architecture-compatible package lines.
 - [Finance beta controls](finance-beta-controls.md) — real Stripe stays disabled until a US LLC exists; beta uses persisted 70/30 simulation and manual RedotPay payouts.
+- [Four-door module boundaries](four-door-module-boundaries.md) — AMIS admin, MESSAGERI messaging, SOCIAL contacts, and ARENA exploration must stay independent.

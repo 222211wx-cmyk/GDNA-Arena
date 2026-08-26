@@ -23,3 +23,10 @@ id = "lP-Z_p31gOP-te3XRQZzK"
 uri = "file://exports/gdna-arena-source.zip"
 type = "unspecified"
 title = "GDNA Arena - Source Code"
+
+[[outputs]]
+id = "BArgKKcU79ZddGdCtdVrh"
+uri = "file://screenshots/arena-qaisypro-choice-page-final.jpg"
+type = "image"
+title = "Arena Qaisypro — صفحة الاختيارات"
+description = "الصفحة النهائية المعزولة بأبواب AMIS وMESSAGERI وSOCIAL وARENA."

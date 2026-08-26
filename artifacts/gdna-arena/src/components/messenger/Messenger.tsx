@@ -2280,7 +2280,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
         {/* ── Top bar ── */}
         <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>AMIS</p>
+          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>MESSAGERI</p>
           <button onClick={() => { setTab("settings"); activeRoomIdRef.current = null; setActiveRoom(null); }} title={st.nav_settings ?? "Settings"}
             data-testid="button-open-settings"
             style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: tab === "settings" ? `${GOLD}18` : "transparent", color: tab === "settings" ? GOLD : "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
