@@ -59,7 +59,8 @@ export const SOCIAL_T: Record<string, Record<string, string>> = {
     conversation_deleted: "Conversation deleted",
     contacts: "Contacts", add_friend: "Add friend", search_contacts: "Search citizens…",
     no_contacts: "No citizens found", back: "Back", chats: "Chats", groups: "Groups",
-    settings_saved: "Settings saved",
+    nav_chats: "Chats", nav_calls: "Calls", nav_communities: "Communities", nav_settings: "Settings",
+    settings_general: "Settings", settings_saved: "Settings saved",
     notif_hint: "Controls the unread badge on the floating AMIS button",
     receipts_hint: "When off, your read status is never shared with others",
     // Task #165 — replies, reactions, block, solidarity status
@@ -185,7 +186,8 @@ export const SOCIAL_T: Record<string, Record<string, string>> = {
     conversation_deleted: "تم حذف المحادثة",
     contacts: "جهات الاتصال", add_friend: "إضافة صديق", search_contacts: "ابحث عن مواطنين…",
     no_contacts: "لم يُعثر على مواطنين", back: "رجوع", chats: "المحادثات", groups: "المجموعات",
-    settings_saved: "تم حفظ الإعدادات",
+    nav_chats: "المحادثات", nav_calls: "المكالمات", nav_communities: "المجتمعات", nav_settings: "الإعدادات",
+    settings_general: "الإعدادات", settings_saved: "تم حفظ الإعدادات",
     notif_hint: "يتحكم في شارة الرسائل غير المقروءة على زر AMIS العائم",
     receipts_hint: "عند الإيقاف، لا تتم مشاركة حالة قراءتك مع الآخرين أبداً",
     // Task #165 — replies, reactions, block, solidarity status

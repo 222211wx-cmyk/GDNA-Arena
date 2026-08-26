@@ -5,7 +5,9 @@
  *  - "embedded" → Social Hub messages tab
  *  - "widget"   → CommHub floating panel
  * Structure:
- *  - 4 fixed bottom tabs: Discussions | Actus | Communautés | Appels
+ *  - 4 fixed WhatsApp-style destinations: Chats | Calls | Communities | Settings
+ *    (tap a destination, or make one deliberate horizontal swipe, to move to the
+ *     adjacent destination). Solidarity Relay lives INSIDE Communities.
  *  - Chat = full page: header (avatar+name+call) / messages with date separators /
  *    RTL-friendly composer with + inside the input shell revealing camera/gallery/files/mic/emoji
  *  - No GIPHY. Keyboard-stable (dvh + interactive-widget=resizes-content).
@@ -97,7 +99,7 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
@@ -107,6 +109,8 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   onBlockChanged?: (roomId: number, blocked: boolean) => void;
   /** Fix #2: authenticated user's id so we exclude self when finding peer */
   currentUserId?: number;
+  /** When true, render as an in-flow destination panel (Settings tab) rather than a slide-over overlay. */
+  inline?: boolean;
 }) {
   const [settings, setSettings] = useState<MsgSettings | null>(null);
   const [muted, setMuted] = useState(activeRoom?.muted ?? false);
@@ -189,13 +193,22 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
     setBlockBusy(false);
   }
 
+  const rootStyle: React.CSSProperties = inline
+    ? { position: "relative", flex: 1, minHeight: 0, background: BG, display: "flex", flexDirection: "column", overflow: "hidden" }
+    : { position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" };
+
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
-      style={{ position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <motion.div
+      initial={inline ? false : { opacity: 0, x: 20 }}
+      animate={inline ? undefined : { opacity: 1, x: 0 }}
+      exit={inline ? undefined : { opacity: 0, x: 20 }}
+      style={rootStyle}>
       <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10 }}>
         <Settings size={17} style={{ color: GOLD }} />
-        <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, flex: 1 }}>{st.msg_settings ?? "Messenger settings"}</p>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: 6 }}><X size={18} /></button>
+        <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, flex: 1 }}>{activeRoom ? (st.msg_settings ?? "Messenger settings") : (st.settings_general ?? st.msg_settings ?? "Settings")}</p>
+        {!inline && (
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: 6 }}><X size={18} /></button>
+        )}
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px" }}>
         {!settings ? <div style={{ textAlign: "center", color: "#444", padding: 32 }}>…</div> : (
@@ -444,8 +457,8 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
   onJoined: (roomId: number) => void;
   onOpen: (roomId: number) => void;
   onCreate: () => void;
-  /** Fix #3: navigate to Relay tab scoped to this community */
-  onViewRelay: (roomId: number, roomName: string) => void;
+  /** Open the Solidarity Relay inside Communities. roomId null → empire-wide. */
+  onViewRelay: (roomId: number | null, roomName: string | null) => void;
 }) {
   const [groups, setGroups] = useState<GroupRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -484,6 +497,14 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}10`, border: `1px solid ${GOLD}25`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
         <Plus size={18} style={{ color: GOLD }} />
         <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>{st.new_group ?? "New group"}</span>
+      </button>
+      {/* Empire-wide Solidarity Relay entry (opens inside Communities) */}
+      <button onClick={() => onViewRelay(null, null)}
+        data-testid="button-empire-relay"
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}08`, border: `1px solid ${GOLD}20`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
+        <HandHeart size={18} style={{ color: GOLD }} />
+        <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>{st.relay_title ?? "Solidarity Relay"}</span>
+        <ChevronRight size={16} style={{ color: `${GOLD}80`, marginInlineStart: "auto" }} />
       </button>
       {loading && <p style={{ color: "#444", textAlign: "center", padding: 24 }}>…</p>}
       {!loading && loadError && (
@@ -762,13 +783,24 @@ const EMOJI_GROUPS: [string, string[]][] = [
   ["⚽", ["⚽","🏀","🎾","🏐","🎮","🕹️","🎲","♟️","🎵","🎶","🎤","🎧","🎸","🥁","🎬","🎥","📸","🍕","🍔","🌮","🍩","☕","🍵","🥤","🚗","✈️","⏰","📱","💻","📚"]],
 ];
 
-type BottomTab = "discussions" | "actus" | "communautes" | "appels";
+// Four WhatsApp-style destinations, in fixed left-to-right order.
+// Swiping horizontally moves between adjacent destinations in this order.
+type BottomTab = "chats" | "calls" | "communities" | "settings";
+
+const TAB_ORDER: BottomTab[] = ["chats", "calls", "communities", "settings"];
+
+const TAB_I18N_KEYS: Record<BottomTab, string> = {
+  chats: "nav_chats",
+  calls: "nav_calls",
+  communities: "nav_communities",
+  settings: "nav_settings",
+};
 
 const TAB_LABELS: Record<BottomTab, string> = {
-  discussions: "Discussions",
-  actus: "Relay",
-  communautes: "Communautés",
-  appels: "Appels",
+  chats: "Chats",
+  calls: "Calls",
+  communities: "Communities",
+  settings: "Settings",
 };
 
 // ── Main Messenger ────────────────────────────────────────────────────────────
@@ -798,7 +830,7 @@ function IdentityBoundMessenger({ variant, user }: {
   const dir = lang === "ar" ? "rtl" : "ltr";
   const call = useCallContext();
 
-  const [tab,         setTab]         = useState<BottomTab>("discussions");
+  const [tab,         setTab]         = useState<BottomTab>("chats");
   const [rooms,       setRooms]       = useState<DmRoom[]>([]);
   const [roomQuery,   setRoomQuery]   = useState("");
   const [activeRoom,  setActiveRoom]  = useState<DmRoom | null>(null);
@@ -823,7 +855,10 @@ function IdentityBoundMessenger({ variant, user }: {
   const [showAttachTray, setShowAttachTray] = useState(false);
   // Task #165: reply + reactions
   const [replyTo,       setReplyTo]       = useState<DmMessage | null>(null);
-  // Fix #3: community-scoped relay view (null = empire-wide)
+  // Solidarity Relay now lives INSIDE the Communities destination (not a 5th tab).
+  // showRelay opens the Relay view within Communities; relayRoomId/Name scope it
+  // to a single community (null = empire-wide).
+  const [showRelay,     setShowRelay]     = useState(false);
   const [relayRoomId,   setRelayRoomId]   = useState<number | null>(null);
   const [relayRoomName, setRelayRoomName] = useState<string | null>(null);
 
@@ -849,6 +884,110 @@ function IdentityBoundMessenger({ variant, user }: {
   const e2eRegistrationRef = useRef<Promise<void> | null>(null);
 
   const isWidget = variant === "widget";
+
+  // ── Deliberate horizontal swipe → adjacent destination ──────────────────────
+  // A single touch that is clearly horizontal (not vertical scroll) and does not
+  // start on an interactive control navigates to the neighbouring destination.
+  const swipeRef = useRef<{
+    x: number; y: number; active: boolean; decided: boolean; horizontal: boolean;
+  }>({ x: 0, y: 0, active: false, decided: false, horizontal: false });
+
+  const goToAdjacentTab = useCallback((direction: 1 | -1) => {
+    setTab(prev => {
+      const idx = TAB_ORDER.indexOf(prev);
+      const nextIdx = idx + direction;
+      if (nextIdx < 0 || nextIdx >= TAB_ORDER.length) return prev;
+      // Leaving a destination resets any transient chat/relay context.
+      activeRoomIdRef.current = null;
+      setActiveRoom(null);
+      return TAB_ORDER[nextIdx];
+    });
+  }, []);
+
+  // Never hijack a gesture that begins on an input, button, link, or any element
+  // that opts out of swipe navigation (audio/video controls, sliders, etc.).
+  const isInteractiveTarget = (el: EventTarget | null): boolean => {
+    let node = el as HTMLElement | null;
+    while (node && node !== document.body) {
+      const tag = node.tagName;
+      if (
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+        tag === "BUTTON" || tag === "A" || tag === "AUDIO" || tag === "VIDEO" ||
+        node.getAttribute?.("role") === "button" ||
+        node.getAttribute?.("contenteditable") === "true" ||
+        node.dataset?.noSwipe === "true"
+      ) return true;
+      node = node.parentElement;
+    }
+    return false;
+  };
+
+  const SWIPE_THRESHOLD = 60;   // px of horizontal travel required to commit
+  const SWIPE_SLOP = 12;        // px before we decide axis
+  const SWIPE_RATIO = 1.4;      // horizontal must dominate vertical by this ratio
+
+  const onSwipeTouchStart = useCallback((e: React.TouchEvent) => {
+    // Only single-finger gestures, never while a chat/room is open, never on inputs.
+    if (activeRoom || e.touches.length !== 1 || isInteractiveTarget(e.target)) {
+      swipeRef.current.active = false;
+      return;
+    }
+    const t = e.touches[0];
+    swipeRef.current = { x: t.clientX, y: t.clientY, active: true, decided: false, horizontal: false };
+  }, [activeRoom]);
+
+  const onSwipeTouchMove = useCallback((e: React.TouchEvent) => {
+    const s = swipeRef.current;
+    if (!s.active) return;
+    if (e.touches.length !== 1) {
+      s.active = false;
+      return;
+    }
+    const t = e.touches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (!s.decided) {
+      if (Math.abs(dx) < SWIPE_SLOP && Math.abs(dy) < SWIPE_SLOP) return;
+      // Decide the axis once: a mainly vertical gesture is left to normal scroll.
+      s.horizontal = Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO;
+      s.decided = true;
+      if (!s.horizontal) s.active = false;
+    }
+  }, []);
+
+  const onSwipeTouchEnd = useCallback((e: React.TouchEvent) => {
+    const s = swipeRef.current;
+    if (!s.active || !s.horizontal) { s.active = false; return; }
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    s.active = false;
+    if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+    // Destinations are visually ordered from the start edge; a physical left
+    // swipe advances to the next item in both LTR and RTL layouts.
+    const forward = dx < 0;
+    goToAdjacentTab(forward ? 1 : -1);
+  }, [goToAdjacentTab]);
+
+  const onTabKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, current: BottomTab) => {
+    const currentIndex = TAB_ORDER.indexOf(current);
+    let nextIndex: number | null = null;
+
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = TAB_ORDER.length - 1;
+    if (event.key === "ArrowRight") nextIndex = currentIndex + (dir === "rtl" ? -1 : 1);
+    if (event.key === "ArrowLeft") nextIndex = currentIndex + (dir === "rtl" ? 1 : -1);
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    nextIndex = Math.max(0, Math.min(TAB_ORDER.length - 1, nextIndex));
+    const nextTab = TAB_ORDER[nextIndex];
+    activeRoomIdRef.current = null;
+    setActiveRoom(null);
+    setTab(nextTab);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`amis-tab-${nextTab}`)?.focus();
+    });
+  }, [dir]);
 
   const ensureE2eRegistered = useCallback(async () => {
     if (!user) throw new Error("Login required");
@@ -880,6 +1019,16 @@ function IdentityBoundMessenger({ variant, user }: {
     }
     void ensureE2eRegistered().catch(() => {});
   }, [ensureE2eRegistered, user?.id]);
+
+  // Reset the Solidarity Relay view whenever we leave the Communities destination
+  // so it never lingers when the citizen returns from another destination.
+  useEffect(() => {
+    if (tab !== "communities" && showRelay) {
+      setShowRelay(false);
+      setRelayRoomId(null);
+      setRelayRoomName(null);
+    }
+  }, [tab, showRelay]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 640);
@@ -1090,7 +1239,7 @@ function IdentityBoundMessenger({ variant, user }: {
     });
     if (r.ok) {
       const j = await r.json();
-      setTab("discussions");
+      setTab("chats");
       if (j.room) await openRoomById(j.room.id, j.room);
     }
   }
@@ -1515,7 +1664,7 @@ function IdentityBoundMessenger({ variant, user }: {
   );
 
   const containerHeight =
-    variant === "full"     ? "calc(100dvh - 130px)" :
+    variant === "full"     ? (isMobile ? "calc(100dvh - 265px)" : "calc(100dvh - 130px)") :
     variant === "embedded" ? "calc(100dvh - 280px)" : "100%";
 
   const filteredRooms = rooms.filter(r => getPeerName(r).toLowerCase().includes(roomQuery.toLowerCase()));
@@ -2058,14 +2207,26 @@ function IdentityBoundMessenger({ variant, user }: {
         {/* ── Top bar ── */}
         <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>AMIS</p>
-          <button onClick={() => setShowSettings(true)} title={st.msg_settings ?? "Settings"}
-            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={() => { setTab("settings"); activeRoomIdRef.current = null; setActiveRoom(null); }} title={st.nav_settings ?? "Settings"}
+            data-testid="button-open-settings"
+            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: tab === "settings" ? `${GOLD}18` : "transparent", color: tab === "settings" ? GOLD : "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Settings size={18} />
           </button>
         </div>
 
-        {/* ── Tab content ── */}
-        {tab === "discussions" && (
+        {/* ── Tab content (swipeable between adjacent destinations) ── */}
+        <div
+          role="tabpanel"
+          id={`amis-panel-${tab}`}
+          aria-labelledby={`amis-tab-${tab}`}
+          data-testid={`amis-panel-${tab}`}
+          onTouchStart={onSwipeTouchStart}
+          onTouchMove={onSwipeTouchMove}
+          onTouchEnd={onSwipeTouchEnd}
+          onTouchCancel={() => { swipeRef.current.active = false; }}
+          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}
+        >
+        {tab === "chats" && (
           <>
             <div style={{ padding: "10px 14px 4px" }}>
               <div style={{ position: "relative" }}>
@@ -2124,24 +2285,23 @@ function IdentityBoundMessenger({ variant, user }: {
             </div>
             {/* FAB: new chat */}
             <button onClick={() => setShowContacts("dm")}
-              style={{ position: "absolute", bottom: 76, insetInlineEnd: 18, width: 54, height: 54, borderRadius: 16, background: GOLD, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,0,0,0.5)", zIndex: 20 }}>
+              style={{ position: "absolute", bottom: 18, insetInlineEnd: 18, width: 54, height: 54, borderRadius: 16, background: GOLD, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,0,0,0.5)", zIndex: 20 }}>
               <MessageSquare size={23} />
             </button>
           </>
         )}
 
-        {tab === "actus" && (
-          <SolidarityRelay
-            st={{ ...st }}
-            currentUserId={user.id}
-            lang={lang}
-            activeRoomId={relayRoomId}
-            activeRoomName={relayRoomName}
-            onClearRoom={() => { setRelayRoomId(null); setRelayRoomName(null); }}
+        {tab === "calls" && (
+          <AppelsTab
+            st={st}
+            user={user}
+            onNewCall={() => setShowContacts("call")}
+            connectionTest={call.connectionTest}
+            onTestConnection={call.testConnection}
           />
         )}
 
-        {tab === "communautes" && (
+        {tab === "communities" && (
           <>
             {showGroupNew && (
               <div className="m-3 rounded-lg border border-border bg-card p-3">
@@ -2155,44 +2315,91 @@ function IdentityBoundMessenger({ variant, user }: {
               </div>
             )}
             <CommunautesTab st={st} myRoomIds={new Set(rooms.map(r => r.id))}
-              onJoined={roomId => { setTab("discussions"); openRoomById(roomId); }}
-              onOpen={roomId => { setTab("discussions"); openRoomById(roomId); }}
+              onJoined={roomId => { setTab("chats"); openRoomById(roomId); }}
+              onOpen={roomId => { setTab("chats"); openRoomById(roomId); }}
               onCreate={() => setShowGroupNew(true)}
               onViewRelay={(roomId, roomName) => {
-                setRelayRoomId(roomId);
-                setRelayRoomName(roomName);
-                setTab("actus");
+                // Solidarity Relay opens INSIDE Communities — never a hidden 5th tab.
+                setRelayRoomId(roomId ?? null);
+                setRelayRoomName(roomName ?? null);
+                setShowRelay(true);
               }} />
+            {/* Solidarity Relay lives inside the Communities destination */}
+            <AnimatePresence>
+              {showRelay && (
+                <motion.div
+                  initial={{ opacity: 0, x: 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 24 }}
+                  data-no-swipe="true"
+                  data-testid="communities-relay-panel"
+                  style={{ position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" }}
+                >
+                  <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10 }}>
+                    <button onClick={() => { setShowRelay(false); setRelayRoomId(null); setRelayRoomName(null); }}
+                      title={st.back ?? "Back"} data-testid="button-relay-back"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: GOLD, padding: 4, display: "flex" }}>
+                      <BackArrow size={20} />
+                    </button>
+                    <HandHeart size={16} style={{ color: GOLD }} />
+                    <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, flex: 1 }}>{st.relay_title ?? "Solidarity Relay"}</p>
+                  </div>
+                  <SolidarityRelay
+                    st={{ ...st }}
+                    currentUserId={user.id}
+                    lang={lang}
+                    activeRoomId={relayRoomId}
+                    activeRoomName={relayRoomName}
+                    onClearRoom={() => { setRelayRoomId(null); setRelayRoomName(null); }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         )}
 
-        {tab === "appels" && (
-          <AppelsTab
+        {tab === "settings" && (
+          <SettingsPanel
             st={st}
-            user={user}
-            onNewCall={() => setShowContacts("call")}
-            connectionTest={call.connectionTest}
-            onTestConnection={call.testConnection}
+            activeRoom={null}
+            inline
+            onClose={() => {}}
+            currentUserId={user?.id}
+            onMuteChanged={() => loadRooms()}
+            onRoomDeleted={removeRoomFromAllSurfaces}
+            showToast={setToast}
           />
         )}
 
-        {/* ── Fixed bottom tab bar ── */}
-        <div style={{ display: "flex", background: BG_BAR, borderTop: `1px solid ${GOLD}15`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
-          {(Object.keys(TAB_LABELS) as BottomTab[]).map(k => {
+        </div>{/* end swipeable tab content */}
+
+        {/* ── Fixed bottom destination bar (accessible tabs) ── */}
+        <div role="tablist" aria-label="AMIS destinations" data-testid="amis-tabbar"
+          style={{ display: "flex", background: BG_BAR, borderTop: `1px solid ${GOLD}15`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {TAB_ORDER.map(k => {
             const active = tab === k;
-            const Icon = k === "discussions" ? MessageSquare : k === "actus" ? HandHeart : k === "communautes" ? Users : Phone;
+            const Icon = k === "chats" ? MessageSquare : k === "calls" ? Phone : k === "communities" ? Users : Settings;
+            const label = st[TAB_I18N_KEYS[k]] ?? TAB_LABELS[k];
             return (
-              <button key={k} onClick={() => { setTab(k); activeRoomIdRef.current = null; setActiveRoom(null); }}
+              <button key={k}
+                role="tab"
+                id={`amis-tab-${k}`}
+                aria-selected={active}
+                aria-controls={`amis-panel-${k}`}
+                tabIndex={active ? 0 : -1}
+                data-testid={`amis-tab-${k}`}
+                onKeyDown={event => onTabKeyDown(event, k)}
+                onClick={() => { setTab(k); activeRoomIdRef.current = null; setActiveRoom(null); }}
                 style={{ flex: 1, padding: "9px 0 7px", border: "none", cursor: "pointer", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" }}>
                 <div style={{ position: "relative" }}>
                   <Icon size={21} style={{ color: active ? GOLD : "#777" }} />
-                  {k === "discussions" && totalUnread > 0 && (
+                  {k === "chats" && totalUnread > 0 && (
                     <span style={{ position: "absolute", top: -5, insetInlineEnd: -9, background: GOLD, color: "#000", borderRadius: 9, minWidth: 16, textAlign: "center", fontSize: 9.5, fontWeight: 900, padding: "1px 4px" }}>
                       {totalUnread}
                     </span>
                   )}
                 </div>
-                <span style={{ fontSize: 10.5, fontWeight: active ? 900 : 600, color: active ? GOLD : "#777" }}>{TAB_LABELS[k]}</span>
+                <span style={{ fontSize: 10.5, fontWeight: active ? 900 : 600, color: active ? GOLD : "#777" }}>{label}</span>
                 {active && <div style={{ position: "absolute", top: 0, left: "25%", right: "25%", height: 2.5, background: GOLD, borderRadius: 2 }} />}
               </button>
             );
@@ -2208,11 +2415,6 @@ function IdentityBoundMessenger({ variant, user }: {
               onClose={() => setShowContacts(false)}
               onDm={openDmWith}
               onCall={(u, v) => call.startCall(u, v)} />
-          )}
-          {showSettings && !activeRoom && (
-            <SettingsPanel st={st} activeRoom={null} onClose={() => setShowSettings(false)}
-              currentUserId={user?.id}
-              onMuteChanged={() => loadRooms()} onRoomDeleted={removeRoomFromAllSurfaces} showToast={setToast} />
           )}
         </AnimatePresence>
 
