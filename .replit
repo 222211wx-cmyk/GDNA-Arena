@@ -27,6 +27,7 @@ channel = "stable-25_05"
 [userenv.shared]
 ADMIN_EMAILS = "222211wx@gmail.com"
 GIPHY_API_KEY = "dc6zaT0xFJmzC"
+AGORA_APP_ID = "62585b9b53c44c47baa7600ee5d74e54"
 
 [[ports]]
 localPort = 8080

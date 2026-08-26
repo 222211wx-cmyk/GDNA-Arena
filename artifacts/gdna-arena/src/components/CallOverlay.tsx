@@ -181,7 +181,7 @@ export default function CallOverlay({
       style={{ background: "#050505" }}>
 
       {/* Remote video / avatar */}
-      <div className="flex-1 relative flex items-center justify-center">
+      <div className="flex-1 min-h-0 relative flex items-center justify-center overflow-hidden">
         {remoteStream ? (
           <video id="remote-player" ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" muted={speakerOff} />
         ) : (
@@ -220,7 +220,7 @@ export default function CallOverlay({
       </div>
 
       {/* Controls bar */}
-      <div className="flex items-center justify-center gap-4 py-8"
+      <div className="shrink-0 flex items-center justify-center gap-4 py-8"
         style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(12px)" }}>
 
         <button onClick={() => setMuted(v => !v)}
