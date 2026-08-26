@@ -4,13 +4,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  useFonts,
-} from '@expo-google-fonts/inter';
+import { useDesignSystemFonts } from '@workspace/gdna-ds/hooks/use-fonts';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -40,31 +35,23 @@ function AuthGate() {
 }
 
 function RootLayoutNav() {
+  const colors = useColors();
   return (
     <>
       <AuthGate />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#000000' } }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="chat"
-          options={{
-            presentation: 'modal',
-            headerShown: false,
-          }}
-        />
+        <Stack.Screen name="chat" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="conversation/[roomId]" options={{ headerShown: false }} />
       </Stack>
     </>
   );
 }
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
+  const { fontsLoaded, fontError } = useDesignSystemFonts();
+  const colors = useColors();
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
@@ -78,7 +65,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000000' }}>
+          <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
             <KeyboardProvider>
               <AuthProvider>
                 <RootLayoutNav />

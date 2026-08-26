@@ -52,6 +52,9 @@ const allowedOrigins = new Set<string>();
 if (process.env.REPLIT_DEV_DOMAIN) {
   allowedOrigins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
 }
+if (process.env.REPLIT_EXPO_DEV_DOMAIN) {
+  allowedOrigins.add(`https://${process.env.REPLIT_EXPO_DEV_DOMAIN}`);
+}
 for (const domain of (process.env.REPLIT_DOMAINS ?? "").split(",")) {
   const d = domain.trim();
   if (d) allowedOrigins.add(`https://${d}`);

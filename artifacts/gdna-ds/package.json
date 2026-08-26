@@ -26,8 +26,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
+    "@expo-google-fonts/inter": ">=0.4.0",
+    "expo-font": ">=14",
     "react": ">=18",
-    "react-dom": ">=18"
+    "react-dom": ">=18",
+    "react-native": ">=0.81"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -86,9 +89,11 @@
     "@types/node": "^25.3.3",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@expo-google-fonts/inter": "0.4.0",
     "@vitejs/plugin-react": "^5.0.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "react-native": "0.81.5",
     "tailwindcss": "^4.1.14",
     "vite": "^7.3.0"
   }

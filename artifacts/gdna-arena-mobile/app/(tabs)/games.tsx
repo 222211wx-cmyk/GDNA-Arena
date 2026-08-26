@@ -6,7 +6,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
+import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiPost, type PlayResult } from '@/lib/api';
 
@@ -16,7 +17,7 @@ const GAMES = [
     name: 'Arena Strike',
     desc: 'Fast-paced head-to-head battle in the digital arena',
     icon: 'flash' as const,
-    color: '#ff4444',
+    color: nativeTheme.colors.dark.destructive,
     reward: 200,
     winChance: '45%',
     difficulty: 'Hard',
@@ -26,7 +27,7 @@ const GAMES = [
     name: 'Neon Racer',
     desc: 'Race through neon highways in a digital speed duel',
     icon: 'speedometer' as const,
-    color: '#00d4ff',
+    color: nativeTheme.colors.dark.chart2,
     reward: 80,
     winChance: '60%',
     difficulty: 'Medium',
@@ -36,7 +37,7 @@ const GAMES = [
     name: 'Crypto Clash',
     desc: 'Clash in the crypto arena for coin supremacy',
     icon: 'logo-bitcoin' as const,
-    color: '#ffd700',
+    color: nativeTheme.colors.dark.chart1,
     reward: 120,
     winChance: '50%',
     difficulty: 'Hard',
@@ -46,7 +47,7 @@ const GAMES = [
     name: 'GlobalStar Tournament',
     desc: 'Compete for supremacy in the GlobalStar voting league',
     icon: 'trophy' as const,
-    color: '#9b59b6',
+    color: nativeTheme.colors.dark.chart4,
     reward: 200,
     winChance: '12%',
     difficulty: 'Expert',
@@ -64,7 +65,7 @@ function ResultModal({
   if (!result) return null;
   // Standard games use `win`; GlobalStar tournament uses `isWin`
   const isWin = result.win ?? result.isWin ?? false;
-  const accentColor = isWin ? '#00ff88' : '#ff4444';
+  const accentColor = isWin ? nativeTheme.colors.dark.chart3 : nativeTheme.colors.dark.destructive;
 
   return (
     <Modal visible={visible} transparent animationType="fade">
@@ -80,7 +81,7 @@ function ResultModal({
 
           <View style={[modalStyles.rewardRow, { borderColor: colors.border }]}>
             <View style={modalStyles.rewardItem}>
-              <Text style={[modalStyles.rewardVal, { color: '#ffd700' }]}>+{result.coinsEarned}</Text>
+              <Text style={[modalStyles.rewardVal, { color: nativeTheme.colors.dark.chart1 }]}>+{result.coinsEarned}</Text>
               <Text style={[modalStyles.rewardLbl, { color: colors.mutedForeground }]}>COINS</Text>
             </View>
             <View style={[modalStyles.rewardDivider, { backgroundColor: colors.border }]} />
@@ -90,7 +91,7 @@ function ResultModal({
             </View>
             <View style={[modalStyles.rewardDivider, { backgroundColor: colors.border }]} />
             <View style={modalStyles.rewardItem}>
-              <Text style={[modalStyles.rewardVal, { color: '#ffd700' }]}>{result.newBalance}</Text>
+              <Text style={[modalStyles.rewardVal, { color: nativeTheme.colors.dark.chart1 }]}>{result.newBalance}</Text>
               <Text style={[modalStyles.rewardLbl, { color: colors.mutedForeground }]}>BALANCE</Text>
             </View>
           </View>
@@ -109,7 +110,7 @@ function ResultModal({
 }
 
 const modalStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  overlay: { flex: 1, backgroundColor: nativeTheme.colors.dark.background, alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', borderRadius: 20, borderWidth: 1, padding: 28, alignItems: 'center' },
   iconCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   headline: { fontSize: 28, fontFamily: 'Inter_700Bold', letterSpacing: 3, marginBottom: 8 },
@@ -265,7 +266,7 @@ export default function GamesScreen() {
                 <View style={s.gameMeta}>
                   <View style={s.metaChip}>
                     <Ionicons name="flash" size={11} color="#ffd700" />
-                    <Text style={[s.metaText, { color: '#ffd700' }]}>+{game.reward} coins</Text>
+                    <Text style={[s.metaText, { color: nativeTheme.colors.dark.chart1 }]}>+{game.reward} coins</Text>
                   </View>
                   <View style={s.metaChip}>
                     <Ionicons name="shield-checkmark" size={11} color={colors.primary} />
@@ -324,10 +325,10 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   title: { fontSize: 26, fontFamily: 'Inter_700Bold', color: colors.foreground },
   balancePill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#1a1500', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: nativeTheme.colors.dark.secondary, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
     borderWidth: 1, borderColor: '#ffd70033',
   },
-  balanceText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#ffd700' },
+  balanceText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: nativeTheme.colors.dark.chart1 },
   subtitle: { fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', paddingHorizontal: 20, marginBottom: 24 },
   ageBanner: {
     marginHorizontal: 16, marginBottom: 16, padding: 14, flexDirection: 'row',
@@ -390,7 +391,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   playBtnLoading: { opacity: 0.7 },
-  playBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#000' },
+  playBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold', color: nativeTheme.colors.dark.primaryForeground },
   infoBanner: {
     marginHorizontal: 16, padding: 14, flexDirection: 'row', gap: 8, alignItems: 'flex-start',
     backgroundColor: colors.secondary, borderRadius: 12,

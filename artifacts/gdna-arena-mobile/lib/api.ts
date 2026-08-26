@@ -1,10 +1,12 @@
 /**
  * GDNA Arena API client for React Native.
- * Handles cookie-based session auth by storing the session cookie in AsyncStorage.
+ * Handles cookie-based session auth by storing the session cookie in native
+ * encrypted secure storage.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
-const SESSION_KEY = '@gdna_session_cookie';
+const SESSION_KEY = 'gdna.session.cookie';
 
 export function getApiBase(): string {
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
@@ -13,9 +15,41 @@ export function getApiBase(): string {
   return 'http://localhost:3000/api';
 }
 
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 let sessionCookie: string | null = null;
 let sessionGeneration = 0;
 let sessionStorageQueue: Promise<void> = Promise.resolve();
+
+const sessionStorage = {
+  async get(): Promise<string | null> {
+    if (Platform.OS === 'web') {
+      return typeof localStorage === 'undefined' ? null : localStorage.getItem(SESSION_KEY);
+    }
+    return SecureStore.getItemAsync(SESSION_KEY);
+  },
+  async set(value: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(SESSION_KEY, value);
+      return;
+    }
+    await SecureStore.setItemAsync(SESSION_KEY, value, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  },
+  async delete(): Promise<void> {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(SESSION_KEY);
+      return;
+    }
+    await SecureStore.deleteItemAsync(SESSION_KEY);
+  },
+};
 
 function serializeSessionStorage<T>(operation: () => Promise<T>): Promise<T> {
   const result = sessionStorageQueue.then(operation, operation);
@@ -26,7 +60,7 @@ function serializeSessionStorage<T>(operation: () => Promise<T>): Promise<T> {
 export async function loadSessionCookie(): Promise<void> {
   const expectedGeneration = sessionGeneration;
   await serializeSessionStorage(async () => {
-    const stored = await AsyncStorage.getItem(SESSION_KEY);
+    const stored = await sessionStorage.get();
     if (expectedGeneration === sessionGeneration) sessionCookie = stored;
   });
 }
@@ -36,14 +70,14 @@ export async function saveSessionCookie(
   expectedGeneration = sessionGeneration,
 ): Promise<boolean> {
   // A login response from a request started before logout/account-switch must
-  // never resurrect that previous session in AsyncStorage.
+    // never resurrect that previous session in secure storage.
   if (expectedGeneration !== sessionGeneration) return false;
   return serializeSessionStorage(async () => {
     if (expectedGeneration !== sessionGeneration) return false;
-    await AsyncStorage.setItem(SESSION_KEY, cookie);
+    await sessionStorage.set(cookie);
     if (expectedGeneration !== sessionGeneration) {
       // Logout/account-switch happened while the write was in flight.
-      await AsyncStorage.removeItem(SESSION_KEY);
+      await sessionStorage.delete();
       return false;
     }
     sessionCookie = cookie;
@@ -56,7 +90,7 @@ export async function clearSessionCookie(): Promise<void> {
   // asynchronous storage deletion yields.
   sessionGeneration += 1;
   sessionCookie = null;
-  await serializeSessionStorage(() => AsyncStorage.removeItem(SESSION_KEY));
+  await serializeSessionStorage(() => sessionStorage.delete());
 }
 
 export function beginSessionTransition(): void {
@@ -83,6 +117,32 @@ function extractCookie(response: Response): string | null {
   if (!raw) return null;
   // grab just the cookie name=value before the first semicolon
   return raw.split(';')[0].trim();
+}
+
+async function parseResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string };
+    throw new ApiError(res.status, body.error ?? res.statusText);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+export async function apiRequest<TResponse, TBody = never>(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: TBody,
+): Promise<TResponse> {
+  const requestGeneration = sessionGeneration;
+  const res = await fetch(`${getApiBase()}${path}`, {
+    method,
+    headers: getHeaders(),
+    credentials: 'include',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const cookie = extractCookie(res);
+  if (cookie?.includes('connect.sid')) await saveSessionCookie(cookie, requestGeneration);
+  return parseResponse<TResponse>(res);
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
@@ -118,6 +178,31 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     throw new Error(errBody?.error ?? res.statusText);
   }
   return res.json();
+}
+
+export const apiPut = <TResponse, TBody>(path: string, body: TBody) =>
+  apiRequest<TResponse, TBody>('PUT', path, body);
+export const apiPatch = <TResponse, TBody>(path: string, body: TBody) =>
+  apiRequest<TResponse, TBody>('PATCH', path, body);
+export const apiDelete = <TResponse = void>(path: string) =>
+  apiRequest<TResponse>('DELETE', path);
+
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const headers = getHeaders();
+  delete headers['Content-Type'];
+  const res = await fetch(`${getApiBase()}${path}`, {
+    method: 'POST', headers, credentials: 'include', body: form,
+  });
+  return parseResponse<T>(res);
+}
+
+export function createAuthenticatedWebSocket(): WebSocket {
+  const url = getApiBase().replace(/^http/, 'ws').replace(/\/api$/, '/api/ws');
+  const options = sessionCookie ? { headers: { Cookie: sessionCookie } } : undefined;
+  const NativeWebSocket = WebSocket as unknown as new (
+    address: string, protocols?: string | string[], options?: { headers?: Record<string, string> },
+  ) => WebSocket;
+  return new NativeWebSocket(url, undefined, options);
 }
 
 // Types

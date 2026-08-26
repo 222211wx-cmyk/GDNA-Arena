@@ -7,17 +7,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
+import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiGet, type TransactionItem } from '@/lib/api';
 
 function getRank(xp: number): { label: string; color: string; next: number; progress: number } {
   const tiers = [
-    { label: 'BRONZE',   color: '#cd7f32', min: 0,     max: 500   },
-    { label: 'SILVER',   color: '#c0c0c0', min: 500,   max: 2000  },
-    { label: 'GOLD',     color: '#ffd700', min: 2000,  max: 5000  },
-    { label: 'PLATINUM', color: '#b0c4de', min: 5000,  max: 10000 },
-    { label: 'DIAMOND',  color: '#00d4ff', min: 10000, max: 10000 },
+    { label: 'BRONZE',   color: nativeTheme.colors.dark.chart1, min: 0,     max: 500   },
+    { label: 'SILVER',   color: nativeTheme.colors.dark.mutedForeground, min: 500,   max: 2000  },
+    { label: 'GOLD',     color: nativeTheme.colors.dark.chart1, min: 2000,  max: 5000  },
+    { label: 'PLATINUM', color: nativeTheme.colors.dark.chart2, min: 5000,  max: 10000 },
+    { label: 'DIAMOND',  color: nativeTheme.colors.dark.chart2, min: 10000, max: 10000 },
   ];
   const tier = tiers.find(t => xp < t.max) ?? tiers[tiers.length - 1];
   const progress = tier.max === tier.min ? 1 : Math.min((xp - tier.min) / (tier.max - tier.min), 1);
@@ -156,18 +157,18 @@ export default function ProfileScreen() {
         ) : (
           txData.transactions.slice(0, 15).map((tx, i) => (
             <View key={tx.id} style={[s.txRow, i < Math.min(txData.transactions.length, 15) - 1 && s.txRowBorder]}>
-              <View style={[s.txIcon, { backgroundColor: tx.amount >= 0 ? '#001a0d' : '#1a0000' }]}>
+              <View style={[s.txIcon, { backgroundColor: tx.amount >= 0 ? nativeTheme.colors.dark.accent : nativeTheme.colors.dark.secondary }]}>
                 <Ionicons
                   name={tx.amount >= 0 ? 'arrow-down' : 'arrow-up'}
                   size={14}
-                  color={tx.amount >= 0 ? '#00ff88' : '#ff4444'}
+                  color={tx.amount >= 0 ? nativeTheme.colors.dark.chart3 : nativeTheme.colors.dark.destructive}
                 />
               </View>
               <View style={s.txInfo}>
                 <Text style={s.txDesc} numberOfLines={1}>{tx.description}</Text>
                 <Text style={s.txDate}>{new Date(tx.createdAt).toLocaleDateString()}</Text>
               </View>
-              <Text style={[s.txAmount, { color: tx.amount >= 0 ? '#00ff88' : '#ff4444' }]}>
+              <Text style={[s.txAmount, { color: tx.amount >= 0 ? nativeTheme.colors.dark.chart3 : nativeTheme.colors.dark.destructive }]}>
                 {tx.amount >= 0 ? '+' : ''}{tx.amount}
               </Text>
             </View>
@@ -230,7 +231,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   logoutBtn: {
     marginHorizontal: 16, borderRadius: 14, paddingVertical: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#1a0000', borderWidth: 1, borderColor: colors.destructive + '44',
+    backgroundColor: nativeTheme.colors.dark.secondary, borderWidth: 1, borderColor: colors.destructive + '44',
   },
   logoutText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: colors.destructive },
 });

@@ -17,6 +17,9 @@ on it and import its theme and components directly.
 - `src/components/ui/` — the initial shadcn scaffold, exported as
   `./components/*`. Generated systems keep and theme it; Figma imports prune and
   restyle it; code imports replace it with the source component library.
+- `src/components/native/` — token-driven React Native Button, Card, Input,
+  Typography, Badge, Empty, and Spinner primitives. Native props replace
+  DOM-only class names and hover states.
 - `src/lib/` (`cn`) and `src/hooks/` — exported as `./lib/*` and `./hooks/*`.
 - `src/App.tsx` — the entry point for the living style guide.
 - `src/preview/DesignSystemBrowser.tsx` — the persistent grouped navigation,

@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
+import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiBase, getHeaders } from '@/lib/api';
 interface Message {
@@ -237,7 +238,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   headerTitle: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#00ff88' },
+  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: nativeTheme.colors.dark.chart3 },
   statusText: { fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground },
   list: { flex: 1 },
   typingRow: { paddingHorizontal: 16, paddingBottom: 8 },

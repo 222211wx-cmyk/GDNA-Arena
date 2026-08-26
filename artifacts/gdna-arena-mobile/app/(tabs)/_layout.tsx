@@ -1,6 +1,6 @@
 import React from 'react';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
@@ -30,6 +30,10 @@ function NativeTabLayout() {
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: 'person', selected: 'person.fill' }} />
         <Label>Profile</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="amis">
+        <Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} />
+        <Label>AMIS</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -126,6 +130,15 @@ function ClassicTabLayout() {
             ) : (
               <Feather name="user" size={22} color={color} />
             ),
+        }}
+      />
+      <Tabs.Screen
+        name="amis"
+        options={{
+          title: 'AMIS',
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="bubble.left.and.bubble.right.fill" tintColor={color} size={22} /> :
+              <Ionicons name="chatbubbles" size={22} color={color} />,
         }}
       />
     </Tabs>

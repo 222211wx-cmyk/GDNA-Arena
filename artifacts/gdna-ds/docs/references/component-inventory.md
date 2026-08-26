@@ -19,6 +19,14 @@ after pilot approval).
 | Label | components/label.md | radix-ui label | 4 | 1 | implemented |
 | Separator, Tooltip, Toast, Textarea, Skeleton, Dialog + all other stock shadcn families (see `src/components/ui/`) | — (source-identical scaffold) | radix-ui | ≤4 each | 2 | implemented |
 
+## Native families
+
+Expo consumers use the token-only native theme and font hooks. Native Button
+(`default`, `secondary`, `outline`, `ghost`, `destructive`; including icon
+size), Card, Input, Typography, Badge, Empty, and Spinner families are
+implemented under `src/components/native/`. They use React Native primitives
+and intentionally do not expose DOM-only states or CSS class names.
+
 Custom app-level styling (not components — recorded as guidelines): `.imperial-gold`
 gradient, gold glow keyframes, `.royal-btn`, thin `#C9A84C` borders (see SKILL notes
 and preview Guidelines).

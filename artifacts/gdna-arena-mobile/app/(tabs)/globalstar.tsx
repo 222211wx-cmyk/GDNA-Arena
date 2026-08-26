@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
+import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { apiGet, apiPost, type GsFigure, type GsDomain } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -58,7 +59,7 @@ export default function GlobalStarScreen() {
   const renderFigure = ({ item, index }: { item: GsFigure; index: number }) => {
     const hasVoted = voted.has(item.id);
     const isVoting = voteMutation.isPending && voteMutation.variables === item.id;
-    const rankColor = index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : colors.mutedForeground;
+    const rankColor = index === 0 ? nativeTheme.colors.dark.chart1 : index === 1 ? nativeTheme.colors.dark.mutedForeground : index === 2 ? nativeTheme.colors.dark.chart1 : colors.mutedForeground;
 
     return (
       <View style={[s.figureCard, index === 0 && s.topCard]}>
@@ -101,12 +102,12 @@ export default function GlobalStarScreen() {
           activeOpacity={0.75}
         >
           {isVoting ? (
-            <ActivityIndicator size="small" color={hasVoted ? colors.primary : '#000'} />
+            <ActivityIndicator size="small" color={hasVoted ? colors.primary : nativeTheme.colors.dark.primaryForeground} />
           ) : (
             <Ionicons
               name={hasVoted ? 'checkmark' : 'thumbs-up'}
               size={16}
-              color={hasVoted ? colors.primary : '#000'}
+              color={hasVoted ? colors.primary : nativeTheme.colors.dark.primaryForeground}
             />
           )}
         </TouchableOpacity>
@@ -203,7 +204,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     borderRadius: 14, borderWidth: 1, borderColor: colors.border,
     marginBottom: 10, padding: 12, gap: 10,
   },
-  topCard: { borderColor: '#ffd70044', backgroundColor: '#0d0d00' },
+  topCard: { borderColor: nativeTheme.colors.dark.chart1 + '44', backgroundColor: nativeTheme.colors.dark.card },
   rankCol: { width: 32, alignItems: 'center' },
   rankNum: { fontSize: 14, fontFamily: 'Inter_700Bold' },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.muted },
@@ -213,7 +214,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   figureName: { fontSize: 15, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 2 },
   figureMeta: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 4 },
   voteCountRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  voteCount: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#ffd700' },
+  voteCount: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: nativeTheme.colors.dark.chart1 },
   voteBtn: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',

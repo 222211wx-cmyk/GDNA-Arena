@@ -5,19 +5,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
+import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiGet, type LeaderboardPlayer } from '@/lib/api';
 
 function getRankLabel(xp: number): { label: string; color: string } {
-  if (xp >= 10000) return { label: 'DIAMOND', color: '#00d4ff' };
-  if (xp >= 5000)  return { label: 'PLATINUM', color: '#b0c4de' };
-  if (xp >= 2000)  return { label: 'GOLD', color: '#ffd700' };
-  if (xp >= 500)   return { label: 'SILVER', color: '#c0c0c0' };
-  return { label: 'BRONZE', color: '#cd7f32' };
+  if (xp >= 10000) return { label: 'DIAMOND', color: nativeTheme.colors.dark.chart2 };
+  if (xp >= 5000)  return { label: 'PLATINUM', color: nativeTheme.colors.dark.chart2 };
+  if (xp >= 2000)  return { label: 'GOLD', color: nativeTheme.colors.dark.chart1 };
+  if (xp >= 500)   return { label: 'SILVER', color: nativeTheme.colors.dark.mutedForeground };
+  return { label: 'BRONZE', color: nativeTheme.colors.dark.chart1 };
 }
 
-const MEDAL_COLORS = ['#ffd700', '#c0c0c0', '#cd7f32'];
+const MEDAL_COLORS = [nativeTheme.colors.dark.chart1, nativeTheme.colors.dark.mutedForeground, nativeTheme.colors.dark.chart1];
 
 export default function LeaderboardScreen() {
   const colors = useColors();
@@ -179,7 +180,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statsCol: { alignItems: 'center', minWidth: 44 },
   xpVal: { fontSize: 14, fontFamily: 'Inter_700Bold', color: colors.primary },
   xpLbl: { fontSize: 9, fontFamily: 'Inter_500Medium', color: colors.mutedForeground, letterSpacing: 0.5 },
-  winsVal: { fontSize: 14, fontFamily: 'Inter_700Bold', color: '#00ff88' },
+  winsVal: { fontSize: 14, fontFamily: 'Inter_700Bold', color: nativeTheme.colors.dark.chart3 },
   winsLbl: { fontSize: 9, fontFamily: 'Inter_500Medium', color: colors.mutedForeground, letterSpacing: 0.5 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { fontSize: 14, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' },

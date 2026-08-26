@@ -9,6 +9,16 @@
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "@workspace/gdna-ds": "workspace:*",
+    "expo-crypto": "~15.0.8",
+    "expo-file-system": "~19.0.21",
+    "expo-secure-store": "~15.0.8",
+    "react-native-agora": "4.6.2",
+    "react-native-nitro-modules": "0.37.0",
+    "react-native-quick-base64": "3.0.1",
+    "react-native-quick-crypto": "1.1.7"
+  },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@expo-google-fonts/inter": "^0.4.0",

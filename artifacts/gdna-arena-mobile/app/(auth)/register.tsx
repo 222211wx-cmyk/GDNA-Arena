@@ -6,7 +6,7 @@ import {
 import { Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -165,7 +165,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   title: { fontSize: 20, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 20 },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#1a0000', borderRadius: 8, padding: 10,
+    backgroundColor: colors.muted, borderRadius: 8, padding: 10,
     marginBottom: 16, borderWidth: 1, borderColor: colors.destructive,
   },
   errorText: { fontSize: 13, color: colors.destructive, fontFamily: 'Inter_400Regular', flex: 1 },

@@ -8,18 +8,19 @@ import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
-import { useColors } from '@/hooks/useColors';
+import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
+import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiPost, apiGet } from '@/lib/api';
 
 interface Stats { totalCitizens: number; totalVotes: number; gamesPlayed: number; }
 
 function getRank(xp: number): { label: string; color: string } {
-  if (xp >= 10000) return { label: 'DIAMOND', color: '#00d4ff' };
-  if (xp >= 5000)  return { label: 'PLATINUM', color: '#b0c4de' };
-  if (xp >= 2000)  return { label: 'GOLD', color: '#ffd700' };
-  if (xp >= 500)   return { label: 'SILVER', color: '#c0c0c0' };
-  return { label: 'BRONZE', color: '#cd7f32' };
+  if (xp >= 10000) return { label: 'DIAMOND', color: nativeTheme.colors.dark.chart2 };
+  if (xp >= 5000)  return { label: 'PLATINUM', color: nativeTheme.colors.dark.chart2 };
+  if (xp >= 2000)  return { label: 'GOLD', color: nativeTheme.colors.dark.chart1 };
+  if (xp >= 500)   return { label: 'SILVER', color: nativeTheme.colors.dark.mutedForeground };
+  return { label: 'BRONZE', color: nativeTheme.colors.dark.chart1 };
 }
 
 function StatCard({ label, value, icon, color, colors }: {
@@ -174,10 +175,10 @@ export default function HomeScreen() {
       <Text style={s.sectionTitle}>QUICK ACTIONS</Text>
       <View style={s.actionsGrid}>
         {[
-          { label: 'Play Games', icon: 'game-controller', color: '#ff8c00', route: '/(tabs)/games' },
-          { label: 'Vote', icon: 'star', color: '#ffd700', route: '/(tabs)/globalstar' },
+          { label: 'Play Games', icon: 'game-controller', color: nativeTheme.colors.dark.chart1, route: '/(tabs)/games' },
+          { label: 'Vote', icon: 'star', color: nativeTheme.colors.dark.chart1, route: '/(tabs)/globalstar' },
           { label: 'Leaderboard', icon: 'bar-chart', color: colors.primary, route: '/(tabs)/leaderboard' },
-          { label: 'GDN-AI Chat', icon: 'chatbubble-ellipses', color: '#00ff88', route: '/chat' },
+          { label: 'GDN-AI Chat', icon: 'chatbubble-ellipses', color: nativeTheme.colors.dark.chart3, route: '/chat' },
         ].map(a => (
           <TouchableOpacity
             key={a.label}
@@ -200,7 +201,7 @@ export default function HomeScreen() {
           <View style={s.lbCard}>
             {leaderboard.players.slice(0, 5).map((p, i) => (
               <View key={p.username} style={[s.lbRow, i < 4 && s.lbRowBorder]}>
-                <Text style={[s.lbPos, i === 0 && { color: '#ffd700' }, i === 1 && { color: '#c0c0c0' }, i === 2 && { color: '#cd7f32' }]}>
+                <Text style={[s.lbPos, i === 0 && { color: nativeTheme.colors.dark.chart1 }, i === 1 && { color: nativeTheme.colors.dark.mutedForeground }, i === 2 && { color: nativeTheme.colors.dark.chart1 }]}>
                   {i + 1}
                 </Text>
                 <Text style={s.lbName}>{p.username}</Text>
@@ -240,11 +241,11 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   dailyText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: colors.primaryForeground },
   claimMsgBox: {
-    marginHorizontal: 16, marginBottom: 16, backgroundColor: '#001a0d',
-    borderRadius: 14, paddingVertical: 12, borderWidth: 1, borderColor: '#00ff88',
+    marginHorizontal: 16, marginBottom: 16, backgroundColor: nativeTheme.colors.dark.accent,
+    borderRadius: 14, paddingVertical: 12, borderWidth: 1, borderColor: nativeTheme.colors.dark.chart3,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  claimMsgText: { fontSize: 14, color: '#00ff88', fontFamily: 'Inter_600SemiBold' },
+  claimMsgText: { fontSize: 14, color: nativeTheme.colors.dark.chart3, fontFamily: 'Inter_600SemiBold' },
   banner: {
     marginHorizontal: 16, marginBottom: 24, backgroundColor: colors.accent,
     borderRadius: 16, borderWidth: 1, borderColor: colors.primary + '44',
