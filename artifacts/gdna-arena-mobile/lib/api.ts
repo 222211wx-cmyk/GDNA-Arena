@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 import { assertNetworkOnline } from '@/contexts/OnlineContext';
 
 const SESSION_KEY = 'gdna.session.cookie';
+const CACHED_USER_KEY = 'gdna.auth.user.v1';
 
 export function getApiBase(): string {
   const configured = process.env.EXPO_PUBLIC_API_ORIGIN ?? process.env.EXPO_PUBLIC_DOMAIN;
@@ -47,6 +48,49 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+export async function loadCachedAuthUser(): Promise<AuthUser | null> {
+  if (Platform.OS === 'web') {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+    return null;
+  }
+  const stored = await SecureStore.getItemAsync(CACHED_USER_KEY);
+  if (!stored) return null;
+  try {
+    const parsed = JSON.parse(stored) as Partial<AuthUser>;
+    if (
+      typeof parsed.id !== 'number' ||
+      typeof parsed.username !== 'string' ||
+      typeof parsed.balance !== 'number' ||
+      typeof parsed.xp !== 'number'
+    ) {
+      await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+      return null;
+    }
+    return parsed as AuthUser;
+  } catch {
+    await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+    return null;
+  }
+}
+
+export async function saveCachedAuthUser(user: AuthUser): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+    return;
+  }
+  await SecureStore.setItemAsync(CACHED_USER_KEY, JSON.stringify(user), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+}
+
+export async function clearCachedAuthUser(): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+    return;
+  }
+  await SecureStore.deleteItemAsync(CACHED_USER_KEY);
 }
 
 let sessionCookie: string | null = null;
@@ -185,8 +229,8 @@ export async function apiGet<T>(path: string): Promise<T> {
     credentials: 'include',
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body?.error ?? res.statusText);
+    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string };
+    throw new ApiError(res.status, body.error ?? res.statusText);
   }
   return res.json();
 }

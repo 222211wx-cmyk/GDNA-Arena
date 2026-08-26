@@ -3,12 +3,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   apiPost,
   apiGet,
+  ApiError,
   beginSessionTransition,
+  clearCachedAuthUser,
   clearSessionCookie,
+  loadCachedAuthUser,
   loadSessionCookie,
+  saveCachedAuthUser,
   type AuthUser,
 } from '@/lib/api';
-import { OfflineError } from '@/contexts/OnlineContext';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -33,22 +36,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const generation = ++authGenerationRef.current;
     let cancelled = false;
     (async () => {
-      await loadSessionCookie();
-      // Never render the cached citizen before the server verifies that the
-      // persisted cookie still belongs to that exact account.
+      const [, cachedUser] = await Promise.all([
+        loadSessionCookie(),
+        loadCachedAuthUser(),
+      ]);
+      if (cancelled || generation !== authGenerationRef.current) return;
+      // Native cached identity is encrypted and read-only while offline. It
+      // keeps a valid citizen session usable during a cold airplane-mode launch.
+      if (cachedUser) setUser(cachedUser);
       let fresh: AuthUser | null = null;
-      let offline = false;
+      let verifiedUnauthenticated = false;
       try {
         fresh = await apiGet<AuthUser>('/auth/me');
       } catch (error) {
-        offline = error instanceof OfflineError;
+        verifiedUnauthenticated = error instanceof ApiError && (error.status === 401 || error.status === 403);
       }
       if (cancelled || generation !== authGenerationRef.current) return;
       if (fresh) {
-        if (!cancelled && generation === authGenerationRef.current) setUser(fresh);
-      } else if (!offline) {
+        setUser(fresh);
+        await saveCachedAuthUser(fresh);
+      } else if (verifiedUnauthenticated) {
         setUser(null);
-        await clearSessionCookie();
+        await Promise.all([clearSessionCookie(), clearCachedAuthUser()]);
       }
       if (!cancelled && generation === authGenerationRef.current) setIsLoading(false);
     })();
@@ -68,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     const data = await apiPost<AuthUser>('/auth/login', { username, password });
     if (generation !== authGenerationRef.current) return;
+    await saveCachedAuthUser(data);
     if (generation === authGenerationRef.current) setUser(data);
   };
 
@@ -79,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     const data = await apiPost<AuthUser>('/auth/register', { username, password, birthDate });
     if (generation !== authGenerationRef.current) return;
+    await saveCachedAuthUser(data);
     if (generation === authGenerationRef.current) setUser(data);
   };
 
@@ -97,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Clear the local copy immediately after starting the server-side logout,
     // so this device cannot reuse it even if the network request fails.
     const serverLogout = apiPost('/auth/logout');
-    await clearSessionCookie();
+    await Promise.all([clearSessionCookie(), clearCachedAuthUser()]);
     await serverLogout;
   };
 
@@ -105,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const generation = authGenerationRef.current;
     const fresh = await apiGet<AuthUser>('/auth/me').catch(() => null);
     if (fresh && generation === authGenerationRef.current) {
+      await saveCachedAuthUser(fresh);
       if (generation === authGenerationRef.current) setUser(fresh);
     }
   };
@@ -113,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const updated = { ...user, balance: newBalance };
     setUser(updated);
+    void saveCachedAuthUser(updated);
   };
 
   return (
