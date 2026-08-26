@@ -27,7 +27,6 @@ args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 [services.production.run.env]
 PORT = "8080"
 NODE_ENV = "production"
-AGORA_APP_ID = "62585b9b53c44c47baa7600ee5d74e54"
 
 [services.production.health.startup]
 path = "/api/healthz"

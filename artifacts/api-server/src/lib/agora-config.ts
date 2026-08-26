@@ -18,15 +18,21 @@ export interface AgoraConfigStatus {
  * Replit injects production secrets into process.env; avoiding a module-level
  * snapshot means token requests never use a value captured before injection.
  */
-export function readAgoraServerConfig(): AgoraServerConfig | null {
-  const appId = process.env.AGORA_APP_ID?.trim() ?? "";
-  const certificate = process.env.AGORA_APP_CERTIFICATE?.trim() ?? "";
+export function readAgoraServerConfig(): AgoraServerConfig {
+  const appId = process.env.AGORA_APP_ID;
+  const appCertificate = process.env.AGORA_APP_CERTIFICATE;
 
-  if (!AGORA_HEX_ID.test(appId) || !AGORA_HEX_ID.test(certificate)) {
-    return null;
+  if (!appId || !appCertificate) {
+    throw new Error("Agora secrets missing");
   }
 
-  return { appId, certificate };
+  const normalizedAppId = appId.trim();
+  const normalizedCertificate = appCertificate.trim();
+  if (!AGORA_HEX_ID.test(normalizedAppId) || !AGORA_HEX_ID.test(normalizedCertificate)) {
+    throw new Error("Agora secrets invalid");
+  }
+
+  return { appId: normalizedAppId, certificate: normalizedCertificate };
 }
 
 export function getAgoraConfigStatus(): AgoraConfigStatus {

@@ -17,7 +17,6 @@ const TOKEN_TTL_SEC = 60 * 60; // 1h — longer than any realistic call setup + 
 
 function issueAgoraCredentials(channel: string, userId: number) {
   const config = readAgoraServerConfig();
-  if (!config) return null;
 
   const token = RtcTokenBuilder.buildTokenWithUid(
     config.appId,
@@ -41,15 +40,15 @@ router.get("/rtc/preflight-token", (req, res): void => {
   }
 
   const channel = `preflight_${randomUUID().replace(/-/g, "")}`;
-  const credentials = issueAgoraCredentials(channel, req.session.userId);
-  if (!credentials) {
+  try {
+    const credentials = issueAgoraCredentials(channel, req.session.userId);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ channel, ...credentials });
+  } catch (error) {
     req.log.warn(getAgoraConfigStatus(), "Agora token request arrived before configuration was ready");
     res.setHeader("Retry-After", "2");
     res.status(503).json({ error: "Secure call service is starting; retry shortly" });
-    return;
   }
-  res.setHeader("Cache-Control", "no-store");
-  res.json({ channel, ...credentials });
 });
 
 router.get("/rtc/agora-token", (req, res): void => {
@@ -73,14 +72,14 @@ router.get("/rtc/agora-token", (req, res): void => {
     return;
   }
 
-  const credentials = issueAgoraCredentials(channel, req.session.userId);
-  if (!credentials) {
+  try {
+    const credentials = issueAgoraCredentials(channel, req.session.userId);
+    res.json(credentials);
+  } catch (error) {
     req.log.warn(getAgoraConfigStatus(), "Agora token request arrived before configuration was ready");
     res.setHeader("Retry-After", "2");
     res.status(503).json({ error: "Secure call service is starting; retry shortly" });
-    return;
   }
-  res.json(credentials);
 });
 
 export default router;
