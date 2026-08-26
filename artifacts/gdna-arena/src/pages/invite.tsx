@@ -23,19 +23,19 @@ const MESSAGES: Record<string, Record<string, string>> = {
   ar: {
     general: `السلام عليكم ورحمة الله وبركاته،
 
-بكل شرف وتقدير، يسعدنا دعوتكم رسمياً إلى **GDNA Arena** — منصة الإمبراطورية الرقمية التي تجمع أعظم الأسماء في العالم.
+بكل شرف وتقدير، يسعدنا دعوتكم رسمياً إلى **Arena Qaisypro** — منصة الإمبراطورية الرقمية التي تجمع أعظم الأسماء في العالم.
 
-GDNA Arena هي الفضاء الرقمي الأول من نوعه، تجمع الرياضة والموسيقى والسينما والتراث والعلوم في ساحة واحدة. مكانكم بين الكبار محجوز — لأن الأساطير الحقيقية تستحق منصة على مستواها.
+Arena Qaisypro هي الفضاء الرقمي الأول من نوعه، تجمع الرياضة والموسيقى والسينما والتراث والعلوم في ساحة واحدة. مكانكم بين الكبار محجوز — لأن الأساطير الحقيقية تستحق منصة على مستواها.
 
 انضموا إلينا اليوم:
 🔗 ${SITE_URL}
 
 بالغ التقدير والاحترام،
-فريق GDNA Arena 🏛️`,
+فريق Arena Qaisypro 🏛️`,
 
     sport: `السلام عليكم ورحمة الله،
 
-يشرّفنا أن نُقدّم لكم **GDNA Arena** — المنصة الرقمية الإمبراطورية التي تعترف بعظمة الرياضيين البارزين وتُخلّد إرثهم.
+يشرّفنا أن نُقدّم لكم **Arena Qaisypro** — المنصة الرقمية الإمبراطورية التي تعترف بعظمة الرياضيين البارزين وتُخلّد إرثهم.
 
 في GlobalStar، يُصوّت ملايين المشجعين لأعظم الرياضيين في التاريخ — وصوتكم يستحق أن يُسمع. منصة صُمّمت لتكون سجلاً أبدياً لإنجازاتكم أمام العالم.
 
@@ -43,23 +43,23 @@ GDNA Arena هي الفضاء الرقمي الأول من نوعه، تجمع ا
 🔗 ${SITE_URL}
 
 مع خالص التقدير،
-فريق GDNA Arena ⚽🏆`,
+فريق Arena Qaisypro ⚽🏆`,
 
     music: `السلام عليكم ورحمة الله،
 
-تتشرف **GDNA Arena** بدعوتكم رسمياً — منصة الإمبراطورية الرقمية حيث تُصنع الأساطير الموسيقية.
+تتشرف **Arena Qaisypro** بدعوتكم رسمياً — منصة الإمبراطورية الرقمية حيث تُصنع الأساطير الموسيقية.
 
-الموسيقى هي روح الحضارات، وأنتم من خيرة من يحملون هذه الأمانة. في GDNA Arena، يلتقي عشرات الآلاف من محبي الموسيقى، يُصوّتون ويناقشون ويُكرّمون الأصوات الفريدة التي صنعت التاريخ.
+الموسيقى هي روح الحضارات، وأنتم من خيرة من يحملون هذه الأمانة. في Arena Qaisypro، يلتقي عشرات الآلاف من محبي الموسيقى، يُصوّتون ويناقشون ويُكرّمون الأصوات الفريدة التي صنعت التاريخ.
 
 اكتشفوا مكانكم في الإمبراطورية:
 🔗 ${SITE_URL}
 
 بكل محبة وتقدير،
-فريق GDNA Arena 🎵🎤`,
+فريق Arena Qaisypro 🎵🎤`,
 
     cinema: `السلام عليكم ورحمة الله،
 
-بكل فخر، تدعوكم **GDNA Arena** — منصة الإمبراطورية الرقمية التي تُكرّم عمالقة السينما العالمية.
+بكل فخر، تدعوكم **Arena Qaisypro** — منصة الإمبراطورية الرقمية التي تُكرّم عمالقة السينما العالمية.
 
 في ساحة Legends، تتصدر أسماء الأعظم من صنعوا تاريخ الفن السابع — وإرثكم يستحق مكاناً في هذه القاعة المُشرّفة. الملايين من عشّاق السينما ينتظرون التصويت لكم.
 
@@ -67,73 +67,73 @@ GDNA Arena هي الفضاء الرقمي الأول من نوعه، تجمع ا
 🔗 ${SITE_URL}
 
 بتقدير وإعجاب بالغَين،
-فريق GDNA Arena 🎬🎭`,
+فريق Arena Qaisypro 🎬🎭`,
 
     business: `السلام عليكم ورحمة الله،
 
-يُسعد **GDNA Arena** دعوتكم رسمياً — المنصة الرقمية التي تُكرّم أصحاب الرؤى والعقول الاقتصادية الكبرى.
+يُسعد **Arena Qaisypro** دعوتكم رسمياً — المنصة الرقمية التي تُكرّم أصحاب الرؤى والعقول الاقتصادية الكبرى.
 
-نجاحاتكم وإرثكم في عالم الأعمال هو مصدر إلهام لملايين الطامحين. GDNA Arena تمنحكم منصة عالمية لتترك أثركم الرقمي بجانب كبار القادة والرواد في التاريخ.
+نجاحاتكم وإرثكم في عالم الأعمال هو مصدر إلهام لملايين الطامحين. Arena Qaisypro تمنحكم منصة عالمية لتترك أثركم الرقمي بجانب كبار القادة والرواد في التاريخ.
 
 انضموا إلى نخبة الإمبراطورية:
 🔗 ${SITE_URL}
 
 مع فائق الاحترام والتقدير،
-فريق GDNA Arena 💼📈`,
+فريق Arena Qaisypro 💼📈`,
 
     science: `السلام عليكم ورحمة الله،
 
-بكل تقدير واحترام، تدعوكم **GDNA Arena** — منصة الإمبراطورية الرقمية التي تُعلي من قيمة العلم والعلماء.
+بكل تقدير واحترام، تدعوكم **Arena Qaisypro** — منصة الإمبراطورية الرقمية التي تُعلي من قيمة العلم والعلماء.
 
-العقول العلمية هي من تبني الحضارات وتغيّر مسار التاريخ. في GDNA Arena، يلتقي مجتمع من المفكرين والمعرفيين يُقدّر إسهاماتكم ويتابع مسيرتكم العلمية باهتمام بالغ.
+العقول العلمية هي من تبني الحضارات وتغيّر مسار التاريخ. في Arena Qaisypro، يلتقي مجتمع من المفكرين والمعرفيين يُقدّر إسهاماتكم ويتابع مسيرتكم العلمية باهتمام بالغ.
 
 اكتشفوا دوركم في الإمبراطورية:
 🔗 ${SITE_URL}
 
 بأسمى عبارات التقدير والاحترام،
-فريق GDNA Arena 🔬🧬`,
+فريق Arena Qaisypro 🔬🧬`,
 
     art: `السلام عليكم ورحمة الله،
 
-تتشرف **GDNA Arena** بتوجيه هذه الدعوة الشرفية إليكم — منصة الإمبراطورية الرقمية التي تُقدّس الإبداع والفن الأصيل.
+تتشرف **Arena Qaisypro** بتوجيه هذه الدعوة الشرفية إليكم — منصة الإمبراطورية الرقمية التي تُقدّس الإبداع والفن الأصيل.
 
-الفن هو الروح الخالدة للإنسانية، وأنتم من حاملي هذه الأمانة العظيمة. إبداعاتكم تستحق أن تُرى وتُقدَّر من ملايين العشّاق على GDNA Arena.
+الفن هو الروح الخالدة للإنسانية، وأنتم من حاملي هذه الأمانة العظيمة. إبداعاتكم تستحق أن تُرى وتُقدَّر من ملايين العشّاق على Arena Qaisypro.
 
 مكانكم بين عظماء الفن:
 🔗 ${SITE_URL}
 
 بإعجاب وتقدير لا حدود لهما،
-فريق GDNA Arena 🎨✨`,
+فريق Arena Qaisypro 🎨✨`,
 
     tech: `السلام عليكم ورحمة الله،
 
-يُقدّم لكم **GDNA Arena** دعوته الرسمية — المنصة الإمبراطورية الرقمية المبنية على أسس التكنولوجيا والابتكار.
+يُقدّم لكم **Arena Qaisypro** دعوته الرسمية — المنصة الإمبراطورية الرقمية المبنية على أسس التكنولوجيا والابتكار.
 
-العقول التكنولوجية هي من تصنع عالم الغد، وإسهاماتكم في هذا المجال تُلهم الأجيال. GDNA Arena تجمع مجتمعاً تقنياً متميزاً يُقدّر الرؤى الثاقبة والأفكار الخلاّقة.
+العقول التكنولوجية هي من تصنع عالم الغد، وإسهاماتكم في هذا المجال تُلهم الأجيال. Arena Qaisypro تجمع مجتمعاً تقنياً متميزاً يُقدّر الرؤى الثاقبة والأفكار الخلاّقة.
 
 اكتشفوا الإمبراطورية الرقمية:
 🔗 ${SITE_URL}
 
 بتقدير وإكبار،
-فريق GDNA Arena 💡🚀`,
+فريق Arena Qaisypro 💡🚀`,
   },
 
   fr: {
     general: `Madame, Monsieur,
 
-C'est avec un immense honneur que nous vous invitons officiellement à rejoindre **GDNA Arena** — la plateforme impériale numérique qui rassemble les plus grandes personnalités du monde.
+C'est avec un immense honneur que nous vous invitons officiellement à rejoindre **Arena Qaisypro** — la plateforme impériale numérique qui rassemble les plus grandes personnalités du monde.
 
-GDNA Arena est le premier espace numérique de son genre, réunissant sport, musique, cinéma, patrimoine et science dans une seule arène. Votre place parmi les grands vous attend — car les véritables légendes méritent une plateforme à la hauteur de leur stature.
+Arena Qaisypro est le premier espace numérique de son genre, réunissant sport, musique, cinéma, patrimoine et science dans une seule arène. Votre place parmi les grands vous attend — car les véritables légendes méritent une plateforme à la hauteur de leur stature.
 
 Rejoignez-nous aujourd'hui :
 🔗 ${SITE_URL}
 
 Avec nos plus sincères respects,
-L'équipe GDNA Arena 🏛️`,
+L'équipe Arena Qaisypro 🏛️`,
 
     sport: `Madame, Monsieur,
 
-C'est un privilège pour **GDNA Arena** de vous adresser cette invitation officielle — la plateforme impériale qui honore les plus grands sportifs et perpétue leur héritage.
+C'est un privilège pour **Arena Qaisypro** de vous adresser cette invitation officielle — la plateforme impériale qui honore les plus grands sportifs et perpétue leur héritage.
 
 Dans GlobalStar, des millions de fans votent pour les champions qui ont marqué l'histoire du sport. Votre palmarès exceptionnel mérite d'être reconnu et célébré à l'échelle mondiale.
 
@@ -141,23 +141,23 @@ Votre place parmi les légendes :
 🔗 ${SITE_URL}
 
 Avec nos plus vifs respects,
-L'équipe GDNA Arena ⚽🏆`,
+L'équipe Arena Qaisypro ⚽🏆`,
 
     music: `Madame, Monsieur,
 
-**GDNA Arena** a le grand honneur de vous adresser cette invitation officielle — la plateforme impériale où les légendes musicales sont célébrées comme elles le méritent.
+**Arena Qaisypro** a le grand honneur de vous adresser cette invitation officielle — la plateforme impériale où les légendes musicales sont célébrées comme elles le méritent.
 
-La musique est l'âme des civilisations, et vous êtes parmi ceux qui portent cet héritage avec excellence. Des milliers de passionnés vous attendent sur GDNA Arena pour vous rendre l'hommage qui vous est dû.
+La musique est l'âme des civilisations, et vous êtes parmi ceux qui portent cet héritage avec excellence. Des milliers de passionnés vous attendent sur Arena Qaisypro pour vous rendre l'hommage qui vous est dû.
 
 Découvrez votre place dans l'Empire :
 🔗 ${SITE_URL}
 
 Avec toute notre admiration,
-L'équipe GDNA Arena 🎵🎤`,
+L'équipe Arena Qaisypro 🎵🎤`,
 
     cinema: `Madame, Monsieur,
 
-C'est avec fierté que **GDNA Arena** vous convie officiellement — la plateforme impériale qui honore les géants du septième art mondial.
+C'est avec fierté que **Arena Qaisypro** vous convie officiellement — la plateforme impériale qui honore les géants du septième art mondial.
 
 Dans notre Hall of Legends, les plus grands noms du cinéma sont célébrés et débattus par une communauté passionnée. Votre œuvre et votre vision artistique méritent une reconnaissance à l'échelle de votre talent.
 
@@ -165,73 +165,73 @@ Rejoignez les légendes du cinéma :
 🔗 ${SITE_URL}
 
 Avec toute notre admiration et notre respect,
-L'équipe GDNA Arena 🎬🎭`,
+L'équipe Arena Qaisypro 🎬🎭`,
 
     business: `Madame, Monsieur,
 
-**GDNA Arena** a l'honneur de vous adresser cette invitation officielle — la plateforme impériale qui célèbre les grandes figures du monde des affaires et de l'économie.
+**Arena Qaisypro** a l'honneur de vous adresser cette invitation officielle — la plateforme impériale qui célèbre les grandes figures du monde des affaires et de l'économie.
 
-Votre parcours exceptionnel et vos réalisations sont une source d'inspiration pour des millions d'entrepreneurs. GDNA Arena vous offre une tribune mondiale pour marquer votre empreinte numérique aux côtés des plus grands leaders de l'histoire.
+Votre parcours exceptionnel et vos réalisations sont une source d'inspiration pour des millions d'entrepreneurs. Arena Qaisypro vous offre une tribune mondiale pour marquer votre empreinte numérique aux côtés des plus grands leaders de l'histoire.
 
 Rejoignez l'élite de l'Empire :
 🔗 ${SITE_URL}
 
 Avec nos plus respectueuses salutations,
-L'équipe GDNA Arena 💼📈`,
+L'équipe Arena Qaisypro 💼📈`,
 
     science: `Madame, Monsieur,
 
-C'est avec le plus grand respect que **GDNA Arena** vous adresse cette invitation officielle — la plateforme impériale qui valorise la science et les grandes découvertes humaines.
+C'est avec le plus grand respect que **Arena Qaisypro** vous adresse cette invitation officielle — la plateforme impériale qui valorise la science et les grandes découvertes humaines.
 
-Les esprits scientifiques bâtissent les civilisations et orientent le cours de l'histoire. Sur GDNA Arena, une communauté de penseurs et d'intellectuels suit votre parcours avec admiration et intérêt.
+Les esprits scientifiques bâtissent les civilisations et orientent le cours de l'histoire. Sur Arena Qaisypro, une communauté de penseurs et d'intellectuels suit votre parcours avec admiration et intérêt.
 
 Découvrez votre rôle dans l'Empire :
 🔗 ${SITE_URL}
 
 Avec nos plus profondes marques d'estime,
-L'équipe GDNA Arena 🔬🧬`,
+L'équipe Arena Qaisypro 🔬🧬`,
 
     art: `Madame, Monsieur,
 
-**GDNA Arena** a le grand honneur de vous adresser cette invitation officielle — la plateforme impériale qui vénère la créativité et l'art authentique.
+**Arena Qaisypro** a le grand honneur de vous adresser cette invitation officielle — la plateforme impériale qui vénère la créativité et l'art authentique.
 
-L'art est l'âme immortelle de l'humanité, et vous êtes parmi ceux qui portent cet héritage précieux. Vos œuvres méritent d'être découvertes et admirées par des millions d'amateurs sur GDNA Arena.
+L'art est l'âme immortelle de l'humanité, et vous êtes parmi ceux qui portent cet héritage précieux. Vos œuvres méritent d'être découvertes et admirées par des millions d'amateurs sur Arena Qaisypro.
 
 Votre place parmi les grands artistes :
 🔗 ${SITE_URL}
 
 Avec une admiration sans bornes,
-L'équipe GDNA Arena 🎨✨`,
+L'équipe Arena Qaisypro 🎨✨`,
 
     tech: `Madame, Monsieur,
 
-**GDNA Arena** vous adresse cette invitation officielle — la plateforme impériale numérique construite sur les fondements de la technologie et de l'innovation.
+**Arena Qaisypro** vous adresse cette invitation officielle — la plateforme impériale numérique construite sur les fondements de la technologie et de l'innovation.
 
-Les esprits technologiques façonnent le monde de demain, et vos contributions inspirent des générations entières. GDNA Arena rassemble une communauté tech d'élite qui valorise les visions audacieuses et les idées révolutionnaires.
+Les esprits technologiques façonnent le monde de demain, et vos contributions inspirent des générations entières. Arena Qaisypro rassemble une communauté tech d'élite qui valorise les visions audacieuses et les idées révolutionnaires.
 
 Découvrez l'Empire numérique :
 🔗 ${SITE_URL}
 
 Avec tout notre respect et notre admiration,
-L'équipe GDNA Arena 💡🚀`,
+L'équipe Arena Qaisypro 💡🚀`,
   },
 
   en: {
     general: `Dear [Name],
 
-It is with great honor that we officially invite you to **GDNA Arena** — the digital imperial platform that unites the world's greatest figures across every field.
+It is with great honor that we officially invite you to **Arena Qaisypro** — the digital imperial platform that unites the world's greatest figures across every field.
 
-GDNA Arena is a first-of-its-kind digital space, bringing together sport, music, cinema, heritage, and science into one grand arena. Your place among the greats is reserved — because true legends deserve a platform worthy of their legacy.
+Arena Qaisypro is a first-of-its-kind digital space, bringing together sport, music, cinema, heritage, and science into one grand arena. Your place among the greats is reserved — because true legends deserve a platform worthy of their legacy.
 
 Join us today:
 🔗 ${SITE_URL}
 
 With the highest regards,
-The GDNA Arena Team 🏛️`,
+The Arena Qaisypro Team 🏛️`,
 
     sport: `Dear [Name],
 
-It is our privilege to extend this official invitation to you from **GDNA Arena** — the imperial digital platform that recognizes and immortalizes the legacy of the world's greatest athletes.
+It is our privilege to extend this official invitation to you from **Arena Qaisypro** — the imperial digital platform that recognizes and immortalizes the legacy of the world's greatest athletes.
 
 In GlobalStar, millions of fans vote for the champions who shaped sporting history — and your name deserves to stand among the immortals. A platform built to honor your achievements before the entire world.
 
@@ -239,23 +239,23 @@ Claim your place among the legends:
 🔗 ${SITE_URL}
 
 With the deepest respect and admiration,
-The GDNA Arena Team ⚽🏆`,
+The Arena Qaisypro Team ⚽🏆`,
 
     music: `Dear [Name],
 
-**GDNA Arena** is honored to extend this official invitation — the imperial platform where musical legends are celebrated as they truly deserve.
+**Arena Qaisypro** is honored to extend this official invitation — the imperial platform where musical legends are celebrated as they truly deserve.
 
-Music is the soul of civilizations, and you are among those who carry this extraordinary torch. Thousands of passionate music lovers await you on GDNA Arena to pay the tribute your artistry deserves.
+Music is the soul of civilizations, and you are among those who carry this extraordinary torch. Thousands of passionate music lovers await you on Arena Qaisypro to pay the tribute your artistry deserves.
 
 Discover your place in the Empire:
 🔗 ${SITE_URL}
 
 With deepest admiration,
-The GDNA Arena Team 🎵🎤`,
+The Arena Qaisypro Team 🎵🎤`,
 
     cinema: `Dear [Name],
 
-It is with immense pride that **GDNA Arena** invites you officially — the imperial platform honoring the giants of world cinema.
+It is with immense pride that **Arena Qaisypro** invites you officially — the imperial platform honoring the giants of world cinema.
 
 In our Legends Hall, the greatest names in film history are celebrated and debated by a passionate community. Your body of work and artistic vision deserve recognition on a global scale.
 
@@ -263,55 +263,55 @@ Join the legends of cinema:
 🔗 ${SITE_URL}
 
 With the utmost admiration and respect,
-The GDNA Arena Team 🎬🎭`,
+The Arena Qaisypro Team 🎬🎭`,
 
     business: `Dear [Name],
 
-**GDNA Arena** is honored to extend this official invitation — the imperial platform celebrating the great figures of global business and economic leadership.
+**Arena Qaisypro** is honored to extend this official invitation — the imperial platform celebrating the great figures of global business and economic leadership.
 
-Your extraordinary journey and achievements are an inspiration to millions of aspiring leaders worldwide. GDNA Arena offers you a global stage to leave your digital imprint alongside history's greatest minds.
+Your extraordinary journey and achievements are an inspiration to millions of aspiring leaders worldwide. Arena Qaisypro offers you a global stage to leave your digital imprint alongside history's greatest minds.
 
 Join the Empire's elite:
 🔗 ${SITE_URL}
 
 With the highest professional regards,
-The GDNA Arena Team 💼📈`,
+The Arena Qaisypro Team 💼📈`,
 
     science: `Dear [Name],
 
-It is with the deepest respect that **GDNA Arena** addresses this official invitation — the imperial platform that elevates science and celebrates humanity's greatest discoveries.
+It is with the deepest respect that **Arena Qaisypro** addresses this official invitation — the imperial platform that elevates science and celebrates humanity's greatest discoveries.
 
-Scientific minds build civilizations and shape the course of history. On GDNA Arena, a community of thinkers and intellectuals follows your journey with profound admiration.
+Scientific minds build civilizations and shape the course of history. On Arena Qaisypro, a community of thinkers and intellectuals follows your journey with profound admiration.
 
 Discover your role in the Empire:
 🔗 ${SITE_URL}
 
 With our highest esteem,
-The GDNA Arena Team 🔬🧬`,
+The Arena Qaisypro Team 🔬🧬`,
 
     art: `Dear [Name],
 
-**GDNA Arena** has the great honor of extending this official invitation — the imperial platform that venerates creativity and authentic artistic expression.
+**Arena Qaisypro** has the great honor of extending this official invitation — the imperial platform that venerates creativity and authentic artistic expression.
 
-Art is the immortal soul of humanity, and you are among those who carry this precious legacy. Your work deserves to be seen and celebrated by millions of admirers on GDNA Arena.
+Art is the immortal soul of humanity, and you are among those who carry this precious legacy. Your work deserves to be seen and celebrated by millions of admirers on Arena Qaisypro.
 
 Your place among the great artists:
 🔗 ${SITE_URL}
 
 With boundless admiration,
-The GDNA Arena Team 🎨✨`,
+The Arena Qaisypro Team 🎨✨`,
 
     tech: `Dear [Name],
 
-**GDNA Arena** extends this official invitation — the imperial digital platform built on the foundations of technology and innovation.
+**Arena Qaisypro** extends this official invitation — the imperial digital platform built on the foundations of technology and innovation.
 
-Technological visionaries shape the world of tomorrow, and your contributions inspire entire generations. GDNA Arena brings together an elite tech community that values bold visions and revolutionary ideas.
+Technological visionaries shape the world of tomorrow, and your contributions inspire entire generations. Arena Qaisypro brings together an elite tech community that values bold visions and revolutionary ideas.
 
 Discover the digital Empire:
 🔗 ${SITE_URL}
 
 With our deepest respect and admiration,
-The GDNA Arena Team 💡🚀`,
+The Arena Qaisypro Team 💡🚀`,
   },
 };
 
@@ -351,7 +351,7 @@ export default function InvitePage() {
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             className="text-3xl md:text-5xl font-black uppercase tracking-tight mb-3"
             style={{ color: "#C9A84C" }}>
-            GDNA ARENA
+            ARENA QAISYPRO
           </motion.h1>
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
             className="text-sm font-mono uppercase tracking-[0.4em] mb-2"
@@ -440,7 +440,7 @@ export default function InvitePage() {
                   مرسوم شرفي رسمي · Décret Honorifique Officiel · Official Honorary Decree
                 </div>
                 <div className="text-sm font-black" style={{ color: "#C9A84C" }}>
-                  GDNA ARENA — {lang === "ar" ? selectedField.label : lang === "fr" ? selectedField.fr : selectedField.en}
+                  ARENA QAISYPRO — {lang === "ar" ? selectedField.label : lang === "fr" ? selectedField.fr : selectedField.en}
                 </div>
               </div>
               <div className="ml-auto text-xs font-mono px-2 py-0.5"
@@ -472,7 +472,7 @@ export default function InvitePage() {
               <div className="flex items-center gap-2">
                 <div className="text-xl">♔</div>
                 <div>
-                  <div className="text-xs font-black uppercase tracking-widest" style={{ color: "#C9A84C" }}>GDNA ARENA</div>
+                  <div className="text-xs font-black uppercase tracking-widest" style={{ color: "#C9A84C" }}>ARENA QAISYPRO</div>
                   <div className="text-[10px] font-mono" style={{ color: "#C9A84C40" }}>{SITE_SHORT}</div>
                 </div>
               </div>

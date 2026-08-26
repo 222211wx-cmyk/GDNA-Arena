@@ -66,6 +66,8 @@ import { GdnAiFloating } from "@/components/GdnAiTerminal";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import CinemaPage   from "@/pages/cinema";
 import AdminRevenuePage from "@/pages/admin-revenue";
+import FinanceOnboarding from "@/pages/finance-onboarding";
+import AdminFinance from "@/pages/admin-finance";
 
 const queryClient = new QueryClient();
 
@@ -135,7 +137,9 @@ function PageWrapper() {
           <Route path="/leaderboard" component={Leaderboard} />
           <Route path="/chat" component={ChatPage} />
           <Route path="/wallet" component={Wallet} />
+          <Route path="/finance/onboarding" component={FinanceOnboarding} />
           <Route path="/admin/revenue" component={AdminRevenuePage} />
+          <Route path="/admin/finance" component={AdminFinance} />
           <Route component={NotFound} />
         </Switch>
       </ErrorBoundary>

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/components/social/social-i18n";
 
 const EMPLOYEE_NAME = "Ameeq AI";
-const OWNER = "GDNA Arena";
+const OWNER = "Arena Qaisypro";
 const EMPLOYEE_ID = "EMP-001";
 
 type Msg = {

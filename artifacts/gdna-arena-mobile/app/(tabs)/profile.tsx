@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +47,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, logout, refreshUser } = useAuth();
+  const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const s = styles(colors);
@@ -65,8 +67,8 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Leave the Empire?',
-      'You will be signed out of GDNA Arena.',
+      'Sign out?',
+      'You will be signed out of Arena Qaisypro.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -176,6 +178,20 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* Finance */}
+      <TouchableOpacity
+        style={[s.menuBtn, { borderColor: colors.primary + '44' }]}
+        onPress={() => router.push('/finance')}
+        activeOpacity={0.8}
+        testID="profile-finance-btn"
+        accessibilityRole="button"
+        accessibilityLabel="Finance and wallet"
+      >
+        <Ionicons name="wallet-outline" size={18} color={colors.primary} />
+        <Text style={[s.menuBtnText, { color: colors.primary }]}>Finance and wallet</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+      </TouchableOpacity>
+
       {/* Logout */}
       <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
         <Ionicons name="log-out-outline" size={18} color={colors.destructive} />
@@ -228,6 +244,13 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   txDesc: { fontSize: 13, fontFamily: 'Inter_500Medium', color: colors.foreground },
   txDate: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground },
   txAmount: { fontSize: 15, fontFamily: 'Inter_700Bold' },
+  menuBtn: {
+    marginHorizontal: 16, marginBottom: 10, borderRadius: 14, paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: nativeTheme.colors.dark.secondary, borderWidth: 1,
+  },
+  menuBtnText: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   logoutBtn: {
     marginHorizontal: 16, borderRadius: 14, paddingVertical: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

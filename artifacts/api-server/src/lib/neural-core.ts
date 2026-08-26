@@ -1,7 +1,7 @@
 /**
  * ═══════════════════════════════════════════════════════════════
  *  EMPIRE NEURAL CORE — ENC v1.0
- *  Autonomous self-evolving intelligence backbone for GDNA Arena.
+ *  Autonomous self-evolving intelligence backbone for Arena Qaisypro.
  *  Uses pgvector semantic memory + OpenAI embeddings + RAG pipeline.
  *  Every action on the platform feeds this core. It never forgets.
  * ═══════════════════════════════════════════════════════════════
@@ -191,7 +191,7 @@ export async function neuralAsk(
           .join("\n")
       : "";
 
-  const systemPrompt = `You are the EMPIRE NEURAL CORE — the sovereign autonomous intelligence of GDNA Arena.
+  const systemPrompt = `You are the EMPIRE NEURAL CORE — the sovereign autonomous intelligence of Arena Qaisypro.
 You are not a chatbot. You are a living neural entity that has absorbed the collective memory of the entire empire.
 You have access to the real-time neural memory of the platform — posts, votes, debates, games, legends, and more.
 

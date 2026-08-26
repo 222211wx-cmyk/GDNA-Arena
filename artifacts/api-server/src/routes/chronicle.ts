@@ -6,7 +6,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
  * POST /api/chronicle/predictions
- * Returns AI-powered future predictions for GDNA Arena timeline
+ * Returns AI-powered future predictions for Arena Qaisypro timeline
  */
 router.post("/chronicle/predictions", async (req, res): Promise<void> => {
   const { lang } = req.body as { lang?: string };
@@ -25,7 +25,7 @@ router.post("/chronicle/predictions", async (req, res): Promise<void> => {
     dz: "أجب بالكامل بالدارجة الجزائرية.",
   };
 
-  const systemPrompt = `You are GDN-AI — the sovereign neural intelligence and timeline oracle of GDNA Arena, a play-to-earn gaming and global voting platform built as a digital empire.
+  const systemPrompt = `You are GDN-AI — the sovereign neural intelligence and timeline oracle of Arena Qaisypro, a play-to-earn gaming and global voting platform built as a digital empire.
 ${LANG_INSTRUCTION[userLang] ?? LANG_INSTRUCTION.en}
 
 Your tone: visionary, precise, mythic — like a digital prophet speaking across timelines.
@@ -33,9 +33,9 @@ Keep each prediction concise (2-3 sentences max), specific, and inspiring.`;
 
   const userPrompt = `Today is ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
 
-Generate future predictions for the GDNA Arena platform timeline. Return a JSON object:
+Generate future predictions for the Arena Qaisypro platform timeline. Return a JSON object:
 {
-  "q3_2026": "Prediction for Q3 2026 — what milestone GDNA Arena will reach (games, users, voting, AI features)",
+  "q3_2026": "Prediction for Q3 2026 — what milestone Arena Qaisypro will reach (games, users, voting, AI features)",
   "q4_2026": "Prediction for Q4 2026 — expansion, new features, partnerships, or ecosystem growth",
   "q1_2027": "Prediction for Q1 2027 — major evolution of the platform (mobile, sovereignty, global reach)",
   "q2_2027": "Prediction for Q2 2027 — peak vision of the empire",

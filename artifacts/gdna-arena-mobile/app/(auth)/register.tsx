@@ -59,8 +59,8 @@ export default function RegisterScreen() {
             <Text style={s.logoG}>G</Text>
           </View>
         </View>
-        <Text style={s.brand}>JOIN THE EMPIRE</Text>
-        <Text style={s.tagline}>Become a citizen of GDNA Arena</Text>
+        <Text style={s.brand}>JOIN ARENA QAISYPRO</Text>
+        <Text style={s.tagline}>Become a citizen of Arena Qaisypro</Text>
 
         <View style={s.card}>
           <Text style={s.title}>Create Account</Text>
@@ -77,7 +77,7 @@ export default function RegisterScreen() {
             style={s.input}
             value={username}
             onChangeText={setUsername}
-            placeholder="YourEmpireName"
+            placeholder="Your citizen name"
             placeholderTextColor={colors.mutedForeground}
             autoCapitalize="none"
             autoCorrect={false}

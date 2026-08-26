@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  useCall — Agora RTC calls + WebSocket signaling for GDNA Arena
+//  useCall — Agora RTC calls + WebSocket signaling for Arena Qaisypro
 //  Media rides Agora's global relay network (works on strict NATs/firewalls).
 //  The WS layer keeps ring / accept / reject / end + presence + notifications.
 // ══════════════════════════════════════════════════════════════════════════════

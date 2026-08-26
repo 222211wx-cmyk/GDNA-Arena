@@ -49,20 +49,20 @@ function getRestriction(code: string): { restriction: Restriction; message: stri
   if (BLOCKED.has(uc)) {
     return {
       restriction: "blocked",
-      message: "GDNA Arena is not available in your country due to international regulations or sanctions.",
+      message: "Arena Qaisypro is not available in your country due to international regulations or sanctions.",
       laws: ["OFAC Sanctions", "Local Digital Content Law"],
     };
   }
   if (RESTRICTED.has(uc)) {
     return {
       restriction: "restricted",
-      message: "GDNA Arena is available in your country with regulatory restrictions. Virtual coins have no monetary value.",
+      message: "Arena Qaisypro is available in your country with regulatory restrictions. Virtual coins have no monetary value.",
       laws: ["Local Gaming Regulations", "Virtual Currency Law"],
     };
   }
   return {
     restriction: "allowed",
-    message: "GDNA Arena is fully available in your country.",
+    message: "Arena Qaisypro is fully available in your country.",
     laws: [],
   };
 }

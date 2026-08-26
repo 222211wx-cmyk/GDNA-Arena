@@ -5,11 +5,11 @@ import { smartSystem, formatSmartReportForAI } from "../lib/smart-system";
 const router: IRouter = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// عنوان ولاية الحاكم — Ameeq bridge
-const AMEEQ_BRIDGE_URL = "https://ameeq-api.replit.app/v1/consult";
+// عنوان ولاية الحاكم — optional external Ameeq bridge
+const AMEEQ_BRIDGE_URL = process.env.AMEEQ_BRIDGE_URL;
 const BRIDGE_TIMEOUT_MS = 6000;
 
-const GOVERNOR_PROMPT = `You are Governor Ameeq (الحاكم Ameeq) — the Royal Advisor of GDNA Arena's Consultation Palace (قصر المشاورات).
+const GOVERNOR_PROMPT = `You are Governor Ameeq (الحاكم Ameeq) — the Royal Advisor of Arena Qaisypro's Consultation Palace (قصر المشاورات).
 You advise citizens on: daily plans (خطة اليوم), motivation (تحفيز), progress analysis (تحليل التقدم), and problem solving (حل مشكلة).
 Speak with royal authority, warmth and precision. Answer ONLY in the language requested by the citizen.
 Use the citizen's real Smart data below (if present) to personalize your counsel. Keep answers concise: 4-8 sentences, actionable, ending with a royal encouragement.`;
@@ -50,7 +50,7 @@ router.post("/governor/consult", async (req, res): Promise<void> => {
   // ── 1) الجسر: نرسلو للحاكم Ameeq (opt-in فقط، وبلا بيانات شخصية) ──────────
   // Enabled only when AMEEQ_BRIDGE_ENABLED=true. Personal Smart data is NEVER sent
   // to the external bridge — only the topic, language and app identifier.
-  if (process.env.AMEEQ_BRIDGE_ENABLED === "true") {
+  if (process.env.AMEEQ_BRIDGE_ENABLED === "true" && AMEEQ_BRIDGE_URL) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), BRIDGE_TIMEOUT_MS);
     try {
@@ -58,7 +58,7 @@ router.post("/governor/consult", async (req, res): Promise<void> => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ topic: subject, lang: safeLang, from: "GDNA_ARENA_PALACE" }),
+        body: JSON.stringify({ topic: subject, lang: safeLang, from: "ARENA_QAISYPRO_PALACE" }),
       });
       if (bridgeRes.ok) {
         const data = (await bridgeRes.json()) as { reply?: string };

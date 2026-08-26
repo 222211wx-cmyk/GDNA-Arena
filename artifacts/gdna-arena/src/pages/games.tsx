@@ -264,7 +264,7 @@ function TournamentModal({
                   className="font-mono text-red-400 text-xs tracking-[0.5em]">
                   ◉ ELIMINATING 90 CITIZENS
                 </motion.div>
-                <div className="font-mono font-black text-4xl text-white tracking-widest">GDNA ARENA</div>
+                <div className="font-mono font-black text-4xl text-white tracking-widest">ARENA QAISYPRO</div>
                 <div className="font-mono text-yellow-400/40 text-xs tracking-widest">SEPARATING THE GREAT FROM THE REST</div>
               </div>
               <div className="relative h-24 overflow-hidden border border-yellow-400/10">

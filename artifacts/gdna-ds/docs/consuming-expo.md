@@ -1,4 +1,4 @@
-# Consuming GDNA Empire Design System in Expo apps
+# Consuming Arena Qaisypro Design System in Expo apps
 
 Read `artifacts/gdna-ds/docs/AGENTS.md` first. React Native does
 not consume the web CSS or DOM components. It imports portable tokens, native

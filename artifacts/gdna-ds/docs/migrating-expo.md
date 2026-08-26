@@ -1,4 +1,4 @@
-# Migrating Expo UI to GDNA Empire Design System
+# Migrating Expo UI to Arena Qaisypro Design System
 
 Read `artifacts/gdna-ds/docs/AGENTS.md` and
 `artifacts/gdna-ds/docs/consuming-expo.md` first. Use this guide

@@ -49,8 +49,8 @@ export default function LoginScreen() {
             <Text style={s.logoG}>G</Text>
           </View>
         </View>
-        <Text style={s.brand}>GDNA ARENA</Text>
-        <Text style={s.tagline}>The Sovereign Digital Empire</Text>
+        <Text style={s.brand}>ARENA QAISYPRO</Text>
+        <Text style={s.tagline}>The Moroccan Citizen Platform</Text>
 
         {/* Card */}
         <View style={s.card}>
@@ -68,7 +68,7 @@ export default function LoginScreen() {
             style={s.input}
             value={username}
             onChangeText={setUsername}
-            placeholder="YourEmpireName"
+            placeholder="Your citizen name"
             placeholderTextColor={colors.mutedForeground}
             autoCapitalize="none"
             autoCorrect={false}
@@ -99,7 +99,7 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color={colors.primaryForeground} />
             ) : (
-              <Text style={s.btnText}>Enter the Empire</Text>
+              <Text style={s.btnText}>Sign in</Text>
             )}
           </TouchableOpacity>
 

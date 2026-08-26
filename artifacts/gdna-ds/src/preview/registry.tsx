@@ -191,9 +191,9 @@ export type NavGroup = {
 };
 
 export const DESIGN_SYSTEM = {
-  title: 'GDNA Empire Design System',
+  title: 'Arena Qaisypro Design System',
   description:
-    'Imperial black & gold — the visual language of GDNA Arena: pure-black surfaces, imperial gold (#C9A84C), neon-blue accents, and thin gold borders.',
+    'Imperial black & gold — the visual language of Arena Qaisypro: pure-black surfaces, imperial gold (#C9A84C), neon-blue accents, and thin gold borders.',
 } as const;
 
 export const OVERVIEW_ENTRY: PreviewEntry = {

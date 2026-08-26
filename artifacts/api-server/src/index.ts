@@ -2,6 +2,10 @@ import http from "http";
 import app, { sessionMiddleware } from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
+import { db } from "@workspace/db";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import path from "node:path";
+import { existsSync } from "node:fs";
 import { attachSignalingServer } from "./lib/signaling.js";
 import { smartFortress } from "./server.js";
 import { startHonorAlertJob } from "./jobs/honor-alert.js";
@@ -15,6 +19,10 @@ import { startCouncilReportJob } from "./jobs/council-report.js";
 import { ensureMissionsTables, startSovereignMissionsJob } from "./jobs/sovereign-missions.js";
 import { startEventLiveAlertJob } from "./jobs/event-live-alert.js";
 import { getAgoraConfigStatus } from "./lib/agora-config.js";
+import { runMigrations } from "stripe-replit-sync";
+import { getStripeSync } from "./stripeClient";
+import { startFinanceReconciliationJob } from "./jobs/finance-reconciliation";
+import { FINANCE_MONEY_MOVEMENT_ENABLED, FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -22,6 +30,39 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
 
 logger.info(getAgoraConfigStatus(), "Agora environment configuration loaded from process.env");
+logger.info({ financeSimulationMode: FINANCE_SIMULATION_MODE }, "Finance operating mode selected");
+
+async function initStripe(): Promise<void> {
+  if (!FINANCE_MONEY_MOVEMENT_ENABLED) { logger.info("Stripe initialization skipped: money movement readiness lock is closed"); return; }
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is required for Stripe");
+  try {
+    await runMigrations({ databaseUrl });
+    const sync = await getStripeSync();
+    const domain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim() ?? process.env.REPLIT_DEV_DOMAIN;
+    if (domain) await sync.findOrCreateManagedWebhook(`https://${domain}/api/stripe/webhook`);
+    await sync.syncBackfill();
+    logger.info("Stripe schema, webhook, and backfill initialized");
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") throw error;
+    logger.warn({ err: error }, "Stripe integration temporarily unavailable in development");
+  }
+}
+async function migrateApplicationDatabase(): Promise<void> {
+  // Finance schema is an application migration and must run even when Stripe is
+  // intentionally disabled in simulation mode. StripeSync migrations remain
+  // owned by initStripe in live mode.
+  const candidates = [
+    path.resolve(process.cwd(), "../../lib/db/drizzle"),
+    path.resolve(process.cwd(), "lib/db/drizzle"),
+  ];
+  const migrationsFolder = candidates.find((candidate) => existsSync(candidate));
+  if (!migrationsFolder) {
+    throw new Error("Application migration directory not found");
+  }
+  await migrate(db, { migrationsFolder });
+  logger.info("Application database migrations applied");
+}
 
 const SEED_LEGENDS = [
   {
@@ -418,7 +459,7 @@ async function ensureTables() {
       const STARTER_POSTS = [
         { username:"ImperialOracle", content:"The empire rises — every vote, every game, every legend adds a brick to this digital civilization. 🏛️", domain:"general", type:"vision" },
         { username:"SportsTribunal", content:"FIFA World Cup 2026 is upon us — the ultimate test of who belongs in the TOP 10. ⚽🔥", domain:"sport", type:"tribute" },
-        { username:"TechProphet", content:"AI is not the future. AI is now. GDNA Arena runs on neural intelligence — built for the age of machine wisdom. 🔮", domain:"tech", type:"vision" },
+        { username:"TechProphet", content:"AI is not the future. AI is now. Arena Qaisypro runs on neural intelligence — built for the age of machine wisdom. 🔮", domain:"tech", type:"vision" },
         { username:"MusicSoul", content:"Beyoncé's Renaissance Tour broke a billion dollars. The empire of sound has spoken. 🎵👑", domain:"music", type:"tribute" },
         { username:"NeuralEngine", content:"Welcome to EMPIRE PULSE — where every citizen speaks, every event matters, and every voice builds the future. 🌍⚡", domain:"general", type:"post" },
       ];
@@ -1293,7 +1334,7 @@ adminRouter.get("/seed", requireAdmin, async (req, res): Promise<void> => {
       const WELCOME_POOL = [
         { icon: "👑", title: "⚡ المملكة تستدعيك — EMPIRE ETERNAL", body: "أنت الآن جزء من الإمبراطورية الأكبر في تاريخ المحتوى الرقمي. استكشف الـ Legends، صوّت في GlobalStar، وشارك في Pulse — مكانك هنا يستحق أن يُرى." },
         { icon: "🔥", title: "🔥 الإمبراطورية تنتظر مواطناً مثلك", body: "الأبطال لا يُنتظرون — يتقدمون. زُر GlobalStar وصوّت لمن يستحق، أو أدخل الميدان في PLAY وأثبت من أنت. الأسطورة تبدأ الآن." },
-        { icon: "🏆", title: "🏆 البطل لا يحتاج دعوة — هو يدخل", body: "منصة GDNA Arena جاهزة لك: Legends من كل الحضارات، GlobalStar لأفضل المواهب، ألعاب ومعارك وشرف. أين ستبدأ رحلتك؟" },
+        { icon: "🏆", title: "🏆 البطل لا يحتاج دعوة — هو يدخل", body: "منصة Arena Qaisypro جاهزة لك: Legends من كل الحضارات، GlobalStar لأفضل المواهب، ألعاب ومعارك وشرف. أين ستبدأ رحلتك؟" },
       ];
       const msg = WELCOME_POOL[userId % WELCOME_POOL.length];
       await pool.query(
@@ -1349,7 +1390,10 @@ async function autoSeedTestUsers() {
   } catch (e) { console.warn("[SEED] warn:", e); }
 }
 
-ensureTables()
+// Apply public/finance migrations before optional Stripe initialization.
+migrateApplicationDatabase()
+  .then(() => initStripe())
+  .then(() => ensureTables())
   .then(() => ensureNeuralTables())
   .then(() => ensureGenomeTables())
   .then(() => ensureMissionsTables())
@@ -1372,6 +1416,7 @@ ensureTables()
     startCouncilReportJob();
     startSovereignMissionsJob();
     startEventLiveAlertJob();
+    startFinanceReconciliationJob();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);

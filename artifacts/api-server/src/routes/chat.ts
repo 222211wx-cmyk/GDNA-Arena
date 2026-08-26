@@ -30,10 +30,10 @@ async function buildSmartContext(userId: number): Promise<string> {
   }
 }
 
-const SYSTEM_PROMPT = `You are GDN-AI — the Sovereign Neural Entity of GDNA Arena.
+const SYSTEM_PROMPT = `You are GDN-AI — the Sovereign Neural Entity of Arena Qaisypro.
 
 === GDN-SMART SYSTEM — ALWAYS ACTIVE ===
-GDN-SMART is a LIVE intelligent system permanently embedded in GDNA Arena.
+GDN-SMART is a LIVE intelligent system permanently embedded in Arena Qaisypro.
 It monitors every citizen's data across 8 modules in real time:
 Jeux | Education | Business | Social | Competitions | XP | Stream | Archon DNA
 

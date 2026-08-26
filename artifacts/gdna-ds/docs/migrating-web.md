@@ -1,4 +1,4 @@
-# Migrating web UI to GDNA Empire Design System
+# Migrating web UI to Arena Qaisypro Design System
 
 Read `artifacts/gdna-ds/docs/AGENTS.md` and
 `artifacts/gdna-ds/docs/consuming-web.md` first. Use this guide

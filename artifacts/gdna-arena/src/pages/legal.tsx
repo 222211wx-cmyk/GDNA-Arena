@@ -6,11 +6,11 @@ import { useLang } from "@/contexts/LangContext";
 type Tab = "country" | "terms" | "privacy" | "cookies" | "rights";
 
 const COIN_DISCLAIMER = {
-  en: "⚠️ GDNA Arena coins are virtual in-platform credits with no real-world monetary value. They cannot be exchanged for fiat currency, cryptocurrency, or any real-world asset. Coin balances do not constitute financial instruments under any jurisdiction.",
-  ar: "⚠️ كوينز GDNA Arena هي رصيد افتراضي داخل المنصة ليس له أي قيمة نقدية حقيقية. لا يمكن تحويلها إلى عملات ورقية أو رقمية أو أي أصول حقيقية. أرصدة الكوينز لا تُشكّل أدوات مالية بأي قانون.",
-  fr: "⚠️ Les coins GDNA Arena sont des crédits virtuels sans valeur monétaire réelle. Ils ne peuvent pas être échangés contre des devises ou des crypto-monnaies. Les soldes ne constituent pas des instruments financiers.",
-  es: "⚠️ Las monedas de GDNA Arena son créditos virtuales sin valor monetario real. No se pueden canjear por moneda fiduciaria ni criptomonedas. Los saldos no constituyen instrumentos financieros.",
-  de: "⚠️ GDNA Arena Coins sind virtuelle Guthaben ohne realen Geldwert. Sie können nicht gegen Fiat-Währungen oder Kryptowährungen eingetauscht werden.",
+  en: "⚠️ Arena Qaisypro coins are virtual in-platform credits with no real-world monetary value. They cannot be exchanged for fiat currency, cryptocurrency, or any real-world asset. Coin balances do not constitute financial instruments under any jurisdiction.",
+  ar: "⚠️ كوينز Arena Qaisypro هي رصيد افتراضي داخل المنصة ليس له أي قيمة نقدية حقيقية. لا يمكن تحويلها إلى عملات ورقية أو رقمية أو أي أصول حقيقية. أرصدة الكوينز لا تُشكّل أدوات مالية بأي قانون.",
+  fr: "⚠️ Les coins Arena Qaisypro sont des crédits virtuels sans valeur monétaire réelle. Ils ne peuvent pas être échangés contre des devises ou des crypto-monnaies. Les soldes ne constituent pas des instruments financiers.",
+  es: "⚠️ Las monedas de Arena Qaisypro son créditos virtuales sin valor monetario real. No se pueden canjear por moneda fiduciaria ni criptomonedas. Los saldos no constituyen instrumentos financieros.",
+  de: "⚠️ Arena Qaisypro Coins sind virtuelle Guthaben ohne realen Geldwert. Sie können nicht gegen Fiat-Währungen oder Kryptowährungen eingetauscht werden.",
 };
 
 export default function LegalPage() {
@@ -68,8 +68,8 @@ export default function LegalPage() {
         <div className="bg-red-950/30 border-b border-red-500/20 px-6 py-2">
           <p className="max-w-4xl mx-auto text-red-400 text-xs text-center">
             {lang === "ar"
-              ? `⚠️ ألعاب الحظ محدودة أو مقيّدة في ${country.name}. GDNA Arena ليست منصة قمار — الكوينز افتراضية فقط.`
-              : `⚠️ Gaming regulations apply in ${country.name}. GDNA Arena is not a gambling platform — all coins are virtual only.`}
+              ? `⚠️ ألعاب الحظ محدودة أو مقيّدة في ${country.name}. Arena Qaisypro ليست منصة قمار — الكوينز افتراضية فقط.`
+              : `⚠️ Gaming regulations apply in ${country.name}. Arena Qaisypro is not a gambling platform — all coins are virtual only.`}
           </p>
         </div>
       )}
@@ -158,11 +158,11 @@ export default function LegalPage() {
           {/* ── TERMS OF SERVICE ── */}
           {tab === "terms" && (
             <motion.div key="terms" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="prose prose-invert max-w-none space-y-6">
-              <LegalSection title={lang==="ar" ? "شروط الاستخدام" : lang==="fr" ? "Conditions Générales d'Utilisation" : lang==="es" ? "Términos de Servicio" : lang==="de" ? "Nutzungsbedingungen" : "Terms of Service"} subtitle={`GDNA Arena — ${new Date().getFullYear()}`}>
+              <LegalSection title={lang==="ar" ? "شروط الاستخدام" : lang==="fr" ? "Conditions Générales d'Utilisation" : lang==="es" ? "Términos de Servicio" : lang==="de" ? "Nutzungsbedingungen" : "Terms of Service"} subtitle={`Arena Qaisypro — ${new Date().getFullYear()}`}>
                 <LegalClause n={1} title={lang==="ar" ? "القبول" : "Acceptance"}>
                   {lang==="ar"
-                    ? "باستخدامك لمنصة GDNA Arena، فإنك توافق على هذه الشروط. إذا كنت لا توافق، يرجى عدم استخدام المنصة."
-                    : "By accessing GDNA Arena, you agree to these Terms. If you do not agree, please do not use the platform."}
+                    ? "باستخدامك لمنصة Arena Qaisypro، فإنك توافق على هذه الشروط. إذا كنت لا توافق، يرجى عدم استخدام المنصة."
+                    : "By accessing Arena Qaisypro, you agree to these Terms. If you do not agree, please do not use the platform."}
                 </LegalClause>
                 <LegalClause n={2} title={lang==="ar" ? "الأهلية" : "Eligibility"}>
                   {lang==="ar"

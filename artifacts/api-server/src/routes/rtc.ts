@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  RTC — Agora token issuance for GDNA Arena calls (authenticated only).
+//  RTC — Agora token issuance for Arena Qaisypro calls (authenticated only).
 //
 //  Reads AGORA_APP_ID + AGORA_APP_CERTIFICATE from process.env at request time
 //  and issues short-lived tokens scoped to invited call participants.

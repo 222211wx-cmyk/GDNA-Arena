@@ -39,7 +39,7 @@ export function Footer() {
           <div className="col-span-2 md:col-span-1 space-y-3">
             <div className="flex items-center gap-2">
               <Crown className="w-5 h-5 text-yellow-400" />
-              <span className="font-black text-lg uppercase tracking-tighter neon-text-glow">GDNA Arena</span>
+              <span className="font-black text-lg uppercase tracking-tighter neon-text-glow">Arena Qaisypro</span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">{t("footer_tagline")}</p>
             <div className="flex flex-wrap gap-1">
@@ -115,7 +115,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-6 border-t border-border/30 flex flex-col md:flex-row items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground font-mono">
-            © {year} <span className="text-primary font-bold">GDNA Arena</span> — {t("footer_rights")}
+            © {year} <span className="text-primary font-bold">Arena Qaisypro</span> — {t("footer_rights")}
           </p>
           <div className="flex items-center gap-4">
             <Link href="/legal" className="text-xs text-muted-foreground hover:text-primary transition-colors">

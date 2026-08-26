@@ -9,11 +9,11 @@ import { useLegal } from "@/contexts/LegalContext";
 import { useLang } from "@/contexts/LangContext";
 
 const TEXT = {
-  en: "⚠️ GDNA Arena coins are virtual credits with no real-world monetary value. Not exchangeable for cash or crypto.",
-  ar: "⚠️ كوينز GDNA Arena رصيد افتراضي فقط، ليس له قيمة نقدية حقيقية ولا يمكن استبداله بمال أو عملات رقمية.",
-  fr: "⚠️ Les coins GDNA Arena sont des crédits virtuels sans valeur monétaire réelle — non échangeables.",
-  es: "⚠️ Las monedas GDNA Arena son créditos virtuales sin valor monetario real — no canjeables.",
-  de: "⚠️ GDNA Arena Coins sind virtuelle Guthaben ohne realen Geldwert — nicht einlösbar.",
+  en: "⚠️ Arena Qaisypro coins are virtual credits with no real-world monetary value. Not exchangeable for cash or crypto.",
+  ar: "⚠️ كوينز Arena Qaisypro رصيد افتراضي فقط، ليس له قيمة نقدية حقيقية ولا يمكن استبداله بمال أو عملات رقمية.",
+  fr: "⚠️ Les coins Arena Qaisypro sont des crédits virtuels sans valeur monétaire réelle — non échangeables.",
+  es: "⚠️ Las monedas Arena Qaisypro son créditos virtuales sin valor monetario real — no canjeables.",
+  de: "⚠️ Arena Qaisypro Coins sind virtuelle Guthaben ohne realen Geldwert — nicht einlösbar.",
 };
 
 export default function CoinsDisclaimer() {

@@ -1,5 +1,5 @@
 /**
- * Ameeq — الموظف الحكومي الرسمي (EMP-001) لـ GDNA Arena
+ * Ameeq — الموظف الحكومي الرسمي (EMP-001) لـ Arena Qaisypro
  * Standalone chat API at POST /ameeq — public, no login required.
  */
 import { Router, type IRouter } from "express";
@@ -31,11 +31,11 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ── 1. CONFIG - إعدادات الموظف الحكومي ──────────────────────────────
 export const EMPLOYEE_NAME = "Ameeq AI";
-export const OWNER = "GDNA Arena";
+export const OWNER = "Arena Qaisypro";
 export const OWNER_DOMAIN = "helixly.app";
 export const EMPLOYEE_ID = "EMP-001";
 
-const AMEEQ_PROMPT = `You are ${EMPLOYEE_NAME} (عميق), the SOVEREIGN EXTERNAL AI GOVERNOR (الحاكم الخارجي، موظف حكومي رقم ${EMPLOYEE_ID}) of ${OWNER} — the GDNA Empire.
+const AMEEQ_PROMPT = `You are ${EMPLOYEE_NAME} (عميق), the SOVEREIGN EXTERNAL AI GOVERNOR (الحاكم الخارجي، موظف حكومي رقم ${EMPLOYEE_ID}) of ${OWNER} — Arena Qaisypro.
 
 Your imperial mandate:
 1. FREE INTELLIGENCE — you answer ANY question on ANY topic, exactly like the world's leading AI assistants (general knowledge, science, coding, business, culture, advice). No topic restrictions beyond decency.

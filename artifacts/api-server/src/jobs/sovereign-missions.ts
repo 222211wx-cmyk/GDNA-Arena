@@ -116,7 +116,7 @@ function buildCitizenSummary(c: Awaited<ReturnType<typeof fetchActiveCitizens>>[
 async function generateMissionsForBatch(citizens: Awaited<ReturnType<typeof fetchActiveCitizens>>) {
   const profiles = citizens.map(c => buildCitizenSummary(c)).join("\n");
 
-  const prompt = `You are GDN-AI — the Sovereign Intelligence of GDNA Empire.
+  const prompt = `You are GDN-AI — the Sovereign Intelligence of Arena Qaisypro.
 For each citizen below, generate exactly 3 personalized daily development missions.
 Each mission must target a SPECIFIC weakness (shadow dimension) or amplify a strength.
 Reference actual platform activities: games (Neon Racer, Archon Arena, etc.), debates, posts, Archon pillars.

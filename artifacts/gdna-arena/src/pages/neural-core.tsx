@@ -276,7 +276,7 @@ export default function NeuralCorePage() {
 
       {/* Bottom status bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-yellow-500/20 px-6 py-2 flex items-center justify-between text-xs text-gray-600 z-20">
-        <span>ENC — EMPIRE NEURAL CORE © GDNA ARENA</span>
+        <span>ENC — EMPIRE NEURAL CORE © ARENA QAISYPRO</span>
         <motion.span
           animate={{ opacity: [0.4, 1, 0.4] }}
           transition={{ duration: 1, repeat: Infinity }}

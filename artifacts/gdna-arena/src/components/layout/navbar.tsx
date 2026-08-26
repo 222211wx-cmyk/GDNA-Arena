@@ -139,11 +139,11 @@ export function Navbar() {
           <div className="hidden sm:flex flex-col leading-none">
             <span className="font-black text-base tracking-[0.12em] uppercase"
               style={{ color: "#C9A84C", letterSpacing: "0.12em", fontFamily: "inherit" }}>
-              GDNA
+              ARENA
             </span>
             <span className="text-[9px] font-bold tracking-[0.35em] uppercase"
               style={{ color: "#ffffff40", letterSpacing: "0.35em" }}>
-              ARENA
+              QAISYPRO
             </span>
           </div>
         </Link>

@@ -222,7 +222,7 @@ router.get("/smart/analysis", requireAuth, async (req: any, res): Promise<void> 
       `- ${m.name}: ${m.status} (score ${m.score}/100) | ${m.badge} | stats: ${JSON.stringify(m.stats)}`
     ).join("\n");
 
-    const prompt = `Tu es GDN-SMART, le système d'intelligence de l'empire GDNA Arena.
+    const prompt = `Tu es GDN-SMART, le système d'intelligence de l'empire Arena Qaisypro.
 Tu analyses le profil d'un citoyen et génères des recommandations personnalisées EN ARABE ET FRANÇAIS.
 
 PROFIL DU CITOYEN: ${citizen.username}

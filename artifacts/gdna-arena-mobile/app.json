@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "GDNA Arena",
+    "name": "Arena Qaisypro",
     "slug": "gdna-arena-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,8 +17,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.gdna.arena.mobile",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Allow GDNA Arena to use your microphone for encrypted Agora calls.",
-        "NSCameraUsageDescription": "Allow GDNA Arena to use your camera for encrypted Agora video calls."
+        "NSMicrophoneUsageDescription": "Allow Arena Qaisypro to use your microphone for encrypted Agora calls.",
+        "NSCameraUsageDescription": "Allow Arena Qaisypro to use your camera for encrypted Agora video calls."
       }
     },
     "android": {
@@ -47,7 +47,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow GDNA Arena to select an image to encrypt and send."
+          "photosPermission": "Allow Arena Qaisypro to select an image to encrypt and send."
         }
       ],
       "expo-web-browser"

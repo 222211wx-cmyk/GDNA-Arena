@@ -22,7 +22,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     newcomer: {
       icon: "⚽",
       title: "🏟️ مرسوم إمبراطوري — أبطال الملاعب",
-      body: "صدر اليوم مرسوم من قلب الإمبراطورية: أنتَ من رياضيي المستقبل الذين ستُكتب أسماؤهم في سجلات GDNA Arena. تذكّر — كل أسطورة بدأت من صفر. الميدان ينتظرك.",
+      body: "صدر اليوم مرسوم من قلب الإمبراطورية: أنتَ من رياضيي المستقبل الذين ستُكتب أسماؤهم في سجلات Arena Qaisypro. تذكّر — كل أسطورة بدأت من صفر. الميدان ينتظرك.",
       link: "/sport",
     },
     rising: {
@@ -34,7 +34,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     elite: {
       icon: "♔",
       title: "♔ مرسوم الشرف الرياضي العالمي",
-      body: "بصختم الإمبراطورية الذهبي: أنتَ في مصافّ النخبة الرياضية على GDNA Arena. رأيك في GlobalStar يُحرّك جبالاً. الأسطورة التي تصنعها اليوم ستُروى للأجيال. سِد.",
+      body: "بصختم الإمبراطورية الذهبي: أنتَ في مصافّ النخبة الرياضية على Arena Qaisypro. رأيك في GlobalStar يُحرّك جبالاً. الأسطورة التي تصنعها اليوم ستُروى للأجيال. سِد.",
       link: "/games/globalstar",
     },
   },
@@ -43,7 +43,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     newcomer: {
       icon: "🎵",
       title: "🎶 نداء الإمبراطورية — روح الإيقاع",
-      body: "الموسيقى هي لغة الإمبراطوريات العظيمة — ولغتك تُسمع هنا. GDNA Arena ترحّب بك في عالم حيث الإيقاع يصنع التاريخ. شارك، صوّت، واترك بصمتك الصوتية.",
+      body: "الموسيقى هي لغة الإمبراطوريات العظيمة — ولغتك تُسمع هنا. Arena Qaisypro ترحّب بك في عالم حيث الإيقاع يصنع التاريخ. شارك، صوّت، واترك بصمتك الصوتية.",
       link: "/pulse",
     },
     rising: {
@@ -55,7 +55,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     elite: {
       icon: "🏅",
       title: "♔ وسام الإمبراطورية الموسيقية",
-      body: "صدر اليوم بختم الذهب الإمبراطوري: أنتَ من نخبة عشّاق الموسيقى والمحللين على GDNA Arena. إرثك الصوتي يتردد عبر أروقة الإمبراطورية الرقمية. تكلّم والعالم يصغي.",
+      body: "صدر اليوم بختم الذهب الإمبراطوري: أنتَ من نخبة عشّاق الموسيقى والمحللين على Arena Qaisypro. إرثك الصوتي يتردد عبر أروقة الإمبراطورية الرقمية. تكلّم والعالم يصغي.",
       link: "/legends",
     },
   },
@@ -64,7 +64,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     newcomer: {
       icon: "🎬",
       title: "🎬 افتتاح السجلات السينمائية",
-      body: "الستار يرتفع في إمبراطورية GDNA Arena — ومقعدك في الصف الأول محجوز. اكتشف أساطير السينما، صوّت لأفضل الأعمال، وكُن جزءاً من النقد الذي يصنع التاريخ.",
+      body: "الستار يرتفع في إمبراطورية Arena Qaisypro — ومقعدك في الصف الأول محجوز. اكتشف أساطير السينما، صوّت لأفضل الأعمال، وكُن جزءاً من النقد الذي يصنع التاريخ.",
       link: "/legends",
     },
     rising: {
@@ -85,7 +85,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     newcomer: {
       icon: "🔮",
       title: "⚡ ترحيب تكنولوجي من الإمبراطورية",
-      body: "الإمبراطورية الرقمية تُرحّب بعقل تكنولوجي جديد. GDNA Arena مبنية على الابتكار — وأنت ممن يفهمون هذا المعنى. استكشف، تفاعل، وشارك في بناء المستقبل.",
+      body: "الإمبراطورية الرقمية تُرحّب بعقل تكنولوجي جديد. Arena Qaisypro مبنية على الابتكار — وأنت ممن يفهمون هذا المعنى. استكشف، تفاعل، وشارك في بناء المستقبل.",
       link: "/hub",
     },
     rising: {
@@ -97,7 +97,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     elite: {
       icon: "💡",
       title: "♔ نيشان العقل التكنولوجي الإمبراطوري",
-      body: "صدر بختم الذهب: أنتَ في مصاف العقول التقنية النادرة على GDNA Arena. DNA رقمي قرأه Genome Engine وأكّد ما يعرفه الجميع — أنتَ بنّاء هذا العالم الجديد.",
+      body: "صدر بختم الذهب: أنتَ في مصاف العقول التقنية النادرة على Arena Qaisypro. DNA رقمي قرأه Genome Engine وأكّد ما يعرفه الجميع — أنتَ بنّاء هذا العالم الجديد.",
       link: "/neural-core",
     },
   },
@@ -106,7 +106,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     newcomer: {
       icon: "🔬",
       title: "🔭 ترحيب العقول العلمية",
-      body: "الإمبراطورية تُقدّر العقول الفضولية — وعقلك العلمي أصلٌ نادر. GDNA Arena تجمع المعرفة من كل الحقول. شارك أفكارك في Pulse واترك أثراً علمياً حقيقياً.",
+      body: "الإمبراطورية تُقدّر العقول الفضولية — وعقلك العلمي أصلٌ نادر. Arena Qaisypro تجمع المعرفة من كل الحقول. شارك أفكارك في Pulse واترك أثراً علمياً حقيقياً.",
       link: "/pulse",
     },
     rising: {
@@ -127,7 +127,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     newcomer: {
       icon: "🎨",
       title: "🎨 ترحيب فني من الإمبراطورية",
-      body: "الفن هو روح الحضارات العظيمة — وروحك الفنية تُضيء هذه الإمبراطورية. GDNA Arena ترحّب بك في عالم جمع بين الإبداع والتنافس. عبّر، شارك، وابنِ إرثاً.",
+      body: "الفن هو روح الحضارات العظيمة — وروحك الفنية تُضيء هذه الإمبراطورية. Arena Qaisypro ترحّب بك في عالم جمع بين الإبداع والتنافس. عبّر، شارك، وابنِ إرثاً.",
       link: "/pulse",
     },
     rising: {
@@ -160,7 +160,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     elite: {
       icon: "♔",
       title: "♔ وسام الاقتصاد الإمبراطوري",
-      body: "بختم الذهب الإمبراطوري: أنتَ في مصاف النخبة الاقتصادية على GDNA Arena. ثروتك الرقمية وحكمتك الاستثمارية أدخلاك قاعة الكبار. اقتصاد الإمبراطورية يثق بك.",
+      body: "بختم الذهب الإمبراطوري: أنتَ في مصاف النخبة الاقتصادية على Arena Qaisypro. ثروتك الرقمية وحكمتك الاستثمارية أدخلاك قاعة الكبار. اقتصاد الإمبراطورية يثق بك.",
       link: "/wallet",
     },
   },
@@ -169,7 +169,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     newcomer: {
       icon: "📚",
       title: "🏫 ترحيب تعليمي من الإمبراطورية",
-      body: "العلم هو السلاح الأقوى في الإمبراطورية الرقمية — وأنتَ تحمله. GDNA Arena تُقدّر العقول المتعلمة. استكشف Learn، شارك في النقاشات، وعلّم من حولك.",
+      body: "العلم هو السلاح الأقوى في الإمبراطورية الرقمية — وأنتَ تحمله. Arena Qaisypro تُقدّر العقول المتعلمة. استكشف Learn، شارك في النقاشات، وعلّم من حولك.",
       link: "/learn",
     },
     rising: {
@@ -181,7 +181,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     elite: {
       icon: "♔",
       title: "♔ نيشان الحكمة الإمبراطوري",
-      body: "تُمنح الحكمة الإمبراطورية لمن استحقّها بالعلم والعطاء المستمر — وأنتَ واحد منهم. اسمك في ديوان المُعلّمين والمُفكّرين في GDNA Arena محفور بحرف ذهبي.",
+      body: "تُمنح الحكمة الإمبراطورية لمن استحقّها بالعلم والعطاء المستمر — وأنتَ واحد منهم. اسمك في ديوان المُعلّمين والمُفكّرين في Arena Qaisypro محفور بحرف ذهبي.",
       link: "/growth",
     },
   },
@@ -202,7 +202,7 @@ const DECREE_LIBRARY: Record<string, Record<string, { icon: string; title: strin
     elite: {
       icon: "♔",
       title: "♔ المرسوم الإمبراطوري الأعلى",
-      body: "بختم الذهب وبحضور أعلى مجلس في GDNA Arena — يُمنح لك اليوم لقب 'أسطورة الإمبراطورية'. مسيرتك تُلهم الأجيال القادمة. أنتَ لستَ مواطناً عادياً — أنتَ تاريخ.",
+      body: "بختم الذهب وبحضور أعلى مجلس في Arena Qaisypro — يُمنح لك اليوم لقب 'أسطورة الإمبراطورية'. مسيرتك تُلهم الأجيال القادمة. أنتَ لستَ مواطناً عادياً — أنتَ تاريخ.",
       link: "/leaderboard",
     },
   },
@@ -226,7 +226,7 @@ async function detectDomain(userId: number): Promise<string> {
 async function generateAIDecree(username: string, domain: string, tier: string): Promise<{ title: string; body: string } | null> {
   if (!process.env.OPENAI_API_KEY) return null;
   try {
-    const prompt = `أنت النظام الذكي GDN-AI لإمبراطورية GDNA Arena.
+    const prompt = `أنت النظام الذكي GDN-AI لإمبراطورية Arena Qaisypro.
 اكتب مرسوماً شرفياً إمبراطورياً قصيراً وقوياً موجَّهاً لمواطن اسمه "${username}".
 مجاله: ${domain} | مستواه: ${tier === "elite" ? "نخبة متميزة" : "محارب صاعد"}.
 المرسوم: جملة عنوان + نص ٣-٤ جمل (بالعربية أو الفرنسية أو الإنجليزية — اختر ما يناسب النبرة الإمبراطورية).

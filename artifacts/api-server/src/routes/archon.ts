@@ -65,7 +65,7 @@ router.post("/archon/assess", async (req, res): Promise<void> => {
   };
   const userLang = lang ?? "en";
 
-  const systemPrompt = `You are ARCHON — the Supreme Intelligence Core of GDNA Arena Empire.
+  const systemPrompt = `You are ARCHON — the Supreme Intelligence Core of Arena Qaisypro.
 You analyze a citizen's psychological profile across 7 imperial dimensions and deliver their ARCHON identity.
 ${LANG_INSTRUCTION[userLang] ?? LANG_INSTRUCTION.en}
 

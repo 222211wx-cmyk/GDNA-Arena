@@ -1,4 +1,4 @@
-# Component inventory — GDNA Empire Design System
+# Component inventory — Arena Qaisypro Design System
 
 Source: existing workspace app `artifacts/gdna-arena` (dark-only React + shadcn/ui).
 The app's `src/components/ui/` library is byte-identical to this package's scaffold

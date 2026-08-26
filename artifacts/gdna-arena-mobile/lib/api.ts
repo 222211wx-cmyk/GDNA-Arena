@@ -1,5 +1,5 @@
 /**
- * GDNA Arena API client for React Native.
+ * Arena Qaisypro API client for React Native.
  * Handles cookie-based session auth by storing the session cookie in native
  * encrypted secure storage.
  */

@@ -10,7 +10,7 @@ async function pushHonorNotification(userId: number, username: string) {
     [
       userId,
       `👑 تهانينا ${username} — وصلت للـ Trending!`,
-      `مبروك يا ${username}، أنت الآن في قائمة الـ Trending ديال GDNA Arena. صفحتك الرسمية جاهزة. انت الإمبراطور ديال المحتوى ديالك 🏆`,
+      `مبروك يا ${username}، أنت الآن في قائمة الـ Trending ديال Arena Qaisypro. صفحتك الرسمية جاهزة. انت الإمبراطور ديال المحتوى ديالك 🏆`,
       `/citizen/${username}`,
     ]
   );

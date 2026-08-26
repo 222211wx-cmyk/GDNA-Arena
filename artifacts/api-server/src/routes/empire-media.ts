@@ -7,6 +7,7 @@ import { pool } from "@workspace/db";
 import { getRate } from "./rights";
 import { getLevel, multiplierForUsername } from "../lib/levels.js";
 import { moderateText } from "../lib/moderate";
+import { FINANCE_SIMULATION_MODE } from "../lib/finance-simulation";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -334,6 +335,8 @@ router.get("/gs/earnings", async (req, res): Promise<void> => {
 
 // ─── POST /gs/withdrawals ─────────────────────────────────────────────────────
 router.post("/gs/withdrawals", async (req, res): Promise<void> => {
+  res.status(409).json({ error: "Legacy coin withdrawal is not payable. Complete verified finance onboarding and use /finance/payouts." });
+  return;
   try {
     const uploaderName = await sessionUsername(req);
     if (!uploaderName) { res.status(401).json({ error: "سجّل الدخول أولاً" }); return; }
@@ -443,12 +446,6 @@ router.get("/gifs/search", async (req, res): Promise<void> => {
 
 // ─── Admin gate: ADMIN_SECRET header OR session is_admin ─────────────────────
 async function isAdminRequest(req: any): Promise<boolean> {
-  const secret = process.env.ADMIN_SECRET;
-  const header = req.headers["x-admin-secret"];
-  if (secret && typeof header === "string") {
-    const a = Buffer.from(header), b = Buffer.from(secret);
-    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
-  }
   const userId = (req.session as any)?.userId;
   if (!userId) return false;
   try {
@@ -475,6 +472,7 @@ router.get("/gs/admin/withdrawals", async (req, res): Promise<void> => {
 // ─── PATCH /gs/admin/withdrawals/:id — update status ─────────────────────────
 router.patch("/gs/admin/withdrawals/:id", async (req, res): Promise<void> => {
   try {
+    if (FINANCE_SIMULATION_MODE) { res.status(409).json({ error: "Legacy payout status changes are disabled in finance simulation mode" }); return; }
     if (!(await isAdminRequest(req))) { res.status(403).json({ error: "بوابة الإدارة — الدخول مرفوض" }); return; }
     const id = parseInt(req.params.id, 10);
     const status = req.body?.status;

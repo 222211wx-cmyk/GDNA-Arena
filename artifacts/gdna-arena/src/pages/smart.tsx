@@ -191,7 +191,7 @@ export default function SmartPage() {
                 </motion.span>
               </div>
               <p style={{ margin: "4px 0 0", color: "#888", fontSize: 13 }}>
-                Système Intelligent GDNA Arena — Analyse temps-réel · Recommandations personnalisées
+                Système Intelligent Arena Qaisypro — Analyse temps-réel · Recommandations personnalisées
               </p>
             </div>
 

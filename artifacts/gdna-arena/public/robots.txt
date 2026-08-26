@@ -3,5 +3,5 @@ Allow: /
 
 Sitemap: https://helixly.app/sitemap.xml
 
-# GDNA Arena — Sovereign Digital Empire
+# Arena Qaisypro — Sovereign Digital Platform
 # Play-to-earn gaming · GlobalStar voting · GDN-AI intelligence

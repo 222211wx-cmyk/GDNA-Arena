@@ -22,7 +22,7 @@ export function BrandPage() {
         <h2 className="text-lg font-semibold">Empire style rules</h2>
         <Guidelines
           items={[
-            { kind: 'do', text: 'Treat dark mode as the canonical mode — GDNA Arena is a dark-first product on pure black (#000).' },
+            { kind: 'do', text: 'Treat dark mode as the canonical mode — Arena Qaisypro is a dark-first product on pure black (#000).' },
             { kind: 'do', text: 'Reserve imperial gold (#C9A84C) for primary actions, ranks, and royal emphasis; use thin gold-tinted borders to frame surfaces.' },
             { kind: 'do', text: 'Use neon blue (#00d4ff) sparingly as a tech/energy accent (links, highlights, charts), never as a competing primary.' },
             { kind: 'do', text: 'Support RTL layouts — Arabic/Darija is a first-class language of the empire.' },

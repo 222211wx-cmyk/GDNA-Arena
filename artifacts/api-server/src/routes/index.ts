@@ -40,6 +40,7 @@ import levelsRouter from "./levels";
 import rtcRouter from "./rtc";
 import fortressRouter from "./fortress";
 import solidarityRouter from "./solidarity";
+import financeRouter from "./finance";
 
 const router: IRouter = Router();
 
@@ -76,6 +77,7 @@ router.use(levelsRouter);
 router.use(rtcRouter);
 router.use(fortressRouter);
 router.use(solidarityRouter);
+router.use(financeRouter);
 router.use("/neural", neuralRouter);
 router.use("/genome", genomeRouter);
 router.use("/geo", geoRouter);

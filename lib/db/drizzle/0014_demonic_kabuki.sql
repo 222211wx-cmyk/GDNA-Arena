@@ -1,0 +1,1 @@
+ALTER TABLE "manual_payout_requests" ALTER COLUMN "reserved_minor" SET DEFAULT 0;

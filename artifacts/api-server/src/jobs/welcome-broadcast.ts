@@ -35,7 +35,7 @@ const WELCOME_MESSAGES: Array<{ title: string; body: string; icon: string }> = [
   {
     icon: "🏆",
     title: "🏆 البطل لا يحتاج دعوة — هو يدخل",
-    body: "منصة GDNA Arena جاهزة لك: Legends من كل الحضارات، GlobalStar لأفضل المواهب، ألعاب ومعارك وشرف. أين ستبدأ رحلتك؟",
+    body: "منصة Arena Qaisypro جاهزة لك: Legends من كل الحضارات، GlobalStar لأفضل المواهب، ألعاب ومعارك وشرف. أين ستبدأ رحلتك؟",
   },
 ];
 

@@ -718,7 +718,7 @@ export default function Hub() {
       >
         <div className="flex justify-center gap-3 text-xl">🌍 🇬🇧 🇫🇷 🇸🇦 🇲🇦</div>
         <p className="text-xs font-mono" style={{ color: "#ffffff30" }}>
-          <span className="imperial-gold font-black">GDNA ARENA</span> · {t("hub_footer")}
+          <span className="imperial-gold font-black">ARENA QAISYPRO</span> · {t("hub_footer")}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           {["Arabic", "English", "Français", "Darija", "Español", "中文", "Русский", "Português"].map(l => (

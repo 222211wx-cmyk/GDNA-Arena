@@ -21,11 +21,11 @@ const T = {
     de: "Zugang Nicht Verfügbar",
   },
   subtitle: {
-    en: "GDNA Arena is not available in your country",
-    ar: "GDNA Arena غير متاحة في بلدك",
-    fr: "GDNA Arena n'est pas disponible dans votre pays",
-    es: "GDNA Arena no está disponible en tu país",
-    de: "GDNA Arena ist in Ihrem Land nicht verfügbar",
+    en: "Arena Qaisypro is not available in your country",
+    ar: "Arena Qaisypro غير متاحة في بلدك",
+    fr: "Arena Qaisypro n'est pas disponible dans votre pays",
+    es: "Arena Qaisypro no está disponible en tu país",
+    de: "Arena Qaisypro ist in Ihrem Land nicht verfügbar",
   },
   reason: {
     en: "Due to international regulations, sanctions, or local law, we are unable to provide access to this platform in your jurisdiction.",

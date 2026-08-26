@@ -338,7 +338,7 @@ export default function GlobalStarHome() {
             <div className="h-px w-20" style={{ background: "#C9A84C20" }} />
           </div>
           <p className="text-xs font-mono" style={{ color: "#ffffff10" }}>
-            GLOBALSTAR · IMPERIAL TRIBUTE HALL · GDNA ARENA
+            GLOBALSTAR · IMPERIAL TRIBUTE HALL · ARENA QAISYPRO
           </p>
         </div>
 

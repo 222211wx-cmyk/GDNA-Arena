@@ -1,4 +1,4 @@
-# Consuming GDNA Empire Design System in web apps
+# Consuming Arena Qaisypro Design System in web apps
 
 Read `artifacts/gdna-ds/docs/AGENTS.md` first. This guide covers
 React/Vite and other shadcn/Tailwind web consumers. If the app already contains

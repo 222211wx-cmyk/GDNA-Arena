@@ -54,7 +54,7 @@ const ARTICLES: Article[] = [
   {
     id: 3,
     category: "Esports",
-    title: "GDNA Arena Season 2 Tournament: $100,000 Prize Pool Opens Registration",
+    title: "Arena Qaisypro Season 2 Tournament: $100,000 Prize Pool Opens Registration",
     summary: "The highly anticipated second season brings new maps, balanced character rosters, and a massive prize pool.",
     readTime: "2 min read",
     date: "Jul 22, 2026"
@@ -134,13 +134,13 @@ export default function NewsPage() {
         <div className="flex-1 overflow-hidden relative">
           <div className="flex whitespace-nowrap animate-[ticker_30s_linear_infinite] group-hover:[animation-play-state:paused]">
             <span className="text-sm font-mono tracking-tight text-white/80 mx-4">
-              🔴 LIVE: Tournament brackets updated • Bitcoin ETF volume surges • New Web3 game launches • GDNA Arena Season 2 announced • Epic Games $50M Fund • 
+              🔴 LIVE: Tournament brackets updated • Bitcoin ETF volume surges • New Web3 game launches • Arena Qaisypro Season 2 announced • Epic Games $50M Fund •
             </span>
             <span className="text-sm font-mono tracking-tight text-white/80 mx-4">
-              🔴 LIVE: Tournament brackets updated • Bitcoin ETF volume surges • New Web3 game launches • GDNA Arena Season 2 announced • Epic Games $50M Fund • 
+              🔴 LIVE: Tournament brackets updated • Bitcoin ETF volume surges • New Web3 game launches • Arena Qaisypro Season 2 announced • Epic Games $50M Fund •
             </span>
             <span className="text-sm font-mono tracking-tight text-white/80 mx-4">
-              🔴 LIVE: Tournament brackets updated • Bitcoin ETF volume surges • New Web3 game launches • GDNA Arena Season 2 announced • Epic Games $50M Fund • 
+              🔴 LIVE: Tournament brackets updated • Bitcoin ETF volume surges • New Web3 game launches • Arena Qaisypro Season 2 announced • Epic Games $50M Fund •
             </span>
           </div>
         </div>

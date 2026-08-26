@@ -1,0 +1,1 @@
+ALTER TABLE "manual_payout_requests" ADD COLUMN "operational_verified" boolean DEFAULT false NOT NULL;
