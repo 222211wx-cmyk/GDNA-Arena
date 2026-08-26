@@ -396,10 +396,10 @@ export default function Home() {
           >
             {!user ? (
               <>
-                <Link href="/register">
+                <Link href="/hub">
                   <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
                     style={{ background: "#22C55E", color: "#000" }}>
-                    JOIN THE EMPIRE
+                    EXPLORE ARENA
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </Link>
@@ -409,6 +409,9 @@ export default function Home() {
                     CITIZEN LOGIN
                   </button>
                 </Link>
+                <p className="basis-full text-center text-xs text-muted-foreground">
+                  No account needed to browse.
+                </p>
               </>
             ) : (
               <Link href="/hub">

@@ -10,6 +10,7 @@ import { LegalProvider } from "@/contexts/LegalContext";
 import { CallProvider } from "@/contexts/CallContext";
 import { ConnectivityProvider } from "@/contexts/ConnectivityContext";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
+import { BetaSimulationBanner } from "@/components/BetaSimulationBanner";
 import CommHub from "@/components/CommHub";
 import CookieBanner from "@/components/legal/CookieBanner";
 import AgeGate from "@/components/legal/AgeGate";
@@ -153,6 +154,7 @@ function Router() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
+      <BetaSimulationBanner />
       <CoinsDisclaimer />
       <Navbar />
       <PageWrapper />
