@@ -22,31 +22,81 @@ import {
   type E2ERecipientKey,
 } from "@/lib/amis-e2ee";
 
-const AGORA_APP_ID = "62585b9b53c44c47baa7600ee5d74e54";
-
 // Fetch a channel-scoped RTC token from the authenticated backend.
-// Returns { appId, token, uid } — token is null while the Agora project runs
-// in App-ID-only mode (no App Certificate configured server-side yet).
-async function fetchAgoraToken(channel: string): Promise<{ appId: string; token: string | null; uid: number | null }> {
+// The Agora client must not be created until this returns a complete signed
+// configuration sourced from the server's runtime process.env.
+async function fetchAgoraToken(channel: string): Promise<{ appId: string; token: string; uid: number }> {
   const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-  // Retry briefly on 403: the caller's call-offer (which registers the call
-  // server-side) races this HTTP request over a separate connection.
+  // 403 can briefly race the WS call registration. 503 means Replit's runtime
+  // configuration is not ready yet. Neither condition may start Agora.
   let lastError = "Secure call token unavailable";
-  for (let attempt = 0; attempt < 4; attempt++) {
+  const retryDelayMs = [350, 700, 1_400, 2_000];
+  for (let attempt = 0; attempt < retryDelayMs.length; attempt++) {
     try {
       const r = await fetch(`${base}/api/rtc/agora-token?channel=${encodeURIComponent(channel)}`, { credentials: "include" });
-      if (r.status === 403) { await new Promise(res => setTimeout(res, 350)); continue; }
+      if (r.status === 403 || r.status === 503) {
+        const body = await r.json().catch(() => ({} as { error?: string }));
+        lastError = body.error ?? `Secure call token failed: HTTP ${r.status}`;
+        if (attempt < retryDelayMs.length - 1) {
+          await new Promise(res => setTimeout(res, retryDelayMs[attempt]));
+          continue;
+        }
+      }
       if (!r.ok) {
         const body = await r.json().catch(() => ({} as { error?: string }));
         throw new Error(body.error ?? `Secure call token failed: HTTP ${r.status}`);
       }
-      const data = await r.json();
-      return { appId: data.appId ?? AGORA_APP_ID, token: data.token ?? null, uid: data.uid ?? null };
+      const data = await r.json() as { appId?: unknown; token?: unknown; uid?: unknown };
+      if (
+        typeof data.appId !== "string" ||
+        !/^[a-f0-9]{32}$/i.test(data.appId) ||
+        typeof data.token !== "string" ||
+        data.token.length === 0 ||
+        typeof data.uid !== "number"
+      ) {
+        throw new Error("Secure call token server returned incomplete configuration");
+      }
+      return { appId: data.appId, token: data.token, uid: data.uid };
     } catch (error) {
       lastError = error instanceof Error ? error.message : lastError;
-      if (attempt < 3) await new Promise(res => setTimeout(res, 350));
+      if (attempt < retryDelayMs.length - 1) {
+        await new Promise(res => setTimeout(res, retryDelayMs[attempt]));
+      }
     }
   }
+  throw new Error(lastError);
+}
+
+async function fetchAgoraPreflight(): Promise<{ appId: string; token: string; uid: number; channel: string }> {
+  const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+  const retryDelayMs = [400, 800, 1_600, 2_000];
+  let lastError = "Agora preflight unavailable";
+
+  for (let attempt = 0; attempt < retryDelayMs.length; attempt++) {
+    const response = await fetch(`${base}/api/rtc/preflight-token`, { credentials: "include" });
+    const data = await response.json().catch(() => ({})) as {
+      appId?: unknown; token?: unknown; uid?: unknown; channel?: unknown; error?: string;
+    };
+    if (response.status === 503 && attempt < retryDelayMs.length - 1) {
+      lastError = data.error ?? lastError;
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs[attempt]));
+      continue;
+    }
+    if (!response.ok) throw new Error(data.error ?? `Agora preflight unavailable: HTTP ${response.status}`);
+    if (
+      typeof data.appId !== "string" ||
+      !/^[a-f0-9]{32}$/i.test(data.appId) ||
+      typeof data.token !== "string" ||
+      data.token.length === 0 ||
+      typeof data.uid !== "number" ||
+      typeof data.channel !== "string" ||
+      data.channel.length === 0
+    ) {
+      throw new Error("Agora preflight token server returned incomplete configuration");
+    }
+    return { appId: data.appId, token: data.token, uid: data.uid, channel: data.channel };
+  }
+
   throw new Error(lastError);
 }
 
@@ -211,19 +261,12 @@ export function useCall(user: { id: number; username: string } | null) {
     let oscillator: OscillatorNode | null = null;
 
     try {
-      const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-      const response = await fetch(`${base}/api/rtc/preflight-token`, { credentials: "include" });
-      if (!response.ok) throw new Error(`Agora preflight unavailable: HTTP ${response.status}`);
-
-      const data = await response.json() as { appId?: string; token?: string | null; uid?: number | null; channel?: string };
-      if (!data.channel) {
-        throw new Error("Agora preflight channel is unavailable");
-      }
+      const data = await fetchAgoraPreflight();
 
       client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       const activeClient = client;
       preflightClientRef.current = activeClient;
-      await activeClient.join(data.appId ?? AGORA_APP_ID, data.channel, data.token ?? null, data.uid ?? null);
+      await activeClient.join(data.appId, data.channel, data.token, data.uid);
 
       // Publish a silent track so Agora can calculate meaningful uplink quality
       // without prompting for the citizen's microphone.
@@ -283,6 +326,9 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Join an Agora channel & publish local media ────────────────────────────
   const joinAgora = useCallback(async (channel: string, withVideo: boolean, encryptionSecret: string) => {
+    // Resolve and validate runtime server configuration before Agora creates or
+    // joins any channel. This prevents a half-started client during secret boot.
+    const { appId, token, uid } = await fetchAgoraToken(channel);
     const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
     agoraRef.current = client;
     // Agora encrypts media frames before they leave this browser. The secret is
@@ -313,7 +359,6 @@ export function useCall(user: { id: number; username: string } | null) {
       rebuildRemoteStream();
     });
 
-    const { appId, token, uid } = await fetchAgoraToken(channel);
     await client.join(appId, channel, token, uid);
 
     const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();

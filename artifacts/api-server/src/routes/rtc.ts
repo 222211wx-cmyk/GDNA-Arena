@@ -1,36 +1,34 @@
 // ══════════════════════════════════════════════════════════════════════════════
 //  RTC — Agora token issuance for GDNA Arena calls (authenticated only).
 //
-//  When AGORA_APP_CERTIFICATE is configured, issues short-lived RTC tokens
-//  scoped to a single channel so only invited participants can join.
-//  Without the certificate the Agora project runs in App-ID-only (testing)
-//  mode and the client joins with a null token.
+//  Reads AGORA_APP_ID + AGORA_APP_CERTIFICATE from process.env at request time
+//  and issues short-lived tokens scoped to invited call participants.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
 import { RtcTokenBuilder, RtcRole } from "agora-token";
 import { isCallParticipant } from "../lib/signaling";
+import { getAgoraConfigStatus, readAgoraServerConfig } from "../lib/agora-config";
 
 const router: IRouter = Router();
 
-const AGORA_APP_ID = process.env.AGORA_APP_ID?.trim() || "62585b9b53c44c47baa7600ee5d74e54";
 const TOKEN_TTL_SEC = 60 * 60; // 1h — longer than any realistic call setup + duration
 
 function issueAgoraCredentials(channel: string, userId: number) {
-  const certificate = process.env.AGORA_APP_CERTIFICATE?.trim();
-  if (!certificate) return null;
+  const config = readAgoraServerConfig();
+  if (!config) return null;
 
   const token = RtcTokenBuilder.buildTokenWithUid(
-    AGORA_APP_ID,
-    certificate,
+    config.appId,
+    config.certificate,
     channel,
     userId,
     RtcRole.PUBLISHER,
     TOKEN_TTL_SEC,
     TOKEN_TTL_SEC,
   );
-  return { appId: AGORA_APP_ID, token, uid: userId };
+  return { appId: config.appId, token, uid: userId };
 }
 
 // The preflight joins an isolated Agora channel and measures Agora's own
@@ -45,7 +43,9 @@ router.get("/rtc/preflight-token", (req, res): void => {
   const channel = `preflight_${randomUUID().replace(/-/g, "")}`;
   const credentials = issueAgoraCredentials(channel, req.session.userId);
   if (!credentials) {
-    res.status(503).json({ error: "Secure call service is not configured" });
+    req.log.warn(getAgoraConfigStatus(), "Agora token request arrived before configuration was ready");
+    res.setHeader("Retry-After", "2");
+    res.status(503).json({ error: "Secure call service is starting; retry shortly" });
     return;
   }
   res.setHeader("Cache-Control", "no-store");
@@ -75,7 +75,9 @@ router.get("/rtc/agora-token", (req, res): void => {
 
   const credentials = issueAgoraCredentials(channel, req.session.userId);
   if (!credentials) {
-    res.status(503).json({ error: "Secure call service is not configured" });
+    req.log.warn(getAgoraConfigStatus(), "Agora token request arrived before configuration was ready");
+    res.setHeader("Retry-After", "2");
+    res.status(503).json({ error: "Secure call service is starting; retry shortly" });
     return;
   }
   res.json(credentials);

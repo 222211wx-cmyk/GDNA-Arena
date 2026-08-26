@@ -14,11 +14,14 @@ import { startGenomeEvolutionJob } from "./jobs/genome-evolution.js";
 import { startCouncilReportJob } from "./jobs/council-report.js";
 import { ensureMissionsTables, startSovereignMissionsJob } from "./jobs/sovereign-missions.js";
 import { startEventLiveAlertJob } from "./jobs/event-live-alert.js";
+import { getAgoraConfigStatus } from "./lib/agora-config.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
 const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
+
+logger.info(getAgoraConfigStatus(), "Agora environment configuration loaded from process.env");
 
 const SEED_LEGENDS = [
   {
