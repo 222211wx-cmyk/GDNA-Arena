@@ -107,6 +107,18 @@ export default function Login() {
               >
                 {isLoading ? "Authenticating..." : "Login"}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-12 border-primary/40 font-bold text-primary"
+                onClick={() => setLocation("/hub")}
+                data-testid="button-continue-as-guest"
+              >
+                الدخول كزائر بلا حساب
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                يمكنك تصفح النسخة التجريبية الآن. الحساب مطلوب فقط للعمليات الحساسة.
+              </p>
               <p className="text-center text-sm text-muted-foreground">
                 No account?{" "}
                 <Link href="/register" className="text-primary hover:underline font-semibold">
