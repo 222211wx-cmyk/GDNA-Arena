@@ -78,11 +78,10 @@ router.post("/archon/assess", async (req, res): Promise<void> => {
     return;
   }
 
-  const dims = [session.volontas, session.resilentia, session.intellectus,
-                session.disciplina, session.societas, session.abundantia, session.auctoritas];
+  const dims = computeDimensions(answers);
   const dimArray = [dims.volontas, dims.resilentia, dims.intellectus,
                     dims.disciplina, dims.societas, dims.abundantia, dims.auctoritas];
-  const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
+  const overallScore = Math.round(dimArray.reduce((a, b) => a + b, 0) / 7);
 
   const LANG_INSTRUCTION: Record<string, string> = {
     en: "Respond entirely in English.",
@@ -146,8 +145,11 @@ Return this exact JSON structure:
     if (!process.env.OPENAI_API_KEY) throw new Error("No API key");
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 200,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 800,
       temperature: 0.85,
       response_format: { type: "json_object" },
     });
@@ -204,7 +206,7 @@ Return this exact JSON structure:
 router.get("/archon/profile", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
   const [session] = await db.select().from(archonSessionsTable)
-    .where(eq(archonSessionsTable.userId, user.id))
+    .where(eq(archonSessionsTable.userId, req.session.userId))
     .orderBy(desc(archonSessionsTable.createdAt))
     .limit(1);
   res.json({ session: session ?? null });
@@ -212,7 +214,8 @@ router.get("/archon/profile", async (req, res): Promise<void> => {
 
 // ── GET /api/archon/profile/:username — public profile lookup ─────────────────
 router.get("/archon/profile/:username", async (req, res): Promise<void> => {
-  const { username } = req.query as { username?: string };
+  const rawUsername = req.params.username;
+  const username = Array.isArray(rawUsername) ? rawUsername[0] : rawUsername;
   if (!username) { res.status(400).json({ error: "Username required" }); return; }
   const [user] = await db.select({ id: usersTable.id })
     .from(usersTable)
@@ -231,6 +234,15 @@ router.get("/archon/profile/:username", async (req, res): Promise<void> => {
                 session.disciplina, session.societas, session.abundantia, session.auctoritas];
   const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
   const fullAiProfile = session.aiProfile as Record<string, string> | null ?? {};
+
+  if (!req.session?.userId) {
+    res.json({
+      locked: true,
+      username,
+      archetype: session.archetype,
+    });
+    return;
+  }
 
   // Return only the public-facing fields — no decrees, protocols, missions, or personal content
   res.json({
@@ -279,14 +291,6 @@ Example tone: "Today: earn 100 points in the Arena of Legends to claim the weekl
       response_format: { type: "json_object" },
     });
     const data = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
-
-    const [saved] = await db.insert(archonDirectivesTable).values({
-      userId, dimension, directive: fallbackDirective,
-    }).returning();
-
-    const [saved] = await db.insert(archonDirectivesTable).values({
-      userId, dimension, directive: fallbackDirective,
-    }).returning();
     await db.insert(archonDirectivesTable).values({
       userId: req.session.userId, dimension, directive: data.directive ?? "Execute silence for 10 minutes.",
     });
@@ -302,12 +306,14 @@ router.get("/archon/daily-directive", async (req, res): Promise<void> => {
 
   const userId = req.session.userId;
   const dateKey = moroccoDateKey();
-  const result = await pool.query(
-    `UPDATE archon_directives
-        SET completed=true
-      WHERE id=$1 AND user_id=$2
-      RETURNING id, completed`,
-    [directiveId, req.session.userId],
+  let result = await pool.query(
+    `SELECT id, directive, completed, created_at AS "createdAt"
+       FROM archon_directives
+      WHERE user_id=$1
+        AND (created_at AT TIME ZONE 'Africa/Casablanca')::date=$2::date
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId, dateKey],
   );
 
   if (!result.rows[0]) {
@@ -420,23 +426,12 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
   const pillarIdx = VALID_PILLARS.indexOf(pillar); // 0–3
   const advisoryKey = userId * 4 + pillarIdx; // fits in int32 range for typical user IDs
   const client = pool ? await pool.connect() : null;
+  if (!client) { res.status(503).json({ error: "Database unavailable" }); return; }
 
-    const { rows: cachedRows } = await client.query<{
-      id: number;
-      directive: string;
-      completed: boolean;
-      date_key: string;
-    }>(
-      `SELECT id, directive, completed,
-              TO_CHAR(created_at AT TIME ZONE 'Africa/Casablanca', 'YYYY-MM-DD') AS date_key
-       FROM archon_directives
-       WHERE user_id = $1
-         AND (created_at AT TIME ZONE 'Africa/Casablanca')::date =
-             (NOW() AT TIME ZONE 'Africa/Casablanca')::date
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [userId],
-    );
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [advisoryKey]);
+
     const { rows: yRows } = await client.query<{ streak: number }>(
       `SELECT streak FROM pillar_completions WHERE user_id=$1 AND pillar=$2 AND date_key=$3 LIMIT 1`,
       [userId, pillar, yesterdayKey],
@@ -498,15 +493,3 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
 });
 
 export default router;
-
-      const cached = cachedRows[0];
-
-    const fallbackDirective = `CLASSIFIED: “Discipline builds the crown.” Complete 15 minutes of focused ${dimension} training today, then review the latest movement inside the empire.`;
-
-    const { rows } = await client.query<{ id: number; completed: boolean }>(
-      `UPDATE archon_directives
-       SET completed = TRUE
-       WHERE id = $1 AND user_id = $2
-       RETURNING id, completed`,
-      [directiveId, req.session.userId],
-    );

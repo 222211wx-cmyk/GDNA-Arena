@@ -79,6 +79,10 @@ app.use(
 // logged-in citizen's browser against these APIs (CSRF-style abuse, OpenAI
 // cost drain on public AI endpoints).
 const allowedOrigins = new Set<string>();
+allowedOrigins.add("https://helixly.app");
+allowedOrigins.add("https://www.helixly.app");
+allowedOrigins.add("https://arena-qaisypro.com");
+allowedOrigins.add("https://www.arena-qaisypro.com");
 if (process.env.REPLIT_DEV_DOMAIN) {
   allowedOrigins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
 }

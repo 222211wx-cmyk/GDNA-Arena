@@ -2,12 +2,11 @@ import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
-import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown } from "lucide-react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown, ScrollText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
-import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, ScrollText } from "lucide-react";
 
 type DailyArchonDirective = {
   id: number;

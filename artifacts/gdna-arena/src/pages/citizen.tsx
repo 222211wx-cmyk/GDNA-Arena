@@ -7,7 +7,7 @@ import {
   MessageSquare, Eye, Coins, Zap, Star, Globe,
   Music, Cpu, Briefcase, Film, Calendar, Medal, Heart,
   AlertTriangle, CheckCircle, Phone, Video, MessageCircle,
-  Lock, ExternalLink, UserPlus, UserCheck, Users, Swords, X
+  Lock, ExternalLink, UserPlus, UserCheck, Users, Swords, X, Share2
 } from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
@@ -99,7 +99,7 @@ function useArchonProfile(username: string | undefined) {
   useEffect(() => {
     if (!username) { setProfile("none"); return; }
     setProfile("loading");
-    fetch(`/api/archon/profile/${encodeURIComponent(username)}`, { credentials: "include" })
+    fetch(`/api/archon/profile/${encodeURIComponent(username)}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => setProfile(d ?? "none"))
       .catch(() => setProfile("none"));
@@ -351,7 +351,7 @@ function EmpireIdentitySection({ username }: { username: string }) {
   const [profile, setProfile] = useState<ArchonPublicProfile | "loading" | "none">("loading");
 
   useEffect(() => {
-    fetch(`/api/archon/profile/${encodeURIComponent(username)}`, { credentials: "include" })
+    fetch(`/api/archon/profile/${encodeURIComponent(username)}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => setProfile(d ?? "none"))
       .catch(() => setProfile("none"));
@@ -593,7 +593,7 @@ export default function CitizenPage() {
   const fetchData = () => {
     if (!username) return;
     setLoading(true);
-    fetch(`/api/citizens/${encodeURIComponent(username)}`, { credentials: "include" })
+    fetch(`/api/citizens/${encodeURIComponent(username)}`)
       .then(r => { if (r.status === 404) { setNotFound(true); return null; } return r.json(); })
       .then(d => {
         if (d) {
@@ -669,11 +669,70 @@ export default function CitizenPage() {
   );
 
   const { citizen, recentPosts, achievements, violations, followers, following, earned, total } = data;
+  const initials = citizen.username.slice(0, 2).toUpperCase();
+  const shareProfile = async () => {
+    const url = `${window.location.origin}/citizen/${encodeURIComponent(citizen.username)}`;
+    if (navigator.share) {
+      await navigator.share({ title: citizen.username, url }).catch(() => {});
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+  };
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto max-w-3xl px-4 py-12">
+          <Card className="overflow-hidden border-primary/30">
+            <CardContent className="space-y-6 p-8 text-center">
+              <div
+                className="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl text-3xl font-black text-black"
+                style={{ background: `linear-gradient(135deg, ${citizen.rank.color}, ${citizen.rank.color}88)` }}
+              >
+                {initials}
+              </div>
+              <div>
+                <h1 className="text-3xl font-black">{citizen.username}</h1>
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  <RankBadge rank={citizen.rank} />
+                  <span
+                    className="inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-black"
+                    style={{
+                      color: citizen.honorInfo.color,
+                      borderColor: `${citizen.honorInfo.color}40`,
+                      background: `${citizen.honorInfo.color}10`,
+                    }}
+                  >
+                    {citizen.honorInfo.badge} {citizen.honorInfo.title}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-4">
+                <div className="text-[10px] font-black tracking-[0.2em] text-muted-foreground">KING LEAGUE POINTS</div>
+                <div className="text-3xl font-black text-primary">{citizen.xp.toLocaleString()} XP</div>
+              </div>
+              <div className="rounded-2xl border border-primary/20 bg-background/70 p-5">
+                <Lock className="mx-auto mb-2 h-7 w-7 text-primary" />
+                <div className="font-black">بيانات خاصة مقفلة</div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  البيانات الحساسة محمية. الاسم واللقب والرتبة ونقاط دوري الملوك فقط هي بيانات عمومية.
+                </p>
+              </div>
+              <div className="flex flex-col justify-center gap-3 sm:flex-row">
+                <Button onClick={shareProfile}><Share2 className="h-4 w-4" /> مشاركة البروفايل</Button>
+                <Button variant="outline" onClick={() => navigate("/login")}>تسجيل الدخول</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   const domMeta = DOMAIN_META[citizen.specialty] ?? DOMAIN_META.general;
   const winRate = citizen.gamesPlayed > 0 ? Math.round((citizen.wins / citizen.gamesPlayed) * 100) : 0;
   const joinDate = new Date(citizen.createdAt).toLocaleDateString("en", { month: "long", year: "numeric" });
-  const initials = citizen.username.slice(0, 2).toUpperCase();
-  const isSelf = currentUser?.username === citizen.username;
+  const isSelf = currentUser.username === citizen.username;
 
   return (
     <div className="min-h-screen bg-background">
@@ -716,6 +775,9 @@ export default function CitizenPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-3xl font-black">{citizen.username}</h1>
                 <RankBadge rank={citizen.rank} />
+                <Button variant="outline" size="sm" onClick={shareProfile}>
+                  <Share2 className="h-4 w-4" /> Share
+                </Button>
               </div>
 
               {/* Honor Title */}
@@ -757,10 +819,25 @@ export default function CitizenPage() {
                 </button>
               </div>
 
-              <XpBar xp={citizen.xp} />
-              <HonorBar honorCount={citizen.honorCount} honorInfo={citizen.honorInfo} />
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+                <div className="text-[10px] font-black tracking-[0.2em] text-muted-foreground">KING LEAGUE POINTS</div>
+                <div className="text-2xl font-black text-primary">{citizen.xp.toLocaleString()} XP</div>
+              </div>
+              {currentUser && <XpBar xp={citizen.xp} />}
+              {currentUser && <HonorBar honorCount={citizen.honorCount} honorInfo={citizen.honorInfo} />}
             </div>
           </div>
+
+          {!currentUser && (
+            <div className="relative mt-6 rounded-2xl border border-primary/20 bg-background/70 p-6 text-center">
+              <Lock className="mx-auto mb-3 h-7 w-7 text-primary" />
+              <div className="font-black">بيانات خاصة مقفلة</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                الاسم واللقب والرتبة ونقاط دوري الملوك بيانات عمومية. سجّل الدخول لعرض تفاصيل المواطن الأخرى.
+              </p>
+              <Button className="mt-4" onClick={() => navigate("/login")}>تسجيل الدخول</Button>
+            </div>
+          )}
 
           {/* Action buttons */}
           {currentUser && !isSelf && (

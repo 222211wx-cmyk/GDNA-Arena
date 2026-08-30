@@ -116,6 +116,28 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
   user.balance = parseInt(user.balance ?? "0");
   user.honorCount = parseInt(user.honor_count ?? "0");
 
+  if (!req.session?.userId) {
+    const honorInfo = getHonorTitle(user.honorCount);
+    res.json({
+      publicOnly: true,
+      citizen: {
+        username: user.username,
+        xp: user.xp,
+        honorCount: user.honorCount,
+        rank: getRank(user.xp),
+        honorInfo,
+      },
+      recentPosts: [],
+      achievements: [],
+      violations: [],
+      followers: [],
+      following: [],
+      earned: 0,
+      total: 0,
+    });
+    return;
+  }
+
   // Recent posts (up to 5)
   const recentPosts = await db
     .select()
