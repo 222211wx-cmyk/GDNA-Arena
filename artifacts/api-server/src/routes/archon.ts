@@ -78,10 +78,11 @@ router.post("/archon/assess", async (req, res): Promise<void> => {
     return;
   }
 
-  const dims = computeDimensions(answers);
+  const dims = [session.volontas, session.resilentia, session.intellectus,
+                session.disciplina, session.societas, session.abundantia, session.auctoritas];
   const dimArray = [dims.volontas, dims.resilentia, dims.intellectus,
                     dims.disciplina, dims.societas, dims.abundantia, dims.auctoritas];
-  const overallScore = Math.round(dimArray.reduce((a, b) => a + b, 0) / 7);
+  const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
 
   const LANG_INSTRUCTION: Record<string, string> = {
     en: "Respond entirely in English.",
@@ -145,11 +146,8 @@ Return this exact JSON structure:
     if (!process.env.OPENAI_API_KEY) throw new Error("No API key");
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: 800,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 200,
       temperature: 0.85,
       response_format: { type: "json_object" },
     });
@@ -206,7 +204,7 @@ Return this exact JSON structure:
 router.get("/archon/profile", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
   const [session] = await db.select().from(archonSessionsTable)
-    .where(eq(archonSessionsTable.userId, req.session.userId))
+    .where(eq(archonSessionsTable.userId, user.id))
     .orderBy(desc(archonSessionsTable.createdAt))
     .limit(1);
   res.json({ session: session ?? null });
@@ -306,14 +304,12 @@ router.get("/archon/daily-directive", async (req, res): Promise<void> => {
 
   const userId = req.session.userId;
   const dateKey = moroccoDateKey();
-  let result = await pool.query(
-    `SELECT id, directive, completed, created_at AS "createdAt"
-       FROM archon_directives
-      WHERE user_id=$1
-        AND (created_at AT TIME ZONE 'Africa/Casablanca')::date=$2::date
-      ORDER BY created_at DESC
-      LIMIT 1`,
-    [userId, dateKey],
+  const result = await pool.query(
+    `UPDATE archon_directives
+        SET completed=true
+      WHERE id=$1 AND user_id=$2
+      RETURNING id, completed`,
+    [directiveId, req.session.userId],
   );
 
   if (!result.rows[0]) {
