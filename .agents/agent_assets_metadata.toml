@@ -23,6 +23,7 @@ id = "lP-Z_p31gOP-te3XRQZzK"
 uri = "file://exports/gdna-arena-source.zip"
 type = "unspecified"
 title = "GDNA Arena - Source Code"
+logical_id = "7d319609-4d56-4587-afad-6029a883239e"
 
 [[outputs]]
 id = "BArgKKcU79ZddGdCtdVrh"
@@ -30,3 +31,4 @@ uri = "file://screenshots/arena-qaisypro-choice-page-final.jpg"
 type = "image"
 title = "Arena Qaisypro — صفحة الاختيارات"
 description = "الصفحة النهائية المعزولة بأبواب AMIS وMESSAGERI وSOCIAL وARENA."
+logical_id = "1afd12cc-0b9a-4c77-910c-a83b0eb09748"
