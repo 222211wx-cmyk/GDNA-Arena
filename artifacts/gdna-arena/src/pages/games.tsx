@@ -57,6 +57,17 @@ const GAMES = [
     isTournament: true, isExternal: false,
     color: "#C9A84C",
   },
+  {
+    id: "penalty-king",
+    title: "ضربات الجزاء الملكية",
+    description: "Action | 1024 أسطورة متصل",
+    image: "/images/globalstar.png",
+    genre: "دوري الملوك",
+    minReward: 5, maxReward: 50, winChance: "55%",
+    isTournament: false, isExternal: false,
+    color: "#C9A84C",
+    isKing: true,
+  },
 ] as const;
 
 type ArenaGameId = (typeof GAMES)[number]["id"];
@@ -422,6 +433,7 @@ export default function Games() {
   };
 
   const handleArenaWithdraw = (gameId: ArenaGameId) => {
+    if (gameId === "penalty-king") return;
     if (!user) {
       setLocation("/login");
       return;
@@ -479,7 +491,7 @@ export default function Games() {
       {/* Smart Domain Widget */}
       <SmartDomainWidget domainId="gaming" label="Module Gaming" />
 
-      {/* 4-game grid */}
+      {/* Games grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {GAMES.map((game, index) => (
           <motion.div key={game.id}
@@ -497,10 +509,30 @@ export default function Games() {
                   ♔ TOURNAMENT
                 </div>
               )}
+              {"isKing" in game && game.isKing && (
+                <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-full border border-primary/50 bg-background/90 px-3 py-1 text-xs font-black text-primary">
+                  👑 جديد
+                </div>
+              )}
 
               <div className="relative aspect-video overflow-hidden">
-                <img src={game.image} alt={game.title}
-                  className="object-cover w-full h-full transform group-hover:scale-110 transition-transform duration-700 ease-out" />
+                {"isKing" in game && game.isKing ? (
+                  <div
+                    role="img"
+                    aria-label="تاج ملكي فوق كرة قدم"
+                    className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 via-background to-primary/5 text-6xl"
+                  >
+                    <motion.span
+                      animate={{ y: [0, -6, 0], rotate: [-2, 2, -2] }}
+                      transition={{ repeat: Infinity, duration: 2.4 }}
+                    >
+                      👑⚽
+                    </motion.span>
+                  </div>
+                ) : (
+                  <img src={game.image} alt={game.title}
+                    className="object-cover w-full h-full transform group-hover:scale-110 transition-transform duration-700 ease-out" />
+                )}
                 <div className={`absolute inset-0 bg-gradient-to-t ${game.isTournament ? "from-black via-black/30 to-transparent" : "from-background via-background/20 to-transparent"}`} />
                 {!game.isTournament && (
                   <div className="absolute top-4 right-4">
@@ -527,7 +559,9 @@ export default function Games() {
                   <div className="border-t border-border/30 pt-3 space-y-1.5">
                     <div className="flex justify-between text-xs uppercase tracking-wider">
                       <span className="text-muted-foreground flex items-center gap-1"><Coins className="w-3 h-3" /> Reward</span>
-                      <span className="font-bold" style={{ color: game.color }}>{game.minReward}–{game.maxReward} coins</span>
+                      <span className="font-bold" style={{ color: game.color }}>
+                        {"isKing" in game && game.isKing ? `${game.minReward}–${game.maxReward} XP` : `${game.minReward}–${game.maxReward} coins`}
+                      </span>
                     </div>
                     {game.isTournament ? (
                       <div className="flex justify-between text-xs uppercase tracking-wider">
@@ -553,19 +587,21 @@ export default function Games() {
                     {game.isTournament ? (
                       <><Crown className="w-4 h-4 mr-2" />ENTER TOURNAMENT</>
                     ) : (
-                      <><Play className="w-4 h-4 mr-2" />Play Now</>
+                      <><Play className="w-4 h-4 mr-2" />{"isKing" in game && game.isKing ? "AL3AB DABA" : "Play Now"}</>
                     )}
                   </Button>
 
-                  <Button
-                    variant="outline"
-                    className="w-full h-11 font-bold tracking-wider"
-                    disabled={arenaWithdraw.isPending}
-                    onClick={() => handleArenaWithdraw(game.id)}
-                  >
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    ارسال ويد ارينا
-                  </Button>
+                  {!("isKing" in game && game.isKing) && (
+                    <Button
+                      variant="outline"
+                      className="w-full h-11 font-bold tracking-wider"
+                      disabled={arenaWithdraw.isPending}
+                      onClick={() => handleArenaWithdraw(game.id)}
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      ارسال ويد ارينا
+                    </Button>
+                  )}
 
                   {/* GlobalStar: link to voting hall */}
                   {game.isTournament && (

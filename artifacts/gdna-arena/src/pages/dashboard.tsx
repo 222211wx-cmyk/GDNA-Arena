@@ -2,11 +2,84 @@ import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
-import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock } from "lucide-react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
+
+type DailyArchonDirective = {
+  id: number;
+  directive: string;
+  completed: boolean;
+  createdAt: string;
+};
+
+function DailyArchonDirectiveCard() {
+  const [directive, setDirective] = useState<DailyArchonDirective | null>(null);
+  const [acknowledging, setAcknowledging] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/archon/daily-directive", { credentials: "include" })
+      .then(async response => response.ok ? response.json() : Promise.reject(new Error("Directive unavailable")))
+      .then(data => setDirective(data.directive))
+      .catch(() => setDirective(null));
+  }, []);
+
+  const acknowledge = async () => {
+    if (!directive || directive.completed || acknowledging) return;
+    setAcknowledging(true);
+    try {
+      const response = await fetch(`/api/archon/daily-directive/${directive.id}/acknowledge`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to acknowledge");
+      setDirective(current => current ? { ...current, completed: true } : current);
+    } finally {
+      setAcknowledging(false);
+    }
+  };
+
+  if (!directive) return null;
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      aria-labelledby="daily-archon-title"
+      data-testid="daily-archon-directive"
+    >
+      <Card className="overflow-hidden border-primary/50 bg-background shadow-[0_0_28px_hsl(var(--primary)/0.12)]">
+        <CardContent className="relative flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between md:p-6">
+          <div className="pointer-events-none absolute inset-y-0 start-0 w-1 bg-primary" />
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 text-primary">
+              <Crown className="size-6" />
+            </div>
+            <div dir="rtl" className="text-right">
+              <p className="mb-1 text-xs font-bold tracking-[0.18em] text-primary">ARCHON • DAILY DIRECTIVE</p>
+              <h2 id="daily-archon-title" className="text-xl font-black text-foreground md:text-2xl">
+                كلمة الأرشون اليوم
+              </h2>
+              <p className="mt-2 max-w-3xl leading-7 text-muted-foreground">{directive.directive}</p>
+              <p className="mt-2 text-xs text-primary/80">يتجدد يومياً عند 00:00 بتوقيت المغرب</p>
+            </div>
+          </div>
+          <Button
+            onClick={acknowledge}
+            disabled={directive.completed || acknowledging}
+            className="min-w-28 shrink-0 font-black"
+            data-testid="button-acknowledge-archon"
+          >
+            <CheckCircle className="me-2 size-4" />
+            {directive.completed ? "تمت المشاهدة" : acknowledging ? "جاري..." : "تم"}
+          </Button>
+        </CardContent>
+      </Card>
+    </motion.section>
+  );
+}
 
 // ── GDN-SMART Widget ───────────────────────────────────────────────────────────
 function SmartWidget() {
@@ -548,6 +621,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      <DailyArchonDirectiveCard />
+
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

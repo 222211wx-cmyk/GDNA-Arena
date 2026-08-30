@@ -24,6 +24,7 @@ import Games from "@/pages/games";
 import NeonRacerGame from "@/pages/game-neon-racer";
 import CryptoClashGame from "@/pages/game-crypto-clash";
 import ArenaStrikeGame from "@/pages/game-arena-strike";
+import PenaltyKingGame from "@/pages/game-penalty-king";
 import NewsPage from "@/pages/news";
 import Leaderboard from "@/pages/leaderboard";
 import ChatPage from "@/pages/chat";
@@ -113,6 +114,7 @@ function PageWrapper() {
           <Route path="/games/neon-racer" component={NeonRacerGame} />
           <Route path="/games/crypto-clash" component={CryptoClashGame} />
           <Route path="/games/arena-strike" component={ArenaStrikeGame} />
+          <Route path="/games/penalty-king" component={PenaltyKingGame} />
           <Route path="/games/globalstar" component={GlobalStarApp} />
           <Route path="/games/globalstar/figures/:id" component={GlobalStarApp} />
           <Route path="/games/globalstar/:rest*" component={GlobalStarApp} />

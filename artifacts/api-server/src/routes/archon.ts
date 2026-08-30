@@ -8,6 +8,32 @@ import { eq, desc } from "drizzle-orm";
 const router: IRouter = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const MOROCCO_TIME_ZONE = "Africa/Casablanca";
+const DAILY_ARCHON_DIRECTIVES = [
+  "اليوم: اجمع 100 نقطة في ملعب الأساطير لتحصل على تاج الأسبوع. «الانتصار يبدأ بخطوة محسوبة.» تابع أخبار الإمبراطورية من SPORT.",
+  "مهمة اليوم: أكمل تحدياً واحداً من أركان التطور وشارك تقدّمك. «الاستمرارية تصنع ما لا تصنعه الحماسة العابرة.» الإمبراطورية تراقب صعود مواطنيها.",
+  "اليوم: ادخل الساحة وساند أسطورة تستحق الصدارة. «الصوت الواعي يصنع التاريخ.» راقب جديد التصنيفات وأخبار الإمبراطورية.",
+  "مهمة اليوم: افتح MESSAGERI وتواصل مع مواطن يشاركك الطموح. «الإمبراطوريات تُبنى بالروابط قبل الجدران.» أخبار المجتمع تنتظرك.",
+  "اليوم: راجع ملفك وطوّر نقطة قوة واحدة بقرار عملي. «من عرف نفسه، عرف طريقه.» تقرير الإمبراطورية اليوم يدعوك للتقدم بثبات.",
+  "مهمة اليوم: حقق فوزاً نزيهاً في إحدى ألعاب ARENA. «المجد نتيجة الانضباط، لا الصدفة.» المنافسات الأسبوعية مستمرة.",
+  "اليوم: اكتشف قصة أسطورة واستخلص منها درساً واحداً. «الإرث معرفة تتحول إلى فعل.» قاعة الأساطير تستقبل أصوات المواطنين.",
+];
+
+function moroccoDateKey(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: MOROCCO_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function directiveForDate(dateKey: string): string {
+  const index = [...dateKey].reduce((sum, char) => sum + char.charCodeAt(0), 0)
+    % DAILY_ARCHON_DIRECTIVES.length;
+  return DAILY_ARCHON_DIRECTIVES[index];
+}
+
 // ── Archon Code Generator (deterministic + aesthetic) ────────────────────────
 function generateArchonCode(dims: number[], archetype: string): string {
   const glyphs = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -261,6 +287,52 @@ The directive should be specific, actionable, and feel like a classified militar
   } catch {
     res.json({ directive: `CLASSIFIED: Focus ${dimension} protocol — 15 minutes of deliberate practice, no distractions.`, duration: "15 min", intensity: "HIGH" });
   }
+});
+
+// ── Daily dashboard directive — resets at 00:00 Africa/Casablanca ─────────────
+router.get("/archon/daily-directive", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const userId = req.session.userId;
+  const dateKey = moroccoDateKey();
+  let result = await pool.query(
+    `SELECT id, directive, completed, created_at AS "createdAt"
+       FROM archon_directives
+      WHERE user_id=$1
+        AND (created_at AT TIME ZONE 'Africa/Casablanca')::date=$2::date
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId, dateKey],
+  );
+
+  if (!result.rows[0]) {
+    result = await pool.query(
+      `INSERT INTO archon_directives (user_id, dimension, directive, completed)
+       VALUES ($1, 'empire', $2, false)
+       RETURNING id, directive, completed, created_at AS "createdAt"`,
+      [userId, directiveForDate(dateKey)],
+    );
+  }
+
+  res.json({ directive: result.rows[0], dateKey, timeZone: MOROCCO_TIME_ZONE });
+});
+
+router.post("/archon/daily-directive/:id/acknowledge", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const directiveId = Number(req.params.id);
+  if (!Number.isInteger(directiveId) || directiveId <= 0) {
+    res.status(400).json({ error: "Invalid directive" }); return;
+  }
+
+  const result = await pool.query(
+    `UPDATE archon_directives
+        SET completed=true
+      WHERE id=$1 AND user_id=$2
+      RETURNING id, completed`,
+    [directiveId, req.session.userId],
+  );
+  if (!result.rows[0]) { res.status(404).json({ error: "Directive not found" }); return; }
+  res.json({ directive: result.rows[0] });
 });
 
 // ── GET /api/archon/pillar/streaks ────────────────────────────────────────────

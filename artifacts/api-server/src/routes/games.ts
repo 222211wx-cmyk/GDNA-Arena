@@ -53,10 +53,11 @@ async function requireAdultPlayer(req: Request, res: Response): Promise<number |
 }
 
 // ── Standard 3 games ──────────────────────────────────────────────────────────
-const GAMES: Record<string, { name: string; minReward: number; maxReward: number; winChance: number }> = {
+const GAMES: Record<string, { name: string; minReward: number; maxReward: number; winChance: number; xpOnly?: boolean }> = {
   "neon-racer":   { name: "Neon Racer",   minReward: 20,  maxReward: 80,  winChance: 0.6  },
   "crypto-clash": { name: "Crypto Clash", minReward: 30,  maxReward: 120, winChance: 0.5  },
   "arena-strike": { name: "Arena Strike", minReward: 50,  maxReward: 200, winChance: 0.45 },
+  "penalty-king": { name: "ضربات الجزاء الملكية", minReward: 5, maxReward: 50, winChance: 0.55, xpOnly: true },
 };
 
 // ── Standard play: 3 games ─────────────────────────────────────────────────────
@@ -75,10 +76,11 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
   const win = Math.random() < game.winChance;
 
   // Server-authoritative reward: win → random in [min, max]; loss → 10% of min
-  const coinsEarned: number = win
+  const baseReward: number = win
     ? Math.floor(game.minReward + Math.random() * (game.maxReward - game.minReward))
     : Math.floor(game.minReward * 0.1);
-  const xpEarned = Math.round(coinsEarned * 1.2);
+  const coinsEarned = game.xpOnly ? 0 : baseReward;
+  const xpEarned = game.xpOnly ? Math.max(1, baseReward) : Math.round(baseReward * 1.2);
 
   let newBalance = coinsEarned;
   let newXp = xpEarned;
@@ -98,7 +100,9 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
       userId,
       amount: coinsEarned,
       type: win ? "win" : "participation",
-      description: `${game.name} — ${win ? "Victory" : "Defeat"} (+${coinsEarned} coins)`,
+      description: game.xpOnly
+        ? `${game.name} — ${win ? "Victory" : "Defeat"} (+${xpEarned} XP)`
+        : `${game.name} — ${win ? "Victory" : "Defeat"} (+${coinsEarned} coins)`,
     });
 
   newBalance = updated.balance;
