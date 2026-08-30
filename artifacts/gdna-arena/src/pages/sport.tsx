@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Trophy, Flame, Star, ArrowRight, Crown, Swords, Globe2, ChevronRight } from "lucide-react";
+import { getLegendImageUrl } from "@/lib/legend-images";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface Legend {
@@ -14,16 +15,6 @@ interface Legend {
   peakYear?: number;
   stats?: { clutch: number; legacy: number; style: number; impact: number; peak: number };
 }
-
-// ── Static image map (Wikipedia CDN) ────────────────────────────────────────
-const SPORT_IMAGES: Record<string, string> = {
-  "Cristiano Ronaldo": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Cristiano_Ronaldo_2018.jpg/400px-Cristiano_Ronaldo_2018.jpg",
-  "Lionel Messi":      "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg/400px-Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg",
-  "LeBron James":      "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/LeBron_James_crop.jpg/400px-LeBron_James_crop.jpg",
-  "Roger Federer":     "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Roger_Federer_at_the_2009_US_Open_03.jpg/400px-Roger_Federer_at_the_2009_US_Open_03.jpg",
-  "Serena Williams":   "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Serena_Williams_2013_US_Open.jpg/400px-Serena_Williams_2013_US_Open.jpg",
-  "Muhammad Ali":      "https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Muhammad_Ali_NYWTS.jpg/400px-Muhammad_Ali_NYWTS.jpg",
-};
 
 const SPORT_QUOTES: Record<string, string> = {
   "Cristiano Ronaldo": "Greatness is not a gift — it's a choice you make every day.",
@@ -60,7 +51,7 @@ function StatBar({ label, value }: { label: string; value: number }) {
 
 function LegendCard({ legend, index }: { legend: Legend; index: number }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const img  = SPORT_IMAGES[legend.name] ?? legend.imageUrl;
+  const img = getLegendImageUrl(legend.name, legend.imageUrl);
   const quote = SPORT_QUOTES[legend.name];
 
   const RANK_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32", "#60a5fa", "#a78bfa", "#34d399"];
@@ -352,7 +343,7 @@ export default function SportPage() {
             <div className="flex items-center gap-4 shrink-0">
               <div className="text-center">
                 <img
-                  src={SPORT_IMAGES["Cristiano Ronaldo"]}
+                  src={getLegendImageUrl("Cristiano Ronaldo") ?? undefined}
                   alt="CR7"
                   className="w-16 h-16 rounded-full object-cover object-top border-2 border-yellow-400 mx-auto mb-1"
                 />
@@ -361,7 +352,7 @@ export default function SportPage() {
               <div className="text-yellow-400 font-black text-2xl">VS</div>
               <div className="text-center">
                 <img
-                  src={SPORT_IMAGES["Lionel Messi"]}
+                  src={getLegendImageUrl("Lionel Messi") ?? undefined}
                   alt="Messi"
                   className="w-16 h-16 rounded-full object-cover object-top border-2 border-yellow-400 mx-auto mb-1"
                 />

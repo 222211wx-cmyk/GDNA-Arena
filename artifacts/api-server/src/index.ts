@@ -64,10 +64,19 @@ async function migrateApplicationDatabase(): Promise<void> {
   logger.info("Application database migrations applied");
 }
 
+const SPORT_LEGEND_IMAGE_URLS: Record<string, string> = {
+  "Cristiano Ronaldo": "/assets/legends/cristiano-ronaldo.jpg",
+  "Lionel Messi": "/assets/legends/lionel-messi.jpg",
+  "LeBron James": "/assets/legends/lebron-james.jpg",
+  "Roger Federer": "/assets/legends/roger-federer.jpg",
+  "Serena Williams": "/assets/legends/serena-williams.jpg",
+  "Muhammad Ali": "/assets/legends/muhammad-ali.jpg",
+};
+
 const SEED_LEGENDS = [
   {
     rank: 1, name: "Cristiano Ronaldo", domain: "sport", nationality: "Portuguese", score: 9820,
-    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Cristiano_Ronaldo_2018.jpg/400px-Cristiano_Ronaldo_2018.jpg",
+    imageUrl: SPORT_LEGEND_IMAGE_URLS["Cristiano Ronaldo"],
     peakYear: 2018,
     bio: {
       childhood: "Born in Funchal, Madeira on February 5, 1985, Cristiano grew up in a small house with three siblings. His father was a gardener, and money was scarce. Football was free — and it was his escape.",
@@ -84,7 +93,7 @@ const SEED_LEGENDS = [
   },
   {
     rank: 2, name: "Lionel Messi", domain: "sport", nationality: "Argentine", score: 9750,
-    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg/400px-Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg",
+    imageUrl: SPORT_LEGEND_IMAGE_URLS["Lionel Messi"],
     peakYear: 2022,
     bio: {
       childhood: "Born June 24, 1987 in Rosario, Argentina. Leo was small, quieter than the rest, but on grass he saw the game differently. His growth hormone condition meant he'd need treatment — Barcelona saw the genius and paid for it.",
@@ -135,7 +144,7 @@ const SEED_LEGENDS = [
   },
   {
     rank: 5, name: "LeBron James", domain: "sport", nationality: "American", score: 9410,
-    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/LeBron_James_crop2.jpg/400px-LeBron_James_crop2.jpg",
+    imageUrl: SPORT_LEGEND_IMAGE_URLS["LeBron James"],
     peakYear: 2016,
     bio: {
       childhood: "Born December 30, 1984 in Akron, Ohio. Raised by a single mother. Moved 12 times before 13. Basketball was stability. He was on national magazine covers before he graduated high school.",
@@ -169,7 +178,7 @@ const SEED_LEGENDS = [
   },
   {
     rank: 7, name: "Roger Federer", domain: "sport", nationality: "Swiss", score: 9180,
-    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Federer_Indian_Wells_2012_3_%28cropped%29.jpg/400px-Federer_Indian_Wells_2012_3_%28cropped%29.jpg",
+    imageUrl: SPORT_LEGEND_IMAGE_URLS["Roger Federer"],
     peakYear: 2006,
     bio: {
       childhood: "Born August 8, 1981 in Basel, Switzerland. Played table tennis, basketball, and football before tennis consumed him. His movement on court was called 'the most beautiful in sports history' before he turned 20.",
@@ -203,7 +212,7 @@ const SEED_LEGENDS = [
   },
   {
     rank: 9, name: "Serena Williams", domain: "sport", nationality: "American", score: 8960,
-    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Serena_Williams_at_The_Championships_Wimbledon_2013_-_July_4%2C_2013_%28cropped%29.jpg/400px-Serena_Williams_at_The_Championships_Wimbledon_2013_-_July_4%2C_2013_%28cropped%29.jpg",
+    imageUrl: SPORT_LEGEND_IMAGE_URLS["Serena Williams"],
     peakYear: 2015,
     bio: {
       childhood: "Born September 26, 1981 in Saginaw, Michigan. Her father Richard Williams wrote a plan for his daughters to be tennis champions before they were born. They were raised on Compton public courts with broken nets.",
@@ -220,7 +229,7 @@ const SEED_LEGENDS = [
   },
   {
     rank: 10, name: "Muhammad Ali", domain: "sport", nationality: "American", score: 8890,
-    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Muhammad_Ali_NYWTS.jpg/400px-Muhammad_Ali_NYWTS.jpg",
+    imageUrl: SPORT_LEGEND_IMAGE_URLS["Muhammad Ali"],
     peakYear: 1974,
     bio: {
       childhood: "Born Cassius Clay on January 17, 1942 in Louisville, Kentucky. At 12, his bicycle was stolen. He told a police officer he wanted to beat up whoever stole it. The officer taught him to box instead. History pivoted.",
@@ -566,6 +575,14 @@ async function ensureTables() {
         }
       }
       console.log("[NEURAL] Seeded 10 legends + debates");
+    }
+
+    // Repair existing seed rows created before sport photos were hosted locally.
+    for (const [name, imageUrl] of Object.entries(SPORT_LEGEND_IMAGE_URLS)) {
+      await pool.query(
+        `UPDATE "legends" SET image_url = $1 WHERE name = $2 AND domain = 'sport'`,
+        [imageUrl, name],
+      );
     }
 
     // Upsert extra music legends by name (runs on every startup; idempotent)

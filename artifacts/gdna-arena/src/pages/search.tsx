@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { Search, Trophy, Users, FileText, Calendar, Loader2, Star } from "lucide-react";
+import { getLegendImageUrl } from "@/lib/legend-images";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -183,27 +184,30 @@ export default function SearchPage() {
           <section>
             <SectionHeader icon={<Trophy size={16} className="text-yellow-400" />} label="Legends" count={results.legends.length} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-              {results.legends.map((leg) => (
-                <Link key={leg.id} href={`/legends/${leg.id}`}>
-                  <div className="flex items-center gap-3 p-4 bg-gray-900/60 border border-gray-800 rounded-xl hover:border-yellow-400/40 hover:bg-gray-900 transition-all cursor-pointer group">
-                    {leg.image_url ? (
-                      <img src={leg.image_url} alt={leg.name} className="w-12 h-12 rounded-full object-cover border border-yellow-400/30 shrink-0" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-yellow-400/10 flex items-center justify-center shrink-0">
-                        <Star size={20} className="text-yellow-400" />
+              {results.legends.map((leg) => {
+                const imageUrl = getLegendImageUrl(leg.name, leg.image_url);
+                return (
+                  <Link key={leg.id} href={`/legends/${leg.id}`}>
+                    <div className="flex items-center gap-3 p-4 bg-gray-900/60 border border-gray-800 rounded-xl hover:border-yellow-400/40 hover:bg-gray-900 transition-all cursor-pointer group">
+                      {imageUrl ? (
+                        <img src={imageUrl} alt={leg.name} className="w-12 h-12 rounded-full object-cover border border-yellow-400/30 shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-yellow-400/10 flex items-center justify-center shrink-0">
+                          <Star size={20} className="text-yellow-400" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-bold text-white group-hover:text-yellow-400 transition-colors truncate">{leg.name}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {DOMAIN_EMOJI[leg.domain] ?? "🌐"} {leg.domain}
+                          {leg.nationality ? ` · ${leg.nationality}` : ""}
+                          {leg.rank ? ` · Rank #${leg.rank}` : ""}
+                        </p>
                       </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="font-bold text-white group-hover:text-yellow-400 transition-colors truncate">{leg.name}</p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {DOMAIN_EMOJI[leg.domain] ?? "🌐"} {leg.domain}
-                        {leg.nationality ? ` · ${leg.nationality}` : ""}
-                        {leg.rank ? ` · Rank #${leg.rank}` : ""}
-                      </p>
                     </div>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           </section>
         )}

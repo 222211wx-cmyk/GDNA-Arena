@@ -29,7 +29,7 @@ router.get("/legends", async (req, res): Promise<void> => {
 router.get("/legends/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
-  const [legend] = await db.select({ domain: legendsTable.domain }).from(legendsTable)
+  const [legend] = await db.select().from(legendsTable)
     .where(eq(legendsTable.id, id)).limit(1);
   if (!legend) { res.status(404).json({ error: "Legend not found" }); return; }
   const debates = await db.select().from(legendDebatesTable)

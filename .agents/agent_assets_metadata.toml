@@ -39,3 +39,17 @@ uri = "file://screenshots/gdna-arena-v2-production-home.png"
 type = "image"
 title = "GDNA Arena V2.0 — الصفحة الرئيسية المنشورة"
 description = "لقطة مباشرة من النسخة العامة على helixly.app بعد فحص النشر."
+
+[[outputs]]
+id = "sFl7w3sj_TRpiXspVCiiN"
+uri = "file://screenshots/sport-legends-local-photos.jpg"
+type = "image"
+title = "SPORT — صور الأساطير المحلية"
+description = "لقطة تحقق من صفحة SPORT بعد استبدال روابط Wikimedia بصور محلية لجميع الأساطير الستة."
+logical_id = "a1a0cce1-e373-464e-8e6c-f72df1a65d1c"
+content_hash = "sha256:614560dca75e9bd62185324f01a97461c91bd1a6afd13fef508d77e5c31dbc1c"
+size = 247297
+mtime_ms = 1788052338467
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/a1a0cce1-e373-464e-8e6c-f72df1a65d1c/99cbb703-2405-43c2-8971-a4cfb8e1a8f3"
+storage_version_token = "1788052352249573"
+content_type = "image/jpeg"

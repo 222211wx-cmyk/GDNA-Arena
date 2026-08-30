@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Crown, Medal, Star, Zap, RefreshCw, ChevronRight, Brain } from "lucide-react";
 import { LegendsListSkeleton } from "@/components/Skeleton";
+import { getLegendImageUrl } from "@/lib/legend-images";
 
 interface Legend {
   id: number; name: string; domain: string; nationality: string;
@@ -96,6 +97,7 @@ export default function LegendsPage() {
           <div className="space-y-3">
             {legends.map((legend, idx) => {
               const meta = DOMAIN_META[legend.domain] ?? DOMAIN_META.sport;
+              const imageUrl = getLegendImageUrl(legend.name, legend.imageUrl);
               const topStats = legend.stats
                 ? Math.round((Object.values(legend.stats).reduce((a, b) => a + b, 0) / Object.values(legend.stats).length))
                 : 0;
@@ -113,8 +115,8 @@ export default function LegendsPage() {
 
                       {/* Avatar */}
                       <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-muted shrink-0">
-                        {legend.imageUrl ? (
-                          <img src={legend.imageUrl} alt={legend.name}
+                        {imageUrl ? (
+                          <img src={imageUrl} alt={legend.name}
                             className="w-full h-full object-cover object-top" />
                         ) : (
                           <div className={`w-full h-full flex items-center justify-center text-xl font-black ${meta.color}`}>

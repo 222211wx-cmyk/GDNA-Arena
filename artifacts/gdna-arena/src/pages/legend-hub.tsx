@@ -8,6 +8,7 @@ import {
   ExternalLink, Clock, Trophy,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getLegendImageUrl } from "@/lib/legend-images";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Legend {
@@ -59,6 +60,7 @@ function timeAgo(d: string) {
 // TAB 1 — NOSTALGIA DNA (GREEN THEME — PAST)
 // ══════════════════════════════════════════════════════════════════════════════
 function NostalgiaTab({ legend }: { legend: Legend }) {
+  const imageUrl = getLegendImageUrl(legend.name, legend.imageUrl);
   const stages = [
     { key: "childhood",    icon: "🌱", label: "CHILDHOOD",    color: GREEN,       border: `${GREEN}40` },
     { key: "training",     icon: "⚔️", label: "TRAINING",     color: "#22d3ee",   border: "rgba(34,211,238,0.4)" },
@@ -79,8 +81,8 @@ function NostalgiaTab({ legend }: { legend: Legend }) {
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <div className="w-full md:w-56 shrink-0 rounded-2xl overflow-hidden aspect-[3/4] bg-muted"
           style={{ border: `1px solid ${GREEN}30` }}>
-          {legend.imageUrl
-            ? <img src={legend.imageUrl} alt={legend.name} className="w-full h-full object-cover object-top" />
+          {imageUrl
+            ? <img src={imageUrl} alt={legend.name} className="w-full h-full object-cover object-top" />
             : <div className="w-full h-full flex items-center justify-center text-6xl font-black" style={{ color: GREEN }}>{legend.name.charAt(0)}</div>
           }
         </div>
@@ -552,6 +554,7 @@ export default function LegendHubPage() {
   );
 
   const meta = DOMAIN_META[legend.domain] ?? DOMAIN_META.sport;
+  const imageUrl = getLegendImageUrl(legend.name, legend.imageUrl);
 
   const TABS = [
     { id: "nostalgia" as Tab, label: "NOSTALGIA DNA",    icon: <Dna className="w-4 h-4" />,          color: GREEN },
@@ -575,8 +578,8 @@ export default function LegendHubPage() {
           </Link>
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-2xl overflow-hidden bg-muted shrink-0 border" style={{ borderColor: `${meta.color}40` }}>
-              {legend.imageUrl
-                ? <img src={legend.imageUrl} alt={legend.name} className="w-full h-full object-cover object-top" />
+              {imageUrl
+                ? <img src={imageUrl} alt={legend.name} className="w-full h-full object-cover object-top" />
                 : <div className="w-full h-full flex items-center justify-center text-2xl font-black" style={{ color: meta.color }}>{legend.name.charAt(0)}</div>
               }
             </div>
