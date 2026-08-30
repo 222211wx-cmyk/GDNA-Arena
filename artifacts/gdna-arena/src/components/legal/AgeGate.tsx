@@ -20,7 +20,8 @@ export default function AgeGate({ active }: { active?: boolean }) {
   const [error, setError] = useState("");
   const isRTL = lang === "ar";
 
-  const isActiveGame = active ?? location.startsWith("/games/");
+  const isXpOnlyGame = location === "/games/penalty-king";
+  const isActiveGame = active ?? (location.startsWith("/games/") && !isXpOnlyGame);
   if (!isActiveGame || (!loading && user?.isAdult === true)) return null;
 
   const T = {

@@ -52,6 +52,18 @@ async function requireAdultPlayer(req: Request, res: Response): Promise<number |
   return userId;
 }
 
+function requireAuthenticatedPlayer(req: Request, res: Response): number | null {
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({
+      code: "GAME_LOGIN_REQUIRED",
+      error: "سجّل الدخول لحفظ XP ونتيجة اللعب.",
+    });
+    return null;
+  }
+  return userId;
+}
+
 // ── Standard 3 games ──────────────────────────────────────────────────────────
 const GAMES: Record<string, { name: string; minReward: number; maxReward: number; winChance: number; xpOnly?: boolean }> = {
   "neon-racer":   { name: "Neon Racer",   minReward: 20,  maxReward: 80,  winChance: 0.6  },
@@ -69,7 +81,10 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
   const game = GAMES[raw];
   if (!game) { res.status(404).json({ error: "Unknown game" }); return; }
 
-  const userId = await requireAdultPlayer(req, res);
+  // XP-only games are open to every registered age. Coins/crypto games remain 18+.
+  const userId = game.xpOnly
+    ? requireAuthenticatedPlayer(req, res)
+    : await requireAdultPlayer(req, res);
   if (!userId) return;
 
   // Outcome is always server-determined — never trust req.body.win
