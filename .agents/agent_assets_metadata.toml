@@ -32,3 +32,10 @@ type = "image"
 title = "Arena Qaisypro — صفحة الاختيارات"
 description = "الصفحة النهائية المعزولة بأبواب AMIS وMESSAGERI وSOCIAL وARENA."
 logical_id = "1afd12cc-0b9a-4c77-910c-a83b0eb09748"
+
+[[outputs]]
+id = "yu9BtyH7EPFhCOfg_Gqy3"
+uri = "file://screenshots/gdna-arena-v2-production-home.png"
+type = "image"
+title = "GDNA Arena V2.0 — الصفحة الرئيسية المنشورة"
+description = "لقطة مباشرة من النسخة العامة على helixly.app بعد فحص النشر."
