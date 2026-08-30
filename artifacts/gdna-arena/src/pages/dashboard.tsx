@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, ScrollText } from "lucide-react";
 
 type DailyArchonDirective = {
   id: number;
@@ -359,6 +360,14 @@ interface ArchonDashProfile {
   };
 }
 
+interface DailyDirective {
+  id: number;
+  directive: string;
+  completed: boolean;
+  dateKey: string;
+  duration?: string;
+  intensity?: string;
+}
 function computeFourPillarsDash(d: ArchonDashProfile["dimensions"], overallScore: number) {
   const dimVals = Object.values(d);
   return [
@@ -371,7 +380,11 @@ function computeFourPillarsDash(d: ArchonDashProfile["dimensions"], overallScore
 
 function ArchonIdentityWidget() {
   const [, nav] = useLocation();
+  const { lang } = useLang();
   const [profile, setProfile] = useState<ArchonDashProfile | "none" | "loading">("loading");
+  const [directive, setDirective] = useState<DailyDirective | null>(null);
+  const [directiveLoading, setDirectiveLoading] = useState(false);
+  const [markingSeen, setMarkingSeen] = useState(false);
 
   useEffect(() => {
     fetch("/api/archon/profile", { credentials: "include" })
@@ -398,6 +411,45 @@ function ArchonIdentityWidget() {
       })
       .catch(() => setProfile("none"));
   }, []);
+
+  useEffect(() => {
+    if (typeof profile === "string") return;
+    const dominantDimension = Object.entries(profile.dimensions)
+      .sort(([, a], [, b]) => b - a)[0]?.[0];
+    if (!dominantDimension) return;
+
+    setDirectiveLoading(true);
+    fetch("/api/archon/mission", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dimension: dominantDimension.toUpperCase(),
+        archetype: profile.archetype,
+        lang,
+      }),
+    })
+      .then(async r => r.ok ? r.json() : Promise.reject(new Error("Directive unavailable")))
+      .then(setDirective)
+      .catch(() => setDirective(null))
+      .finally(() => setDirectiveLoading(false));
+  }, [profile, lang]);
+
+  const markDirectiveSeen = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!directive || directive.completed || markingSeen) return;
+    setMarkingSeen(true);
+    try {
+      const response = await fetch(`/api/archon/mission/${directive.id}/seen`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Could not mark directive as seen");
+      setDirective(current => current ? { ...current, completed: true } : current);
+    } finally {
+      setMarkingSeen(false);
+    }
+  };
 
   if (profile === "loading") return null;
 
@@ -486,6 +538,46 @@ function ArchonIdentityWidget() {
                 <span className="text-xs text-muted-foreground font-normal">/100</span>
               </div>
               <div className="text-[10px] text-muted-foreground tracking-wider uppercase">SCORE</div>
+            </div>
+          </div>
+
+          {/* Today's Morocco-time Archon directive */}
+          <div className="mt-4 rounded-xl border border-primary/30 bg-background/90 px-4 py-4 shadow-[inset_0_0_24px_hsl(var(--primary)/0.05)]">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10">
+                <ScrollText size={18} className="text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-primary">
+                  كلمة الأرشون اليوم
+                </div>
+                <div className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                  DAILY ARCHON DIRECTIVE · MOROCCO COMMAND
+                </div>
+                {directiveLoading ? (
+                  <div className="mt-3 h-10 animate-pulse rounded-lg bg-primary/10" />
+                ) : directive ? (
+                  <p className="mt-3 text-sm font-semibold leading-relaxed text-foreground" dir={lang === "ar" ? "rtl" : "ltr"}>
+                    {directive.directive}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-muted-foreground">Directive channel temporarily unavailable.</p>
+                )}
+              </div>
+              {directive && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={directive.completed ? "outline" : "default"}
+                  disabled={directive.completed || markingSeen}
+                  onClick={markDirectiveSeen}
+                  className="shrink-0 font-black"
+                  data-testid="button-archon-directive-seen"
+                >
+                  <CheckCircle className="mr-1.5 h-4 w-4" />
+                  {directive.completed ? "تمت المشاهدة" : markingSeen ? "..." : "تم"}
+                </Button>
+              )}
             </div>
           </div>
 

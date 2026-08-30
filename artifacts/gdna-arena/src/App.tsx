@@ -64,7 +64,6 @@ import FortressPage from "@/pages/fortress";
 import SearchPage from "@/pages/search";
 import AmisPage from "@/pages/amis";
 import { Footer } from "@/components/layout/footer";
-import { GdnAiFloating } from "@/components/GdnAiTerminal";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import CinemaPage   from "@/pages/cinema";
 import AdminRevenuePage from "@/pages/admin-revenue";
@@ -150,17 +149,9 @@ function PageWrapper() {
     </main>
   );
 }
-
-// Module pages own their surface — no floating cross-module shells here.
-const MODULE_ROUTES = ["/messages", "/social", "/amis"];
-
 function Router() {
   const [location] = useLocation();
   const isChoiceEntry = location === "/login";
-  const isModulePage = MODULE_ROUTES.some(
-    (r) => location === r || location.startsWith(r + "/"),
-  );
-
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
       <BetaSimulationBanner />
@@ -168,8 +159,6 @@ function Router() {
       {!isChoiceEntry && <Navbar />}
       <PageWrapper />
       {!isChoiceEntry && <Footer />}
-      {/* Floating AI terminal stays on general pages, off isolated modules. */}
-      {!isModulePage && !isChoiceEntry && <GdnAiFloating />}
       <CookieBanner />
       <AgeGate />
       <GeoBlock />
