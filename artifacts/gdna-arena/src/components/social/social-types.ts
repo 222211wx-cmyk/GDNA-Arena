@@ -12,6 +12,7 @@ export interface FeedPost {
   imageUrl?: string;
   mediaType?: string;   // "image" | "video"
   createdAt: string;
+  expiresAt?: string | null;
 }
 
 export interface Comment {

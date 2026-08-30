@@ -33,6 +33,7 @@ export const dmMessages = pgTable("dm_messages", {
   type: text("type").notNull().default("text"), // text | audio | video | image | file
   isRead: boolean("is_read").notNull().default(false),
   replyToId: integer("reply_to_id"),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

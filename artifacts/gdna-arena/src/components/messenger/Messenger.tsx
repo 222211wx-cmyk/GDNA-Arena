@@ -19,7 +19,7 @@ import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
   Camera, Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
-  ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ShieldOff, Shield,
+  ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ClipboardPaste, ShieldOff,
 } from "lucide-react";
 import SolidarityRelay from "./SolidarityRelay";
 import type { GroupRoom } from "../social/social-types";
@@ -239,28 +239,6 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
             {activeRoom && (
               <ToggleRow label={`${st.mute_conv ?? "Mute conversation"} · ${activeRoom.type === "group" ? (activeRoom.name ?? "Group") : ""}`.trim()}
                 value={muted} onChange={toggleMute} disabled={!isOnline} />
-            )}
-            {/* Block/Unblock — direct rooms only */}
-            {activeRoom?.type === "direct" && peerId && (
-              <div className="mt-5 border-t border-border/40 pt-4">
-                <Button type="button"
-                  variant={isBlocked ? "outline" : "destructive"}
-                  className="w-full justify-start gap-2"
-                  disabled={blockBusy || !isOnline} onClick={toggleBlock}
-                  data-testid="button-block-citizen">
-                  {isBlocked ? <Shield size={15} /> : <ShieldOff size={15} />}
-                  {blockBusy
-                    ? "…"
-                    : isBlocked
-                      ? (st.unblock_citizen ?? "Unblock citizen")
-                      : (st.block_citizen ?? "Block citizen")}
-                </Button>
-                <p className="mt-2 px-1 text-[10.5px] text-muted-foreground">
-                  {isBlocked
-                    ? "Unblocking restores messaging between you."
-                    : "Blocking prevents new messages from this citizen."}
-                </p>
-              </div>
             )}
             {activeRoom && (
               <div className="mt-4 border-t border-border/40 pt-4">
@@ -878,6 +856,7 @@ function IdentityBoundMessenger({ variant, user }: {
   const [activeRoom,  setActiveRoom]  = useState<DmRoom | null>(null);
   const [messages,    setMessages]    = useState<DmMessage[]>([]);
   const [text,        setText]        = useState("");
+  const [expireAfterHours, setExpireAfterHours] = useState<number | null>(null);
   const [sending,     setSending]     = useState(false);
   const [showGroupNew, setShowGroupNew] = useState(false);
   const [groupName,   setGroupName]   = useState("");
@@ -1330,6 +1309,7 @@ function IdentityBoundMessenger({ variant, user }: {
       const baseBody: Record<string, unknown> = override
         ? { ...(override as Record<string, unknown>) }
         : { content: text.trim(), type: "text" };
+      if (expireAfterHours !== null) baseBody.expireAfterHours = expireAfterHours;
       if (!override && replyTo) baseBody.replyToId = replyTo.id;
       const roomId = activeRoom.id;
       await ensureE2eRegistered();
@@ -1387,13 +1367,14 @@ function IdentityBoundMessenger({ variant, user }: {
   async function deleteMessage(msgId: number) {
     if (!activeRoom) return;
     if (!isOnline) { blockOffline(); return; }
+    if (!window.confirm("حذف هذه الرسالة عند جميع الأطراف؟")) return;
     setMenuMsgId(null);
     const r = await fetch(api(`/api/messages/rooms/${activeRoom.id}/messages/${msgId}`), {
       method: "DELETE", credentials: "include",
     });
     if (r.ok) {
       setMessages(prev => prev.filter(m => m.id !== msgId));
-      setToast(st.msg_deleted ?? "Message deleted");
+      setToast("تم حذف الرسالة عند جميع الأطراف");
       loadRooms();
     } else {
       const j = await r.json().catch(() => ({} as { error?: string }));
@@ -1405,6 +1386,20 @@ function IdentityBoundMessenger({ variant, user }: {
     setMenuMsgId(null);
     const t = msg.secureAttachment?.name ?? msg.content ?? msg.fileUrl ?? msg.audioUrl ?? "";
     navigator.clipboard?.writeText(t).then(() => setToast(st.copied ?? "Copied!")).catch(() => {});
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) {
+        setToast("Clipboard is empty");
+        return;
+      }
+      setText(current => `${current}${current ? " " : ""}${text}`);
+      setShowAttachTray(false);
+    } catch {
+      setToast("استعمل Ctrl+V أو الضغط المطول للصق");
+    }
   }
 
   async function sendReaction(msg: DmMessage, reaction: "support" | "listen" | "celebrate") {
@@ -1760,6 +1755,25 @@ function IdentityBoundMessenger({ variant, user }: {
     </div>
   ) : (
     <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <span className="text-[11px] font-semibold text-muted-foreground">الحذف التلقائي</span>
+        <select
+          value={expireAfterHours ?? ""}
+          onChange={event => setExpireAfterHours(event.target.value ? Number(event.target.value) : null)}
+          className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+          aria-label="مدة الحذف التلقائي"
+        >
+          <option value="">بدون حذف تلقائي</option>
+          <option value="1">ساعة</option>
+          <option value="6">6 ساعات</option>
+          <option value="12">12 ساعة</option>
+          <option value="24">24 ساعة</option>
+          <option value="168">أسبوع</option>
+          <option value="720">شهر</option>
+          <option value="2160">90 يوم</option>
+        </select>
+        <span className="text-[10px] text-muted-foreground">الحذف اليدوي متاح دائماً</span>
+      </div>
       {/* Reply preview bar */}
       {replyTo && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px", borderBottom: `1px solid ${GOLD}15`, marginBottom: 8 }}>
@@ -1821,6 +1835,7 @@ function IdentityBoundMessenger({ variant, user }: {
                   () => recording ? stopVoiceNote() : startVoiceNote(),
                 ],
                 [<Smile key="emo" size={19} />, st.attach_emoji ?? "Emoji", () => { setShowEmoji(v => !v); setShowAttachTray(false); }],
+                [<ClipboardPaste key="paste" size={19} />, "Paste", pasteFromClipboard],
               ] as [React.ReactNode, string, () => void][]).map(([icon, label, fn], idx) => (
                 <button
                   key={idx}
@@ -2186,7 +2201,7 @@ function IdentityBoundMessenger({ variant, user }: {
                       {mine && (
                         <button onClick={() => deleteMessage(msg.id)}
                           className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-xs font-semibold text-destructive hover:bg-accent">
-                          <Trash2 size={12} /> {st.delete_msg ?? "Delete"}
+                          <Trash2 size={12} /> حذف عند الطرفين
                         </button>
                       )}
                     </div>

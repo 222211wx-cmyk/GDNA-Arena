@@ -27,6 +27,7 @@ const E2E_PREFIX = "e2e:v1:";
 const MAX_E2E_CONTENT_LENGTH = 96_000;
 const MAX_E2E_DEVICES = 8;
 const E2E_DEVICE_TTL = "90 days";
+const MESSAGE_EXPIRY_HOURS = new Set([1, 6, 12, 24, 168, 720, 2160]);
 const ARENA_WITHDRAW_GAMES = {
   "neon-racer": "Neon Racer",
   "crypto-clash": "Crypto Clash",
@@ -856,6 +857,21 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
     res.status(403).json({ error: "Access denied — not a member of this room" }); return;
   }
 
+  // Expired messages are removed for every participant before history is read.
+  await pool.query(
+    `DELETE FROM dm_message_reactions
+     WHERE message_id IN (
+       SELECT id FROM dm_messages
+       WHERE room_id=$1 AND expires_at IS NOT NULL AND expires_at <= now()
+     )`,
+    [roomId],
+  );
+  await pool.query(
+    `DELETE FROM dm_messages
+     WHERE room_id=$1 AND expires_at IS NOT NULL AND expires_at <= now()`,
+    [roomId],
+  );
+
   const msgs = await db.select().from(dmMessages)
     .where(eq(dmMessages.roomId, roomId))
     .orderBy(desc(dmMessages.createdAt)).limit(60);
@@ -927,9 +943,16 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
     res.status(403).json({ error: "Access denied — not a member of this room" }); return;
   }
 
-  const { content, audioUrl, videoUrl, fileUrl, type = "text", replyToId } = req.body as {
+  const { content, audioUrl, videoUrl, fileUrl, type = "text", replyToId, expireAfterHours } = req.body as {
     content?: string; audioUrl?: string; videoUrl?: string; fileUrl?: string; type?: string; replyToId?: number;
+    expireAfterHours?: number | null;
   };
+  if (expireAfterHours != null && !MESSAGE_EXPIRY_HOURS.has(expireAfterHours)) {
+    res.status(400).json({ error: "Invalid message expiry" }); return;
+  }
+  const expiresAt = expireAfterHours == null
+    ? null
+    : new Date(Date.now() + expireAfterHours * 60 * 60 * 1000);
   const encryptedEnvelope = typeof content === "string" && content.startsWith(E2E_PREFIX)
     ? parseE2eEnvelope(content)
     : null;
@@ -1022,15 +1045,16 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
       }
       const inserted = await client.query(
         `INSERT INTO dm_messages
-           (room_id, user_id, username, content, audio_url, video_url, file_url, type, reply_to_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           (room_id, user_id, username, content, audio_url, video_url, file_url, type, reply_to_id, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          RETURNING id, room_id AS "roomId", user_id AS "userId", username,
                    content, audio_url AS "audioUrl", video_url AS "videoUrl",
                    file_url AS "fileUrl", type, is_read AS "isRead",
-                   reply_to_id AS "replyToId", created_at AS "createdAt"`,
+                    reply_to_id AS "replyToId", expires_at AS "expiresAt",
+                    created_at AS "createdAt"`,
         [
           roomId, userId, me.username, content?.trim() ?? null,
-          audioUrl ?? null, videoUrl ?? null, fileUrl ?? null, type, replyToId ?? null,
+          audioUrl ?? null, videoUrl ?? null, fileUrl ?? null, type, replyToId ?? null, expiresAt,
         ],
       );
       msg = inserted.rows[0];
@@ -1046,7 +1070,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
       roomId, userId, username: me.username,
       content: content?.trim() ?? null,
       audioUrl: audioUrl ?? null, videoUrl: videoUrl ?? null,
-      fileUrl: fileUrl ?? null, type, replyToId: replyToId ?? null,
+      fileUrl: fileUrl ?? null, type, replyToId: replyToId ?? null, expiresAt,
     }).returning();
   }
 
