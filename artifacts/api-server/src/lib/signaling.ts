@@ -358,7 +358,10 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           send(ws, { type: "call-unavailable", to: msg.to });
           return;
         }
-        if (userIsInCall(target.username)) { send(ws, { type: "call-busy", to: msg.to }); return; }
+        if (userIsInCall(self.username) || userIsInCall(target.username)) {
+          send(ws, { type: "call-busy", to: msg.to });
+          return;
+        }
          const lockClient = await pool!.connect();
          try {
            await lockClient.query("BEGIN");
@@ -376,11 +379,15 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           }
            // Recording the call while holding the same lock used by key
            // registration/revocation closes the key-check→route race.
-           activeCalls.set(msg.callId, {
-             caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
-             callerSocket: self.ws, calleeSocket: null, startedAt: new Date(),
-           });
            await lockClient.query("COMMIT");
+            activeCalls.set(msg.callId, {
+              caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
+              callerSocket: self.ws, calleeSocket: target.ws, startedAt: new Date(),
+            });
+            // Reserve both participants while the call is ringing. Without this,
+            // either side could create a second offer before the first answer.
+            setUserInCall(self.username, true);
+            setUserInCall(target.username, true);
          } catch {
            await lockClient.query("ROLLBACK").catch(() => {});
           send(ws, { type: "call-unavailable", to: msg.to });

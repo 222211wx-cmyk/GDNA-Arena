@@ -596,6 +596,15 @@ export function useCall(user: { id: number; username: string } | null) {
         setRealtimeConnecting();
         window.dispatchEvent(new Event("gdna:realtime-disconnected"));
         if (pingRef.current) clearInterval(pingRef.current);
+        if (currentCallIdRef.current) {
+          clearRingTimer();
+          currentCallIdRef.current = null;
+          setIncomingCall(null);
+          setCallStatus("ended");
+          setActivePeer(null);
+          setActiveCallId(null);
+          void leaveAgora();
+        }
         scheduleReconnect();
       };
 
@@ -844,20 +853,6 @@ export function useCall(user: { id: number; username: string } | null) {
   }, [activePeer, activeCallId, leaveAgora, sendWS]);
 
   // ── Screen share (Agora) ──────────────────────────────────────────────────
-  const startScreenShare = useCallback(async () => {
-    const client = agoraRef.current;
-    if (!client) return;
-    try {
-      const screen = await AgoraRTC.createScreenVideoTrack({}, "disable");
-      screenTrackRef.current = screen;
-      if (localVideoRef.current) await client.unpublish(localVideoRef.current);
-      await client.publish(screen);
-      setScreenSharing(true);
-      screen.on("track-ended", () => { void stopScreenShare(); });
-    } catch { /* user cancelled */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const stopScreenShare = useCallback(async () => {
     const client = agoraRef.current;
     const screen = screenTrackRef.current;
@@ -869,8 +864,43 @@ export function useCall(user: { id: number; username: string } | null) {
     if (client && localVideoRef.current) {
       try { await client.publish(localVideoRef.current); } catch { /* channel closed */ }
     }
+    const audioTrack = localAudioRef.current?.getMediaStreamTrack();
+    const videoTrack = localVideoRef.current?.getMediaStreamTrack();
+    const restoredTracks = [audioTrack, videoTrack].filter((track): track is MediaStreamTrack => Boolean(track));
+    const restored = restoredTracks.length ? new MediaStream(restoredTracks) : null;
+    localStreamRef.current = restored;
+    setLocalStream(restored);
     setScreenSharing(false);
   }, []);
+
+  const startScreenShare = useCallback(async () => {
+    const client = agoraRef.current;
+    if (!client || callStatus !== "active") {
+      showCallError("مشاركة الشاشة متاحة أثناء المكالمة النشطة فقط");
+      return;
+    }
+    try {
+      const screen = await AgoraRTC.createScreenVideoTrack({}, "disable");
+      screenTrackRef.current = screen;
+      if (localVideoRef.current) await client.unpublish(localVideoRef.current);
+      await client.publish(screen);
+      const audioTrack = localAudioRef.current?.getMediaStreamTrack();
+      const screenMediaTrack = screen.getMediaStreamTrack();
+      const sharedStream = new MediaStream([
+        ...(audioTrack ? [audioTrack] : []),
+        screenMediaTrack,
+      ]);
+      localStreamRef.current = sharedStream;
+      setLocalStream(sharedStream);
+      setScreenSharing(true);
+      screen.on("track-ended", () => { void stopScreenShare(); });
+    } catch (error) {
+      const name = (error as { name?: string })?.name;
+      if (name !== "NotAllowedError") {
+        showCallError("تعذرت مشاركة الشاشة على هذا الجهاز أو المتصفح");
+      }
+    }
+  }, [callStatus, stopScreenShare]);
 
   // ── Start live story (WebRTC path, unchanged) ─────────────────────────────
   const startLive = useCallback(async (title: string, domain: string) => {
@@ -904,11 +934,16 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("أنت غير متصل بالشبكة — لا يمكن الانضمام إلى البث الآن");
       return;
     }
-    const pc = createLivePC("", liveId);
+    const live = activeLives.find((item) => item.liveId === liveId);
+    if (!live) {
+      showCallError("انتهى هذا البث أو لم يعد متاحاً");
+      return;
+    }
+    const pc = createLivePC(live.host, liveId);
     pcRef.current = pc;
     sendWS({ type: "live-join", liveId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline, sendWS]);
+  }, [activeLives, isOnline, sendWS]);
 
   // ── Log outgoing calls to history exactly once, with the real call type ────
   useEffect(() => {

@@ -40,11 +40,15 @@ export default function CallOverlay({
   const [speakerOff,  setSpeakerOff]  = useState(false);
   const [minimized,   setMinimized]   = useState(false);
   const [duration,    setDuration]    = useState(0);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
 
   // Attach streams to video elements
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      void remoteVideoRef.current.play()
+        .then(() => setPlaybackBlocked(false))
+        .catch(() => setPlaybackBlocked(true));
     }
   }, [remoteStream]);
 
@@ -70,6 +74,16 @@ export default function CallOverlay({
     const t = setInterval(() => setDuration(d => d + 1), 1000);
     return () => clearInterval(t);
   }, [status]);
+
+  useEffect(() => {
+    if (status === "calling" || status === "ringing") {
+      setMuted(false);
+      setVideoOff(false);
+      setSpeakerOff(false);
+      setMinimized(false);
+      setPlaybackBlocked(false);
+    }
+  }, [status, peer, incomingCall?.from]);
 
   const formatDuration = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
@@ -217,6 +231,20 @@ export default function CallOverlay({
           </div>
         )}
 
+        {playbackBlocked && remoteStream && (
+          <button
+            type="button"
+            onClick={() => {
+              void remoteVideoRef.current?.play()
+                .then(() => setPlaybackBlocked(false))
+                .catch(() => setPlaybackBlocked(true));
+            }}
+            className="absolute bottom-28 left-1/2 -translate-x-1/2 rounded-full border border-primary/40 bg-card px-4 py-2 text-sm font-bold text-primary"
+          >
+            اضغط لتشغيل صوت المكالمة
+          </button>
+        )}
+
         {/* Local video (PiP) */}
         {localStream && hasVideo && !videoOff && (
           <div id="local-player" className="absolute bottom-4 right-4 w-28 h-20 rounded-xl overflow-hidden border-2"
@@ -262,7 +290,7 @@ export default function CallOverlay({
         </button>
 
         {/* Screen share */}
-        {hasVideo && onScreenShare && (
+        {onScreenShare && (
           <button
             onClick={screenSharing ? onStopScreen : onScreenShare}
             className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"

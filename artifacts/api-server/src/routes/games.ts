@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
 import { eq, sql, desc } from "drizzle-orm";
 import {
   db,
@@ -11,6 +12,46 @@ import { pushNotification } from "./notifications";
 import { isAdultForGames } from "../lib/age";
 
 const router: IRouter = Router();
+
+type PenaltyDirection = "left" | "center" | "right";
+type PenaltyShot = {
+  number: number;
+  direction: PenaltyDirection;
+  keeperDirection: PenaltyDirection;
+  goal: boolean;
+};
+type PenaltyMatch = {
+  id: string;
+  shots: PenaltyShot[];
+  completed: boolean;
+  settled: boolean;
+};
+
+type SessionWithPenaltyMatch = Request["session"] & {
+  penaltyKingMatch?: PenaltyMatch;
+};
+
+const PENALTY_DIRECTIONS: PenaltyDirection[] = ["left", "center", "right"];
+
+function isPenaltyDirection(value: unknown): value is PenaltyDirection {
+  return typeof value === "string" && PENALTY_DIRECTIONS.includes(value as PenaltyDirection);
+}
+
+function penaltyResponse(match: PenaltyMatch, xpEarned = 0) {
+  const goals = match.shots.filter((shot) => shot.goal).length;
+  const win = match.completed && goals >= 3;
+  return {
+    matchId: match.id,
+    shots: match.shots,
+    shotNumber: match.shots.length,
+    totalShots: 5,
+    goals,
+    saves: match.shots.length - goals,
+    complete: match.completed,
+    win,
+    xpEarned,
+  };
+}
 
 async function requireAdultPlayer(req: Request, res: Response): Promise<number | null> {
   const userId = req.session?.userId;
@@ -86,6 +127,99 @@ router.post("/games/:gameId/play", async (req, res): Promise<void> => {
     ? requireAuthenticatedPlayer(req, res)
     : await requireAdultPlayer(req, res);
   if (!userId) return;
+
+  if (raw === "penalty-king") {
+    const direction = req.body?.direction;
+    if (!isPenaltyDirection(direction)) {
+      res.status(400).json({
+        code: "PENALTY_DIRECTION_REQUIRED",
+        error: "اختر جهة صحيحة للتسديدة: يسار أو وسط أو يمين.",
+      });
+      return;
+    }
+
+    const session = req.session as SessionWithPenaltyMatch;
+    let match = session.penaltyKingMatch;
+    if (!match || (match.completed && req.body?.restart === true)) {
+      match = {
+        id: `pk_${randomUUID().replace(/-/g, "")}`,
+        shots: [],
+        completed: false,
+        settled: false,
+      };
+      session.penaltyKingMatch = match;
+    }
+
+    if (match.completed) {
+      res.status(409).json({
+        code: "PENALTY_MATCH_COMPLETE",
+        error: "انتهت المباراة. ابدأ مباراة جديدة للعب مرة أخرى.",
+        ...penaltyResponse(match),
+      });
+      return;
+    }
+
+    const keeperDirection = PENALTY_DIRECTIONS[Math.floor(Math.random() * PENALTY_DIRECTIONS.length)];
+    const goal = direction !== keeperDirection;
+    match.shots.push({
+      number: match.shots.length + 1,
+      direction,
+      keeperDirection,
+      goal,
+    });
+    match.completed = match.shots.length === 5;
+
+    let xpEarned = 0;
+    if (match.completed && !match.settled) {
+      const goals = match.shots.filter((shot) => shot.goal).length;
+      const win = goals >= 3;
+      xpEarned = 5 + goals * 5 + (win ? 20 : 0);
+
+      const [updated] = await db
+        .update(usersTable)
+        .set({
+          xp: sql`${usersTable.xp} + ${xpEarned}`,
+          gamesPlayed: sql`${usersTable.gamesPlayed} + 1`,
+          wins: win ? sql`${usersTable.wins} + 1` : usersTable.wins,
+        })
+        .where(eq(usersTable.id, userId))
+        .returning({ xp: usersTable.xp });
+
+      if (!updated) {
+        res.status(404).json({ error: "الحساب غير موجود" });
+        return;
+      }
+
+      await db.insert(transactionsTable).values({
+        userId,
+        amount: 0,
+        type: win ? "win" : "participation",
+        description: `${game.name} — ${goals}/5 goals (+${xpEarned} XP)`,
+      });
+      match.settled = true;
+
+      void pushNotification({
+        userId,
+        type: "xp_earned",
+        title: win ? "👑 فوز في دوري الملوك!" : "⚽ اكتملت مباراة دوري الملوك",
+        body: `${goals}/5 أهداف — +${xpEarned} XP`,
+        icon: win ? "🏆" : "⚽",
+        linkPath: "/games/penalty-king",
+      });
+    }
+
+    req.log.info(
+      { userId, matchId: match.id, shot: match.shots.length, direction, keeperDirection, goal },
+      "Penalty King shot played",
+    );
+    res.json({
+      ...penaltyResponse(match, xpEarned),
+      keeperDirection,
+      goal,
+      message: goal ? "GOAL" : "SAVED",
+    });
+    return;
+  }
 
   // Outcome is always server-determined — never trust req.body.win
   const win = Math.random() < game.winChance;
