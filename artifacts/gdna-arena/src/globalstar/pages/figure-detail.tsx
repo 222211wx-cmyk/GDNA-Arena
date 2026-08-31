@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'wouter';
 import { useGetGsFigure } from '@workspace/api-client-react';
 import { useLanguage } from '@/globalstar/contexts/language-context';
+import { earningsFigureCopy, type EarningsFigureCopy } from '@/globalstar/i18n/earnings-figure-copy';
 import { Navbar } from '@/globalstar/components/navbar';
 import { NewsTicker } from '@/globalstar/components/news-ticker';
 import { FigureAvatar } from '@/globalstar/components/figure-avatar';
@@ -28,7 +29,9 @@ interface MediaItem {
 }
 
 // ── Story Viewer ──────────────────────────────────────────────────────────────
-function StoryViewer({ stories, onClose }: { stories: MediaItem[]; onClose: () => void }) {
+function StoryViewer({ stories, onClose, copy, locale, direction }: {
+  stories: MediaItem[]; onClose: () => void; copy: EarningsFigureCopy['figure']; locale: string; direction: 'rtl' | 'ltr';
+}) {
   const [idx, setIdx] = useState(0);
   const [progress, setProgress] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -50,7 +53,8 @@ function StoryViewer({ stories, onClose }: { stories: MediaItem[]; onClose: () =
   const s = stories[idx];
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
+      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+      dir={direction} role="dialog" aria-modal="true" aria-label={copy.openStories} onClick={onClose}>
       <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
         className="relative w-full max-w-sm bg-gradient-to-b from-gray-900 to-black rounded-3xl overflow-hidden shadow-2xl border border-white/10"
         onClick={e => e.stopPropagation()}>
@@ -62,13 +66,15 @@ function StoryViewer({ stories, onClose }: { stories: MediaItem[]; onClose: () =
             </div>
           ))}
         </div>
-        <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white">
+        <button onClick={onClose} aria-label={copy.closeStory} className="absolute top-4 end-4 text-white/60 hover:text-white">
           <X className="w-5 h-5" />
         </button>
         <div className="px-6 py-8 min-h-72 flex flex-col justify-center space-y-4">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-primary" />
-            <span className="text-xs font-mono text-primary uppercase tracking-widest">Story {idx + 1}/{stories.length}</span>
+            <span className="text-xs font-mono text-primary uppercase tracking-widest">
+              {copy.storyPosition(new Intl.NumberFormat(locale).format(idx + 1), new Intl.NumberFormat(locale).format(stories.length))}
+            </span>
           </div>
           <h3 className="text-xl font-black text-white leading-tight">{s.title}</h3>
           <p className="text-sm text-white/80 leading-relaxed">{s.content}</p>
@@ -76,12 +82,12 @@ function StoryViewer({ stories, onClose }: { stories: MediaItem[]; onClose: () =
         <div className="flex border-t border-white/10">
           <button onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}
             className="flex-1 py-3 flex items-center justify-center gap-1 text-xs text-white/50 hover:text-white disabled:opacity-20">
-            <ChevronLeft className="w-4 h-4" /> Prev
+            <ChevronLeft className={`w-4 h-4 ${direction === 'rtl' ? 'rotate-180' : ''}`} /> {copy.previous}
           </button>
           <div className="w-px bg-white/10" />
           <button onClick={() => { if (idx < stories.length - 1) setIdx(idx + 1); else onClose(); }}
             className="flex-1 py-3 flex items-center justify-center gap-1 text-xs text-white/50 hover:text-white">
-            Next <ChevronRight className="w-4 h-4" />
+            {copy.next} <ChevronRight className={`w-4 h-4 ${direction === 'rtl' ? 'rotate-180' : ''}`} />
           </button>
         </div>
       </motion.div>
@@ -91,11 +97,18 @@ function StoryViewer({ stories, onClose }: { stories: MediaItem[]; onClose: () =
 
 // ─── Sovereign Upload Card ────────────────────────────────────────────────────
 function UploadCard({ upload, onClick }: { upload: EmpireUpload; onClick: () => void }) {
+  const { language } = useLanguage();
+  const copy = earningsFigureCopy(language);
+  const c = copy.figure;
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       whileHover={{ scale: 1.01 }}
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      aria-label={c.openUpload(upload.title)}
+      onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') onClick(); }}
       className="cursor-pointer rounded-xl p-4 flex items-center gap-4 transition-all"
       style={{ background: 'rgba(10,8,0,0.9)', border: '1.5px solid rgba(255,215,0,0.2)' }}
     >
@@ -105,13 +118,13 @@ function UploadCard({ upload, onClick }: { upload: EmpireUpload; onClick: () => 
           ? <Video className="w-5 h-5" style={{ color: '#FFD700' }} />
           : <Music className="w-5 h-5" style={{ color: '#FFD700' }} />}
       </div>
-      <div className="flex-1 min-w-0 text-right" dir="rtl">
+      <div className="flex-1 min-w-0 text-start">
         <p className="font-black text-sm text-white truncate">{upload.title}</p>
         <p className="text-xs mt-0.5" style={{ color: 'rgba(255,215,0,0.5)' }}>{upload.uploader_name}</p>
       </div>
-      <div className="shrink-0 flex items-center gap-1.5 mr-2">
+      <div className="shrink-0 flex items-center gap-1.5 me-2" aria-label={c.uploadViews(upload.views.toLocaleString(copy.locale))}>
         <Eye className="w-3 h-3" style={{ color: 'rgba(255,215,0,0.5)' }} />
-        <span className="text-xs text-white font-mono">{upload.views.toLocaleString()}</span>
+        <span className="text-xs text-white font-mono">{upload.views.toLocaleString(copy.locale)}</span>
       </div>
       <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
         style={{ background: '#FFD700' }}>
@@ -125,7 +138,11 @@ function UploadCard({ upload, onClick }: { upload: EmpireUpload; onClick: () => 
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function FigureDetail() {
-  const { t } = useLanguage();
+  const { language } = useLanguage();
+  const copy = earningsFigureCopy(language);
+  const c = copy.figure;
+  const locale = copy.locale;
+  const direction = language === 'ar' ? 'rtl' : 'ltr';
   const params = useParams();
   const figureId = params.id ? parseInt(params.id) : 0;
   const { data: figure, isLoading } = useGetGsFigure(figureId);
@@ -134,6 +151,10 @@ export default function FigureDetail() {
   const [uploads, setUploads] = useState<EmpireUpload[]>([]);
   const [activeUpload, setActiveUpload] = useState<EmpireUpload | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [mediaLoading, setMediaLoading] = useState(true);
+  const [mediaError, setMediaError] = useState(false);
+  const [uploadsLoading, setUploadsLoading] = useState(true);
+  const [uploadsError, setUploadsError] = useState(false);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   // Map figure domain → upload category + figure tag
@@ -146,18 +167,30 @@ export default function FigureDetail() {
 
   useEffect(() => {
     if (!figureId) return;
+    setMediaLoading(true);
+    setMediaError(false);
     fetch(`${BASE}/api/gs/media?figureId=${figureId}`, { credentials: 'include' })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then(d => setMedia(d.media ?? []))
-      .catch(() => {});
+      .catch(() => setMediaError(true))
+      .finally(() => setMediaLoading(false));
   }, [figureId]);
 
   const fetchUploads = () => {
     if (!figure?.domain) return;
+    setUploadsLoading(true);
+    setUploadsError(false);
     fetch(`${BASE}/api/gs/uploads?category=${figureCategory}&limit=20`, { credentials: 'include' })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then(d => setUploads(d.uploads ?? []))
-      .catch(() => {});
+      .catch(() => setUploadsError(true))
+      .finally(() => setUploadsLoading(false));
   };
 
   useEffect(() => { fetchUploads(); }, [figure?.domain]);
@@ -172,9 +205,9 @@ export default function FigureDetail() {
   };
 
   if (isLoading) return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background" dir={direction}>
       <Navbar /><NewsTicker />
-      <div className="container mx-auto px-4 py-12 space-y-6">
+      <div className="container mx-auto px-4 py-12 space-y-6" aria-label={c.loading} role="status">
         <Skeleton className="h-64 w-full rounded-2xl" />
         <div className="grid md:grid-cols-3 gap-6">{[1,2,3].map(i=><Skeleton key={i} className="h-32 rounded-2xl"/>)}</div>
         <Skeleton className="h-48 w-full rounded-2xl" />
@@ -183,18 +216,20 @@ export default function FigureDetail() {
   );
 
   if (!figure) return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background" dir={direction}>
       <Navbar /><NewsTicker />
-      <div className="container mx-auto px-4 py-24 text-center text-muted-foreground">Figure not found</div>
+      <div className="container mx-auto px-4 py-24 text-center text-muted-foreground">{c.notFound}</div>
     </div>
   );
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background" dir={direction}>
       <Navbar /><NewsTicker />
 
       <AnimatePresence>
-        {activeStory && stories.length > 0 && <StoryViewer stories={stories} onClose={() => setActiveStory(false)} />}
+        {activeStory && stories.length > 0 && (
+          <StoryViewer stories={stories} onClose={() => setActiveStory(false)} copy={c} locale={locale} direction={direction} />
+        )}
       </AnimatePresence>
       <EmpireMediaPopup upload={activeUpload} onClose={() => setActiveUpload(null)} />
       <UploadModal
@@ -208,7 +243,7 @@ export default function FigureDetail() {
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <Link href="/ranking">
           <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back to Rankings
+            <ArrowLeft className={`w-4 h-4 ${direction === 'rtl' ? 'rotate-180' : ''}`} /> {c.back}
           </button>
         </Link>
 
@@ -219,7 +254,7 @@ export default function FigureDetail() {
             <CardContent className="p-6 md:p-8">
               <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
                 <FigureAvatar name={figure.name} imageUrl={figure.imageUrl} size="xl" />
-                <div className="flex-1 text-center md:text-left">
+                <div className="flex-1 text-center md:text-start">
                   <div className="flex items-center justify-center md:justify-start gap-3 flex-wrap mb-2">
                     <h1 className="text-3xl md:text-5xl font-black">{figure.name}</h1>
                     <RankBadge rank={figure.rank} size="lg" />
@@ -230,15 +265,15 @@ export default function FigureDetail() {
                   </div>
                   <div className="flex items-center justify-center md:justify-start gap-4 mb-5">
                     <div>
-                      <div className="text-4xl font-black text-primary font-mono">{figure.votes.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider">{t('votes')}</div>
+                      <div className="text-4xl font-black text-primary font-mono">{figure.votes.toLocaleString(locale)}</div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider">{c.votes}</div>
                     </div>
                     <VoteButton figureId={figure.id} currentVotes={figure.votes} size="lg" />
                   </div>
                   {stories.length > 0 && (
                     <Button onClick={() => setActiveStory(true)} variant="outline"
                       className="border-purple-400/40 text-purple-400 hover:bg-purple-400/10 gap-2 font-bold">
-                      <BookOpen className="w-4 h-4" /> {stories.length} Stories
+                      <BookOpen className="w-4 h-4" /> {new Intl.NumberFormat(locale).format(stories.length)} {c.stories}
                     </Button>
                   )}
                 </div>
@@ -257,14 +292,14 @@ export default function FigureDetail() {
                  <RankBadge rank={figure.rank} size="md" />}
               </div>
               <div className="text-2xl font-black">#{figure.rank}</div>
-              <div className="text-xs text-muted-foreground mt-1">{t('rank')} in {figure.domainLabel}</div>
+              <div className="text-xs text-muted-foreground mt-1">{c.rankIn(figure.domainLabel)}</div>
             </CardContent>
           </Card>
           <Card className="border-primary/20">
             <CardContent className="p-4 text-center">
               <Activity className="w-6 h-6 text-primary mx-auto mb-2" />
-              <div className="text-2xl font-black text-primary">{figure.recentVotes.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground mt-1">{t('recentActivity')}</div>
+               <div className="text-2xl font-black text-primary">{figure.recentVotes.toLocaleString(locale)}</div>
+              <div className="text-xs text-muted-foreground mt-1">{c.recentActivity}</div>
             </CardContent>
           </Card>
           <Card className="border-primary/20">
@@ -273,7 +308,7 @@ export default function FigureDetail() {
               <div className={`text-2xl font-black ${figure.voteTrend > 0 ? 'text-green-400' : figure.voteTrend < 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
                 {figure.voteTrend > 0 ? '+' : ''}{figure.voteTrend}%
               </div>
-              <div className="text-xs text-muted-foreground mt-1">{t('voteTrend')}</div>
+              <div className="text-xs text-muted-foreground mt-1">{c.voteTrend}</div>
             </CardContent>
           </Card>
         </div>
@@ -282,42 +317,50 @@ export default function FigureDetail() {
         {figure.bio && (
           <Card className="border-primary/20 mb-6">
             <CardContent className="p-6">
-              <h2 className="text-lg font-black uppercase tracking-wider mb-3">{t('bio')}</h2>
+              <h2 className="text-lg font-black uppercase tracking-wider mb-3">{c.biography}</h2>
               <p className="text-foreground/80 leading-relaxed">{figure.bio}</p>
             </CardContent>
           </Card>
         )}
 
         {/* Stories */}
-        {stories.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-black uppercase tracking-wider flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-purple-400" /> Stories
+                 <BookOpen className="w-5 h-5 text-purple-400" /> {c.stories}
               </h2>
               <div className="flex items-center gap-2">
                 <button onClick={() => setUploadOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all hover:opacity-90"
                   style={{ background: '#FFD700', color: '#000' }}>
-                  <Plus className="w-3.5 h-3.5" /> رفع محتوى
+                   <Plus className="w-3.5 h-3.5" /> {c.uploadContent}
                 </button>
-                <Button onClick={() => setActiveStory(true)} size="sm" variant="outline"
+                {stories.length > 0 && <Button onClick={() => setActiveStory(true)} size="sm" variant="outline"
+                  aria-label={c.openStories}
                   className="border-purple-400/40 text-purple-400 hover:bg-purple-400/10 text-xs">
-                  Read All Stories
-                </Button>
+                  {c.stories}
+                </Button>}
               </div>
             </div>
-            <div className="grid md:grid-cols-3 gap-4">
+            {mediaLoading ? (
+              <p className="text-sm text-muted-foreground" role="status">{c.loadingMedia}</p>
+            ) : mediaError ? (
+              <p className="text-sm text-red-400" role="alert">{c.mediaError}</p>
+            ) : stories.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{c.noStories}</p>
+            ) : <div className="grid md:grid-cols-3 gap-4">
               {stories.map((s, i) => (
                 <motion.div key={s.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
                   <Card onClick={() => setActiveStory(true)}
+                    role="button" tabIndex={0} aria-label={`${c.openStories}: ${s.title}`}
+                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setActiveStory(true); }}
                     className="border-purple-400/20 bg-purple-400/5 hover:border-purple-400/50 transition-colors cursor-pointer h-full">
                     <CardContent className="p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-purple-400/20 border border-purple-400/30 flex items-center justify-center">
                           <span className="text-xs font-black text-purple-400">{i + 1}</span>
                         </div>
-                        <span className="text-xs font-mono text-purple-400 uppercase tracking-widest">Story</span>
+                        <span className="text-xs font-mono text-purple-400 uppercase tracking-widest">{c.story}</span>
                       </div>
                       <h3 className="font-black text-sm leading-tight">{s.title}</h3>
                       <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">{s.content}</p>
@@ -325,9 +368,8 @@ export default function FigureDetail() {
                   </Card>
                 </motion.div>
               ))}
-            </div>
+            </div>}
           </motion.div>
-        )}
 
         {/* Sovereign Uploads */}
         <div>
@@ -337,27 +379,34 @@ export default function FigureDetail() {
                 style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.3)' }}>
                 <Upload className="w-3.5 h-3.5" style={{ color: '#FFD700' }} />
               </div>
-              <div dir="rtl">
-                <p className="font-black text-sm text-white">المحتوى السيادي</p>
-                <p className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>محتوى المواطنين · من خوادم GDNA</p>
+               <div>
+                <p className="font-black text-sm text-white">{c.sovereignContent}</p>
+                <p className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>{c.citizenContent}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => setUploadOpen(true)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black transition-all hover:opacity-90 active:scale-[0.97]"
                 style={{ background: '#FFD700', color: '#000' }}>
-                <Plus className="w-4 h-4" /> رفع محتوى
+                <Plus className="w-4 h-4" /> {c.upload}
               </button>
               <Link href="/earnings">
                 <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold"
                   style={{ border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700', background: 'rgba(255,215,0,0.06)' }}>
-                  <Coins className="w-3 h-3" /> أرباحي
+                  <Coins className="w-3 h-3" /> {c.myEarnings}
                 </button>
               </Link>
             </div>
           </div>
 
-          {uploads.length === 0 ? (
+          {uploadsLoading ? (
+            <div className="rounded-2xl p-10 text-center text-muted-foreground" role="status">{c.loadingMedia}</div>
+          ) : uploadsError ? (
+            <div className="rounded-2xl p-10 text-center" role="alert">
+              <p className="text-red-400 mb-3">{c.mediaError}</p>
+              <button onClick={fetchUploads} className="text-sm font-bold text-primary">{c.retry}</button>
+            </div>
+          ) : uploads.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="rounded-2xl p-10 text-center"
@@ -366,14 +415,14 @@ export default function FigureDetail() {
                 style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.2)' }}>
                 <Upload className="w-7 h-7" style={{ color: 'rgba(255,215,0,0.4)' }} />
               </div>
-              <p className="font-black text-white mb-1" dir="rtl">كن أول من ينشر عن {figureName}</p>
-              <p className="text-xs mb-5" style={{ color: 'rgba(255,215,0,0.4)' }} dir="rtl">
-                كل 100 مشاهدة = 1 عملة ذهبية · أرباحك تُحسب تلقائياً
+              <p className="font-black text-white mb-1">{c.firstPublish(figureName)}</p>
+              <p className="text-xs mb-5" style={{ color: 'rgba(255,215,0,0.4)' }}>
+                {c.autoEarnings}
               </p>
               <button onClick={() => setUploadOpen(true)}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm transition-all hover:opacity-90 active:scale-[0.97]"
                 style={{ background: '#FFD700', color: '#000' }}>
-                <Plus className="w-4 h-4" /> أضف فيديو أو صوت الآن
+                <Plus className="w-4 h-4" /> {c.addMedia}
               </button>
             </motion.div>
           ) : (
@@ -388,7 +437,7 @@ export default function FigureDetail() {
                 <button onClick={() => setUploadOpen(true)}
                   className="w-full rounded-xl py-3 flex items-center justify-center gap-2 font-black text-sm transition-all hover:opacity-80"
                   style={{ border: '1.5px dashed rgba(255,215,0,0.3)', color: '#FFD700', background: 'rgba(255,215,0,0.04)' }}>
-                  <Plus className="w-4 h-4" /> أضف محتواك عن {figureName}
+                 <Plus className="w-4 h-4" /> {c.addAbout(figureName)}
                 </button>
               </motion.div>
             </div>

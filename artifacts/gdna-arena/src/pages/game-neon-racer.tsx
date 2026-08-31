@@ -5,6 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Coins, Zap, ArrowLeft, Trophy, X, Zap as Lightning } from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import GameWarning from "@/components/GameWarning";
+import { useLang } from "@/contexts/LangContext";
+import { gameText } from "@/i18n/game-chrome";
+import { gameLocaleText, localeForLang } from "@/i18n/game-locale-copy";
+import { finalLabelText } from "@/i18n/final-labels-copy";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -17,6 +21,8 @@ const NEON = "#00d4ff";
 export default function NeonRacerGame() {
   const [, setLocation] = useLocation();
   const { user, refreshUser } = useAuth();
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof gameText>[1], values?: Record<string, string | number>) => gameText(lang, key, values);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [countdown, setCountdown] = useState(3);
@@ -82,16 +88,16 @@ export default function NeonRacerGame() {
         body: JSON.stringify({ win }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
+      if (!res.ok) throw new Error(data.error ?? gameLocaleText(lang, "failed"));
       setResult(data); // server now records and returns the win we sent
       if (user) await refreshUser();
       try {
         const stored = JSON.parse(localStorage.getItem("gdna_recent_matches") ?? "[]");
-        const updated = [{ game: "Neon Racer", win: data.win, coins: data.coinsEarned, xp: data.xpEarned, time: new Date().toISOString() }, ...stored].slice(0, 20);
+        const updated = [{ game: finalLabelText(lang, "neonRacer"), win: data.win, coins: data.coinsEarned, xp: data.xpEarned, time: new Date().toISOString() }, ...stored].slice(0, 20);
         localStorage.setItem("gdna_recent_matches", JSON.stringify(updated));
       } catch { /* ignore */ }
     } catch (e: unknown) {
-      setError((e as Error).message ?? "Failed to submit");
+      setError((e as Error).message ?? t("submitting"));
     } finally {
       setSubmitting(false);
       setPhase("result");
@@ -99,21 +105,21 @@ export default function NeonRacerGame() {
   };
 
   const rating = reactionMs == null ? null
-    : reactionMs < 200 ? { label: "LIGHTNING", color: "#ffdd00" }
-    : reactionMs < 300 ? { label: "BLAZING", color: NEON }
-    : reactionMs < 400 ? { label: "FAST", color: "#a3e635" }
-    : reactionMs < 550 ? { label: "SLOW", color: "#f97316" }
-    : { label: "TOO SLOW", color: "#ef4444" };
+    : reactionMs < 200 ? { label: t("lightning"), color: "#ffdd00" }
+    : reactionMs < 300 ? { label: t("blazing"), color: NEON }
+    : reactionMs < 400 ? { label: t("fast"), color: "#a3e635" }
+    : reactionMs < 550 ? { label: t("slow"), color: "#f97316" }
+    : { label: t("tooSlow"), color: "#ef4444" };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col" style={{ background: "radial-gradient(ellipse at top, #001a2e 0%, #000 60%)" }}>
+    <div className="min-h-screen bg-black flex flex-col" dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: "radial-gradient(ellipse at top, #001a2e 0%, #000 60%)" }}>
       {/* Back bar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-cyan-500/10">
         <button onClick={() => setLocation("/games")} className="flex items-center gap-2 text-cyan-400/60 hover:text-cyan-400 transition-colors font-mono text-xs tracking-wider">
-          <ArrowLeft className="w-4 h-4" /> BACK TO ARENA
+          <ArrowLeft className="w-4 h-4" /> {t("backArena")}
         </button>
         <div className="flex-1" />
-        <div className="font-mono text-xs text-cyan-400/40 tracking-[0.3em]">NEON RACER</div>
+        <div className="font-mono text-xs text-cyan-400/40 tracking-[0.3em]">{finalLabelText(lang, "neonRacer")}</div>
       </div>
 
       <div className="px-4 pt-4">
@@ -128,12 +134,12 @@ export default function NeonRacerGame() {
             <motion.div key="intro" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="text-center space-y-8 max-w-md w-full">
               <div className="space-y-3">
-                <div className="font-mono text-xs tracking-[0.5em] text-cyan-400/40">REACTION CHALLENGE</div>
+                <div className="font-mono text-xs tracking-[0.5em] text-cyan-400/40">{t("reactionChallenge")}</div>
                 <h1 className="font-black text-5xl tracking-widest uppercase" style={{ color: NEON, textShadow: `0 0 40px ${NEON}60` }}>
-                  NEON RACER
+                  {finalLabelText(lang, "neonRacer")}
                 </h1>
                 <p className="text-white/40 font-mono text-sm">
-                  When BOOST lights up — hit it instantly.<br />React under 400ms to win.
+                  {t("neonInstructions").split("|").map((line, i) => <span key={line}>{line}{i === 0 && <br />}</span>)}
                 </p>
               </div>
 
@@ -154,19 +160,23 @@ export default function NeonRacerGame() {
 
               <div className="space-y-2">
                 <div className="grid grid-cols-3 gap-2 font-mono text-xs">
-                  {[["< 200ms", "LIGHTNING", "#ffdd00"], ["< 300ms", "BLAZING", NEON], ["< 400ms", "FAST", "#a3e635"]].map(([ms, label, color]) => (
+                  {[
+                    { limit: 200, label: t("lightning"), color: "#ffdd00" },
+                    { limit: 300, label: t("blazing"), color: NEON },
+                    { limit: 400, label: t("fast"), color: "#a3e635" },
+                  ].map(({ limit, label, color }) => (
                     <div key={label} className="border border-white/10 p-2 text-center">
-                      <div style={{ color: color as string }}>{ms}</div>
+                       <div style={{ color }}>{`< ${limit.toLocaleString(localeForLang[lang])}ms`}</div>
                       <div className="text-white/30 text-[10px]">{label}</div>
                     </div>
                   ))}
                 </div>
-                <p className="text-white/20 font-mono text-xs">≥ 400ms = DEFEAT</p>
+                <p className="text-white/20 font-mono text-xs">≥ {(400).toLocaleString(localeForLang[lang])}ms = {t("defeat")}</p>
               </div>
 
               <Button onClick={startCountdown}
                 className="w-full h-14 font-mono font-black text-lg tracking-[0.3em] border border-cyan-500 text-cyan-400 bg-transparent hover:bg-cyan-500 hover:text-black transition-all">
-                START RACE
+                {t("startRace")}
               </Button>
             </motion.div>
           )}
@@ -175,26 +185,28 @@ export default function NeonRacerGame() {
           {phase === "countdown" && (
             <motion.div key="countdown" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="text-center space-y-6">
-              <div className="font-mono text-xs tracking-[0.5em] text-cyan-400/40">GET READY</div>
+              <div className="font-mono text-xs tracking-[0.5em] text-cyan-400/40">{t("getReady")}</div>
               <AnimatePresence mode="wait">
                 <motion.div key={countdown} initial={{ scale: 2, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }}
                   transition={{ duration: 0.3 }}
                   className="font-black text-9xl" style={{ color: NEON, textShadow: `0 0 60px ${NEON}` }}>
-                  {countdown}
+                  {countdown.toLocaleString(localeForLang[lang])}
                 </motion.div>
               </AnimatePresence>
-              <div className="font-mono text-white/20 text-sm">DO NOT CLICK YET</div>
+              <div className="font-mono text-white/20 text-sm">{t("doNotClick")}</div>
             </motion.div>
           )}
 
           {/* ── WAITING ───────────────────────────── */}
           {phase === "waiting" && (
             <motion.div key="waiting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="w-full h-[60vh] relative cursor-pointer" onClick={handleBoost}>
+              className="w-full h-[60vh] relative cursor-pointer" onClick={handleBoost}
+              role="button" tabIndex={0} aria-label={gameLocaleText(lang, "boostAction")}
+              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") handleBoost(); }}>
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
                 {/* Road animation */}
                 <motion.div animate={{ opacity: [0.3, 0.6, 0.3] }} transition={{ repeat: Infinity, duration: 1.2 }}
-                  className="font-mono text-white/40 text-sm tracking-widest">WAIT FOR BOOST...</motion.div>
+                  className="font-mono text-white/40 text-sm tracking-widest">{t("waitBoost")}</motion.div>
                 <div className="relative w-64 h-32 border border-white/5 overflow-hidden rounded"
                   style={{ background: "#000810" }}>
                   <motion.div animate={{ x: ["-10%", "110%"] }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
@@ -203,7 +215,7 @@ export default function NeonRacerGame() {
                     className="absolute bottom-0 left-0 right-0 h-0.5"
                     style={{ background: `linear-gradient(90deg, transparent, ${NEON}40, transparent)` }} />
                 </div>
-                <div className="font-mono text-xs text-white/20">TAP THE SCREEN WHEN BOOST APPEARS</div>
+                <div className="font-mono text-xs text-white/20">{t("tapBoost")}</div>
               </div>
             </motion.div>
           )}
@@ -212,7 +224,8 @@ export default function NeonRacerGame() {
           {phase === "reacting" && (
             <motion.div key="reacting" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
               className="w-full h-[60vh] relative cursor-pointer flex items-center justify-center"
-              onClick={handleBoost}>
+              onClick={handleBoost} role="button" tabIndex={0} aria-label={gameLocaleText(lang, "boostAction")}
+              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") handleBoost(); }}>
               <motion.div
                 animate={{ scale: [1, 1.05, 1], boxShadow: [`0 0 60px ${NEON}60`, `0 0 100px ${NEON}90`, `0 0 60px ${NEON}60`] }}
                 transition={{ repeat: Infinity, duration: 0.4 }}
@@ -220,7 +233,7 @@ export default function NeonRacerGame() {
                 style={{ borderColor: NEON, background: `radial-gradient(circle, ${NEON}20 0%, transparent 70%)` }}>
                 <Lightning className="w-16 h-16 mb-2" style={{ color: NEON, filter: `drop-shadow(0 0 20px ${NEON})` }} />
                 <div className="font-black text-4xl tracking-[0.3em]" style={{ color: NEON, textShadow: `0 0 30px ${NEON}` }}>
-                  BOOST!
+                  {t("boost")}
                 </div>
               </motion.div>
             </motion.div>
@@ -230,11 +243,11 @@ export default function NeonRacerGame() {
           {phase === "tooEarly" && (
             <motion.div key="early" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
               className="text-center space-y-8">
-              <div className="text-red-400 text-7xl font-black font-mono">FALSE<br/>START</div>
-              <p className="text-white/40 font-mono text-sm">You jumped too early. Wait for the BOOST signal.</p>
+              <div className="text-red-400 text-7xl font-black font-mono">{t("falseStart").split("|").map((line, i) => <span key={line}>{line}{i === 0 && <br />}</span>)}</div>
+              <p className="text-white/40 font-mono text-sm">{t("early")}</p>
               <Button onClick={startCountdown}
                 className="font-mono border border-red-400/50 text-red-400 bg-transparent hover:bg-red-400/10">
-                TRY AGAIN
+                {t("tryAgain")}
               </Button>
             </motion.div>
           )}
@@ -244,11 +257,11 @@ export default function NeonRacerGame() {
             <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               className="text-center space-y-6 max-w-sm w-full">
               {submitting ? (
-                <div className="font-mono text-cyan-400 animate-pulse text-sm">SUBMITTING SCORE...</div>
+                <div className="font-mono text-cyan-400 animate-pulse text-sm">{t("submitting")}</div>
               ) : error ? (
                 <div className="space-y-4">
                   <div className="font-mono text-red-400 text-sm">{error}</div>
-                  <Button onClick={() => setLocation("/games")} variant="outline">BACK</Button>
+                  <Button onClick={() => setLocation("/games")} variant="outline">{t("back")}</Button>
                 </div>
               ) : result ? (
                 <>
@@ -260,7 +273,7 @@ export default function NeonRacerGame() {
                       }
                     </motion.div>
                     <div className="font-black text-4xl tracking-widest" style={{ color: result.win ? NEON : "#ef4444" }}>
-                      {result.win ? "VICTORY" : "DEFEAT"}
+                      {result.win ? t("victory") : t("defeat")}
                     </div>
                     {rating && (
                       <div className="font-mono text-sm font-black tracking-[0.3em]" style={{ color: rating.color }}>
@@ -269,7 +282,7 @@ export default function NeonRacerGame() {
                     )}
                     {reactionMs != null && (
                       <div className="font-mono text-white/40 text-xs">
-                        Reaction: <span className="text-white font-bold">{reactionMs}ms</span>
+                         {t("reaction")} <span className="text-white font-bold">{reactionMs.toLocaleString(localeForLang[lang])}ms</span>
                       </div>
                     )}
                   </div>
@@ -277,24 +290,24 @@ export default function NeonRacerGame() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="border border-cyan-500/30 p-4 text-center" style={{ background: "#00d4ff08" }}>
                       <Coins className="w-5 h-5 mx-auto mb-1" style={{ color: NEON }} />
-                      <div className="font-mono font-black text-2xl" style={{ color: NEON }}>+{result.coinsEarned}</div>
-                      <div className="font-mono text-xs text-white/30">COINS</div>
+                       <div className="font-mono font-black text-2xl" style={{ color: NEON }}>+{result.coinsEarned.toLocaleString(localeForLang[lang])}</div>
+                       <div className="font-mono text-xs text-white/30">{t("coins")}</div>
                     </div>
                     <div className="border border-purple-400/30 p-4 text-center bg-purple-400/5">
                       <Zap className="w-5 h-5 mx-auto mb-1 text-purple-400" />
-                      <div className="font-mono font-black text-2xl text-purple-400">+{result.xpEarned}</div>
-                      <div className="font-mono text-xs text-white/30">XP</div>
+                       <div className="font-mono font-black text-2xl text-purple-400">+{result.xpEarned.toLocaleString(localeForLang[lang])}</div>
+                      <div className="font-mono text-xs text-white/30">{finalLabelText(lang, "xp")}</div>
                     </div>
                   </div>
 
                   <div className="flex gap-3">
                     <Button onClick={startCountdown}
                       className="flex-1 font-mono border border-cyan-500 text-cyan-400 bg-transparent hover:bg-cyan-500 hover:text-black">
-                      ↺ RACE AGAIN
+                       {t("raceAgain")}
                     </Button>
                     <Button onClick={() => setLocation("/games")} variant="outline"
                       className="flex-1 font-mono border-white/20 text-white/50 hover:border-white/40">
-                      BACK →
+                       {t("back")} →
                     </Button>
                   </div>
                 </>

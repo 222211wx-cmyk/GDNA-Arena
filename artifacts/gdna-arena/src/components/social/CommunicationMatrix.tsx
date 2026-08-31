@@ -18,7 +18,7 @@ import {
   Activity, RefreshCw, Bell, Globe, ArrowRight, Wifi, WifiOff,
 } from "lucide-react";
 import Avatar from "./Avatar";
-import { GOLD, GOLD_A, api, timeAgo } from "./social-i18n";
+import { GOLD, GOLD_A, api, timeAgo, useSocialI18n } from "./social-i18n";
 import type { FeedPost, Citizen, NotifItem } from "./social-types";
 
 interface LiveEvent {
@@ -45,7 +45,8 @@ type ConnState = "live" | "syncing" | "offline";
 const CARD_BG = "hsl(var(--card))";
 const BORDER = GOLD_A(0.094);
 
-export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearchSubmit }: Props) {
+export default function CommunicationMatrix({ user, onNavigate, onSearchSubmit }: Props) {
+  const { st, dir, locale } = useSocialI18n();
   const [, wouterNavigate] = useLocation();
 
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -144,28 +145,28 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
   const liveEventCount = events.filter(e => e.isLive).length;
 
   // Merge cross-surface activity into a single scannable stream.
-  const activity = buildActivity(posts, events, notifs, st);
+  const activity = buildActivity(posts, events, notifs, st, locale);
 
   const connMeta: Record<ConnState, { label: string; color: string; icon: React.ReactNode }> = {
-    live:    { label: st.matrix_live ?? "Live",       color: "#22c55e", icon: <Wifi size={12} /> },
-    syncing: { label: st.matrix_syncing ?? "Syncing", color: GOLD,      icon: <RefreshCw size={12} className={refreshing ? "spin-slow" : undefined} /> },
-    offline: { label: st.matrix_offline ?? "Offline", color: "#ef4444", icon: <WifiOff size={12} /> },
+    live:    { label: st.matrix_live,       color: "#22c55e", icon: <Wifi size={12} /> },
+    syncing: { label: st.matrix_syncing, color: GOLD,      icon: <RefreshCw size={12} className={refreshing ? "spin-slow" : undefined} /> },
+    offline: { label: st.matrix_offline, color: "#ef4444", icon: <WifiOff size={12} /> },
   };
 
   const stats = [
-    { key: "unread", label: st.stat_unread ?? "Unread messages", value: unread,            color: "#3b82f6", path: "/messages" },
-    { key: "live",   label: st.stat_live_events ?? "Live now",   value: liveEventCount,     color: "#ef4444", path: "/events"   },
-    { key: "notif",  label: st.stat_notifications ?? "New notifications", value: notifs.length, color: GOLD,   path: "/messages" },
-    { key: "posts",  label: st.stat_posts ?? "Fresh posts",      value: posts.length,       color: "#22c55e", path: "/pulse"    },
+    { key: "unread", label: st.stat_unread, value: unread, color: "#3b82f6", path: "/messages" },
+    { key: "live", label: st.stat_live_events, value: liveEventCount, color: "#ef4444", path: "/events" },
+    { key: "notif", label: st.stat_notifications, value: notifs.length, color: GOLD, path: "/messages" },
+    { key: "posts", label: st.stat_posts, value: posts.length, color: "#22c55e", path: "/pulse" },
   ];
 
   const tiles = [
-    { key: "messages", title: st.tile_messages ?? "Messages", sub: st.tile_messages_sub ?? "AMIS solidarity network", icon: <MessageSquare size={18} />, path: "/messages", badge: unread },
-    { key: "pulse",    title: st.tile_pulse ?? "Social Pulse", sub: st.tile_pulse_sub ?? "Live empire feed",           icon: <Radio size={18} />,          path: "/pulse",    badge: 0 },
-    { key: "events",   title: st.tile_events ?? "Events",      sub: st.tile_events_sub ?? "Happening across the empire",icon: <Calendar size={18} />,      path: "/events",   badge: liveEventCount },
-    { key: "citizens", title: st.tile_citizens ?? "Citizens",  sub: st.tile_citizens_sub ?? "Discover and connect",    icon: <Users size={18} />,          path: "/citizens", badge: 0 },
-    { key: "friends",  title: st.tile_friends ?? "Friends",    sub: st.tile_friends_sub ?? "Your solidarity circle",   icon: <UserPlus size={18} />,       path: "/friends",  badge: 0 },
-    { key: "search",   title: st.tile_search ?? "Search",      sub: st.tile_search_sub ?? "Explore the empire",        icon: <Search size={18} />,         path: "/search",   badge: 0 },
+    { key: "messages", title: st.tile_messages, sub: st.tile_messages_sub, icon: <MessageSquare size={18} />, path: "/messages", badge: unread },
+    { key: "pulse", title: st.tile_pulse, sub: st.tile_pulse_sub, icon: <Radio size={18} />, path: "/pulse", badge: 0 },
+    { key: "events", title: st.tile_events, sub: st.tile_events_sub, icon: <Calendar size={18} />, path: "/events", badge: liveEventCount },
+    { key: "citizens", title: st.tile_citizens, sub: st.tile_citizens_sub, icon: <Users size={18} />, path: "/citizens", badge: 0 },
+    { key: "friends", title: st.tile_friends, sub: st.tile_friends_sub, icon: <UserPlus size={18} />, path: "/friends", badge: 0 },
+    { key: "search", title: st.tile_search, sub: st.tile_search_sub, icon: <Search size={18} />, path: "/search", badge: 0 },
   ];
 
   return (
@@ -190,18 +191,18 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Globe size={18} style={{ color: GOLD, flexShrink: 0 }} />
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, letterSpacing: 0.5, color: "#fff" }} data-testid="text-matrix-title">
-                {st.matrix_title ?? "Communication Matrix"}
+                 {st.matrix_title}
               </h2>
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#ffffff70", lineHeight: 1.5, maxWidth: 520 }}>
-              {st.matrix_subtitle ?? "One living network — conversations, pulse, citizens and events, connected."}
+               {st.matrix_subtitle}
             </p>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <div
               aria-live="polite"
-              aria-label={`${st.matrix_updated ?? "Updated"}: ${connMeta[conn].label}`}
+               aria-label={`${st.matrix_updated}: ${connMeta[conn].label}`}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 background: "#111", border: `1px solid ${connMeta[conn].color}40`,
@@ -218,8 +219,8 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
             <button
               onClick={manualRefresh}
               disabled={refreshing}
-              aria-label={st.matrix_refresh ?? "Refresh now"}
-              title={st.matrix_refresh ?? "Refresh now"}
+               aria-label={st.matrix_refresh}
+               title={st.matrix_refresh}
               className="empire-btn"
               style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5,
@@ -236,12 +237,12 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
 
         {lastUpdated && (
           <p style={{ margin: "10px 0 0", fontSize: 10.5, color: "#ffffff35" }} data-testid="text-last-updated">
-            {(st.matrix_updated ?? "Updated")} · {timeAgo(new Date(lastUpdated).toISOString(), st)}
+             {st.matrix_updated} · {timeAgo(new Date(lastUpdated).toISOString(), st, locale)}
           </p>
         )}
         {!user && (
           <p style={{ margin: "8px 0 0", fontSize: 11.5, color: GOLD_A(0.69) }} data-testid="text-login-hint">
-            {st.matrix_login_hint ?? "Sign in to see your personal network activity."}
+             {st.matrix_login_hint}
           </p>
         )}
       </div>
@@ -271,7 +272,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
 
       {/* Quick actions — launcher tiles into existing routes */}
       <div>
-        <SectionLabel icon={<Activity size={12} />} text={st.matrix_quick_actions ?? "Quick actions"} />
+        <SectionLabel icon={<Activity size={12} />} text={st.matrix_quick_actions} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginTop: 8 }}>
           {tiles.map(t => (
             <button
@@ -316,14 +317,14 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
 
       {/* Recent cross-surface activity */}
       <div>
-        <SectionLabel icon={<Bell size={12} />} text={st.matrix_recent_activity ?? "Recent activity"} />
+        <SectionLabel icon={<Bell size={12} />} text={st.matrix_recent_activity} />
         <div style={{
           marginTop: 8, background: CARD_BG, border: `1px solid ${BORDER}`,
           borderRadius: 12, overflow: "hidden",
         }}>
           {activity.length === 0 ? (
             <p style={{ margin: 0, padding: "22px 16px", textAlign: "center", color: "#ffffff40", fontSize: 12.5 }} data-testid="text-no-activity">
-              {st.matrix_no_activity ?? "No recent activity yet."}
+               {st.matrix_no_activity}
             </p>
           ) : (
             activity.map((a, i) => (
@@ -334,7 +335,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
                 transition={{ delay: Math.min(i * 0.03, 0.2) }}
                 onClick={() => navigate(a.path)}
                 className="cm-act"
-                aria-label={`${a.title}. ${st.matrix_open ?? "Open"}`}
+                 aria-label={`${a.title}. ${st.matrix_open}`}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 11,
                   padding: "11px 14px", background: "transparent", border: "none",
@@ -365,14 +366,14 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
       {/* Discoverable citizens */}
       {citizens.length > 0 && (
         <div>
-          <SectionLabel icon={<Users size={12} />} text={st.matrix_discover_citizens ?? "Discover citizens"} />
+          <SectionLabel icon={<Users size={12} />} text={st.matrix_discover_citizens} />
           <div style={{ display: "flex", gap: 10, overflowX: "auto", marginTop: 8, paddingBottom: 4 }} className="scrollbar-hide">
             {citizens.map(c => (
               <button
                 key={c.id}
                 onClick={() => navigate("/citizens")}
                 className="empire-btn"
-                aria-label={`${c.username} — ${st.matrix_open ?? "Open"} ${st.citizens ?? "Citizens"}`}
+                 aria-label={`${c.username} — ${st.matrix_open} ${st.citizens}`}
                 style={{
                   flex: "0 0 auto", width: 120, background: CARD_BG, border: `1px solid ${BORDER}`,
                   borderRadius: 12, padding: "14px 10px", cursor: "pointer",
@@ -385,7 +386,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
                   {c.username}
                 </span>
                 <span style={{ fontSize: 10, color: GOLD, fontWeight: 700 }}>
-                  {(c.xp ?? 0).toLocaleString()} {st.xp ?? "XP"}
+                   {(c.xp ?? 0).toLocaleString(locale)} {st.xp}
                 </span>
               </button>
             ))}
@@ -397,7 +398,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
       <button
         onClick={() => submitSearch("")}
         className="empire-btn"
-        aria-label={st.matrix_search_cta ?? "Search the empire"}
+        aria-label={st.matrix_search_cta}
         style={{
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           background: GOLD_A(0.071), border: `1px solid ${GOLD_A(0.208)}`, borderRadius: 12,
@@ -405,7 +406,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
         }}
         data-testid="button-search-empire"
       >
-        <Search size={15} /> {st.matrix_search_cta ?? "Search the empire"}
+         <Search size={15} /> {st.matrix_search_cta}
       </button>
     </div>
   );
@@ -436,27 +437,29 @@ function buildActivity(
   events: LiveEvent[],
   notifs: NotifItem[],
   st: Record<string, string>,
+  locale: string,
 ): ActivityRow[] {
   const rows: ActivityRow[] = [];
 
   events.filter(e => e.isLive).slice(0, 2).forEach(e => {
     rows.push({
       kind: "event", id: e.id,
-      title: e.title, meta: st.matrix_live ?? "Live",
+      title: e.title, meta: st.matrix_live,
       path: "/events", color: "#ef4444", icon: <Radio size={14} />,
     });
   });
 
   notifs.slice(0, 3).forEach((n, idx) => {
     const verb =
-      n.type === "comment"  ? (st.notif_comment  ?? "commented on your post") :
-      n.type === "follow"   ? (st.notif_follow   ?? "started following you") :
-      n.type === "reaction" ? (st.notif_reaction ?? "reacted to your post") :
+       n.type === "comment"  ? st.notif_comment :
+       n.type === "follow"   ? st.notif_follow :
+       n.type === "reaction" ? st.notif_reaction :
+       n.type === "call_missed" ? st.notif_call_missed :
       (n.content ?? "");
     rows.push({
       kind: "notif", id: `${n.type}-${idx}`,
       title: `${n.username} ${verb}`.trim(),
-      meta: n.createdAt ? timeAgo(n.createdAt, st) : "",
+       meta: n.createdAt ? timeAgo(n.createdAt, st, locale) : "",
       path: "/messages", color: "#3b82f6", icon: <Bell size={14} />,
     });
   });
@@ -465,7 +468,7 @@ function buildActivity(
     rows.push({
       kind: "post", id: p.id,
       title: `${p.username}: ${(p.content ?? "").slice(0, 70)}${(p.content ?? "").length > 70 ? "…" : ""}`,
-      meta: p.createdAt ? timeAgo(p.createdAt, st) : "",
+       meta: p.createdAt ? timeAgo(p.createdAt, st, locale) : "",
       path: "/pulse", color: "#22c55e", icon: <Globe size={14} />,
     });
   });

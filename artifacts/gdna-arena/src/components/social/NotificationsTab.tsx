@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Bell } from "lucide-react";
-import { GOLD, GOLD_A, timeAgo, api } from "./social-i18n";
+import { GOLD, GOLD_A, timeAgo, api, useSocialI18n } from "./social-i18n";
 import type { NotifItem } from "./social-types";
 
 function notifIcon(type: string) {
@@ -24,10 +24,10 @@ function notifBg(type: string) {
 }
 
 function notifLabel(n: NotifItem, st: Record<string, string>): string {
-  if (n.type === "comment")     return st.notif_comment   ?? "commented on your post";
-  if (n.type === "reaction")    return `${st.notif_reaction ?? "reacted"} ${n.content}`;
-  if (n.type === "follow")      return st.notif_follow    ?? "started following you";
-  if (n.type === "call_missed") return "missed your call";
+  if (n.type === "comment")     return st.notif_comment;
+  if (n.type === "reaction")    return `${st.notif_reaction} ${n.content}`;
+  if (n.type === "follow")      return st.notif_follow;
+  if (n.type === "call_missed") return st.notif_call_missed;
   return n.content;
 }
 
@@ -37,7 +37,8 @@ interface Props {
   dir: string;
 }
 
-export default function NotificationsTab({ user, st, dir }: Props) {
+export default function NotificationsTab({ user }: Props) {
+  const { st, dir, locale } = useSocialI18n();
   const [notifs,  setNotifs]  = useState<NotifItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [allRead, setAllRead] = useState(false);
@@ -62,18 +63,18 @@ export default function NotificationsTab({ user, st, dir }: Props) {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div dir={dir} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {/* Header */}
       {notifs.length > 0 && !allRead && (
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button onClick={() => setAllRead(true)}
             style={{ background: "none", border: `1px solid ${GOLD_A(0.19)}`, borderRadius: 8, padding: "5px 12px", color: GOLD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            {st.mark_read ?? "Mark all read"}
+            {st.mark_read}
           </button>
         </div>
       )}
 
-      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 40 }}>…</div>}
+      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 40 }}>{st.loading}</div>}
       {!loading && notifs.length === 0 && (
         <div style={{ textAlign: "center", padding: 60, color: "hsl(var(--muted-foreground))" }}>
           <Bell size={36} style={{ opacity: 0.2, display: "block", margin: "0 auto 12px" }} />
@@ -114,7 +115,7 @@ export default function NotificationsTab({ user, st, dir }: Props) {
               </p>
             )}
             <p style={{ margin: "4px 0 0", fontSize: 10, color: "#ffffff25" }}>
-              {timeAgo(n.createdAt, st)}
+              {timeAgo(n.createdAt, st, locale)}
             </p>
           </div>
         </motion.div>

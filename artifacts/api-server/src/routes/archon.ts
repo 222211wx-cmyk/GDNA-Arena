@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import OpenAI from "openai";
 import { db, pool } from "@workspace/db";
-import { archonSessionsTable, archonDirectivesTable, pillarCompletionsTable } from "@workspace/db/schema";
+import { archonSessionsTable, archonDirectivesTable } from "@workspace/db/schema";
 import { usersTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -149,7 +149,7 @@ Return this exact JSON structure:
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 800,
+      max_tokens: 200,
       temperature: 0.85,
       response_format: { type: "json_object" },
     });
@@ -409,11 +409,13 @@ router.get("/archon/pillar/streaks", async (req, res): Promise<void> => {
   const todayKey = new Date().toISOString().slice(0, 10);
   const pillars = ["mens", "vis", "anima", "legatum"] as const;
 
-  // Fetch all completions for this user across all pillars
-  const rows = await db.select().from(pillarCompletionsTable)
-    .where(eq(pillarCompletionsTable.userId, targetUserId))
-    .orderBy(desc(pillarCompletionsTable.createdAt));
-
+  const { rows } = await pool.query(
+    `SELECT pillar, streak, date_key AS "dateKey", created_at AS "createdAt"
+       FROM pillar_completions
+      WHERE user_id = $1
+      ORDER BY created_at DESC`,
+    [targetUserId],
+  );
   const streakMap: Record<string, { streak: number; completedToday: boolean; totalDays: number }> = {};
 
   const yesterday = new Date();

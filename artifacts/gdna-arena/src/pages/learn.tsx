@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BookOpen, Play, CheckCircle2, Zap, Users, Clock, Star, GraduationCap, ExternalLink, Award, Filter } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
+import { useLang } from "@/contexts/LangContext";
+import { contentCopy } from "@/i18n/content-discovery-copy";
 
 interface Course {
   id: number;
@@ -42,6 +44,8 @@ function timeStr(min: number) {
 }
 
 export default function LearnPage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
   const { user } = useAuth();
   const [courses, setCourses]  = useState<Course[]>([]);
   const [stats, setStats]      = useState<Stats | null>(null);
@@ -100,7 +104,7 @@ export default function LearnPage() {
             EDUCATIONAL HUB — EMPIRE LEARNING SYSTEM
           </div>
           <h1 className="text-4xl md:text-6xl font-black mb-4" style={{ color: "hsl(var(--foreground))" }}>
-            LEARN &amp; <span style={{ color: GREEN }}>ASCEND</span>
+            {t("learnTitle")}
           </h1>
           <p className="text-muted-foreground text-lg mb-8 max-w-2xl mx-auto">
             Lectures, masterclasses, and knowledge sessions from the world's greatest minds. 
@@ -154,7 +158,7 @@ export default function LearnPage() {
                   background: active ? `${meta?.color ?? GREEN}20` : "transparent",
                   color: active ? (meta?.color ?? GREEN) : "#888",
                 }}>
-                {d === "all" ? "🌍 ALL" : `${meta?.icon} ${meta?.label}`}
+                {d === "all" ? `🌍 ${t("all")}` : `${meta?.icon} ${meta?.label}`}
               </button>
             );
           })}
@@ -163,7 +167,7 @@ export default function LearnPage() {
         {loading && (
           <div className="text-center py-20">
             <div className="w-12 h-12 rounded-full border-4 animate-spin mx-auto mb-3" style={{ borderColor: GREEN, borderTopColor: "transparent" }} />
-            <p className="text-muted-foreground text-sm">Loading knowledge...</p>
+            <p className="text-muted-foreground text-sm">{t("loading")}</p>
           </div>
         )}
 
@@ -172,7 +176,7 @@ export default function LearnPage() {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-xs font-black text-red-400 tracking-widest">LIVE NOW</span>
+              <span className="text-xs font-black text-red-400 tracking-widest">{t("liveNow")}</span>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               {live.map(c => <CourseCard key={c.id} course={c} onComplete={complete} watching={watching} />)}
@@ -189,7 +193,7 @@ export default function LearnPage() {
             {regular.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
                 <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p>No courses in this domain yet.</p>
+                <p>{t("noCourses")}</p>
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

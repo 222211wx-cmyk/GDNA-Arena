@@ -7,6 +7,9 @@ import {
   Star, ArrowRight, Flame, Cpu, Music, Briefcase,
   Shield, Sword, Eye, Film,
 } from "lucide-react";
+import { useLang } from "@/contexts/LangContext";
+import { contentCopy } from "@/i18n/content-discovery-copy";
+import { formatDate, formatNumber, relativeTime, surfaceCopy } from "@/i18n/content-surfaces-copy";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Legend { id: number; name: string; rank: number; score: number; domain: string; imageUrl: string | null; }
@@ -23,13 +26,6 @@ const DOMAIN_ICON: Record<string, React.ReactNode> = {
   music: <Music className="w-4 h-4" />, business: <Briefcase className="w-4 h-4" />,
   cinema: <Film className="w-4 h-4" />, general: <Globe className="w-4 h-4" />,
 };
-
-function timeAgo(d: string) {
-  const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
-  if (m < 60) return `${m}m`;
-  if (m < 1440) return `${Math.floor(m/60)}h`;
-  return `${Math.floor(m/1440)}d`;
-}
 
 // ── Pillar Card ───────────────────────────────────────────────────────────────
 function PillarCard({ title, sub, icon, color, children }: {
@@ -53,6 +49,9 @@ function PillarCard({ title, sub, icon, color, children }: {
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 export default function EmpireEternalPage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
+  const s = surfaceCopy(lang);
   const [legends, setLegends] = useState<Legend[]>([]);
   const [events,  setEvents]  = useState<Event[]>([]);
   const [posts,   setPosts]   = useState<Post[]>([]);
@@ -79,7 +78,7 @@ export default function EmpireEternalPage() {
   const topLegends   = legends.slice(0, 5);
 
   return (
-    <div className="min-h-screen" style={{ background: "hsl(var(--background))" }}>
+    <div className="min-h-screen" dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: "hsl(var(--background))" }}>
 
       {/* ── HERO ── */}
       <div className="relative overflow-hidden" style={{ background: `radial-gradient(ellipse at 50% 0%, ${G_DIM}, transparent 70%)` }}>
@@ -94,7 +93,7 @@ export default function EmpireEternalPage() {
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-6"
             style={{ borderColor: `${GREEN}40`, color: GREEN, background: `${GREEN}10` }}>
-            <Radio className="w-3.5 h-3.5 animate-pulse" /> EMPIRE ETERNAL v2.0 — AWAKENED
+            <Radio className="w-3.5 h-3.5 animate-pulse" /> EMPIRE ETERNAL v2.0 — {s.awakened}
           </motion.div>
 
           <motion.h1 initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
@@ -109,16 +108,16 @@ export default function EmpireEternalPage() {
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
             className="text-lg md:text-xl italic max-w-2xl mx-auto mb-8"
             style={{ color: `${GREEN}99` }}>
-            "Empire in slumber must awaken to live forever"
+            “{s.eternalQuote}”
           </motion.p>
 
           {/* Three pillars */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
             className="flex justify-center gap-6 flex-wrap">
             {[
-              { icon: "🌿", label: "PAST",    sub: "NOSTALGIA GREEN",       color: GREEN },
-              { icon: "⚡", label: "PRESENT", sub: "COMMUNICATION",         color: "#C9A84C" },
-              { icon: "🔮", label: "FUTURE",  sub: "GROWTH & GLOBAL EVENTS", color: "#a78bfa" },
+              { icon: "🌿", label: t("past"), sub: t("nostalgia"), color: GREEN },
+              { icon: "⚡", label: t("present"), sub: t("communication"), color: "#C9A84C" },
+              { icon: "🔮", label: t("future"), sub: t("globalEvents"), color: "#a78bfa" },
             ].map(p => (
               <div key={p.label} className="flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-bold"
                 style={{ borderColor: `${p.color}30`, color: p.color, background: `${p.color}10` }}>
@@ -132,7 +131,7 @@ export default function EmpireEternalPage() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
               className="mt-6 inline-flex items-center gap-3 px-5 py-2 rounded-full border bg-red-500/10 border-red-500/30">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-red-400 text-sm font-bold">{liveEvents[0]?.icon} {liveEvents[0]?.title} — LIVE NOW</span>
+              <span className="text-red-400 text-sm font-bold">{liveEvents[0]?.icon} {liveEvents[0]?.title} — {t("live")}</span>
             </motion.div>
           )}
 
@@ -141,10 +140,10 @@ export default function EmpireEternalPage() {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
               className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-2xl mx-auto">
               {[
-                { v: stats.users.toLocaleString(),            l: "Citizens",         c: GREEN },
-                { v: stats.posts.toLocaleString(),            l: "Voices",           c: "#C9A84C" },
-                { v: stats.coinsCirculating.toLocaleString(), l: "Coins",            c: "#facc15" },
-                { v: stats.totalXp.toLocaleString(),          l: "Total XP",         c: "#a78bfa" },
+                { v: formatNumber(stats.users, lang),            l: s.citizens, c: GREEN },
+                { v: formatNumber(stats.posts, lang),            l: s.voices, c: "#C9A84C" },
+                { v: formatNumber(stats.coinsCirculating, lang), l: s.coins, c: "#facc15" },
+                { v: formatNumber(stats.totalXp, lang),          l: s.totalXp, c: "#a78bfa" },
               ].map(s => (
                 <div key={s.l} className="p-3 rounded-2xl border text-center"
                   style={{ borderColor: `${s.c}20`, background: `${s.c}08` }}>
@@ -162,7 +161,7 @@ export default function EmpireEternalPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* ─ PAST: TOP LEGENDS ─ */}
-          <PillarCard title="PAST — NOSTALGIA GREEN" sub="Top 10 Legends of All Time" icon={<Crown className="w-5 h-5"/>} color={GREEN}>
+          <PillarCard title={`${t("past")} — ${t("nostalgia")}`} sub={t("topLegends")} icon={<Crown className="w-5 h-5"/>} color={GREEN}>
             <div className="space-y-3">
               {topLegends.map((l, i) => (
                 <Link key={l.id} href={`/legends/${l.id}`}>
@@ -175,27 +174,27 @@ export default function EmpireEternalPage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold truncate">{l.name}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
-                        {DOMAIN_ICON[l.domain]} {l.domain}
+                         {DOMAIN_ICON[l.domain]} {s[l.domain as keyof typeof s] ?? l.domain}
                       </div>
                     </div>
-                    <div className="text-xs font-black shrink-0" style={{ color: GREEN }}>{l.score.toLocaleString()}</div>
+                     <div className="text-xs font-black shrink-0" style={{ color: GREEN }}>{formatNumber(l.score, lang)}</div>
                   </motion.div>
                 </Link>
               ))}
               <Link href="/legends">
                 <div className="mt-2 flex items-center justify-center gap-1 text-xs font-bold py-2 rounded-xl border cursor-pointer hover:bg-white/5 transition-colors"
                   style={{ borderColor: `${GREEN}30`, color: GREEN }}>
-                  View All Legends <ArrowRight className="w-3.5 h-3.5" />
+                   {s.viewAllLegends} <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                 </div>
               </Link>
             </div>
           </PillarCard>
 
           {/* ─ PRESENT: COMMUNICATION ─ */}
-          <PillarCard title="PRESENT — COMMUNICATION" sub="Empire Pulse — Live Feed" icon={<MessageSquare className="w-5 h-5"/>} color="#C9A84C">
+          <PillarCard title={`${t("present")} — ${t("communication")}`} sub={t("pulseFeed")} icon={<MessageSquare className="w-5 h-5"/>} color="#C9A84C">
             <div className="space-y-3">
               {posts.length === 0 && (
-                <div className="text-center py-6 text-muted-foreground text-sm">No posts yet — be the first.</div>
+                <div className="text-center py-6 text-muted-foreground text-sm">{t("noPosts")}</div>
               )}
               {posts.map(p => (
                 <div key={p.id} className="p-3 rounded-xl border border-border/40 bg-white/3 hover:border-primary/20 transition-colors">
@@ -204,7 +203,7 @@ export default function EmpireEternalPage() {
                       {p.username.charAt(0).toUpperCase()}
                     </div>
                     <Link href={`/citizen/${p.username}`} className="text-xs font-bold hover:text-primary transition-colors">{p.username}</Link>
-                    <span className="ml-auto text-[10px] text-muted-foreground">{timeAgo(p.createdAt)}</span>
+                     <span className="ms-auto text-[10px] text-muted-foreground">{relativeTime(p.createdAt, lang)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{p.content}</p>
                 </div>
@@ -212,21 +211,21 @@ export default function EmpireEternalPage() {
               <Link href="/pulse">
                 <div className="flex items-center justify-center gap-1 text-xs font-bold py-2 rounded-xl border cursor-pointer hover:bg-white/5 transition-colors"
                   style={{ borderColor: "hsl(var(--primary) / 0.3)", color: "hsl(var(--primary))" }}>
-                  Open Empire Pulse <ArrowRight className="w-3.5 h-3.5" />
+                   {s.openPulse} <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                 </div>
               </Link>
             </div>
           </PillarCard>
 
           {/* ─ FUTURE: GLOBAL EVENTS ─ */}
-          <PillarCard title="FUTURE — GLOBAL EVENTS" sub="Upcoming International Events" icon={<Globe className="w-5 h-5"/>} color="#a78bfa">
+          <PillarCard title={`${t("future")} — ${t("globalEvents")}`} sub={t("upcomingEvents")} icon={<Globe className="w-5 h-5"/>} color="#a78bfa">
             <div className="space-y-2">
               {liveEvents.map(ev => (
                 <div key={ev.id} className="flex items-center gap-2 p-2 rounded-xl border" style={{ borderColor: "#ef444440", background: "#ef444410" }}>
                   <span className="text-lg shrink-0">{ev.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-bold truncate text-red-300">{ev.title}</div>
-                    <div className="text-[10px] text-muted-foreground">{ev.country} · LIVE</div>
+                     <div className="text-[10px] text-muted-foreground">{ev.country} · {s.live}</div>
                   </div>
                   <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                 </div>
@@ -238,19 +237,19 @@ export default function EmpireEternalPage() {
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium truncate">{ev.title}</div>
                     <div className="text-[10px] text-muted-foreground">
-                      {ev.country} · {new Date(ev.eventDate).toLocaleDateString("en", { month: "short", day: "numeric" })}
+                       {ev.country} · {formatDate(ev.eventDate, lang, { month: "short", day: "numeric" })}
                     </div>
                   </div>
                   <div className="text-[10px] font-black px-1.5 py-0.5 rounded shrink-0"
                     style={{ color: ev.color, background: `${ev.color}15` }}>
-                    {ev.impactScore}
+                     {formatNumber(ev.impactScore, lang)}
                   </div>
                 </motion.div>
               ))}
               <Link href="/pulse">
                 <div className="flex items-center justify-center gap-1 text-xs font-bold py-2 rounded-xl border cursor-pointer hover:bg-white/5 transition-colors"
                   style={{ borderColor: "rgba(167,139,250,0.3)", color: "#a78bfa" }}>
-                  Full Calendar <ArrowRight className="w-3.5 h-3.5" />
+                   {s.fullCalendar} <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
                 </div>
               </Link>
             </div>
@@ -264,15 +263,15 @@ export default function EmpireEternalPage() {
           <div className="text-center mb-6">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs font-bold tracking-widest mb-3"
               style={{ borderColor: `${GREEN}30`, color: GREEN, background: `${GREEN}10` }}>
-              <Zap className="w-3.5 h-3.5" /> EMPIRE ETERNAL — REWARD SYSTEM v2.0
+               <Zap className="w-3.5 h-3.5" /> EMPIRE ETERNAL — {s.rewardSystem} v2.0
             </div>
-            <p className="text-sm text-muted-foreground">Every action builds the empire. Every contribution is rewarded.</p>
+             <p className="text-sm text-muted-foreground">{s.rewardIntro}</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { icon: "🎓", action: "Watch a Lecture",  reward: "+20 XP",    color: GREEN,     desc: "On any Legend's PEAK MOMENTS" },
-              { icon: "⚔️", action: "Join a Debate",    reward: "+50 XP + +50 Coins", color: "#C9A84C", desc: "In GLOBAL ARENA" },
-              { icon: "📖", action: "Post a Story",      reward: "+10 Coins", color: "#a78bfa", desc: "In COMMUNICATION HUB" },
+               { icon: "🎓", action: s.watchLecture, reward: "+20 XP", color: GREEN, desc: s.watchLectureDesc },
+               { icon: "⚔️", action: s.joinDebate, reward: `+50 XP + +50 ${s.coins}`, color: "#C9A84C", desc: s.joinDebateDesc },
+               { icon: "📖", action: s.postStory, reward: `+10 ${s.coins}`, color: "#a78bfa", desc: s.postStoryDesc },
             ].map(r => (
               <div key={r.action} className="p-4 rounded-2xl border text-center"
                 style={{ borderColor: `${r.color}25`, background: `${r.color}08` }}>
@@ -288,12 +287,12 @@ export default function EmpireEternalPage() {
 
       {/* ── CTA FOOTER ── */}
       <div className="border-t text-center py-12" style={{ borderColor: `${GREEN}15` }}>
-        <div className="text-2xl font-black mb-3" style={{ color: GREEN }}>EMPIRE IS AWAKE 🔥</div>
-        <p className="text-muted-foreground text-sm mb-6">The empire never sleeps — it evolves, grows, and conquers.</p>
+         <div className="text-2xl font-black mb-3" style={{ color: GREEN }}>{s.empireAwake}</div>
+         <p className="text-muted-foreground text-sm mb-6">{s.empireNeverSleeps}</p>
         <div className="flex justify-center gap-4 flex-wrap">
-          <Link href="/legends"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: `${GREEN}40`, color: GREEN }}>TOP 10 LEGENDS</button></Link>
-          <Link href="/pulse"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: "hsl(var(--primary) / 0.4)", color: "hsl(var(--primary))" }}>EMPIRE PULSE</button></Link>
-          <Link href="/citizens"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: "#a78bfa40", color: "#a78bfa" }}>CITIZENS</button></Link>
+           <Link href="/legends"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: `${GREEN}40`, color: GREEN }}>{s.topLegends}</button></Link>
+           <Link href="/pulse"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: "hsl(var(--primary) / 0.4)", color: "hsl(var(--primary))" }}>{s.empirePulse}</button></Link>
+           <Link href="/citizens"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: "#a78bfa40", color: "#a78bfa" }}>{s.citizens}</button></Link>
         </div>
       </div>
     </div>

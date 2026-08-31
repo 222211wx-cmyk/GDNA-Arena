@@ -1,21 +1,25 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Copy, Check, Globe, Crown, Star, ChevronDown } from "lucide-react";
+import { useLang } from "@/contexts/LangContext";
+import { localeFor as sharedLocaleFor, surfaceText } from "@/i18n/community-admin-surfaces-copy";
 
 // ─── رابط الموقع ──────────────────────────────────────────────────────────────
 const SITE_URL = "https://helixly.app";
 const SITE_SHORT = "helixly.app";
+const localeFor = (lang: Parameters<typeof sharedLocaleFor>[0]) =>
+  lang === "de" ? "de-DE" : sharedLocaleFor(lang);
 
 // ─── المجالات ─────────────────────────────────────────────────────────────────
 const FIELDS = [
-  { key: "general",  label: "عام",        icon: "🌍", en: "General",   fr: "Général" },
-  { key: "sport",    label: "رياضة",       icon: "⚽", en: "Sport",     fr: "Sport" },
-  { key: "music",    label: "موسيقى",      icon: "🎵", en: "Music",     fr: "Musique" },
-  { key: "cinema",   label: "سينما",       icon: "🎬", en: "Cinema",    fr: "Cinéma" },
-  { key: "business", label: "أعمال",       icon: "💼", en: "Business",  fr: "Business" },
-  { key: "science",  label: "علوم",        icon: "🔬", en: "Science",   fr: "Science" },
-  { key: "art",      label: "فنون",        icon: "🎨", en: "Art",       fr: "Art" },
-  { key: "tech",     label: "تكنولوجيا",  icon: "💡", en: "Tech",      fr: "Technologie" },
+  { key: "general",  label: "عام",        icon: "🌍", en: "General",   fr: "Général", es: "General", de: "Allgemein" },
+  { key: "sport",    label: "رياضة",       icon: "⚽", en: "Sport",     fr: "Sport", es: "Deporte", de: "Sport" },
+  { key: "music",    label: "موسيقى",      icon: "🎵", en: "Music",     fr: "Musique", es: "Música", de: "Musik" },
+  { key: "cinema",   label: "سينما",       icon: "🎬", en: "Cinema",    fr: "Cinéma", es: "Cine", de: "Film" },
+  { key: "business", label: "أعمال",       icon: "💼", en: "Business",  fr: "Business", es: "Negocios", de: "Wirtschaft" },
+  { key: "science",  label: "علوم",        icon: "🔬", en: "Science",   fr: "Science", es: "Ciencia", de: "Wissenschaft" },
+  { key: "art",      label: "فنون",        icon: "🎨", en: "Art",       fr: "Art", es: "Arte", de: "Kunst" },
+  { key: "tech",     label: "تكنولوجيا",  icon: "💡", en: "Tech",      fr: "Technologie", es: "Tecnología", de: "Technologie" },
 ];
 
 // ─── رسائل الدعوة ─────────────────────────────────────────────────────────────
@@ -313,18 +317,184 @@ Discover the digital Empire:
 With our deepest respect and admiration,
 The Arena Qaisypro Team 💡🚀`,
   },
+  es: {
+    general: `Estimado/a [Name],
+
+Es un gran honor invitarle oficialmente a **Arena Qaisypro**, la plataforma imperial digital que reúne a las grandes figuras del mundo.
+
+Deporte, música, cine, patrimonio y ciencia comparten una gran arena. Su lugar entre los grandes le espera.
+
+Únase hoy:
+🔗 ${SITE_URL}
+
+Con nuestro mayor respeto,
+El equipo de Arena Qaisypro 🏛️`,
+    sport: `Estimado/a [Name],
+
+**Arena Qaisypro** tiene el honor de invitarle a la plataforma imperial que reconoce el legado de los grandes deportistas. En GlobalStar, los aficionados celebran a quienes hicieron historia.
+
+Ocupe su lugar entre las leyendas:
+🔗 ${SITE_URL}
+
+Con profunda admiración,
+El equipo de Arena Qaisypro ⚽🏆`,
+    music: `Estimado/a [Name],
+
+**Arena Qaisypro** le invita a la plataforma imperial donde se celebra a las leyendas de la música. Su arte merece el reconocimiento de una comunidad mundial.
+
+Descubra su lugar en el Imperio:
+🔗 ${SITE_URL}
+
+Con admiración,
+El equipo de Arena Qaisypro 🎵🎤`,
+    cinema: `Estimado/a [Name],
+
+**Arena Qaisypro** le invita a la plataforma imperial que honra a los gigantes del cine mundial. Su obra y visión merecen un reconocimiento global.
+
+Únase a las leyendas del cine:
+🔗 ${SITE_URL}
+
+Con admiración y respeto,
+El equipo de Arena Qaisypro 🎬🎭`,
+    business: `Estimado/a [Name],
+
+**Arena Qaisypro** le invita a la plataforma imperial que celebra el liderazgo empresarial. Su trayectoria inspira a millones de personas.
+
+Únase a la élite del Imperio:
+🔗 ${SITE_URL}
+
+Con nuestro mayor respeto,
+El equipo de Arena Qaisypro 💼📈`,
+    science: `Estimado/a [Name],
+
+**Arena Qaisypro** le invita a la plataforma imperial que valora la ciencia y los grandes descubrimientos. Su contribución ayuda a construir el futuro.
+
+Descubra su papel en el Imperio:
+🔗 ${SITE_URL}
+
+Con nuestra mayor estima,
+El equipo de Arena Qaisypro 🔬🧬`,
+    art: `Estimado/a [Name],
+
+**Arena Qaisypro** le invita a la plataforma imperial que honra la creatividad y el arte auténtico. Su obra merece ser vista y celebrada.
+
+Ocupe su lugar entre los grandes artistas:
+🔗 ${SITE_URL}
+
+Con admiración,
+El equipo de Arena Qaisypro 🎨✨`,
+    tech: `Estimado/a [Name],
+
+**Arena Qaisypro** le invita a la plataforma imperial digital fundada en la tecnología y la innovación. Sus ideas inspiran al mundo del mañana.
+
+Descubra el Imperio digital:
+🔗 ${SITE_URL}
+
+Con respeto y admiración,
+El equipo de Arena Qaisypro 💡🚀`,
+  },
+  de: {
+    general: `Sehr geehrte(r) [Name],
+
+mit großer Freude laden wir Sie offiziell zu **Arena Qaisypro** ein — der digitalen imperialen Plattform, die herausragende Persönlichkeiten aus aller Welt vereint.
+
+Arena Qaisypro bringt Sport, Musik, Film, Kulturerbe und Wissenschaft in einer einzigartigen Arena zusammen. Ihr Platz unter den Großen wartet auf Sie — denn wahre Legenden verdienen eine Plattform, die ihrem Vermächtnis gerecht wird.
+
+Werden Sie noch heute Teil der Arena:
+🔗 ${SITE_URL}
+
+Mit größter Hochachtung
+Das Team von Arena Qaisypro 🏛️`,
+    sport: `Sehr geehrte(r) [Name],
+
+**Arena Qaisypro** lädt Sie herzlich auf die imperiale Plattform ein, die außergewöhnliche Sportlerinnen und Sportler würdigt und ihr Vermächtnis bewahrt.
+
+Bei GlobalStar feiern Fans jene Champions, die Sportgeschichte geschrieben haben. Ihre Leistungen verdienen weltweite Anerkennung und einen Platz unter den Legenden.
+
+Nehmen Sie Ihren Platz ein:
+🔗 ${SITE_URL}
+
+Mit tiefem Respekt und großer Bewunderung
+Das Team von Arena Qaisypro ⚽🏆`,
+    music: `Sehr geehrte(r) [Name],
+
+**Arena Qaisypro** lädt Sie offiziell auf die imperiale Plattform ein, auf der musikalische Legenden die Würdigung erhalten, die sie verdienen.
+
+Musik ist die Seele der Kulturen. Ihre Kunst und Ihr unverwechselbares Schaffen verdienen es, von einer weltweiten Gemeinschaft entdeckt und gefeiert zu werden.
+
+Entdecken Sie Ihren Platz im Imperium:
+🔗 ${SITE_URL}
+
+Mit größter Bewunderung
+Das Team von Arena Qaisypro 🎵🎤`,
+    cinema: `Sehr geehrte(r) [Name],
+
+mit großem Stolz lädt **Arena Qaisypro** Sie auf die imperiale Plattform ein, die den prägenden Persönlichkeiten des internationalen Films gewidmet ist.
+
+In unserer Halle der Legenden würdigt eine leidenschaftliche Gemeinschaft die größten Namen der Filmgeschichte. Ihr Werk und Ihre künstlerische Vision verdienen weltweite Anerkennung.
+
+Werden Sie Teil der Filmlegenden:
+🔗 ${SITE_URL}
+
+Mit höchster Anerkennung und Respekt
+Das Team von Arena Qaisypro 🎬🎭`,
+    business: `Sehr geehrte(r) [Name],
+
+**Arena Qaisypro** lädt Sie offiziell auf die imperiale Plattform ein, die visionäre Persönlichkeiten aus Wirtschaft und Unternehmertum würdigt.
+
+Ihr Weg und Ihre Erfolge inspirieren Menschen auf der ganzen Welt. Arena Qaisypro bietet Ihnen eine globale Bühne für Ihr digitales Vermächtnis an der Seite der bedeutendsten Führungspersönlichkeiten.
+
+Werden Sie Teil der Elite des Imperiums:
+🔗 ${SITE_URL}
+
+Mit vorzüglicher Hochachtung
+Das Team von Arena Qaisypro 💼📈`,
+    science: `Sehr geehrte(r) [Name],
+
+mit größtem Respekt lädt **Arena Qaisypro** Sie auf die imperiale Plattform ein, die Wissenschaft und die bedeutendsten Entdeckungen der Menschheit würdigt.
+
+Wissenschaftliche Ideen bauen Zivilisationen auf und verändern den Lauf der Geschichte. Unsere Gemeinschaft verfolgt und schätzt Ihren Beitrag mit aufrichtiger Bewunderung.
+
+Entdecken Sie Ihre Rolle im Imperium:
+🔗 ${SITE_URL}
+
+Mit unserer höchsten Wertschätzung
+Das Team von Arena Qaisypro 🔬🧬`,
+    art: `Sehr geehrte(r) [Name],
+
+**Arena Qaisypro** lädt Sie offiziell auf die imperiale Plattform ein, die Kreativität und authentischen künstlerischen Ausdruck ehrt.
+
+Kunst ist die unvergängliche Seele der Menschheit. Ihr Werk verdient es, von einer weltweiten Gemeinschaft gesehen, verstanden und gefeiert zu werden.
+
+Ihr Platz unter den großen Kunstschaffenden:
+🔗 ${SITE_URL}
+
+Mit grenzenloser Bewunderung
+Das Team von Arena Qaisypro 🎨✨`,
+    tech: `Sehr geehrte(r) [Name],
+
+**Arena Qaisypro** lädt Sie auf die digitale imperiale Plattform ein, die auf Technologie und Innovation aufbaut.
+
+Technologische Visionärinnen und Visionäre gestalten die Welt von morgen. Ihre Ideen inspirieren Generationen und verdienen einen Platz in einer Gemeinschaft, die Mut und Fortschritt würdigt.
+
+Entdecken Sie das digitale Imperium:
+🔗 ${SITE_URL}
+
+Mit tiefem Respekt und großer Bewunderung
+Das Team von Arena Qaisypro 💡🚀`,
+  },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function InvitePage() {
-  const [lang, setLang]   = useState<"ar" | "fr" | "en">("ar");
+  const { lang, setLang } = useLang();
   const [field, setField] = useState("general");
   const [copied, setCopied] = useState(false);
   const [name, setName]   = useState("");
 
   const rawMessage = MESSAGES[lang]?.[field] ?? MESSAGES[lang]?.general ?? "";
   const message = name.trim()
-    ? rawMessage.replace("[Name]", name.trim()).replace("السلام عليكم ورحمة الله وبركاته،", `السلام عليكم ورحمة الله وبركاته ${name.trim()}،`).replace("Madame, Monsieur,", `Cher(e) ${name.trim()},`).replace("Dear [Name],", `Dear ${name.trim()},`)
+    ? rawMessage.replace("[Name]", name.trim()).replace("السلام عليكم ورحمة الله وبركاته،", `السلام عليكم ورحمة الله وبركاته ${name.trim()}،`).replace("Madame, Monsieur,", `Cher(e) ${name.trim()},`).replace("Dear [Name],", `Dear ${name.trim()},`).replace("Estimado/a [Name],", `Estimado/a ${name.trim()},`).replace("Sehr geehrte(r) [Name],", `Sehr geehrte(r) ${name.trim()},`)
     : rawMessage.replace("[Name]", "").trim();
 
   const copyMessage = async () => {
@@ -337,7 +507,7 @@ export default function InvitePage() {
   const isRTL = lang === "ar";
 
   return (
-    <div className="min-h-screen" style={{ background: "#030303" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} lang={lang === "de" ? "de-DE" : lang} className="min-h-screen" style={{ background: "#030303" }}>
 
       {/* ── Hero ── */}
       <div className="relative overflow-hidden border-b" style={{ borderColor: "#C9A84C20" }}>
@@ -356,7 +526,7 @@ export default function InvitePage() {
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
             className="text-sm font-mono uppercase tracking-[0.4em] mb-2"
             style={{ color: "#C9A84C50" }}>
-            الدعوة الرسمية — Invitation Officielle — Official Invitation
+             {surfaceText(lang, "officialInvitation")}
           </motion.p>
           <motion.a href={SITE_URL} target="_blank" rel="noopener noreferrer"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
@@ -375,10 +545,10 @@ export default function InvitePage() {
           {/* Name input */}
           <div className="space-y-2">
             <label className="text-xs font-mono uppercase tracking-widest" style={{ color: "#C9A84C60" }}>
-              اسم الشخصية (اختياري) — Nom (optionnel) — Name (optional)
+              {surfaceText(lang, "optionalName")}
             </label>
             <input value={name} onChange={e => setName(e.target.value)}
-              placeholder="مثال: Cristiano Ronaldo"
+              placeholder={surfaceText(lang, "nameExample")}
               className="w-full px-4 py-2.5 text-sm focus:outline-none"
               style={{ background: "#0a0a0a", border: "1px solid #C9A84C20", color: "#fff" }}
               dir="auto" />
@@ -387,10 +557,10 @@ export default function InvitePage() {
           {/* Language selector */}
           <div className="space-y-2">
             <label className="text-xs font-mono uppercase tracking-widest" style={{ color: "#C9A84C60" }}>
-              اللغة — Langue — Language
+               {surfaceText(lang, "language")}
             </label>
             <div className="flex gap-2">
-              {(["ar", "fr", "en"] as const).map(l => (
+              {(["ar", "fr", "en", "es", "de"] as const).map(l => (
                 <button key={l} onClick={() => setLang(l)}
                   className="flex-1 py-2.5 text-sm font-bold uppercase tracking-wider transition-all"
                   style={{
@@ -398,7 +568,7 @@ export default function InvitePage() {
                     background: lang === l ? "rgba(201,168,76,0.12)" : "transparent",
                     color: lang === l ? "#C9A84C" : "#ffffff40",
                   }}>
-                  {l === "ar" ? "🇲🇦 عربي" : l === "fr" ? "🇫🇷 Français" : "🇬🇧 English"}
+                   {l === "ar" ? "🇲🇦 عربي" : l === "fr" ? "🇫🇷 Français" : l === "es" ? "🇪🇸 Español" : l === "de" ? "🇩🇪 Deutsch" : "🇬🇧 English"}
                 </button>
               ))}
             </div>
@@ -407,7 +577,7 @@ export default function InvitePage() {
           {/* Field selector */}
           <div className="space-y-2">
             <label className="text-xs font-mono uppercase tracking-widest" style={{ color: "#C9A84C60" }}>
-              المجال — Domaine — Field
+               {surfaceText(lang, "field")}
             </label>
             <div className="grid grid-cols-4 gap-1.5">
               {FIELDS.map(f => (
@@ -418,7 +588,7 @@ export default function InvitePage() {
                     background: field === f.key ? "rgba(201,168,76,0.10)" : "transparent",
                     color: field === f.key ? "#C9A84C" : "#ffffff35",
                   }}>
-                  {f.icon} {lang === "ar" ? f.label : lang === "fr" ? f.fr : f.en}
+                  {f.icon} {lang === "ar" ? f.label : lang === "fr" ? f.fr : lang === "es" ? f.es : lang === "de" ? f.de : f.en}
                 </button>
               ))}
             </div>
@@ -437,13 +607,13 @@ export default function InvitePage() {
               <div className="text-2xl">{selectedField.icon}</div>
               <div>
                 <div className="text-xs font-mono uppercase tracking-widest" style={{ color: "#C9A84C60" }}>
-                  مرسوم شرفي رسمي · Décret Honorifique Officiel · Official Honorary Decree
+                    {surfaceText(lang, "decree")}
                 </div>
                 <div className="text-sm font-black" style={{ color: "#C9A84C" }}>
-                  ARENA QAISYPRO — {lang === "ar" ? selectedField.label : lang === "fr" ? selectedField.fr : selectedField.en}
+                    ARENA QAISYPRO — {lang === "ar" ? selectedField.label : lang === "fr" ? selectedField.fr : lang === "es" ? selectedField.es : lang === "de" ? selectedField.de : selectedField.en}
                 </div>
               </div>
-              <div className="ml-auto text-xs font-mono px-2 py-0.5"
+              <div className="ms-auto text-xs font-mono px-2 py-0.5"
                 style={{ border: "1px solid #C9A84C30", color: "#C9A84C60" }}>
                 {new Date().getFullYear()}
               </div>
@@ -477,7 +647,7 @@ export default function InvitePage() {
                 </div>
               </div>
               <div className="text-xs font-mono" style={{ color: "#C9A84C30" }}>
-                🏛️ Imperial Decree · {new Date().toLocaleDateString("fr-FR")}
+                 🏛️ {surfaceText(lang, "imperialDecree")} · {new Date().toLocaleDateString(localeFor(lang))}
               </div>
             </div>
           </motion.div>
@@ -489,21 +659,21 @@ export default function InvitePage() {
             className="flex items-center justify-center gap-2 py-3.5 text-sm font-black uppercase tracking-wider transition-all active:scale-95"
             style={{ background: "#C9A84C", color: "#000" }}>
             {copied
-              ? <><Check className="w-4 h-4" /> تم النسخ!</>
-              : <><Copy className="w-4 h-4" /> نسخ الرسالة</>}
+              ? <><Check className="w-4 h-4" /> {surfaceText(lang, "copied")}</>
+              : <><Copy className="w-4 h-4" /> {surfaceText(lang, "copyMessage")}</>}
           </button>
         </div>
 
         {/* ── Tips ── */}
         <div className="space-y-2 pb-8">
           <p className="text-xs font-mono uppercase tracking-widest text-center" style={{ color: "#C9A84C40" }}>
-            كيف تستخدم الرسالة
+             {surfaceText(lang, "howUse")}
           </p>
           <div className="grid grid-cols-3 gap-2 text-center">
             {[
-              { icon: "✏️", text: "أضف اسم الشخصية" },
-              { icon: "🌍", text: "اختر لغتها المفضلة" },
-              { icon: "📤", text: "انسخ وأرسل" },
+               { icon: "✏️", text: surfaceText(lang, "addName") },
+               { icon: "🌍", text: surfaceText(lang, "chooseLanguage") },
+               { icon: "📤", text: surfaceText(lang, "copySend") },
             ].map((tip, i) => (
               <div key={i} className="p-3 text-xs space-y-1"
                 style={{ border: "1px solid #C9A84C10", background: "rgba(201,168,76,0.02)", color: "#ffffff40" }}>

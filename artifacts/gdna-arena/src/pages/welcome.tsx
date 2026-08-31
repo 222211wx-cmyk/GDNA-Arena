@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
+import { task39Text } from "@/i18n/task39";
+import { localeForLang } from "@/i18n/locale-surfaces-a-copy";
 
 const PATHS = [
   {
@@ -144,7 +146,7 @@ function getRank(xp: number) {
 export default function Welcome() {
   const [, setLocation] = useLocation();
   const { user, loading } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   useEffect(() => {
     if (!loading && !user) setLocation("/login");
@@ -153,13 +155,14 @@ export default function Welcome() {
   if (loading || !user) return null;
 
   const rank = getRank(user.xp);
+  const locale = localeForLang(lang);
 
   const lgPaths = PATHS.filter(p => p.size === "lg");
   const mdPaths = PATHS.filter(p => p.size === "md");
   const smPaths = PATHS.filter(p => p.size === "sm");
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] px-4 py-10 max-w-6xl mx-auto space-y-10">
+    <div className="min-h-[calc(100vh-4rem)] px-4 py-10 max-w-6xl mx-auto space-y-10" dir={lang === "ar" ? "rtl" : "ltr"}>
 
       {/* ── Welcome Header ─────────────────────────────────────────── */}
       <motion.div
@@ -183,7 +186,7 @@ export default function Welcome() {
           <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center font-black text-primary text-sm">
             {user.username.charAt(0).toUpperCase()}
           </div>
-          <div className="text-left">
+          <div className="text-start">
             <p className="text-xs text-muted-foreground uppercase tracking-widest">{t("welcome_back")}</p>
             <p className="font-black text-primary text-sm uppercase tracking-wider">{user.username}</p>
           </div>
@@ -205,7 +208,7 @@ export default function Welcome() {
         {/* Stats strip */}
         <div className="flex flex-wrap justify-center gap-4 pt-3">
           {[
-            { icon: Zap,     val: user.balance.toLocaleString(), label: t("coins"),       color: "text-primary" },
+            { icon: Zap,     val: user.balance.toLocaleString(locale), label: t("coins"), color: "text-primary" },
             { icon: Trophy,  val: user.wins,                     label: t("wins"),         color: "text-yellow-400" },
             { icon: Star,    val: user.xp,                       label: "XP",              color: "text-purple-400" },
             ...(user.canClaimDaily ? [{
@@ -244,21 +247,21 @@ export default function Welcome() {
         {/* Row 1 — 2 large cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {lgPaths.map((p, i) => (
-            <PathCard key={p.key} item={p} index={i} t={t} large />
+            <PathCard key={p.key} item={p} index={i} t={t} lang={lang} large />
           ))}
         </div>
 
         {/* Row 2 — 3 medium cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {mdPaths.map((p, i) => (
-            <PathCard key={p.key} item={p} index={i + 2} t={t} />
+            <PathCard key={p.key} item={p} index={i + 2} t={t} lang={lang} />
           ))}
         </div>
 
         {/* Row 3 — 4 small cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {smPaths.map((p, i) => (
-            <PathCard key={p.key} item={p} index={i + 5} t={t} small />
+            <PathCard key={p.key} item={p} index={i + 5} t={t} lang={lang} small />
           ))}
         </div>
       </div>
@@ -269,11 +272,12 @@ export default function Welcome() {
 
 // ── Path Card Component ───────────────────────────────────────────────────────
 function PathCard({
-  item, index, t, large, small
+  item, index, t, lang, large, small
 }: {
   item: typeof PATHS[0];
   index: number;
   t: (k: string) => string;
+  lang: import("@/contexts/LangContext").Lang;
   large?: boolean;
   small?: boolean;
 }) {
@@ -297,7 +301,7 @@ function PathCard({
                 <item.icon className={`${item.color} ${large ? "w-6 h-6" : "w-4 h-4"}`} />
               </div>
               <Badge className={`text-xs border font-mono ${item.badgeColor}`}>
-                {item.badge}
+                {item.badge === "LIVE" ? task39Text(lang, "live") : item.badge === "EARN" ? task39Text(lang, "earn") : item.badge === "VOTE" ? task39Text(lang, "vote") : item.badge === "NEW" ? task39Text(lang, "new") : item.badge === "TOP" ? task39Text(lang, "top") : item.badge}
               </Badge>
             </div>
 

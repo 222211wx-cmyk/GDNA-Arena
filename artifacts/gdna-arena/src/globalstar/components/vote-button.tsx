@@ -6,6 +6,7 @@ import { useVoteGsFigure, getGetGsFiguresQueryKey, getGetGsRankingQueryKey, getG
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@workspace/gdna-ds/hooks/use-toast';
 import { useLanguage } from '@/globalstar/contexts/language-context';
+import { newsVoteCopy } from '@/globalstar/i18n/news-vote-copy';
 
 interface VoteButtonProps {
   figureId: number;
@@ -19,7 +20,9 @@ export function VoteButton({ figureId, currentVotes, size = 'md' }: VoteButtonPr
   const voteMutation = useVoteGsFigure();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { t } = useLanguage();
+  const { language, isRTL } = useLanguage();
+  const { vote: c, locale } = newsVoteCopy(language);
+  const formattedVotes = new Intl.NumberFormat(locale).format(displayVotes);
 
   const sizeClasses = {
     sm: 'h-8 text-xs',
@@ -43,8 +46,8 @@ export function VoteButton({ figureId, currentVotes, size = 'md' }: VoteButtonPr
           queryClient.invalidateQueries({ queryKey: getGetGsFigureQueryKey(figureId) });
           
           toast({
-            title: data.message,
-            description: `New rank: #${data.newRank}`,
+            title: c.recorded,
+            description: c.newRank(new Intl.NumberFormat(locale).format(data.newRank)),
           });
           
           setTimeout(() => setIsVoting(false), 1000);
@@ -53,8 +56,8 @@ export function VoteButton({ figureId, currentVotes, size = 'md' }: VoteButtonPr
           setDisplayVotes(currentVotes);
           setIsVoting(false);
           toast({
-            title: 'Vote failed',
-            description: 'Please try again',
+            title: c.failed,
+            description: c.tryAgain,
             variant: 'destructive',
           });
         },
@@ -68,6 +71,8 @@ export function VoteButton({ figureId, currentVotes, size = 'md' }: VoteButtonPr
       disabled={isVoting}
       className={`${sizeClasses[size]} gap-2`}
       data-testid={`vote-button-${figureId}`}
+      dir={isRTL ? 'rtl' : 'ltr'}
+      aria-label={isVoting ? c.submitting(formattedVotes) : c.button(formattedVotes)}
     >
       <motion.div
         animate={isVoting ? { scale: [1, 1.3, 1] } : {}}
@@ -75,8 +80,8 @@ export function VoteButton({ figureId, currentVotes, size = 'md' }: VoteButtonPr
       >
         <ThumbsUp className="w-4 h-4" />
       </motion.div>
-      <span className="font-mono">{displayVotes.toLocaleString()}</span>
-      <span>{t('votes')}</span>
+      <span className="font-mono">{formattedVotes}</span>
+      <span>{c.votes}</span>
     </Button>
   );
 }

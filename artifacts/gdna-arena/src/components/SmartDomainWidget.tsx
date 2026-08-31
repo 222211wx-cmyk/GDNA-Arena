@@ -7,6 +7,8 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLang } from "@/contexts/LangContext";
+import { sharedCopy } from "@/i18n/shared-components-copy";
 
 interface DomainModule {
   id: string;
@@ -35,17 +37,6 @@ const DOMAIN_EMOJI: Record<string, string> = {
   archon:       "🧬",
 };
 
-const DOMAIN_LABEL: Record<string, string> = {
-  gaming:       "Gaming",
-  education:    "Éducation",
-  business:     "Business",
-  social:       "Social",
-  competitions: "Compétitions",
-  xp:           "XP & Niveau",
-  stream:       "Stream",
-  archon:       "Archon DNA",
-};
-
 interface Props {
   domainId: string;
   /** Optional override label */
@@ -56,6 +47,9 @@ interface Props {
 
 export default function SmartDomainWidget({ domainId, label, compact = false }: Props) {
   const { user } = useAuth();
+  const { lang } = useLang();
+  const copy = sharedCopy(lang).smart;
+  const isRTL = lang === "ar";
   const [, nav] = useLocation();
   const [mod, setMod] = useState<DomainModule | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,12 +87,13 @@ export default function SmartDomainWidget({ domainId, label, compact = false }: 
   const isActive = mod.status === "ACTIF";
   const color = isActive ? "#22c55e" : "#f97316";
   const emoji = DOMAIN_EMOJI[domainId] ?? "🔌";
-  const title = label ?? DOMAIN_LABEL[domainId] ?? mod.name;
+  const title = label ?? copy.domains[domainId as keyof typeof copy.domains] ?? mod.name;
 
   // Compact mode: single line pill
   if (compact) {
     return (
       <motion.div
+        dir={isRTL ? "rtl" : "ltr"}
         initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
         onClick={() => nav("/smart")}
         style={{
@@ -109,11 +104,13 @@ export default function SmartDomainWidget({ domainId, label, compact = false }: 
         }}>
         <span style={{ fontSize: 13 }}>{emoji}</span>
         <span style={{ color, fontSize: 11, fontWeight: 800, letterSpacing: "0.06em" }}>
-          {isActive ? "● ACTIF" : "○ INACTIF"}
+          {isActive ? `● ${copy.active}` : `○ ${copy.inactive}`}
         </span>
         <span style={{ color: "#888", fontSize: 11 }}>{title}</span>
         <span style={{ color: "#fff", fontWeight: 800, fontSize: 12 }}>{mod.score}/100</span>
-        <span style={{ color: "#555", fontSize: 10 }}>→ SMART</span>
+        <span style={{ color: "#555", fontSize: 10 }}>
+          {isRTL ? `${copy.recommendation} ←` : `→ ${copy.recommendation}`}
+        </span>
       </motion.div>
     );
   }
@@ -121,11 +118,12 @@ export default function SmartDomainWidget({ domainId, label, compact = false }: 
   // Full widget
   return (
     <motion.div
+      dir={isRTL ? "rtl" : "ltr"}
       initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
       style={{
         background: "linear-gradient(135deg, #0a0a0a, #0d0d0d)",
         border: `1px solid ${color}25`,
-        borderLeft: `3px solid ${color}`,
+        borderInlineStart: `3px solid ${color}`,
         borderRadius: 12,
         padding: "12px 18px",
         display: "flex", alignItems: "center", gap: 16,
@@ -160,17 +158,19 @@ export default function SmartDomainWidget({ domainId, label, compact = false }: 
               color, borderRadius: 5, padding: "1px 7px",
               fontSize: 10, fontWeight: 800, letterSpacing: "0.08em",
             }}>
-            {isActive ? "● ACTIF" : "○ INACTIF"}
+            {isActive ? `● ${copy.active}` : `○ ${copy.inactive}`}
           </motion.span>
         </div>
         <div style={{ color: "#666", fontSize: 11, marginTop: 3 }}>{mod.badge}</div>
       </div>
 
       {/* Recommendation pill */}
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ color: "#eab308", fontSize: 10, fontWeight: 700, marginBottom: 2 }}>🧠 SMART</div>
+      <div style={{ textAlign: "end", flexShrink: 0 }}>
+        <div style={{ color: "#eab308", fontSize: 10, fontWeight: 700, marginBottom: 2 }}>
+          🧠 {copy.title}
+        </div>
         <div style={{ color: "#555", fontSize: 10 }}>
-          {isActive ? "Score en progression →" : "Activez ce module →"}
+          {isActive ? copy.progressing : copy.activate} {isRTL ? "←" : "→"}
         </div>
       </div>
 

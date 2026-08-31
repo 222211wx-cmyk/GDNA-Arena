@@ -94,16 +94,16 @@ export function Footer() {
             <h4 className="text-xs font-black uppercase tracking-widest text-primary">{t("footer_legal")}</h4>
             <ul className="space-y-2">
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Shield className="w-3 h-3 text-primary" /> GDPR Compliant
+                <Shield className="w-3 h-3 text-primary" /> {t("footer_gdpr_compliant")}
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Lock className="w-3 h-3 text-primary" /> SSL/TLS 1.3
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Cpu className="w-3 h-3 text-primary" /> AI Moderated
+                <Cpu className="w-3 h-3 text-primary" /> {t("footer_ai_moderated")}
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Globe className="w-3 h-3 text-primary" /> 180+ Countries
+                <Globe className="w-3 h-3 text-primary" /> {t("footer_countries")}
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <FileCheck className="w-3 h-3 text-primary" /> ISO 27001

@@ -7,19 +7,13 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { useLegal } from "@/contexts/LegalContext";
 import { useLang } from "@/contexts/LangContext";
-
-const TEXT = {
-  en: "⚠️ Arena Qaisypro coins are virtual credits with no real-world monetary value. Not exchangeable for cash or crypto.",
-  ar: "⚠️ كوينز Arena Qaisypro رصيد افتراضي فقط، ليس له قيمة نقدية حقيقية ولا يمكن استبداله بمال أو عملات رقمية.",
-  fr: "⚠️ Les coins Arena Qaisypro sont des crédits virtuels sans valeur monétaire réelle — non échangeables.",
-  es: "⚠️ Las monedas Arena Qaisypro son créditos virtuales sin valor monetario real — no canjeables.",
-  de: "⚠️ Arena Qaisypro Coins sind virtuelle Guthaben ohne realen Geldwert — nicht einlösbar.",
-};
+import { sharedCopy } from "@/i18n/shared-components-copy";
 
 export default function CoinsDisclaimer() {
   const { country } = useLegal();
   const { lang }    = useLang();
   const isRTL       = lang === "ar";
+  const copy        = sharedCopy(lang).coins;
 
   const [dismissed, setDismissed] = useState(() =>
     sessionStorage.getItem("gdna_coins_banner") === "1"
@@ -32,17 +26,15 @@ export default function CoinsDisclaimer() {
     setDismissed(true);
   };
 
-  const text = TEXT[lang as keyof typeof TEXT] ?? TEXT.en;
-
   return (
     <div
       dir={isRTL ? "rtl" : "ltr"}
       className="w-full bg-orange-950/70 border-b border-orange-500/30 px-4 py-2 flex items-center gap-3 z-40"
     >
-      <p className="flex-1 text-orange-300 text-xs leading-relaxed">{text}</p>
+      <p className="flex-1 text-orange-300 text-xs leading-relaxed">{copy.text}</p>
       <button
         onClick={dismiss}
-        aria-label="Dismiss"
+        aria-label={copy.dismiss}
         className="shrink-0 text-orange-400/60 hover:text-orange-300 transition-colors"
       >
         <X size={14} />

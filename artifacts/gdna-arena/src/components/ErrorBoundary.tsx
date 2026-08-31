@@ -1,13 +1,15 @@
 import { Component, type ReactNode } from "react";
+import { useLang, type Lang } from "@/contexts/LangContext";
+import { sharedCopy } from "@/i18n/shared-components-copy";
 
-interface Props { children: ReactNode }
+interface Props { children: ReactNode; lang: Lang }
 interface State { hasError: boolean }
 
 /**
  * Global crash guard — one bad API response or render error must never
  * leave citizens staring at a black screen. Shows a gold recovery panel.
  */
-export class ErrorBoundary extends Component<Props, State> {
+class LocalizedErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
   static getDerivedStateFromError(): State {
@@ -20,31 +22,33 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const { lang } = this.props;
+      const copy = sharedCopy(lang).errorBoundary;
       return (
-        <div dir="rtl" style={{
+        <div dir={lang === "ar" ? "rtl" : "ltr"} style={{
           minHeight: "60vh", display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center", gap: "1rem",
           padding: "2rem", textAlign: "center",
         }}>
           <div style={{ fontSize: "3rem" }}>👑</div>
           <h2 style={{ color: "hsl(var(--primary))", fontSize: "1.4rem", fontWeight: 700 }}>
-            وقع خلل مؤقت في هذه الصفحة
+            {copy.title}
           </h2>
           <p style={{ color: "hsl(var(--muted-foreground))", maxWidth: 420 }}>
-            لا داعي للخروج من الموقع — اضغط الزر وستعود الصفحة للعمل.
+            {copy.text}
           </p>
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <button
               onClick={() => this.setState({ hasError: false })}
               style={{ background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", padding: "0.6rem 1.4rem", borderRadius: 8, fontWeight: 700, border: "none", cursor: "pointer" }}
             >
-              إعادة المحاولة
+              {copy.retry}
             </button>
             <button
               onClick={() => { window.location.href = import.meta.env.BASE_URL; }}
               style={{ background: "transparent", color: "hsl(var(--primary))", padding: "0.6rem 1.4rem", borderRadius: 8, fontWeight: 700, border: "1px solid hsl(var(--primary))", cursor: "pointer" }}
             >
-              العودة للرئيسية
+              {copy.home}
             </button>
           </div>
         </div>
@@ -52,4 +56,9 @@ export class ErrorBoundary extends Component<Props, State> {
     }
     return this.props.children;
   }
+}
+
+export function ErrorBoundary({ children }: { children: ReactNode }) {
+  const { lang } = useLang();
+  return <LocalizedErrorBoundary lang={lang}>{children}</LocalizedErrorBoundary>;
 }

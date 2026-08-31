@@ -5,6 +5,8 @@ import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
+import { task39Text } from "@/i18n/task39";
+import { dashboardLocale, dashboardText, type DashboardCopyKey } from "@/i18n/dashboard-copy";
 import { useEffect, useState } from "react";
 import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown, ScrollText, Users, ShieldCheck } from "lucide-react";
 
@@ -16,6 +18,8 @@ type DailyArchonDirective = {
 };
 
 function DailyArchonDirectiveCard() {
+  const { lang } = useLang();
+  const dx = (key: DashboardCopyKey) => dashboardText(lang, key);
   const [directive, setDirective] = useState<DailyArchonDirective | null>(null);
   const [acknowledging, setAcknowledging] = useState(false);
 
@@ -48,6 +52,7 @@ function DailyArchonDirectiveCard() {
       initial={{ opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}
       aria-labelledby="daily-archon-title"
+      dir={lang === "ar" ? "rtl" : "ltr"}
       data-testid="daily-archon-directive"
     >
       <Card className="overflow-hidden border-primary/50 bg-background shadow-[0_0_28px_hsl(var(--primary)/0.12)]">
@@ -57,13 +62,13 @@ function DailyArchonDirectiveCard() {
             <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 text-primary">
               <Crown className="size-6" />
             </div>
-            <div dir="rtl" className="text-right">
-              <p className="mb-1 text-xs font-bold tracking-[0.18em] text-primary">ARCHON • DAILY DIRECTIVE</p>
+            <div className={lang === "ar" ? "text-right" : "text-left"}>
+              <p className="mb-1 text-xs font-bold tracking-[0.18em] text-primary">{dx("directiveEyebrow")}</p>
               <h2 id="daily-archon-title" className="text-xl font-black text-foreground md:text-2xl">
-                كلمة الأرشون اليوم
+                {dx("directiveTitle")}
               </h2>
               <p className="mt-2 max-w-3xl leading-7 text-muted-foreground">{directive.directive}</p>
-              <p className="mt-2 text-xs text-primary/80">يتجدد يومياً عند 00:00 بتوقيت المغرب</p>
+              <p className="mt-2 text-xs text-primary/80">{dx("directiveRefresh")}</p>
             </div>
           </div>
           <Button
@@ -73,7 +78,7 @@ function DailyArchonDirectiveCard() {
             data-testid="button-acknowledge-archon"
           >
             <CheckCircle className="me-2 size-4" />
-            {directive.completed ? "تمت المشاهدة" : acknowledging ? "جاري..." : "تم"}
+            {directive.completed ? dx("seenComplete") : acknowledging ? dx("processing") : dx("seen")}
           </Button>
         </CardContent>
       </Card>
@@ -88,6 +93,8 @@ type DirectiveAcknowledgementCitizen = {
 };
 function SmartWidget() {
   const [, nav] = useLocation();
+  const { lang } = useLang();
+  const dx = (key: DashboardCopyKey, vars?: Record<string, string | number>) => dashboardText(lang, key, vars);
   const [smartData, setSmartData] = useState<{
     overallScore: number;
     activeModules: number;
@@ -110,6 +117,7 @@ function SmartWidget() {
       transition={{ delay: 0.25 }}
       onClick={() => nav("/smart")}
       style={{ cursor: "pointer" }}
+      dir={lang === "ar" ? "rtl" : "ltr"}
     >
       <Card style={{
         background: "linear-gradient(135deg, #0d1117 0%, #0a0f00 50%, #0d1117 100%)",
@@ -150,7 +158,7 @@ function SmartWidget() {
               {/* Title */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
                 <span style={{ color: "#fff", fontWeight: 900, fontSize: 15 }}>
-                  Votre Compagnon Smart est
+                  {dx("smartCompanion")}
                 </span>
                 <motion.span
                   animate={{ opacity: [1, 0.5, 1] }}
@@ -162,16 +170,15 @@ function SmartWidget() {
                     display: "inline-flex", alignItems: "center", gap: 4,
                   }}
                 >
-                  <Zap size={10} /> ACTIF ⚡
+                  <Zap size={10} /> {dx("active")}
                 </motion.span>
               </div>
-              {/* Arabic subtitle */}
-              <p style={{ margin: "0 0 2px", color: "#eab308", fontSize: 12, fontWeight: 700, direction: "rtl", textAlign: "right" }}>
-                رفيقك الذكي نشط ⚡ — يراقب إمبراطوريتك
+              <p style={{ margin: "0 0 2px", color: "#eab308", fontSize: 12, fontWeight: 700 }}>
+                {dx("smartSubtitle")}
               </p>
               {/* Description */}
               <p style={{ margin: 0, color: "#888", fontSize: 12, lineHeight: 1.5 }}>
-                Analyse de vos performances en cours dans tous les domaines · تحليل أداءك جارٍ في جميع المجالات
+                {dx("smartDescription")}
               </p>
             </div>
 
@@ -179,10 +186,10 @@ function SmartWidget() {
             {smartData && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
                 <div style={{ fontSize: 28, fontWeight: 900, color: "#eab308", lineHeight: 1 }}>
-                  {smartData.overallScore}
-                  <span style={{ fontSize: 12, color: "#888", fontWeight: 400 }}>/100</span>
+                  {smartData.overallScore.toLocaleString(dashboardLocale(lang))}
+                  <span style={{ fontSize: 12, color: "#888", fontWeight: 400 }}>/{(100).toLocaleString(dashboardLocale(lang))}</span>
                 </div>
-                <div style={{ fontSize: 10, color: "#555", letterSpacing: "0.08em", textTransform: "uppercase" }}>SCORE</div>
+                <div style={{ fontSize: 10, color: "#555", letterSpacing: "0.08em", textTransform: "uppercase" }}>{dx("score")}</div>
               </div>
             )}
           </div>
@@ -190,8 +197,11 @@ function SmartWidget() {
           {/* Module dots row */}
           {smartData?.modules && (
             <div style={{ display: "flex", gap: 6, marginTop: 16, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ color: "#555", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", marginRight: 4 }}>
-                {smartData.activeModules}/{smartData.totalModules} modules
+              <span style={{ color: "#555", fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", marginInlineEnd: 4 }}>
+                {dx("modulesCount", {
+                  active: smartData.activeModules.toLocaleString(dashboardLocale(lang)),
+                  total: smartData.totalModules.toLocaleString(dashboardLocale(lang)),
+                })}
               </span>
               {smartData.modules.map(m => (
                 <motion.div
@@ -225,12 +235,9 @@ function SmartWidget() {
               }}
             >
               <BrainCircuit size={15} />
-              Voir mes recommandations
+               {dx("recommendations")}
               <ArrowRight size={14} />
             </motion.button>
-            <span style={{ marginRight: 10, color: "#555", fontSize: 11, marginLeft: 12 }}>
-              · عرض التوصيات الذكية
-            </span>
           </div>
         </CardContent>
       </Card>
@@ -252,6 +259,8 @@ type CouncilReport = {
 };
 
 function CouncilReportsWidget() {
+  const { lang } = useLang();
+  const dx = (key: DashboardCopyKey) => dashboardText(lang, key);
   const [reports, setReports] = useState<CouncilReport[] | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
 
@@ -270,23 +279,23 @@ function CouncilReportsWidget() {
   if (!reports || reports.length === 0) return null;
 
   const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("ar-MA", { year: "numeric", month: "long", day: "numeric" });
+    new Date(iso).toLocaleDateString(dashboardLocale(lang), { year: "numeric", month: "long", day: "numeric" });
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
       <Card className="bg-card/50 border-yellow-500/30 overflow-hidden">
-        <CardContent className="p-6" dir="rtl" lang="ar">
+        <CardContent className="p-6" dir={lang === "ar" ? "rtl" : "ltr"} lang={lang === "de" ? "de-DE" : lang}>
           <div className="flex items-center gap-3 mb-1">
             <span className="text-xl">🏛️</span>
             <h3 className="text-sm uppercase tracking-widest text-yellow-500 font-bold">
-              تقارير المجلس الإمبراطوري
+              {dx("councilReports")}
             </h3>
-            <span className="mr-auto text-[10px] uppercase tracking-widest text-muted-foreground border border-yellow-500/30 rounded px-2 py-0.5">
-              ADMIN ONLY
+            <span className="ms-auto text-[10px] uppercase tracking-widest text-muted-foreground border border-yellow-500/30 rounded px-2 py-0.5">
+              {dx("adminOnly")}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mb-4">
-            التقرير اليومي لمجلس الذكاء — حالة الإمبراطورية، التنبؤات، البحوث والتوجيهات
+            {dx("councilDescription")}
           </p>
           <div className="space-y-2">
             {reports.map((r) => {
@@ -295,7 +304,8 @@ function CouncilReportsWidget() {
                 <div key={r.id} className={`rounded-lg border ${open ? "border-yellow-500/40 bg-yellow-500/5" : "border-white/10 bg-white/[0.02]"}`}>
                   <button
                     onClick={() => setOpenId(open ? null : r.id)}
-                    className="w-full text-right p-3 flex items-center gap-3 cursor-pointer"
+                    className="w-full text-start p-3 flex items-center gap-3 cursor-pointer"
+                    aria-expanded={open}
                     data-testid={`button-council-report-${r.id}`}
                   >
                     <span className="text-yellow-500 text-xs shrink-0">{open ? "▲" : "▼"}</span>
@@ -307,24 +317,24 @@ function CouncilReportsWidget() {
                       {r.report.state_of_empire && <p className="m-0">{r.report.state_of_empire}</p>}
                       {!!r.report.predictions?.length && (
                         <div>
-                          <b className="text-yellow-500">🔮 التنبؤات:</b>
-                          <ul className="mt-1 pr-5 list-disc space-y-0.5">
+                           <b className="text-yellow-500">🔮 {dx("predictions")}</b>
+                          <ul className="mt-1 ps-5 list-disc space-y-0.5">
                             {r.report.predictions.map((p, i) => <li key={i}>{p}</li>)}
                           </ul>
                         </div>
                       )}
                       {!!r.report.research?.length && (
                         <div>
-                          <b className="text-yellow-500">🔬 البحوث الجماعية:</b>
-                          <ul className="mt-1 pr-5 list-disc space-y-0.5">
+                          <b className="text-yellow-500">🔬 {dx("research")}</b>
+                          <ul className="mt-1 ps-5 list-disc space-y-0.5">
                             {r.report.research.map((p, i) => <li key={i}>{p}</li>)}
                           </ul>
                         </div>
                       )}
                       {!!r.report.directives?.length && (
                         <div>
-                          <b className="text-yellow-500">⚔️ التوجيهات نحو الريادة:</b>
-                          <ul className="mt-1 pr-5 list-disc space-y-0.5">
+                          <b className="text-yellow-500">⚔️ {dx("directives")}</b>
+                          <ul className="mt-1 ps-5 list-disc space-y-0.5">
                             {r.report.directives.map((p, i) => <li key={i}>{p}</li>)}
                           </ul>
                         </div>
@@ -342,14 +352,14 @@ function CouncilReportsWidget() {
 }
 
 // ── Archon Identity Widget ────────────────────────────────────────────────────
-const ARCHETYPES_DASH: Record<string, { color: string; symbol: string; ar: string }> = {
-  "THE SOVEREIGN":   { color: "#C9A84C", symbol: "♔", ar: "السيد المطلق" },
-  "THE CONQUEROR":   { color: "#FF6B35", symbol: "⚔", ar: "الفاتح" },
-  "THE VISIONARY":   { color: "#A8E6CF", symbol: "👁", ar: "الرائي" },
-  "THE ARCHITECT":   { color: "#DDA0DD", symbol: "⚙", ar: "المعماري" },
-  "THE CATALYST":    { color: "#87CEEB", symbol: "◈", ar: "المحرك" },
-  "THE SENTINEL":    { color: "#98FB98", symbol: "🛡", ar: "الحارس" },
-  "THE SEEKER":      { color: "#E8C97A", symbol: "◉", ar: "الباحث" },
+const ARCHETYPES_DASH: Record<string, { color: string; symbol: string; labelKey: DashboardCopyKey }> = {
+  "THE SOVEREIGN":   { color: "#C9A84C", symbol: "♔", labelKey: "sovereign" },
+  "THE CONQUEROR":   { color: "#FF6B35", symbol: "⚔", labelKey: "conqueror" },
+  "THE VISIONARY":   { color: "#A8E6CF", symbol: "👁", labelKey: "visionary" },
+  "THE ARCHITECT":   { color: "#DDA0DD", symbol: "⚙", labelKey: "architect" },
+  "THE CATALYST":    { color: "#87CEEB", symbol: "◈", labelKey: "catalyst" },
+  "THE SENTINEL":    { color: "#98FB98", symbol: "🛡", labelKey: "sentinel" },
+  "THE SEEKER":      { color: "#E8C97A", symbol: "◉", labelKey: "seeker" },
 };
 
 interface ArchonDashProfile {
@@ -384,6 +394,7 @@ function computeFourPillarsDash(d: ArchonDashProfile["dimensions"], overallScore
 function ArchonIdentityWidget() {
   const [, nav] = useLocation();
   const { lang } = useLang();
+  const dx = (key: DashboardCopyKey) => dashboardText(lang, key);
   const [profile, setProfile] = useState<ArchonDashProfile | "none" | "loading">("loading");
   const [directive, setDirective] = useState<DailyDirective | null>(null);
   const [directiveLoading, setDirectiveLoading] = useState(false);
@@ -461,6 +472,7 @@ function ArchonIdentityWidget() {
     <motion.div
       initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
       onClick={() => nav("/growth")} style={{ cursor: "pointer" }}
+      dir={lang === "ar" ? "rtl" : "ltr"}
     >
       <Card className="border-primary/20 overflow-hidden relative">
         <CardContent className="p-6 relative z-10">
@@ -470,20 +482,20 @@ function ArchonIdentityWidget() {
             </div>
             <div className="flex-1">
               <div className="text-primary/60 font-black text-[10px] tracking-[0.35em] uppercase mb-1">
-                EMPIRE IDENTITY
+                {dx("empireIdentity")}
               </div>
               <div className="font-black text-foreground text-[15px] mb-0.5">
-                Archon Initiation Awaits
+                {dx("initiationAwaits")}
               </div>
               <div className="text-primary/50 text-[11px] font-mono">
-                CLASSIFIED — Complete initiation to unlock your archetype
+                {dx("initiationLocked")}
               </div>
             </div>
             <motion.div
               animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 2, repeat: Infinity }}
               className="bg-primary text-primary-foreground rounded-lg px-4 py-2 font-black text-xs tracking-wider shrink-0"
             >
-              INITIATE ⚡
+              {dx("initiate")}
             </motion.div>
           </div>
         </CardContent>
@@ -498,6 +510,7 @@ function ArchonIdentityWidget() {
     <motion.div
       initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
       onClick={() => nav("/growth")} style={{ cursor: "pointer" }}
+      dir={lang === "ar" ? "rtl" : "ltr"}
     >
       <Card className="overflow-hidden relative" style={{ borderColor: `${archInfo.color}40` }}>
         <motion.div
@@ -526,9 +539,9 @@ function ArchonIdentityWidget() {
             {/* Text */}
             <div className="flex-1 min-w-0">
               <div className="font-black text-[10px] tracking-[0.35em] uppercase mb-0.5" style={{ color: `${archInfo.color}90` }}>
-                EMPIRE IDENTITY — ARCHON
+                {dx("archonIdentity")}
               </div>
-              <div className="font-black text-foreground text-base mb-0.5">{profile.archetype}</div>
+              <div className="font-black text-foreground text-base mb-0.5">{dx(archInfo.labelKey)}</div>
               <div className="font-mono text-[11px] tracking-wider" style={{ color: `${archInfo.color}80` }}>
                 {profile.archonCode}
               </div>
@@ -537,10 +550,10 @@ function ArchonIdentityWidget() {
             {/* Score */}
             <div className="flex flex-col items-center gap-0.5 shrink-0">
               <div className="text-3xl font-black leading-none" style={{ color: archInfo.color }}>
-                {profile.overallScore}
-                <span className="text-xs text-muted-foreground font-normal">/100</span>
+                {profile.overallScore.toLocaleString(dashboardLocale(lang))}
+                <span className="text-xs text-muted-foreground font-normal">/{(100).toLocaleString(dashboardLocale(lang))}</span>
               </div>
-              <div className="text-[10px] text-muted-foreground tracking-wider uppercase">SCORE</div>
+              <div className="text-[10px] text-muted-foreground tracking-wider uppercase">{dx("score")}</div>
             </div>
           </div>
 
@@ -552,10 +565,10 @@ function ArchonIdentityWidget() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-black uppercase tracking-[0.28em] text-primary">
-                  كلمة الأرشون اليوم
+                  {dx("directiveTitle")}
                 </div>
                 <div className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                  DAILY ARCHON DIRECTIVE · MOROCCO COMMAND
+                  {dx("dailyCommand")}
                 </div>
                 {directiveLoading ? (
                   <div className="mt-3 h-10 animate-pulse rounded-lg bg-primary/10" />
@@ -564,7 +577,7 @@ function ArchonIdentityWidget() {
                     {directive.directive}
                   </p>
                 ) : (
-                  <p className="mt-3 text-sm text-muted-foreground">Directive channel temporarily unavailable.</p>
+                  <p className="mt-3 text-sm text-muted-foreground">{dx("directiveUnavailable")}</p>
                 )}
               </div>
               {directive && (
@@ -577,8 +590,8 @@ function ArchonIdentityWidget() {
                   className="shrink-0 font-black"
                   data-testid="button-archon-directive-seen"
                 >
-                  <CheckCircle className="mr-1.5 h-4 w-4" />
-                  {directive.completed ? "تمت المشاهدة" : markingSeen ? "..." : "تم"}
+                  <CheckCircle className="me-1.5 h-4 w-4" />
+                   {directive.completed ? dx("seenComplete") : markingSeen ? dx("processing") : dx("seen")}
                 </Button>
               )}
             </div>
@@ -587,7 +600,7 @@ function ArchonIdentityWidget() {
           {/* Four Pillars */}
           <div className="mt-4">
             <div className="text-muted-foreground text-[10px] font-black tracking-[0.3em] uppercase mb-2.5">
-              FOUR PILLARS — GROWTH ENGINE
+              {dx("fourPillars")}
             </div>
             <div className="flex flex-col gap-2.5">
               {computeFourPillarsDash(profile.dimensions, profile.overallScore).map(p => (
@@ -597,7 +610,7 @@ function ArchonIdentityWidget() {
                       <span className="text-sm">{p.symbol}</span>
                       <span className="font-black text-[11px] tracking-[0.15em]" style={{ color: p.color }}>{p.latin}</span>
                     </div>
-                    <span className="font-black text-xs" style={{ color: p.color }}>{p.score}</span>
+                    <span className="font-black text-xs" style={{ color: p.color }}>{p.score.toLocaleString(dashboardLocale(lang))}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
                     <motion.div
@@ -615,8 +628,8 @@ function ArchonIdentityWidget() {
 
           {/* Archetype declaration */}
           {profile.archetypeDeclaration && (
-            <div className="mt-3 px-4 py-2.5 rounded-xl italic text-sm text-muted-foreground leading-relaxed bg-muted/20 border-l-2"
-              style={{ borderLeftColor: `${archInfo.color}60` }}>
+            <div className="mt-3 px-4 py-2.5 rounded-xl italic text-sm text-muted-foreground leading-relaxed bg-muted/20 border-s-2"
+              style={{ borderInlineStartColor: `${archInfo.color}60` }}>
               "{profile.archetypeDeclaration}"
             </div>
           )}
@@ -629,7 +642,7 @@ function ArchonIdentityWidget() {
               className="inline-flex items-center gap-2 px-5 py-2 rounded-xl font-black text-xs tracking-wider text-primary-foreground cursor-pointer border-0"
               style={{ background: `linear-gradient(135deg, ${archInfo.color}, ${archInfo.color}cc)`, color: "#000" }}
             >
-              ♔ VIEW GROWTH ENGINE
+              {dx("viewGrowth")}
               <ArrowRight size={13} />
             </motion.button>
           </div>
@@ -640,17 +653,21 @@ function ArchonIdentityWidget() {
 }
 
 // نظام المستويات — Empire Levels (mirrors the server's /api/levels table)
-function getRank(xp: number): { label: string; min: number; next: number; color: string; icon: string; multiplier: number } {
-  if (xp <= 100)  return { label: "مبتدئ Level 1",  min: 0,    next: 101,  color: "#8bc34a", icon: "🌱", multiplier: 1.0 };
-  if (xp <= 500)  return { label: "محترف Level 2",  min: 101,  next: 501,  color: "#aaa9ad", icon: "⚔️", multiplier: 1.25 };
-  if (xp <= 2000) return { label: "خبير Level 3",   min: 501,  next: 2001, color: "#ffd700", icon: "🏆", multiplier: 1.5 };
-  return { label: "أسطورة Level 4", min: 2001, next: xp, color: "#00d4ff", icon: "👑", multiplier: 2.0 };
+function getRank(xp: number): { labelKey: DashboardCopyKey; min: number; next: number; color: string; icon: string; multiplier: number } {
+  if (xp <= 100)  return { labelKey: "rank1", min: 0,    next: 101,  color: "#8bc34a", icon: "🌱", multiplier: 1.0 };
+  if (xp <= 500)  return { labelKey: "rank2", min: 101,  next: 501,  color: "#aaa9ad", icon: "⚔️", multiplier: 1.25 };
+  if (xp <= 2000) return { labelKey: "rank3", min: 501,  next: 2001, color: "#ffd700", icon: "🏆", multiplier: 1.5 };
+  return { labelKey: "rank4", min: 2001, next: xp, color: "#00d4ff", icon: "👑", multiplier: 2.0 };
 }
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { user, logout, loading, refreshUser } = useAuth();
-  const { t } = useLang();
+  const { lang } = useLang();
+  const tx = (key: keyof typeof import("@/i18n/task39").task39, vars: Record<string, string | number> = {}) =>
+    task39Text(lang, key, vars).replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? ""));
+  const dx = (key: DashboardCopyKey, vars?: Record<string, string | number>) => dashboardText(lang, key, vars);
+  const number = (value: number) => value.toLocaleString(dashboardLocale(lang));
   const [claimingDaily, setClaimingDaily] = useState(false);
   const [dailyMsg, setDailyMsg] = useState("");
   const [recentMatches, setRecentMatches] = useState<
@@ -670,8 +687,8 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-        <div className="text-primary animate-pulse text-xl uppercase tracking-widest">Loading...</div>
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center" lang={lang === "de" ? "de-DE" : lang}>
+        <div className="text-primary animate-pulse text-xl uppercase tracking-widest">{tx("dashboardLoading")}</div>
       </div>
     );
   }
@@ -687,8 +704,8 @@ export default function Dashboard() {
     try {
       await logout();
       setLocation("/");
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Logout failed");
+    } catch {
+      window.alert(tx("logoutFailed"));
     }
   };
 
@@ -702,20 +719,26 @@ export default function Dashboard() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setDailyMsg(data.error ?? "Already claimed today!");
+        setDailyMsg(
+          res.status === 400
+            ? tx("alreadyClaimed")
+            : res.status === 401
+              ? dx("authenticationRequired")
+              : tx("claimFailed"),
+        );
       } else {
-        setDailyMsg(`+${data.coinsEarned} coins claimed!`);
+        setDailyMsg(tx("coinsClaimed", { n: number(data.coinsEarned) }));
         await refreshUser();
       }
     } catch {
-      setDailyMsg("Failed to claim reward");
+      setDailyMsg(tx("claimFailed"));
     } finally {
       setClaimingDaily(false);
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+    <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-6xl mx-auto space-y-8" dir={lang === "ar" ? "rtl" : "ltr"} lang={lang === "de" ? "de-DE" : lang}>
       <DailyArchonDirectiveCard />
 
       {/* Header */}
@@ -726,23 +749,23 @@ export default function Dashboard() {
       >
         <div>
           <h1 className="text-3xl md:text-4xl font-bold uppercase tracking-wider">
-            Welcome, <span className="text-primary neon-text-glow" data-testid="text-username">{user.username}</span>
+            {tx("welcomeUser")} <span className="text-primary neon-text-glow" data-testid="text-username">{user.username}</span>
           </h1>
           <p className="text-muted-foreground mt-1 uppercase tracking-widest text-sm flex items-center gap-2">
             <Activity className="w-4 h-4 text-green-500" />
-            Status: Online
+            {tx("statusOnline")}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/wallet">
             <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary/10">
-              <Wallet className="w-4 h-4 mr-2" />
-              Wallet
+              <Wallet className="w-4 h-4 me-2" />
+              {dx("wallet")}
             </Button>
           </Link>
           <Button variant="outline" onClick={handleLogout} className="border-destructive/50 text-destructive hover:bg-destructive/10" data-testid="button-logout">
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
+            <LogOut className="w-4 h-4 me-2" />
+            {dx("logout")}
           </Button>
         </div>
       </motion.div>
@@ -757,8 +780,8 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <Gift className="w-8 h-8 text-green-400 shrink-0" />
             <div>
-              <p className="font-bold text-green-400 uppercase tracking-wider">Daily Reward Available!</p>
-              <p className="text-sm text-muted-foreground">Claim your 100 free coins for today</p>
+              <p className="font-bold text-green-400 uppercase tracking-wider">{tx("dailyAvailable")}</p>
+              <p className="text-sm text-muted-foreground">{dx("dailyRewardDescription", { amount: number(100) })}</p>
             </div>
           </div>
           <Button
@@ -767,8 +790,8 @@ export default function Dashboard() {
             className="bg-green-500 hover:bg-green-400 text-black font-bold uppercase tracking-wider shrink-0"
             data-testid="button-daily-reward"
           >
-            <Gift className="w-4 h-4 mr-2" />
-            {claimingDaily ? "Claiming..." : "Claim +100 Coins"}
+            <Gift className="w-4 h-4 me-2" />
+            {claimingDaily ? tx("claiming") : dx("claimCoins", { amount: number(100) })}
           </Button>
         </motion.div>
       )}
@@ -780,7 +803,7 @@ export default function Dashboard() {
           className="bg-card/30 border border-primary/10 rounded-xl p-3 flex items-center gap-3 text-sm text-muted-foreground"
         >
           <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-          Daily reward claimed — come back tomorrow for more coins!
+          {tx("dailyClaimed")}
         </motion.div>
       )}
 
@@ -798,14 +821,14 @@ export default function Dashboard() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             <CardContent className="p-8 flex flex-col justify-center items-center text-center h-full relative z-10">
               <Coins className="w-16 h-16 text-primary mb-6 drop-shadow-[0_0_15px_rgba(0,212,255,0.8)]" />
-              <p className="text-sm uppercase tracking-widest text-muted-foreground mb-2">Available Balance</p>
+              <p className="text-sm uppercase tracking-widest text-muted-foreground mb-2">{tx("availableBalance")}</p>
               <h2 className="text-5xl md:text-7xl font-black text-foreground neon-text-glow mb-8 tracking-tighter" data-testid="text-balance">
-                {user.balance.toLocaleString()} <span className="text-2xl text-primary font-bold">COINS</span>
+                {number(user.balance)} <span className="text-2xl text-primary font-bold">{dx("coins")}</span>
               </h2>
               <Link href="/games">
                 <Button size="lg" className="h-14 px-8 text-md font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground neon-glow transition-all duration-300">
-                  <Swords className="w-5 h-5 mr-2" />
-                  Play to Earn More
+                  <Swords className="w-5 h-5 me-2" />
+                  {tx("playEarn")}
                 </Button>
               </Link>
             </CardContent>
@@ -821,9 +844,9 @@ export default function Dashboard() {
                   <Trophy className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-muted-foreground">Rank</p>
-                  <p className="text-xl font-bold" style={{ color: rank.color }} data-testid="text-rank">{rank.icon} {rank.label}</p>
-                  <p className="text-[11px] text-muted-foreground">مضاعف الأرباح ×{rank.multiplier}</p>
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground">{tx("rank")}</p>
+                  <p className="text-xl font-bold" style={{ color: rank.color }} data-testid="text-rank">{rank.icon} {dx(rank.labelKey)}</p>
+                  <p className="text-[11px] text-muted-foreground">{dx("earningsMultiplier", { value: number(rank.multiplier) })}</p>
                 </div>
               </div>
               <div className="w-full bg-background rounded-full h-2 mt-4 border border-primary/20">
@@ -832,7 +855,7 @@ export default function Dashboard() {
                   style={{ width: `${xpProgress}%`, backgroundColor: rank.color, boxShadow: `0 0 10px ${rank.color}` }}
                 />
               </div>
-              <p className="text-xs text-right mt-2 text-muted-foreground">{user.xp} / {rank.next} XP</p>
+              <p className="text-xs text-end mt-2 text-muted-foreground">{number(user.xp)} / {number(rank.next)} XP</p>
             </CardContent>
           </Card>
 
@@ -840,20 +863,20 @@ export default function Dashboard() {
             <CardContent className="p-6">
               <div className="flex items-center gap-3 mb-4">
                 <Target className="w-5 h-5 text-primary" />
-                <h3 className="text-sm uppercase tracking-widest text-muted-foreground">Stats</h3>
+                <h3 className="text-sm uppercase tracking-widest text-muted-foreground">{tx("stats")}</h3>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Games Played</span>
-                  <span className="font-bold" data-testid="text-games-played">{user.gamesPlayed}</span>
+                  <span className="text-sm text-muted-foreground">{tx("gamesPlayed")}</span>
+                   <span className="font-bold" data-testid="text-games-played">{number(user.gamesPlayed)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Wins</span>
-                  <span className="font-bold text-primary" data-testid="text-wins">{user.wins}</span>
+                  <span className="text-sm text-muted-foreground">{dx("wins")}</span>
+                  <span className="font-bold text-primary" data-testid="text-wins">{number(user.wins)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Win Rate</span>
-                  <span className="font-bold text-green-400">{winRate}%</span>
+                  <span className="text-sm text-muted-foreground">{tx("winRate")}</span>
+                  <span className="font-bold text-green-400">{number(winRate)}%</span>
                 </div>
               </div>
             </CardContent>
@@ -879,12 +902,12 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-5">
               <Clock className="w-5 h-5 text-primary" />
-              <h3 className="text-sm uppercase tracking-widest text-muted-foreground">Recent Matches</h3>
+              <h3 className="text-sm uppercase tracking-widest text-muted-foreground">{tx("recentMatches")}</h3>
             </div>
             {recentMatches.length === 0 ? (
               <div className="text-center py-8">
                 <Swords className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">No matches yet — <Link href="/games" className="text-primary hover:underline">play your first game!</Link></p>
+                <p className="text-sm text-muted-foreground">{tx("noMatches")} <Link href="/games" className="text-primary hover:underline">{tx("playFirst")}</Link></p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -892,11 +915,11 @@ export default function Dashboard() {
                   const ago = (() => {
                     const diff = Date.now() - new Date(m.time).getTime();
                     const mins = Math.floor(diff / 60000);
-                    if (mins < 1) return "just now";
-                    if (mins < 60) return `${mins}m ago`;
+                    if (mins < 1) return tx("justNow");
+                     if (mins < 60) return tx("minutesAgo", { n: number(mins) });
                     const hrs = Math.floor(mins / 60);
-                    if (hrs < 24) return `${hrs}h ago`;
-                    return `${Math.floor(hrs / 24)}d ago`;
+                     if (hrs < 24) return tx("hoursAgo", { n: number(hrs) });
+                     return tx("daysAgo", { n: number(Math.floor(hrs / 24)) });
                   })();
                   return (
                     <div key={i} className={`flex items-center justify-between p-3 rounded-lg border ${
@@ -909,13 +932,13 @@ export default function Dashboard() {
                           <p className="text-xs text-muted-foreground">{ago}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4 text-right">
+                      <div className="flex items-center gap-4 text-end">
                         <div>
-                          <p className="text-xs text-primary font-bold">+{m.coins} <span className="text-muted-foreground font-normal">coins</span></p>
-                          <p className="text-xs text-purple-400">+{m.xp} XP</p>
+                           <p className="text-xs text-primary font-bold">+{number(m.coins)} <span className="text-muted-foreground font-normal">{dx("coinUnit")}</span></p>
+                           <p className="text-xs text-purple-400">+{number(m.xp)} XP</p>
                         </div>
                         <span className={`text-xs font-bold uppercase tracking-wider ${m.win ? "text-primary" : "text-destructive/70"}`}>
-                          {m.win ? "WIN" : "LOSS"}
+                          {m.win ? tx("win") : tx("loss")}
                         </span>
                       </div>
                     </div>
@@ -932,7 +955,7 @@ export default function Dashboard() {
         <Card className="bg-card/50 border-primary/20">
           <CardHeader>
             <CardTitle className="text-lg uppercase tracking-wider flex items-center gap-2">
-              🔐 تغيير كلمة السر — Changer le mot de passe
+              🔐 {tx("changePassword")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -946,6 +969,9 @@ export default function Dashboard() {
 
 function ChangePasswordForm() {
   const { changePassword } = useAuth();
+  const { lang } = useLang();
+  const tx = (key: keyof typeof import("@/i18n/task39").task39) => task39Text(lang, key);
+  const dx = (key: DashboardCopyKey) => dashboardText(lang, key);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [msg, setMsg] = useState("");
@@ -956,27 +982,45 @@ function ChangePasswordForm() {
     e.preventDefault();
     setMsg("");
     setErr("");
+    if (!currentPassword || !newPassword) {
+      setErr(dx("passwordsRequired"));
+      return;
+    }
+    if (newPassword.length < 6) {
+      setErr(dx("passwordTooShort"));
+      return;
+    }
     setBusy(true);
     try {
-      const message = await changePassword(currentPassword, newPassword);
-      setMsg(message);
+      await changePassword(currentPassword, newPassword);
+      setMsg(dx("passwordChanged"));
       setCurrentPassword("");
       setNewPassword("");
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      const apiMessage = e instanceof Error ? e.message : "";
+      if (apiMessage.includes("6 أحرف") || apiMessage.includes("6 caractères")) {
+        setErr(dx("passwordTooShort"));
+      } else if (apiMessage.includes("غير صحيحة") || apiMessage.includes("incorrect")) {
+        setErr(dx("currentPasswordIncorrect"));
+      } else if (apiMessage.includes("الدخول") || apiMessage.includes("Connectez-vous")) {
+        setErr(dx("authenticationRequired"));
+      } else {
+        setErr(dx("passwordChangeFailed"));
+      }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4 max-w-md">
+    <form onSubmit={submit} noValidate className="space-y-4 max-w-md" dir={lang === "ar" ? "rtl" : "ltr"}>
       {err && <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">{err}</div>}
       {msg && <div className="p-3 rounded-md bg-primary/10 border border-primary/30 text-primary text-sm">{msg}</div>}
       <input
         type="password"
         autoComplete="current-password"
-        placeholder="كلمة السر الحالية — Mot de passe actuel"
+        placeholder={tx("currentPassword")}
+        aria-label={tx("currentPassword")}
         value={currentPassword}
         onChange={(e) => setCurrentPassword(e.target.value)}
         className="w-full h-11 px-3 rounded-md bg-background/50 border border-primary/30 text-sm focus:outline-none focus:border-primary"
@@ -986,7 +1030,8 @@ function ChangePasswordForm() {
       <input
         type="password"
         autoComplete="new-password"
-        placeholder="كلمة السر الجديدة (6+ أحرف) — Nouveau mot de passe"
+        placeholder={tx("newPassword")}
+        aria-label={tx("newPassword")}
         value={newPassword}
         onChange={(e) => setNewPassword(e.target.value)}
         className="w-full h-11 px-3 rounded-md bg-background/50 border border-primary/30 text-sm focus:outline-none focus:border-primary"
@@ -995,13 +1040,16 @@ function ChangePasswordForm() {
         data-testid="input-new-password"
       />
       <Button type="submit" disabled={busy} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-wider" data-testid="button-change-password">
-        {busy ? "..." : "✅ تغيير كلمة السر"}
+        {busy ? tx("loading") : `✅ ${tx("changePassword")}`}
       </Button>
     </form>
   );
 }
 
 function ArchonAcknowledgementsWidget() {
+  const { lang } = useLang();
+  const dx = (key: DashboardCopyKey, vars?: Record<string, string | number>) => dashboardText(lang, key, vars);
+  const number = (value: number) => value.toLocaleString(dashboardLocale(lang));
   const [data, setData] = useState<DirectiveAcknowledgements | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -1035,6 +1083,7 @@ function ArchonAcknowledgementsWidget() {
       animate={{ opacity: 1, y: 0 }}
       aria-labelledby="archon-acknowledgements-title"
       data-testid="archon-acknowledgements"
+      dir={lang === "ar" ? "rtl" : "ltr"}
     >
       <Card className="overflow-hidden border-primary/30 bg-card/50">
         <CardContent className="p-6">
@@ -1046,14 +1095,20 @@ function ArchonAcknowledgementsWidget() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 id="archon-acknowledgements-title" className="font-black text-foreground">
-                    ARCHON DIRECTIVE ACKNOWLEDGEMENTS
+                    {dx("acknowledgementsTitle")}
                   </h2>
                   <span className="rounded border border-primary/30 px-2 py-0.5 text-[10px] font-bold tracking-widest text-primary">
-                    ADMIN ONLY
+                    {dx("adminOnly")}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Today in Africa/Casablanca · {data?.dateKey ?? "—"}
+                  {dx("todayCasablanca", {
+                    date: data?.dateKey
+                      ? new Date(`${data.dateKey}T12:00:00`).toLocaleDateString(dashboardLocale(lang), {
+                          year: "numeric", month: "long", day: "numeric",
+                        })
+                      : "—",
+                  })}
                 </p>
               </div>
             </div>
@@ -1063,10 +1118,13 @@ function ArchonAcknowledgementsWidget() {
                 <Users className="size-5 text-primary" />
                 <div>
                   <p className="text-2xl font-black leading-none text-primary" data-testid="text-archon-ack-rate">
-                    {data.acknowledgementRate}%
+                    {number(data.acknowledgementRate)}%
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {data.acknowledgedCount} of {data.totalCitizens} citizens
+                    {dx("citizensCount", {
+                      done: number(data.acknowledgedCount),
+                      total: number(data.totalCitizens),
+                    })}
                   </p>
                 </div>
               </div>
@@ -1080,11 +1138,11 @@ function ArchonAcknowledgementsWidget() {
             </div>
           ) : error || !data ? (
             <p className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-              Acknowledgement data could not be loaded.
+              {dx("ackLoadError")}
             </p>
           ) : (
             <>
-              <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted/40" aria-label={`${data.acknowledgementRate}% acknowledged`}>
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted/40" aria-label={dx("acknowledgedAria", { rate: number(data.acknowledgementRate) })}>
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-500"
                   style={{ width: `${data.acknowledgementRate}%` }}
@@ -1094,11 +1152,11 @@ function ArchonAcknowledgementsWidget() {
                 <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                   <h3 className="flex items-center gap-2 text-sm font-black text-primary">
                     <CheckCircle className="size-4" />
-                    Acknowledged ({acknowledged.length})
+                    {dx("acknowledged", { count: number(acknowledged.length) })}
                   </h3>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {acknowledged.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No acknowledgements yet.</p>
+                      <p className="text-sm text-muted-foreground">{dx("noAcknowledgements")}</p>
                     ) : acknowledged.map(citizen => (
                       <span key={citizen.id} className="rounded-full border border-primary/30 bg-background/60 px-3 py-1 text-xs font-semibold">
                         {citizen.username}
@@ -1109,11 +1167,11 @@ function ArchonAcknowledgementsWidget() {
                 <div className="rounded-lg border border-border bg-background/40 p-4">
                   <h3 className="flex items-center gap-2 text-sm font-black text-muted-foreground">
                     <Clock className="size-4" />
-                    Not acknowledged ({pending.length})
+                    {dx("notAcknowledged", { count: number(pending.length) })}
                   </h3>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {pending.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Every citizen has acknowledged today’s directive.</p>
+                      <p className="text-sm text-muted-foreground">{dx("allAcknowledged")}</p>
                     ) : pending.map(citizen => (
                       <span key={citizen.id} className="rounded-full border border-border bg-muted/20 px-3 py-1 text-xs font-semibold text-muted-foreground">
                         {citizen.username}

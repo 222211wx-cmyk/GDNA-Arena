@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageSquare, Share2, Bookmark, BookmarkCheck } from "lucide-react";
 import Avatar from "./Avatar";
-import { GOLD, GOLD_A, DOMAIN_ICONS, timeAgo, api } from "./social-i18n";
+import { GOLD, GOLD_A, DOMAIN_ICONS, timeAgo, api, useSocialI18n } from "./social-i18n";
 import type { FeedPost, Comment } from "./social-types";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
@@ -32,7 +32,7 @@ function ActionBtn({ icon, label, onClick, active, color, disabled }: {
 }
 
 // ── ReactionBtn ───────────────────────────────────────────────────────────────
-function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: number }) {
+function ReactionBtn({ postId, initialLikes, st }: { postId: number; initialLikes: number; st: Record<string, string> }) {
   const { isOnline } = useConnectivity();
   const [open,       setOpen]       = useState(false);
   const [myReaction, setMyReaction] = useState<string | null>(null);
@@ -89,7 +89,7 @@ function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: n
         }}>
         <span style={{ fontSize: 15 }}>{displayEmoji}</span>
         {total > 0 && <span>{total}</span>}
-        {!myReaction && <span>React</span>}
+        {!myReaction && <span>{st.react}</span>}
       </button>
       <AnimatePresence>
         {open && (
@@ -99,7 +99,7 @@ function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: n
             exit={{ opacity: 0, scale: 0.8, y: 8 }}
             transition={{ duration: 0.12 }}
             style={{
-              position: "absolute", bottom: "calc(100% + 4px)", left: 0,
+              position: "absolute", bottom: "calc(100% + 4px)", insetInlineStart: 0,
                background: "hsl(var(--secondary))", border: `1px solid ${GOLD_A(0.15)}`,
               borderRadius: 24, padding: "6px 10px",
               display: "flex", gap: 4, zIndex: 200,
@@ -135,7 +135,8 @@ interface Props {
   onSaveToggle: () => void;
 }
 
-export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: Props) {
+export default function FeedCard({ post, user, saved, onSaveToggle }: Props) {
+  const { st, dir, locale } = useSocialI18n();
   const { isOnline } = useConnectivity();
   const [comments,       setComments]       = useState<Comment[]>([]);
   const [newComment,     setNewComment]     = useState("");
@@ -180,7 +181,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
   }
 
   return (
-    <motion.div
+    <motion.div dir={dir}
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       id={`post-${post.id}`}
        style={{ background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.08)}`, borderRadius: 12, overflow: "hidden" }}>
@@ -190,7 +191,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
         <div style={{ flex: 1 }}>
           <p style={{ margin: 0, fontWeight: 800, color: "hsl(var(--foreground))", fontSize: 14 }}>{post.username}</p>
           <p style={{ margin: 0, fontSize: 11, color: "#ffffff40" }}>
-            {DOMAIN_ICONS[post.domain] ?? "🌍"} {post.domain} · {timeAgo(post.createdAt, st)}
+             {DOMAIN_ICONS[post.domain] ?? "🌍"} {st[post.domain] ?? post.domain} · {timeAgo(post.createdAt, st, locale)}
           </p>
         </div>
       </div>
@@ -207,7 +208,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
           <div style={{ margin: "0 16px 12px", borderRadius: 10, overflow: "hidden", aspectRatio: "16/9", background: "#000" }}>
             <iframe
               src={`https://www.youtube-nocookie.com/embed/${ytId}?rel=0&modestbranding=1`}
-              title="YouTube video"
+              title={st.youtube_video}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               style={{ width: "100%", height: "100%", border: "none", display: "block" }}
@@ -217,22 +218,22 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
       })()}
       {post.imageUrl && post.mediaType !== "video" && (
         <div style={{ margin: "0 16px 12px" }}>
-          <img src={post.imageUrl} alt="" style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 8 }}
+          <img src={post.imageUrl} alt={st.media_alt} style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 8 }}
             onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
         </div>
       )}
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 2, padding: "8px 10px", borderTop: `1px solid #ffffff08`, flexWrap: "wrap" }}>
-        <ReactionBtn postId={post.id} initialLikes={post.likes} />
+        <ReactionBtn postId={post.id} initialLikes={post.likes} st={st} />
         <ActionBtn icon={<MessageSquare size={14} />}
           label={`${post.commentCount > 0 ? post.commentCount + " " : ""}${st.comment}`}
           onClick={toggleComments} active={expanded} color={GOLD} />
         <div style={{ position: "relative" }}>
           <ActionBtn icon={<Share2 size={14} />} label={st.share} onClick={handleShare} color="#3b82f6" />
           {shareToast && (
-            <span style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, background: "#22c55e", color: "#000", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-              {st.share_copied ?? "Copied!"}
+            <span style={{ position: "absolute", bottom: "calc(100% + 4px)", insetInlineStart: 0, background: "#22c55e", color: "#000", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+              {st.share_copied}
             </span>
           )}
         </div>
@@ -252,15 +253,15 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
                 {st.comments}
               </p>
               {comments.length === 0 && (
-                <p style={{ color: "#ffffff30", fontSize: 12, margin: "0 0 8px" }}>No comments yet.</p>
+                <p style={{ color: "#ffffff30", fontSize: 12, margin: "0 0 8px" }}>{st.no_comments}</p>
               )}
               {comments.map(c => (
                 <div key={c.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <Avatar name={c.username} size={24} />
                   <div style={{ background: "hsl(var(--secondary))", borderRadius: 8, padding: "6px 10px", flex: 1 }}>
                     <span style={{ fontWeight: 700, color: GOLD, fontSize: 12 }}>{c.username}</span>
-                    <span style={{ color: "hsl(var(--foreground))", fontSize: 13, marginLeft: 8 }} dir={dir}>{c.content}</span>
-                    <p style={{ margin: "3px 0 0", fontSize: 10, color: "#ffffff25" }}>{timeAgo(c.createdAt, st)}</p>
+                    <span style={{ color: "hsl(var(--foreground))", fontSize: 13, marginInlineStart: 8 }} dir={dir}>{c.content}</span>
+                    <p style={{ margin: "3px 0 0", fontSize: 10, color: "#ffffff25" }}>{timeAgo(c.createdAt, st, locale)}</p>
                   </div>
                 </div>
               ))}
@@ -270,6 +271,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
                   <input value={newComment} onChange={e => setNewComment(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && sendComment()}
                     placeholder={st.write_comment} dir={dir}
+                     aria-label={st.write_comment}
                     style={{ flex: 1, background: "hsl(var(--secondary))", border: `1px solid ${GOLD_A(0.13)}`, borderRadius: 8, padding: "6px 12px", color: "hsl(var(--foreground))", fontSize: 13, outline: "none" }} />
                   <button onClick={sendComment} disabled={sending || !newComment.trim() || !isOnline}
                     style={{ padding: "6px 14px", borderRadius: 8, background: GOLD, border: "none", color: "hsl(var(--primary-foreground))", fontWeight: 800, cursor: "pointer", fontSize: 12, opacity: sending ? 0.5 : 1 }}>

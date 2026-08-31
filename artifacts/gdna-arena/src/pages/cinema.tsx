@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Film, Flame, Star, ArrowRight, Crown, Clapperboard, Globe2, ChevronRight } from "lucide-react";
+import { useLang } from "@/contexts/LangContext";
+import { Skeleton } from "@/components/Skeleton";
+import { gameLocaleText, localeForLang } from "@/i18n/game-locale-copy";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface Legend {
@@ -26,27 +29,19 @@ const CINEMA_IMAGES: Record<string, string> = {
 };
 
 const CINEMA_QUOTES: Record<string, string> = {
-  "Stanley Kubrick":   "A film is — or should be — more like music than like fiction.",
-  "Quentin Tarantino": "I steal from every single movie ever made.",
-  "Martin Scorsese":   "Cinema is a mirror by which we often see ourselves.",
-  "Akira Kurosawa":    "In order to gain anything, you must first lose everything.",
-  "Meryl Streep":      "The great gift of human beings is that we have the power of empathy.",
-  "Christopher Nolan": "I have a lot of respect for people who say: 'I will make this work.'",
+  "Stanley Kubrick":   "cinema_quote_kubrick",
+  "Quentin Tarantino": "cinema_quote_tarantino",
+  "Martin Scorsese":   "cinema_quote_scorsese",
+  "Akira Kurosawa":    "cinema_quote_kurosawa",
+  "Meryl Streep":      "cinema_quote_streep",
+  "Christopher Nolan": "cinema_quote_nolan",
 };
 
-const DNA_PILLARS = [
-  { icon: "🎬", label: "DIRECTION DNA",    desc: "The art of orchestrating a vision" },
-  { icon: "📖", label: "STORYTELLING DNA", desc: "Narrative depth and emotional truth" },
-  { icon: "💥", label: "IMPACT DNA",       desc: "Cultural and societal resonance" },
-  { icon: "🏆", label: "LEGACY DNA",       desc: "Their place in cinema history" },
-];
-
-
 const ERA_NAMES: Record<string, string> = {
-  "golden-age":   "Golden Age",
-  "new-hollywood": "New Hollywood",
-  "modern":       "Modern",
-  "independent":  "Independent",
+  "golden-age":   "era_golden_age",
+  "new-hollywood": "era_new_hollywood",
+  "modern":       "era_modern",
+  "independent":  "era_independent",
 };
 
 // Map legends to eras by name
@@ -75,6 +70,7 @@ function StatBar({ label, value }: { label: string; value: number }) {
 }
 
 function LegendCard({ legend, index }: { legend: Legend; index: number }) {
+  const { t, lang } = useLang();
   const img   = CINEMA_IMAGES[legend.name] ?? legend.imageUrl;
   const quote = CINEMA_QUOTES[legend.name];
 
@@ -91,12 +87,12 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
         className="absolute top-3 left-3 z-10 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black border-2"
         style={{ borderColor: rankColor, color: rankColor, background: "rgba(0,0,0,0.8)" }}
       >
-        #{legend.rank}
+        #{legend.rank.toLocaleString(localeForLang[lang])}
       </div>
 
       {/* Score badge */}
       <div className="absolute top-3 right-3 z-10 bg-background/70 border border-primary/30 text-primary text-xs font-bold px-2 py-1 rounded-lg">
-        {legend.score.toLocaleString()}
+        {legend.score.toLocaleString(localeForLang[lang])}
       </div>
 
       {/* Image */}
@@ -129,7 +125,7 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
               <>
                 <span className="text-muted-foreground">·</span>
                 <Star size={11} className="text-primary" />
-                <span className="text-primary/80 text-xs">Peak {legend.peakYear}</span>
+                <span className="text-primary/80 text-xs">{t("sport_peak")} {legend.peakYear.toLocaleString(localeForLang[lang], { useGrouping: false })}</span>
               </>
             )}
           </div>
@@ -138,16 +134,16 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
         {/* Quote */}
         {quote && (
           <p className="text-muted-foreground text-xs italic leading-relaxed border-l-2 border-primary/30 pl-2">
-            "{quote}"
+            “{t(quote)}”
           </p>
         )}
 
         {/* DNA Stats */}
         {legend.stats && (
           <div className="space-y-1.5 pt-1">
-            <StatBar label="DIRECTION"    value={legend.stats.style}  />
-            <StatBar label="IMPACT"       value={legend.stats.impact} />
-            <StatBar label="LEGACY"       value={legend.stats.legacy} />
+            <StatBar label={t("cinema_pillar_direction")} value={legend.stats.style}  />
+            <StatBar label={t("cinema_pillar_impact")} value={legend.stats.impact} />
+            <StatBar label={t("cinema_pillar_legacy")} value={legend.stats.legacy} />
           </div>
         )}
 
@@ -156,7 +152,7 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
           href={`/legends/${legend.id}`}
           className="flex items-center justify-between w-full mt-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-xl text-primary text-xs font-bold hover:bg-primary/10 hover:border-primary/40 transition-all group/btn"
         >
-          <span>VIEW LEGEND HUB</span>
+          <span>{t("cinema_view_hub")}</span>
           <ChevronRight size={14} className="group-hover/btn:translate-x-0.5 transition-transform" />
         </Link>
       </div>
@@ -166,9 +162,19 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function CinemaPage() {
+  const { t, lang } = useLang();
+  const dir = lang === "ar" ? "rtl" : "ltr";
   const [legends, setLegends] = useState<Legend[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [activeFilter, setActiveFilter] = useState<"all" | "golden-age" | "new-hollywood" | "modern" | "independent">("all");
+
+  const DNA_PILLARS = [
+    { icon: "🎬", label: t("cinema_pillar_direction"), desc: t("cinema_pillar_direction_desc") },
+    { icon: "📖", label: t("cinema_pillar_story"), desc: t("cinema_pillar_story_desc") },
+    { icon: "💥", label: t("cinema_pillar_impact"), desc: t("cinema_pillar_impact_desc") },
+    { icon: "🏆", label: t("cinema_pillar_legacy"), desc: t("cinema_pillar_legacy_desc") },
+  ];
 
   useEffect(() => {
     const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
@@ -188,7 +194,7 @@ export default function CinemaPage() {
         }));
         setLegends(apiLegends);
       })
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -197,7 +203,7 @@ export default function CinemaPage() {
     : legends.filter(l => ERA_MAP[activeFilter]?.includes(l.name));
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground" dir={dir}>
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
@@ -211,9 +217,9 @@ export default function CinemaPage() {
         <div className="max-w-7xl mx-auto px-4 pt-14 pb-10 relative">
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
-            <Link href="/" className="hover:text-foreground transition-colors">EMPIRE ETERNAL</Link>
+             <Link href="/" className="hover:text-foreground transition-colors">{t("empire_eternal")}</Link>
             <ChevronRight size={12} />
-            <span className="text-primary">CINEMA</span>
+             <span className="text-primary">{t("cinema_hero_cinema")}</span>
           </div>
 
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
@@ -221,38 +227,35 @@ export default function CinemaPage() {
               {/* Pillar tag */}
               <div className="inline-flex items-center gap-2 border border-primary/30 bg-primary/5 text-primary text-xs font-black tracking-widest px-3 py-1.5 rounded-full mb-4">
                 <Clapperboard size={12} />
-                PILLAR III — CINEMATIC DNA
+                 {t("cinema_pillar_tag")}
               </div>
 
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-none">
-                <span className="text-foreground">CINEMA</span>
+                <span className="text-foreground">{t("cinema_hero_cinema")}</span>
                 <br />
                 <span className="bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent">
-                  LEGENDS
+                  {t("cinema_hero_legends")}
                 </span>
               </h1>
 
-              <p className="mt-4 text-muted-foreground max-w-xl leading-relaxed">
-                The cinematic universe of greatness — every director, actor, and visionary here
-                carries a complete <span className="text-primary">DNA</span> of direction, storytelling, and legacy.
-              </p>
+              <p className="mt-4 text-muted-foreground max-w-xl leading-relaxed">{t("cinema_desc")}</p>
             </div>
 
             {/* Live stats */}
             <div className="flex gap-4 lg:gap-6 shrink-0">
               <div className="text-center">
-                <div className="text-3xl font-black text-primary">{legends.length}</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Legends</div>
+                <div className="text-3xl font-black text-primary">{legends.length.toLocaleString(localeForLang[lang])}</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">{t("sport_legends_label")}</div>
               </div>
               <div className="w-px bg-border" />
               <div className="text-center">
                 <div className="text-3xl font-black text-primary">4</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Eras</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">{t("cinema_eras_label")}</div>
               </div>
               <div className="w-px bg-border" />
               <div className="text-center">
                 <div className="text-3xl font-black text-primary">∞</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Frames</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">{t("cinema_frames_label")}</div>
               </div>
             </div>
           </div>
@@ -291,7 +294,7 @@ export default function CinemaPage() {
                   : "border border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
               }`}
             >
-              {f === "all" ? "🎬 ALL ERAS" : ERA_NAMES[f]}
+               {f === "all" ? t("cinema_filter_all") : t(ERA_NAMES[f])}
             </button>
           ))}
 
@@ -301,22 +304,26 @@ export default function CinemaPage() {
             className="ml-auto flex items-center gap-2 px-4 py-1.5 bg-primary text-primary-foreground text-xs font-black tracking-wider rounded-full hover:bg-primary/90 transition-all"
           >
             <Flame size={13} />
-            VOTE NOW
+            {t("cinema_vote_now")}
             <ArrowRight size={13} />
           </Link>
         </div>
 
         {/* Grid */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" role="status" aria-label={gameLocaleText(lang, "loading")}>
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-80 bg-card border border-border rounded-2xl animate-pulse" />
+              <Skeleton key={i} className="h-80 rounded-2xl" />
             ))}
+          </div>
+        ) : loadError ? (
+          <div className="text-center py-20 text-destructive" role="alert">
+            <p>{gameLocaleText(lang, "loadFailed")}</p>
           </div>
         ) : displayed.length === 0 ? (
           <div className="text-center py-20 text-muted-foreground">
             <Film size={48} className="mx-auto mb-3 opacity-20" />
-            <p>No legends in this era yet</p>
+            <p>{t("cinema_no_legends")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -337,15 +344,12 @@ export default function CinemaPage() {
             <div>
               <div className="flex items-center gap-2 text-primary text-xs font-black tracking-widest mb-2">
                 <Crown size={14} />
-                DIRECTOR SHOWDOWN — The Grand Debate
+                {t("cinema_goat_title")}
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-foreground">
-                Kubrick vs Tarantino — Vote in the Eternal Debate
+                {t("cinema_kubrick_vs")}
               </h2>
-              <p className="text-muted-foreground text-sm mt-2 max-w-md">
-                Two visions of cinema that changed the world forever. Who crafted the greater art?
-                Your GlobalStar vote writes history.
-              </p>
+              <p className="text-muted-foreground text-sm mt-2 max-w-md">{t("cinema_goat_desc")}</p>
             </div>
 
             <div className="flex items-center gap-4 shrink-0">
@@ -363,7 +367,7 @@ export default function CinemaPage() {
                 </div>
                 <div className="text-xs text-primary font-bold">KUBRICK</div>
               </div>
-              <div className="text-primary font-black text-2xl">VS</div>
+              <div className="text-primary font-black text-2xl">{t("showdown_vs")}</div>
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary mx-auto mb-1 bg-muted flex items-center justify-center">
                   {CINEMA_IMAGES["Quentin Tarantino"] ? (
@@ -383,7 +387,7 @@ export default function CinemaPage() {
                 href="/games/globalstar"
                 className="flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground font-black text-sm rounded-xl hover:bg-primary/90 transition-all hover:shadow-[0_0_20px_rgba(255,215,0,0.3)]"
               >
-                Vote Now
+                {t("cinema_goat_vote")}
                 <ArrowRight size={16} />
               </Link>
             </div>

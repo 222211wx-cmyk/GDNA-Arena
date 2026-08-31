@@ -9,6 +9,8 @@ import {
   Volume2, VolumeX, Minimize2, Monitor, MonitorOff
 } from "lucide-react";
 import type { CallStatus } from "@/hooks/useCall";
+import { SOCIAL_T } from "@/components/social/social-i18n";
+import { useLang } from "@/contexts/LangContext";
 
 interface Props {
   status:         CallStatus;
@@ -29,6 +31,8 @@ export default function CallOverlay({
   status, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd,
   screenSharing = false, onScreenShare, onStopScreen, callError,
 }: Props) {
+  const { lang } = useLang();
+  const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef  = useRef<HTMLVideoElement>(null);
   const [muted,       setMuted]       = useState(false);
@@ -116,13 +120,14 @@ export default function CallOverlay({
             </div>
             <p className="font-black text-white text-lg">{incomingCall.from}</p>
             <p className="text-xs font-mono animate-pulse" style={{ color: "#22c55e" }}>
-              {incomingCall.video ? "📹 Incoming video call" : "📞 Incoming voice call"}
+               {incomingCall.video ? `📹 ${st.incoming_video_call}` : `📞 ${st.incoming_voice_call}`}
             </p>
           </div>
 
           <div className="flex justify-center gap-6">
             {/* Reject */}
             <button onClick={onReject}
+              aria-label={st.reject_call}
               className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
               style={{ background: "hsl(var(--destructive))" }}>
               <PhoneOff className="w-6 h-6 text-white" />
@@ -131,6 +136,7 @@ export default function CallOverlay({
             {/* Answer audio */}
             {incomingCall.video && (
               <button onClick={() => onAnswer(false)}
+                aria-label={st.answer_voice}
                 className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
                 style={{ background: "#3b82f6" }}>
                 <Phone className="w-6 h-6 text-white" />
@@ -139,6 +145,7 @@ export default function CallOverlay({
 
             {/* Answer video */}
             <button onClick={() => onAnswer(incomingCall.video)}
+              aria-label={incomingCall.video ? st.answer_video : st.answer_voice}
               className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
               style={{ background: "#22c55e" }}>
               {incomingCall.video ? <Video className="w-6 h-6 text-white" /> : <Phone className="w-6 h-6 text-white" />}
@@ -162,7 +169,7 @@ export default function CallOverlay({
               <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center font-black text-sm text-black"
                 style={{ background: "hsl(var(--primary))" }}>{peer?.charAt(0).toUpperCase()}</div>
               <p className="text-[10px] font-mono" style={{ color: "hsl(var(--primary))" }}>
-                {status === "calling" ? "Calling..." : status === "active" ? formatDuration(duration) : "Ended"}
+                {status === "calling" ? st.calling : status === "active" ? formatDuration(duration) : st.call_ended}
               </p>
             </div>
           </div>}
@@ -193,9 +200,9 @@ export default function CallOverlay({
             <div className="space-y-1">
               <p className="text-white font-black text-2xl">{peer}</p>
               <p className="text-sm font-mono animate-pulse" style={{ color: status === "active" ? "#22c55e" : "hsl(var(--primary))" }}>
-                {status === "calling"  ? "⏳ Calling..."
-                : status === "active"  ? `✅ Connected — ${formatDuration(duration)}`
-                : status === "ended"   ? "📵 Call ended"
+                 {status === "calling"  ? `⏳ ${st.calling}`
+                 : status === "active"  ? `✅ ${st.connected} — ${formatDuration(duration)}`
+                 : status === "ended"   ? `📵 ${st.call_ended}`
                 : ""}
               </p>
             </div>
@@ -224,6 +231,7 @@ export default function CallOverlay({
         style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(12px)" }}>
 
         <button onClick={() => setMuted(v => !v)}
+          aria-label={muted ? st.unmute : st.mute}
           className="w-13 h-13 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
           style={{ background: muted ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
           {muted ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
@@ -231,6 +239,7 @@ export default function CallOverlay({
 
         {hasVideo && (
           <button onClick={() => setVideoOff(v => !v)}
+            aria-label={videoOff ? st.enable_video : st.disable_video}
             className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
             style={{ background: videoOff ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
             {videoOff ? <VideoOff className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}
@@ -239,12 +248,14 @@ export default function CallOverlay({
 
         {/* End call — center large */}
         <button onClick={onEnd}
+          aria-label={st.end_call}
           className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg"
           style={{ background: "hsl(var(--destructive))" }}>
           <PhoneOff className="w-7 h-7 text-white" />
         </button>
 
         <button onClick={() => setSpeakerOff(v => !v)}
+          aria-label={speakerOff ? st.enable_speaker : st.disable_speaker}
           className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
           style={{ background: speakerOff ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
           {speakerOff ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
@@ -256,7 +267,8 @@ export default function CallOverlay({
             onClick={screenSharing ? onStopScreen : onScreenShare}
             className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
             style={{ background: screenSharing ? "#f59e0b" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}
-            title={screenSharing ? "Stop sharing" : "Share screen"}>
+            title={screenSharing ? st.stop_sharing : st.share_screen}
+            aria-label={screenSharing ? st.stop_sharing : st.share_screen}>
             {screenSharing
               ? <MonitorOff className="w-5 h-5 text-black" />
               : <Monitor className="w-5 h-5 text-white" />}
@@ -264,6 +276,7 @@ export default function CallOverlay({
         )}
 
         <button onClick={() => setMinimized(true)}
+          aria-label={st.minimize}
           className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
           style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
           <Minimize2 className="w-5 h-5 text-white" />

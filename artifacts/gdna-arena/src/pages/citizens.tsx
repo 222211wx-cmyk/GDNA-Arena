@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { useAuth }        from "@/contexts/AuthContext";
 import { useCallContext } from "@/contexts/CallContext";
+import { useLang }        from "@/contexts/LangContext";
+import { SOCIAL_T } from "@/components/social/social-i18n";
+import { formatNumber, isArabic, techT } from "@/i18n/tech-surfaces-copy";
 
 interface HonorInfo { title: string; color: string; badge: string }
 interface Rank { label: string; tier: number; color: string; icon: string }
@@ -34,6 +37,8 @@ const BASE  = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 const bapi  = (p: string) => `${BASE()}${p}`;
 
 export default function CitizensPage() {
+  const { t, lang } = useLang();
+  const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const { user }     = useAuth();
   const call         = useCallContext();
   const [, navigate] = useLocation();
@@ -99,27 +104,27 @@ export default function CitizensPage() {
   const theRest   = filtered.slice(3);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div dir={isArabic(lang) ? "rtl" : "ltr"} lang={lang === "de" ? "de-DE" : lang} className="min-h-screen bg-background">
       {/* Hero */}
       <div className="relative overflow-hidden border-b border-primary/10 bg-gradient-to-b from-black to-background">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-20%,rgba(34,197,94,0.08),transparent_70%)]" />
         <div className="relative max-w-5xl mx-auto px-4 py-12 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-bold tracking-widest mb-5">
-            <Users className="w-3.5 h-3.5" /> EMPIRE CITIZENS — HONOR BOARD
+            <Users className="w-3.5 h-3.5" /> {t("citizens_badge")}
           </div>
           <h1 className="text-5xl md:text-6xl font-black tracking-tight mb-3">
-            CITIZEN <span className="text-primary">DIRECTORY</span>
+            {t("citizens_title_1")} <span className="text-primary">{t("citizens_title_2")}</span>
           </h1>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            The Empire's ranked citizens — every XP earned, every honor given, every battle won is recorded here.
+            {t("citizens_subtitle")}
           </p>
 
           {/* Honor System Banner */}
           <div className="mt-6 inline-flex items-center gap-3 px-5 py-3 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 text-sm">
             <span className="text-xl">🎖️</span>
-            <div className="text-left">
-              <div className="font-black text-yellow-400 text-xs tracking-widest">CITIZEN HONOR SYSTEM</div>
-              <div className="text-muted-foreground text-xs">Honor respectful citizens · Earn titles · Build your legacy</div>
+             <div className="text-start">
+              <div className="font-black text-yellow-400 text-xs tracking-widest">{t("citizens_honor_system")}</div>
+              <div className="text-muted-foreground text-xs">{t("citizens_honor_desc")}</div>
             </div>
           </div>
         </div>
@@ -129,18 +134,18 @@ export default function CitizensPage() {
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-3 mb-8">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               value={query} onChange={e => setQuery(e.target.value)}
-              placeholder="Search citizens..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-card border border-border/50 focus:border-primary/50 outline-none text-sm transition-colors"
+              placeholder={t("citizens_search_placeholder")}
+               className="w-full ps-9 pe-4 py-2.5 rounded-xl bg-card border border-border/50 focus:border-primary/50 outline-none text-sm transition-colors"
             />
           </div>
           <div className="flex gap-2">
             {([
-              { v: "xp",    label: "XP Rank",    icon: <Zap className="w-3.5 h-3.5" /> },
-              { v: "honor", label: "Honor",       icon: <Medal className="w-3.5 h-3.5" /> },
-              { v: "coins", label: "Coins",       icon: <Coins className="w-3.5 h-3.5" /> },
+              { v: "xp",    label: t("citizens_sort_xp"),    icon: <Zap className="w-3.5 h-3.5" /> },
+              { v: "honor", label: t("citizens_sort_honor"), icon: <Medal className="w-3.5 h-3.5" /> },
+              { v: "coins", label: t("citizens_sort_coins"), icon: <Coins className="w-3.5 h-3.5" /> },
             ] as const).map(s => (
               <button key={s.v} onClick={() => setSort(s.v)}
                 className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl border text-sm font-bold transition-all ${
@@ -191,9 +196,9 @@ export default function CitizensPage() {
                         <div className={`w-full ${heights[podiumPos]} mt-3 rounded-t-xl flex flex-col items-center justify-end pb-3 border-t border-l border-r`}
                           style={{ background: `${c.rank.color}15`, borderColor: `${c.rank.color}30` }}>
                           <div className="text-xs font-black" style={{ color: c.rank.color }}>
-                            {sort === "honor" ? `${c.honorCount} honors` : sort === "coins" ? `${c.balance.toLocaleString()}` : `${c.xp.toLocaleString()} XP`}
+                             {sort === "honor" ? `${formatNumber(lang, c.honorCount)} ${st.citizens_honors ?? techT(lang, "citizensHonors")}` : sort === "coins" ? `${formatNumber(lang, c.balance)} ${st.coins}` : `${formatNumber(lang, c.xp)} XP`}
                           </div>
-                          <div className="text-[10px] text-muted-foreground">#1 {sort === "honor" ? "Honor" : sort === "coins" ? "Coins" : "XP"}</div>
+                          <div className="text-[10px] text-muted-foreground">#1 {sort === "honor" ? t("citizens_sort_honor") : sort === "coins" ? st.coins : "XP"}</div>
                         </div>
                       </motion.div>
                     );
@@ -234,16 +239,16 @@ export default function CitizensPage() {
                       </span>
                       {c.isMuted && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-900/30 border border-red-500/30 text-red-400">
-                          🔇 MUTED
+                           🔇 {st.muted}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                       <span className="flex items-center gap-1 text-primary">
-                        <Zap className="w-3 h-3" /> {c.xp.toLocaleString()} XP
+                         <Zap className="w-3 h-3" /> {formatNumber(lang, c.xp)} XP
                       </span>
                       <span className="flex items-center gap-1 text-yellow-400">
-                        <Coins className="w-3 h-3" /> {c.balance.toLocaleString()}
+                         <Coins className="w-3 h-3" /> {formatNumber(lang, c.balance)}
                       </span>
                       <span className="flex items-center gap-1" style={{ color: c.honorInfo.color }}>
                         🎖️ {c.honorCount}
@@ -259,7 +264,7 @@ export default function CitizensPage() {
                     <div className="shrink-0 flex items-center gap-1.5">
                       {/* رسالة */}
                       <button onClick={() => void openDM(c.username, c.id)}
-                        disabled={dmId === c.id} title="اكتب رسالة"
+                        disabled={dmId === c.id} title={st.dm} aria-label={st.dm}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80 disabled:opacity-40"
                         style={{ background: "hsl(var(--primary) / 0.08)", border: "1px solid hsl(var(--primary) / 0.19)", color: "hsl(var(--primary))" }}>
                         {dmId === c.id
@@ -267,20 +272,20 @@ export default function CitizensPage() {
                           : <MessageSquare className="w-3 h-3" />}
                       </button>
                       {/* صوتي */}
-                      <button onClick={() => call.startCall(c.username, false)} title="مكالمة صوتية"
+                      <button onClick={() => call.startCall(c.username, false)} title={st.voice_call} aria-label={st.voice_call}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80"
                         style={{ background: "#071a07", border: `1px solid ${GREEN}40`, color: GREEN }}>
                         <Phone className="w-3 h-3" />
                       </button>
                       {/* فيديو */}
-                      <button onClick={() => call.startCall(c.username, true)} title="مكالمة فيديو"
+                      <button onClick={() => call.startCall(c.username, true)} title={st.video_call} aria-label={st.video_call}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80"
                         style={{ background: "#07101a", border: "1px solid #09f4", color: "#09f" }}>
                         <Video className="w-3 h-3" />
                       </button>
                       {/* متابعة / إزالة */}
                       <button onClick={() => void toggleFollow(c.username, c.id)}
-                        disabled={addingId === c.id} title={followIds.has(c.id) ? "إلغاء المتابعة" : "إضافة صديق"}
+                        disabled={addingId === c.id} title={followIds.has(c.id) ? st.following : st.follow} aria-label={followIds.has(c.id) ? st.following : st.follow}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80 disabled:opacity-40"
                         style={{
                           background: followIds.has(c.id) ? "#130303" : "#0d1a0d",
@@ -301,6 +306,12 @@ export default function CitizensPage() {
                 </motion.div>
               ))}
             </div>
+            {filtered.length === 0 && (
+              <div className="py-16 text-center text-sm text-muted-foreground">
+                <Search className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                {techT(lang, "noCitizens")}
+              </div>
+            )}
           </>
         )}
       </div>

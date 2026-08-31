@@ -24,7 +24,7 @@ vi.mock("framer-motion", () => ({
 }));
 
 describe("Register", () => {
-  it("shows the bilingual account-recovery limit before citizens create an account", () => {
+  it("shows the default Arabic account-recovery policy before account creation", () => {
     render(<Register />);
 
     const notice = screen.getByTestId("notice-password-recovery");
@@ -35,11 +35,7 @@ describe("Register", () => {
     expect(notice).toHaveTextContent(
       "لا يمكن تغييرها إلا من الإعدادات أثناء تسجيل الدخول",
     );
-    expect(notice).toHaveTextContent(
-      "il ne peut pas être récupéré par e-mail",
-    );
-    expect(notice).toHaveTextContent(
-      "ne peut être modifié que depuis les paramètres, une fois connecté",
-    );
+    expect(notice).not.toHaveTextContent("register.recovery");
+    expect(notice).not.toHaveTextContent("recovery");
   });
 });

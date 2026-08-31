@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'wouter';
+import { useLanguage } from '@/globalstar/contexts/language-context';
+import { earningsFigureCopy } from '@/globalstar/i18n/earnings-figure-copy';
 import { Navbar } from '@/globalstar/components/navbar';
 import { NewsTicker } from '@/globalstar/components/news-ticker';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,22 +33,19 @@ interface Withdrawal {
   paid_at?: string;
 }
 
-const CATEGORY_META: Record<string, { label: string; icon: string }> = {
-  sport:     { label: 'الرياضة',  icon: '⚽' },
-  press:     { label: 'الصحافة', icon: '📰' },
-  art:       { label: 'الفن',    icon: '🎨' },
-  knowledge: { label: 'المعرفة', icon: '📚' },
+const CATEGORY_ICONS: Record<string, string> = {
+  sport: '⚽', press: '📰', art: '🎨', knowledge: '📚',
 };
 
-const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  pending:  { label: 'قيد المراجعة', color: '#FFD700', icon: <Hourglass className="w-3.5 h-3.5" /> },
-  approved: { label: 'موافق عليه',   color: '#4ade80', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
-  paid:     { label: 'تم الدفع',     color: '#4ade80', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
-  rejected: { label: 'مرفوض',        color: '#f87171', icon: <XCircle className="w-3.5 h-3.5" /> },
+const STATUS_META: Record<string, { color: string; icon: React.ReactNode }> = {
+  pending:  { color: '#FFD700', icon: <Hourglass className="w-3.5 h-3.5" /> },
+  approved: { color: '#4ade80', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+  paid:     { color: '#4ade80', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
+  rejected: { color: '#f87171', icon: <XCircle className="w-3.5 h-3.5" /> },
 };
 
 // Animated counter
-function AnimatedNumber({ value, decimals = 2 }: { value: number; decimals?: number }) {
+function AnimatedNumber({ value, locale, decimals = 2 }: { value: number; locale: string; decimals?: number }) {
   const [display, setDisplay] = useState(value);
   const prev = useRef(value);
 
@@ -66,10 +65,15 @@ function AnimatedNumber({ value, decimals = 2 }: { value: number; decimals?: num
     requestAnimationFrame(animate);
   }, [value]);
 
-  return <>{display.toFixed(decimals)}</>;
+  return <>{new Intl.NumberFormat(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(display)}</>;
 }
 
 export default function EarningsPage() {
+  const { language } = useLanguage();
+  const copy = earningsFigureCopy(language);
+  const c = copy.earnings;
+  const locale = copy.locale;
+  const direction = language === 'ar' ? 'rtl' : 'ltr';
   const [name, setName] = useState(() => localStorage.getItem('empire_citizen_name') ?? '');
   const [searched, setSearched] = useState(false);
   const [uploads, setUploads] = useState<EarningsUpload[]>([]);
@@ -82,11 +86,13 @@ export default function EarningsPage() {
   const [withdrawStatus, setWithdrawStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [withdrawError, setWithdrawError] = useState('');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   const fetchAll = useCallback(async (_n?: string, silent = false) => {
     // Identity now comes from the login session — no name needed.
     if (!silent) setLoading(true);
+    if (!silent) setLoadError(false);
     try {
       const [earnRes, wdRes] = await Promise.all([
         fetch(`${BASE}/api/gs/earnings`, { credentials: 'include' }),
@@ -102,8 +108,10 @@ export default function EarningsPage() {
         if (earnData.uploaderName) setName(earnData.uploaderName);
         setSearched(true);
         setLastRefresh(new Date());
+      } else {
+        setLoadError(true);
       }
-    } catch {}
+    } catch { setLoadError(true); }
     if (!silent) setLoading(false);
   }, [BASE]);
 
@@ -131,9 +139,9 @@ export default function EarningsPage() {
 
   const handleWithdraw = async () => {
     const amount = parseFloat(withdrawAmount);
-    if (isNaN(amount) || amount <= 0) { setWithdrawError('أدخل مبلغاً صحيحاً'); return; }
-    if (amount > availableBalance) { setWithdrawError('الرصيد غير كافٍ'); return; }
-    if (amount < 10) { setWithdrawError('الحد الأدنى للسحب 10 عملات'); return; }
+    if (isNaN(amount) || amount <= 0) { setWithdrawError(c.invalidAmount); return; }
+    if (amount > availableBalance) { setWithdrawError(c.insufficient); return; }
+    if (amount < 10) { setWithdrawError(c.belowMinimum); return; }
 
     setWithdrawStatus('loading');
     setWithdrawError('');
@@ -144,28 +152,23 @@ export default function EarningsPage() {
         credentials: 'include',
         body: JSON.stringify({ amountCoins: amount }),
       });
-      const payload: unknown = await r.json();
-      const apiError =
-        typeof payload === 'object' && payload !== null && 'error' in payload &&
-        typeof payload.error === 'string'
-          ? payload.error
-          : undefined;
-      if (!r.ok) { setWithdrawError(apiError ?? 'فشل الطلب'); setWithdrawStatus('error'); return; }
+      await r.json();
+      if (!r.ok) { setWithdrawError(c.requestFailed); setWithdrawStatus('error'); return; }
       setWithdrawStatus('success');
       setWithdrawAmount('');
       fetchAll(name, true);
       setTimeout(() => setWithdrawStatus('idle'), 3000);
     } catch {
-      setWithdrawError('حدث خطأ في الاتصال');
+      setWithdrawError(c.connectionError);
       setWithdrawStatus('error');
     }
   };
 
-  const madValue = totalEarnings.toFixed(2);
-  const usdValue = (totalEarnings * 0.10).toFixed(2);
+  const number = (value: number, digits = 2) =>
+    new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 
   return (
-    <div className="min-h-[100dvh]" style={{ background: '#0a0800' }}>
+    <div className="min-h-[100dvh]" dir={direction} style={{ background: '#0a0800' }}>
       <Navbar />
       <NewsTicker />
 
@@ -175,7 +178,7 @@ export default function EarningsPage() {
         <Link href="/ranking">
           <button className="flex items-center gap-2 text-sm mb-6 transition-colors hover:opacity-80"
             style={{ color: 'rgba(255,215,0,0.6)' }}>
-            <ArrowLeft className="w-4 h-4" /> العودة إلى التصنيفات
+            <ArrowLeft className={`w-4 h-4 ${direction === 'rtl' ? 'rotate-180' : ''}`} /> {c.back}
           </button>
         </Link>
 
@@ -185,26 +188,27 @@ export default function EarningsPage() {
           style={{ background: 'linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,140,0,0.05))', border: '1.5px solid rgba(255,215,0,0.4)' }}>
           <div className="p-6 md:p-8">
             <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-3" dir="rtl">
+              <div className="flex items-center gap-3">
                 <Coins className="w-9 h-9" style={{ color: '#FFD700' }} />
                 <div>
-                  <h1 className="text-3xl font-black text-white">أرباحي</h1>
+                  <h1 className="text-3xl font-black text-white">{c.title}</h1>
                   <p className="text-xs mt-0.5" style={{ color: 'rgba(255,215,0,0.5)' }}>
-                    لوحة الأرباح · EMPIRE ETERNAL
+                    {c.subtitle}
                   </p>
                 </div>
               </div>
               {lastRefresh && (
                 <button onClick={() => fetchAll(name, true)}
+                  aria-label={c.refresh}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-70"
                   style={{ border: '1px solid rgba(255,215,0,0.2)', color: 'rgba(255,215,0,0.5)' }}>
                   <RefreshCw className="w-3 h-3" />
-                  {lastRefresh.toLocaleTimeString('ar')}
+                  {c.refreshAt(lastRefresh.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }))}
                 </button>
               )}
             </div>
-            <p className="text-xs mt-2 text-right" dir="rtl" style={{ color: 'rgba(255,215,0,0.45)' }}>
-              كل 100 مشاهدة = 1 عملة ذهبية · 1 عملة = 1 درهم مغربي ≈ 0.10 دولار
+            <p className="text-xs mt-2 text-start" style={{ color: 'rgba(255,215,0,0.45)' }}>
+              {c.rateSummary}
             </p>
           </div>
         </motion.div>
@@ -212,23 +216,26 @@ export default function EarningsPage() {
         {/* ── SEARCH ────────────────────────────────────────────────────────── */}
         <div className="rounded-2xl p-5 mb-6"
           style={{ background: 'rgba(255,215,0,0.05)', border: '1px solid rgba(255,215,0,0.2)' }}>
-          <p className="text-sm font-bold mb-3 text-right" dir="rtl" style={{ color: 'rgba(255,215,0,0.7)' }}>
-            أدخل اسمك في الإمبراطورية
+          <p className="text-sm font-bold mb-3 text-start" style={{ color: 'rgba(255,215,0,0.7)' }}>
+            {c.searchLabel}
           </p>
           <div className="flex gap-2">
             <button onClick={handleSearch} disabled={loading || !name.trim()}
               className="px-5 py-3 rounded-xl font-black text-black transition-all hover:opacity-90 disabled:opacity-40 shrink-0 flex items-center gap-2"
               style={{ background: '#FFD700' }}>
-              <Search className="w-4 h-4" /> بحث
+              <Search className="w-4 h-4" /> {c.search}
             </button>
             <input value={name} onChange={e => setName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="مثال: El Qaisy Abdelmalik"
-              className="flex-1 rounded-xl px-4 py-3 text-sm text-white text-right placeholder:text-white/30 outline-none"
-              dir="rtl"
+              placeholder={c.searchPlaceholder}
+              aria-label={c.searchLabel}
+              className="flex-1 rounded-xl px-4 py-3 text-sm text-white text-start placeholder:text-white/30 outline-none"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,215,0,0.25)' }} />
           </div>
         </div>
+
+        {loading && <p className="text-center text-sm mb-6 text-white/50" role="status">{c.loading}</p>}
+        {loadError && <div className="text-center mb-6 text-red-400" role="alert">{c.loadError}</div>}
 
         <AnimatePresence>
         {searched && (
@@ -241,20 +248,20 @@ export default function EarningsPage() {
                 style={{ background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.08))', border: '1.5px solid rgba(255,215,0,0.4)' }}>
                 <div className="flex items-center gap-2 mb-2">
                   <Coins className="w-5 h-5" style={{ color: '#FFD700' }} />
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,215,0,0.6)' }}>إجمالي الأرباح</span>
+                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,215,0,0.6)' }}>{c.totalEarnings}</span>
                 </div>
                 <div className="text-4xl font-black" style={{ color: '#FFD700', fontFamily: 'monospace' }}>
-                  <AnimatedNumber value={totalEarnings} />
+                  <AnimatedNumber value={totalEarnings} locale={locale} />
                 </div>
                 <div className="flex items-center gap-3 mt-2">
-                  <span className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>عملة ذهبية</span>
+                  <span className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>{c.coin}</span>
                   <div className="flex items-center gap-1 text-xs" style={{ color: 'rgba(255,215,0,0.4)' }}>
                     <Banknote className="w-3 h-3" />
-                    <AnimatedNumber value={parseFloat(madValue)} /> MAD
+                    <AnimatedNumber value={totalEarnings} locale={locale} /> MAD
                   </div>
                   <div className="flex items-center gap-1 text-xs" style={{ color: 'rgba(255,215,0,0.4)' }}>
                     <DollarSign className="w-3 h-3" />
-                    <AnimatedNumber value={parseFloat(usdValue)} /> USD
+                    <AnimatedNumber value={totalEarnings * 0.10} locale={locale} /> USD
                   </div>
                 </div>
               </div>
@@ -264,39 +271,39 @@ export default function EarningsPage() {
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,215,0,0.15)' }}>
                 <Eye className="w-5 h-5 mb-2" style={{ color: 'rgba(255,215,0,0.6)' }} />
                 <div className="text-2xl font-black text-white font-mono">
-                  <AnimatedNumber value={totalViews} decimals={0} />
+                  <AnimatedNumber value={totalViews} locale={locale} decimals={0} />
                 </div>
-                <div className="text-xs mt-1" style={{ color: 'rgba(255,215,0,0.4)' }}>مشاهدة</div>
+                <div className="text-xs mt-1" style={{ color: 'rgba(255,215,0,0.4)' }}>{c.views}</div>
               </div>
 
               {/* Uploads */}
               <div className="rounded-2xl p-4"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,215,0,0.15)' }}>
                 <Upload className="w-5 h-5 mb-2" style={{ color: 'rgba(255,215,0,0.6)' }} />
-                <div className="text-2xl font-black text-white">{uploads.length}</div>
-                <div className="text-xs mt-1" style={{ color: 'rgba(255,215,0,0.4)' }}>محتوى مرفوع</div>
+                <div className="text-2xl font-black text-white">{new Intl.NumberFormat(locale).format(uploads.length)}</div>
+                <div className="text-xs mt-1" style={{ color: 'rgba(255,215,0,0.4)' }}>{c.uploads}</div>
               </div>
             </div>
 
             {/* Available balance banner */}
             <div className="rounded-xl px-5 py-3 mb-6 flex items-center justify-between"
               style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)' }}>
-              <div className="flex items-center gap-2" dir="rtl">
+              <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                 <span className="text-sm font-bold text-green-400">
-                  الرصيد المتاح للسحب: {availableBalance.toFixed(2)} عملة
+                  {c.availableCoins(number(availableBalance))}
                 </span>
               </div>
               <span className="text-xs" style={{ color: 'rgba(74,222,128,0.6)' }}>
-                ≈ {(availableBalance).toFixed(2)} MAD · {(availableBalance * 0.10).toFixed(2)} USD
+                ≈ {number(availableBalance)} MAD · {number(availableBalance * 0.10)} USD
               </span>
             </div>
 
             {/* ── TABS ──────────────────────────────────────────────────────── */}
             <div className="flex gap-2 mb-5">
               {[
-                { key: 'content',  label: 'محتواي', icon: <Video className="w-4 h-4" /> },
-                { key: 'withdraw', label: 'السحب',   icon: <ArrowDownCircle className="w-4 h-4" /> },
+                { key: 'content', label: c.contentTab, icon: <Video className="w-4 h-4" /> },
+                { key: 'withdraw', label: c.withdrawTab, icon: <ArrowDownCircle className="w-4 h-4" /> },
               ].map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm transition-all"
@@ -313,8 +320,8 @@ export default function EarningsPage() {
               uploads.length === 0 ? (
                 <div className="text-center py-12">
                   <TrendingUp className="w-12 h-12 mx-auto mb-3" style={{ color: 'rgba(255,215,0,0.15)' }} />
-                  <p className="text-sm" style={{ color: 'rgba(255,215,0,0.4)' }}>لا يوجد محتوى برفع هذا الاسم بعد</p>
-                  <p className="text-xs mt-1" style={{ color: 'rgba(255,215,0,0.25)' }}>ارفع محتواك من صفحة التصنيفات</p>
+                  <p className="text-sm" style={{ color: 'rgba(255,215,0,0.4)' }}>{c.noContent}</p>
+                  <p className="text-xs mt-1" style={{ color: 'rgba(255,215,0,0.25)' }}>{c.uploadHint}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -333,11 +340,11 @@ export default function EarningsPage() {
                               ? <Video className="w-5 h-5" style={{ color: '#FFD700' }} />
                               : <Music className="w-5 h-5" style={{ color: '#FFD700' }} />}
                           </div>
-                          <div className="flex-1 min-w-0" dir="rtl">
+                          <div className="flex-1 min-w-0">
                             <p className="font-black text-sm text-white truncate">{u.title}</p>
                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                               <span className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>
-                                {CATEGORY_META[u.category]?.icon} {CATEGORY_META[u.category]?.label}
+                                {CATEGORY_ICONS[u.category]} {c.categories[u.category] ?? u.category}
                               </span>
                               {u.figure_tag && (
                                 <>
@@ -349,19 +356,19 @@ export default function EarningsPage() {
                               )}
                               <span style={{ color: 'rgba(255,215,0,0.2)' }}>·</span>
                               <span className="text-xs" style={{ color: 'rgba(255,215,0,0.35)' }}>
-                                {new Date(u.created_at).toLocaleDateString('ar')}
+                                {new Date(u.created_at).toLocaleDateString(locale)}
                               </span>
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
+                          <div className="text-end shrink-0">
                             <div className="flex items-center gap-1 justify-end mb-1">
                               <span className="text-base font-black" style={{ color: '#FFD700', fontFamily: 'monospace' }}>
-                                {parseFloat(String(u.earnings)).toFixed(2)}
+                                {number(parseFloat(String(u.earnings)))}
                               </span>
                               <Coins className="w-4 h-4" style={{ color: '#FFD700' }} />
                             </div>
                             <div className="flex items-center gap-1 justify-end">
-                              <span className="text-xs font-mono text-white">{u.views.toLocaleString()}</span>
+                              <span className="text-xs font-mono text-white">{u.views.toLocaleString(locale)}</span>
                               <Eye className="w-3 h-3" style={{ color: 'rgba(255,215,0,0.5)' }} />
                             </div>
                           </div>
@@ -387,12 +394,12 @@ export default function EarningsPage() {
                 {/* Rates info */}
                 <div className="rounded-2xl p-4"
                   style={{ background: 'rgba(255,215,0,0.05)', border: '1px solid rgba(255,215,0,0.2)' }}>
-                  <p className="font-black text-sm text-white mb-3 text-right" dir="rtl">معدلات التحويل</p>
-                  <div className="grid grid-cols-3 gap-3" dir="rtl">
+                  <p className="font-black text-sm text-white mb-3 text-start">{c.conversion}</p>
+                  <div className="grid grid-cols-3 gap-3">
                     {[
-                      { icon: <Coins className="w-4 h-4" style={{ color: '#FFD700' }} />, from: '1 عملة', to: '= 1 درهم مغربي', color: '#FFD700' },
-                      { icon: <DollarSign className="w-4 h-4 text-green-400" />, from: '1 عملة', to: '≈ 0.10 دولار', color: '#4ade80' },
-                      { icon: <Clock className="w-4 h-4 text-blue-400" />, from: 'حد أدنى', to: '10 عملات', color: '#60a5fa' },
+                      { icon: <Coins className="w-4 h-4" style={{ color: '#FFD700' }} />, from: c.oneCoin, to: c.oneMad, color: '#FFD700' },
+                      { icon: <DollarSign className="w-4 h-4 text-green-400" />, from: c.oneCoin, to: c.tenthUsd, color: '#4ade80' },
+                      { icon: <Clock className="w-4 h-4 text-blue-400" />, from: c.minimum, to: c.tenCoins, color: '#60a5fa' },
                     ].map((rate, i) => (
                       <div key={i} className="rounded-xl p-3 text-center"
                         style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,215,0,0.1)' }}>
@@ -407,35 +414,37 @@ export default function EarningsPage() {
                 {/* Withdrawal form */}
                 <div className="rounded-2xl p-5"
                   style={{ background: 'rgba(255,215,0,0.04)', border: '1.5px solid rgba(255,215,0,0.25)' }}>
-                  <p className="font-black text-white mb-1 text-right" dir="rtl">طلب سحب</p>
-                  <p className="text-xs mb-4 text-right" dir="rtl" style={{ color: 'rgba(255,215,0,0.5)' }}>
-                    الرصيد المتاح: <span style={{ color: '#FFD700', fontWeight: 900 }}>{availableBalance.toFixed(2)}</span> عملة
+                  <p className="font-black text-white mb-1 text-start">{c.request}</p>
+                  <p className="text-xs mb-4 text-start" style={{ color: 'rgba(255,215,0,0.5)' }}>
+                    {c.availableShort}: <span style={{ color: '#FFD700', fontWeight: 900 }}>{number(availableBalance)}</span> {c.coin}
                   </p>
 
-                  <div className="flex gap-2 mb-3" dir="rtl">
+                  <div className="flex gap-2 mb-3">
                     <input
                       value={withdrawAmount}
                       onChange={e => setWithdrawAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder="أدخل المبلغ..."
-                      className="flex-1 rounded-xl px-4 py-3 text-right text-sm text-white placeholder:text-white/30 outline-none"
+                      placeholder={c.amountPlaceholder}
+                      aria-label={c.amountPlaceholder}
+                      inputMode="decimal"
+                      className="flex-1 rounded-xl px-4 py-3 text-start text-sm text-white placeholder:text-white/30 outline-none"
                       style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,215,0,0.3)' }}
                     />
                     <button
                       onClick={() => setWithdrawAmount(availableBalance.toFixed(2))}
                       className="px-3 py-2 rounded-xl text-xs font-bold transition-all hover:opacity-80"
                       style={{ border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700', background: 'rgba(255,215,0,0.08)' }}>
-                      الكل
+                      {c.all}
                     </button>
                   </div>
 
                   {withdrawAmount && !isNaN(parseFloat(withdrawAmount)) && parseFloat(withdrawAmount) > 0 && (
                     <div className="rounded-xl px-4 py-2.5 mb-3 flex items-center justify-between"
                       style={{ background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.15)' }}>
-                      <span className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>ستحصل على:</span>
-                      <div className="flex items-center gap-3 text-xs font-mono" dir="rtl">
-                        <span style={{ color: '#4ade80' }}>{(parseFloat(withdrawAmount) * 0.10).toFixed(2)} USD</span>
+                      <span className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>{c.receive}</span>
+                      <div className="flex items-center gap-3 text-xs font-mono">
+                        <span style={{ color: '#4ade80' }}>{number(parseFloat(withdrawAmount) * 0.10)} USD</span>
                         <span style={{ color: 'rgba(255,215,0,0.4)' }}>·</span>
-                        <span style={{ color: '#FFD700' }}>{parseFloat(withdrawAmount).toFixed(2)} MAD</span>
+                        <span style={{ color: '#FFD700' }}>{number(parseFloat(withdrawAmount))} MAD</span>
                       </div>
                     </div>
                   )}
@@ -445,7 +454,7 @@ export default function EarningsPage() {
                       style={{ background: 'rgba(255,50,50,0.1)', border: '1px solid rgba(255,50,50,0.3)' }}>
                       <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                       <p className="text-sm text-red-400">{withdrawError}</p>
-                      <button onClick={() => { setWithdrawError(''); setWithdrawStatus('idle'); }} className="ml-auto">
+                      <button aria-label={c.dismissError} onClick={() => { setWithdrawError(''); setWithdrawStatus('idle'); }} className="ms-auto">
                         <X className="w-3.5 h-3.5 text-red-400" />
                       </button>
                     </div>
@@ -455,7 +464,7 @@ export default function EarningsPage() {
                     <div className="flex items-center justify-center gap-2 py-3 rounded-xl"
                       style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)' }}>
                       <CheckCircle2 className="w-5 h-5 text-green-400" />
-                      <span className="font-bold text-green-400 text-sm">تم إرسال طلب السحب بنجاح!</span>
+                      <span className="font-bold text-green-400 text-sm">{c.sent}</span>
                     </div>
                   ) : (
                     <button onClick={handleWithdraw}
@@ -463,7 +472,7 @@ export default function EarningsPage() {
                       className="w-full rounded-xl py-3.5 font-black text-black text-base transition-all hover:opacity-90 disabled:opacity-40 flex items-center justify-center gap-2"
                       style={{ background: '#FFD700' }}>
                       <ArrowDownCircle className="w-5 h-5" />
-                      {withdrawStatus === 'loading' ? 'جارٍ الإرسال...' : 'طلب سحب'}
+                      {withdrawStatus === 'loading' ? c.sending : c.submit}
                     </button>
                   )}
                 </div>
@@ -471,8 +480,8 @@ export default function EarningsPage() {
                 {/* Withdrawal history */}
                 {withdrawals.length > 0 && (
                   <div>
-                    <p className="font-black text-sm text-white mb-3 text-right" dir="rtl">
-                      سجل الطلبات ({withdrawals.length})
+                    <p className="font-black text-sm text-white mb-3 text-start">
+                      {c.historyCount(new Intl.NumberFormat(locale).format(withdrawals.length))}
                     </p>
                     <div className="space-y-2">
                       {withdrawals.map((w, i) => {
@@ -486,29 +495,29 @@ export default function EarningsPage() {
                               style={{ background: `${meta.color}18`, border: `1px solid ${meta.color}40`, color: meta.color }}>
                               {meta.icon}
                             </div>
-                            <div className="flex-1 min-w-0" dir="rtl">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-black text-white font-mono">
-                                  {parseFloat(String(w.amount_coins)).toFixed(2)} عملة
+                                  {number(parseFloat(String(w.amount_coins)))} {c.coin}
                                 </span>
                                 <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>·</span>
                                 <span className="text-xs font-mono" style={{ color: 'rgba(255,215,0,0.5)' }}>
-                                  {parseFloat(String(w.amount_mad)).toFixed(2)} MAD
+                                  {number(parseFloat(String(w.amount_mad)))} MAD
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-xs font-bold" style={{ color: meta.color }}>
-                                  {meta.label}
+                                  {c.statuses[w.status] ?? w.status}
                                 </span>
                                 <span style={{ color: 'rgba(255,255,255,0.2)' }}>·</span>
                                 <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                                  {new Date(w.requested_at).toLocaleDateString('ar')}
+                                  {new Date(w.requested_at).toLocaleDateString(locale)}
                                 </span>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
+                            <div className="text-end shrink-0">
                               <span className="text-xs font-mono text-green-400">
-                                {parseFloat(String(w.amount_usd)).toFixed(2)} $
+                                {number(parseFloat(String(w.amount_usd)))} $
                               </span>
                             </div>
                           </motion.div>

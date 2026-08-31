@@ -5,6 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Coins, Zap, ArrowLeft, Trophy, X, Clock } from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import GameWarning from "@/components/GameWarning";
+import { useLang } from "@/contexts/LangContext";
+import { gameText } from "@/i18n/game-chrome";
+import { gameLocaleText, localeForLang } from "@/i18n/game-locale-copy";
+import { finalLabelText } from "@/i18n/final-labels-copy";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 const COLOR = "#a855f7";
@@ -41,6 +45,8 @@ const TIME_LIMIT = 60;
 export default function CryptoClashGame() {
   const [, setLocation] = useLocation();
   const { user, refreshUser } = useAuth();
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof gameText>[1], values?: Record<string, string | number>) => gameText(lang, key, values);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [deck, setDeck] = useState<CardState[]>([]);
@@ -128,16 +134,16 @@ export default function CryptoClashGame() {
         body: JSON.stringify({ win: won }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
+      if (!res.ok) throw new Error(data.error ?? gameLocaleText(lang, "failed"));
       setResult(data); // server records and returns the win we sent
       if (user) await refreshUser();
       try {
         const stored = JSON.parse(localStorage.getItem("gdna_recent_matches") ?? "[]");
-        const updated = [{ game: "Crypto Clash", win: data.win, coins: data.coinsEarned, xp: data.xpEarned, time: new Date().toISOString() }, ...stored].slice(0, 20);
+        const updated = [{ game: finalLabelText(lang, "cryptoClash"), win: data.win, coins: data.coinsEarned, xp: data.xpEarned, time: new Date().toISOString() }, ...stored].slice(0, 20);
         localStorage.setItem("gdna_recent_matches", JSON.stringify(updated));
       } catch { /* ignore */ }
     } catch (e: unknown) {
-      setError((e as Error).message ?? "Error");
+      setError((e as Error).message ?? t("recording"));
     } finally {
       setSubmitting(false);
     }
@@ -148,14 +154,14 @@ export default function CryptoClashGame() {
   const timerColor = timeLeft > 30 ? COLOR : timeLeft > 10 ? "#f97316" : "#ef4444";
 
   return (
-    <div className="min-h-screen bg-black flex flex-col" style={{ background: "radial-gradient(ellipse at top, #1a0030 0%, #000 60%)" }}>
+    <div className="min-h-screen bg-black flex flex-col" dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: "radial-gradient(ellipse at top, #1a0030 0%, #000 60%)" }}>
       {/* Back bar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-purple-500/10">
         <button onClick={() => setLocation("/games")} className="flex items-center gap-2 text-purple-400/60 hover:text-purple-400 transition-colors font-mono text-xs tracking-wider">
-          <ArrowLeft className="w-4 h-4" /> BACK TO ARENA
+          <ArrowLeft className="w-4 h-4" /> {t("backArena")}
         </button>
         <div className="flex-1" />
-        <div className="font-mono text-xs text-purple-400/40 tracking-[0.3em]">CRYPTO CLASH</div>
+        <div className="font-mono text-xs text-purple-400/40 tracking-[0.3em]">{finalLabelText(lang, "cryptoClash")}</div>
       </div>
 
       <div className="px-4 pt-4">
@@ -170,12 +176,12 @@ export default function CryptoClashGame() {
             <motion.div key="intro" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="text-center space-y-8 max-w-md w-full">
               <div className="space-y-3">
-                <div className="font-mono text-xs tracking-[0.5em] text-purple-400/40">MEMORY CARD DUEL</div>
+                <div className="font-mono text-xs tracking-[0.5em] text-purple-400/40">{t("memoryDuel")}</div>
                 <h1 className="font-black text-5xl tracking-widest uppercase" style={{ color: COLOR, textShadow: `0 0 40px ${COLOR}60` }}>
-                  CRYPTO<br/>CLASH
+                   {finalLabelText(lang, "cryptoClash")}
                 </h1>
                 <p className="text-white/40 font-mono text-sm leading-relaxed">
-                  Match all 8 crypto symbol pairs<br/>before the 60-second timer expires.
+                  {t("cryptoInstructions").split("|").map((line, i) => <span key={line}>{line}{i === 0 && <br />}</span>)}
                 </p>
               </div>
 
@@ -192,10 +198,10 @@ export default function CryptoClashGame() {
 
               <div className="space-y-2 font-mono text-xs text-white/30">
                 <div className="flex justify-between border-b border-white/5 pb-2">
-                  <span>All pairs matched</span><span className="text-green-400">WIN</span>
+                  <span>{t("allMatched")}</span><span className="text-green-400">{t("win")}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Time runs out</span><span className="text-red-400">DEFEAT</span>
+                  <span>{t("timeRunsOut")}</span><span className="text-red-400">{t("defeat")}</span>
                 </div>
               </div>
 
@@ -204,7 +210,7 @@ export default function CryptoClashGame() {
                 style={{ borderColor: COLOR, ["--tw-bg-opacity" as string]: "1" }}
                 onMouseEnter={e => (e.currentTarget.style.background = COLOR)}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                START DUEL
+                {t("startDuel")}
               </Button>
             </motion.div>
           )}
@@ -217,14 +223,14 @@ export default function CryptoClashGame() {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1.5 font-mono text-xs" style={{ color: timerColor }}>
                   <Clock className="w-3.5 h-3.5" />
-                  <span className="font-black text-lg w-8 text-right">{timeLeft}</span>
+                  <span className="font-black text-lg w-8 text-right">{timeLeft.toLocaleString(localeForLang[lang])}</span>
                 </div>
                 <div className="flex-1 h-1.5 bg-white/5 rounded overflow-hidden">
                   <motion.div className="h-full rounded" style={{ background: timerColor }}
                     animate={{ width: `${timerPct}%` }} transition={{ duration: 0.5 }} />
                 </div>
                 <div className="font-mono text-xs text-white/30">
-                  {matched}/8 <span className="text-white/20">pairs</span>
+                    {matched.toLocaleString(localeForLang[lang])}/{(8).toLocaleString(localeForLang[lang])} <span className="text-white/20">{t("pairs")}</span>
                 </div>
               </div>
 
@@ -234,6 +240,7 @@ export default function CryptoClashGame() {
                   <motion.button
                     key={card.id}
                     onClick={() => flipCard(idx)}
+                     aria-label={gameLocaleText(lang, "flipCard", { n: (idx + 1).toLocaleString(localeForLang[lang]) })}
                     whileTap={{ scale: 0.95 }}
                     className="aspect-square rounded border relative overflow-hidden"
                     style={{
@@ -264,7 +271,7 @@ export default function CryptoClashGame() {
                 ))}
               </div>
 
-              <div className="text-center font-mono text-xs text-white/20">Moves: {moves}</div>
+              <div className="text-center font-mono text-xs text-white/20">{t("moves")} {moves.toLocaleString(localeForLang[lang])}</div>
             </motion.div>
           )}
 
@@ -273,11 +280,11 @@ export default function CryptoClashGame() {
             <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               className="text-center space-y-6 max-w-sm w-full">
               {submitting ? (
-                <div className="font-mono text-purple-400 animate-pulse text-sm">RECORDING DUEL...</div>
+                <div className="font-mono text-purple-400 animate-pulse text-sm">{t("recording")}</div>
               ) : error ? (
                 <div className="space-y-4">
                   <div className="font-mono text-red-400 text-sm">{error}</div>
-                  <Button onClick={() => setLocation("/games")} variant="outline">BACK</Button>
+                  <Button onClick={() => setLocation("/games")} variant="outline">{t("back")}</Button>
                 </div>
               ) : result ? (
                 <>
@@ -289,12 +296,12 @@ export default function CryptoClashGame() {
                       }
                     </motion.div>
                     <div className="font-black text-4xl tracking-widest" style={{ color: result.win ? COLOR : "#ef4444" }}>
-                      {result.win ? "VICTORY" : "DEFEAT"}
+                      {result.win ? t("victory") : t("defeat")}
                     </div>
                     <div className="font-mono text-xs text-white/30">
                       {result.win
-                        ? `All 8 pairs matched in ${moves} moves!`
-                        : `${matched}/8 pairs matched — time expired`
+                        ? t("matchedWin", { moves: moves.toLocaleString(localeForLang[lang]) })
+                        : t("matchedLose", { matched: matched.toLocaleString(localeForLang[lang]) })
                       }
                     </div>
                   </div>
@@ -302,13 +309,13 @@ export default function CryptoClashGame() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="border p-4 text-center" style={{ borderColor: `${COLOR}40`, background: `${COLOR}08` }}>
                       <Coins className="w-5 h-5 mx-auto mb-1" style={{ color: COLOR }} />
-                      <div className="font-mono font-black text-2xl" style={{ color: COLOR }}>+{result.coinsEarned}</div>
-                      <div className="font-mono text-xs text-white/30">COINS</div>
+                       <div className="font-mono font-black text-2xl" style={{ color: COLOR }}>+{result.coinsEarned.toLocaleString(localeForLang[lang])}</div>
+                       <div className="font-mono text-xs text-white/30">{t("coins")}</div>
                     </div>
                     <div className="border border-purple-400/30 p-4 text-center bg-purple-400/5">
                       <Zap className="w-5 h-5 mx-auto mb-1 text-purple-400" />
-                      <div className="font-mono font-black text-2xl text-purple-400">+{result.xpEarned}</div>
-                      <div className="font-mono text-xs text-white/30">XP</div>
+                       <div className="font-mono font-black text-2xl text-purple-400">+{result.xpEarned.toLocaleString(localeForLang[lang])}</div>
+                      <div className="font-mono text-xs text-white/30">{finalLabelText(lang, "xp")}</div>
                     </div>
                   </div>
 
@@ -318,11 +325,11 @@ export default function CryptoClashGame() {
                       style={{ borderColor: COLOR }}
                       onMouseEnter={e => (e.currentTarget.style.background = COLOR)}
                       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                      ↺ DUEL AGAIN
+                       {t("duelAgain")}
                     </Button>
                     <Button onClick={() => setLocation("/games")} variant="outline"
                       className="flex-1 font-mono border-white/20 text-white/50 hover:border-white/40">
-                      BACK →
+                       {t("back")} →
                     </Button>
                   </div>
                 </>

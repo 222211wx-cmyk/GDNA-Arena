@@ -6,6 +6,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLang } from "@/contexts/LangContext";
+import { contentCopy } from "@/i18n/content-discovery-copy";
+import { finalLabelText } from "@/i18n/final-labels-copy";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface SmartModule {
@@ -110,6 +113,8 @@ if (false) {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 function DiscardSmartPage() {
   const { user } = useAuth();
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
   const [, nav] = useLocation();
 
   const [status, setStatus]   = useState<SmartData | null>(null);
@@ -152,9 +157,9 @@ function DiscardSmartPage() {
 
   if (!user) {
     return (
-      <div style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, background: "#000" }}>
+      <div dir={lang === "ar" ? "rtl" : "ltr"} style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, background: "#000" }}>
         <div style={{ fontSize: 64 }}>🧠</div>
-        <h2 style={{ color: "#eab308", fontWeight: 900, fontSize: 24, margin: 0 }}>GDN-SMART SYSTEM</h2>
+        <h2 style={{ color: "#eab308", fontWeight: 900, fontSize: 24, margin: 0 }}>GDN-SMART {finalLabelText(lang, "system")}</h2>
         <p style={{ color: "#aaa", margin: 0 }}>سجّل دخولك للوصول إلى نظامك الذكي الشخصي</p>
         <button onClick={() => nav("/login")} style={{ background: "#eab308", color: "#000", border: "none", borderRadius: 10, padding: "12px 32px", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
           تسجيل الدخول
@@ -167,7 +172,7 @@ function DiscardSmartPage() {
   const ai   = analysis?.analysis;
 
   return (
-    <div style={{ background: "#000", minHeight: "100vh", padding: "0 0 60px" }}>
+    <div dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: "#000", minHeight: "100vh", padding: "0 0 60px" }}>
 
       {/* ── Header bar ── */}
       <div style={{ background: "linear-gradient(135deg, #0a0a0a 0%, #111 100%)", borderBottom: "1px solid #eab30820", padding: "28px 20px 20px" }}>
@@ -193,7 +198,7 @@ function DiscardSmartPage() {
                 </motion.span>
               </div>
               <p style={{ margin: "4px 0 0", color: "#888", fontSize: 13 }}>
-                Système Intelligent Arena Qaisypro — Analyse temps-réel · Recommandations personnalisées
+                {finalLabelText(lang, "smartTagline")}
               </p>
             </div>
 
@@ -201,7 +206,7 @@ function DiscardSmartPage() {
             {data && (
               <div style={{ textAlign: "center", flexShrink: 0 }}>
                 <ScoreRing score={data.overallScore} size={72} />
-                <div style={{ color: "#888", fontSize: 10, marginTop: 2 }}>SCORE GLOBAL</div>
+                <div style={{ color: "#888", fontSize: 10, marginTop: 2 }}>{t("overallScore")}</div>
               </div>
             )}
           </div>
@@ -454,7 +459,7 @@ function DiscardSmartPage() {
                           <div style={{ color: "#fff", fontWeight: 800, fontSize: 15, direction: "rtl", textAlign: "right", marginBottom: 6 }}>{rec.title}</div>
                           <div style={{ color: "#aaa", fontSize: 12, direction: "rtl", textAlign: "right", marginBottom: 10, lineHeight: 1.5 }}>{rec.action}</div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ color: "#ef4444", fontSize: 10, fontWeight: 800 }}>HAUTE PRIORITÉ</span>
+                            <span style={{ color: "#ef4444", fontSize: 10, fontWeight: 800 }}>{t("highPriority")}</span>
                             <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 12 }}>{rec.reward}</span>
                           </div>
                         </motion.div>
@@ -467,7 +472,7 @@ function DiscardSmartPage() {
               <div style={{ textAlign: "center", padding: 60, color: "#888" }}>
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                   style={{ width: 40, height: 40, border: "3px solid #eab30820", borderTopColor: "#eab308", borderRadius: "50%", margin: "0 auto 12px" }} />
-                <p style={{ direction: "rtl" }}>AI يولّد مهامك اليومية…</p>
+                <p style={{ direction: "rtl" }}>{t("generatingMissions")}</p>
               </div>
             ) : (
               <div style={{ textAlign: "center", padding: 60 }}>
@@ -497,6 +502,8 @@ function DiscardSmartPage() {
 }
 export default function SmartPage() {
   const { user } = useAuth();
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
   const [, nav] = useLocation();
 
   const [status, setStatus]   = useState<SmartData | null>(null);
@@ -539,12 +546,12 @@ export default function SmartPage() {
 
   if (!user) {
     return (
-      <div style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, background: "hsl(var(--background))" }}>
+      <div dir={lang === "ar" ? "rtl" : "ltr"} style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, background: "hsl(var(--background))" }}>
         <div style={{ fontSize: 64 }}>🧠</div>
-        <h2 style={{ color: "hsl(var(--primary))", fontWeight: 900, fontSize: 24, margin: 0 }}>GDN-SMART SYSTEM</h2>
-        <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>سجّل دخولك للوصول إلى نظامك الذكي الشخصي</p>
+        <h2 style={{ color: "hsl(var(--primary))", fontWeight: 900, fontSize: 24, margin: 0 }}>GDN-SMART {finalLabelText(lang, "system")}</h2>
+        <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>{t("fortressLogin")}</p>
         <button onClick={() => nav("/login")} style={{ background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", border: "none", borderRadius: 10, padding: "12px 32px", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
-          تسجيل الدخول
+          {t("signIn")}
         </button>
       </div>
     );
@@ -554,7 +561,7 @@ export default function SmartPage() {
   const ai   = analysis?.analysis;
 
   return (
-    <div style={{ background: "hsl(var(--background))", minHeight: "100vh", padding: "0 0 60px" }}>
+    <div dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: "hsl(var(--background))", minHeight: "100vh", padding: "0 0 60px" }}>
 
       {/* ── Header bar ── */}
       <div style={{ background: "linear-gradient(135deg, #0a0a0a 0%, #111 100%)", borderBottom: "1px solid hsl(var(--primary) / 0.13)", padding: "28px 20px 20px" }}>
@@ -580,7 +587,7 @@ export default function SmartPage() {
                 </motion.span>
               </div>
               <p style={{ margin: "4px 0 0", color: "hsl(var(--muted-foreground))", fontSize: 13 }}>
-                Système Intelligent GDNA Arena — Analyse temps-réel · Recommandations personnalisées
+                {finalLabelText(lang, "smartTagline")}
               </p>
             </div>
 
@@ -588,7 +595,7 @@ export default function SmartPage() {
             {data && (
               <div style={{ textAlign: "center", flexShrink: 0 }}>
                 <ScoreRing score={data.overallScore} size={72} />
-                <div style={{ color: "hsl(var(--muted-foreground))", fontSize: 10, marginTop: 2 }}>SCORE GLOBAL</div>
+                <div style={{ color: "hsl(var(--muted-foreground))", fontSize: 10, marginTop: 2 }}>{t("overallScore")}</div>
               </div>
             )}
           </div>
@@ -841,7 +848,7 @@ export default function SmartPage() {
                           <div style={{ color: "hsl(var(--foreground))", fontWeight: 800, fontSize: 15, direction: "rtl", textAlign: "right", marginBottom: 6 }}>{rec.title}</div>
                           <div style={{ color: "hsl(var(--muted-foreground))", fontSize: 12, direction: "rtl", textAlign: "right", marginBottom: 10, lineHeight: 1.5 }}>{rec.action}</div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ color: "hsl(var(--destructive))", fontSize: 10, fontWeight: 800 }}>HAUTE PRIORITÉ</span>
+                            <span style={{ color: "hsl(var(--destructive))", fontSize: 10, fontWeight: 800 }}>{t("highPriority")}</span>
                             <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 12 }}>{rec.reward}</span>
                           </div>
                         </motion.div>
@@ -854,7 +861,7 @@ export default function SmartPage() {
               <div style={{ textAlign: "center", padding: 60, color: "hsl(var(--muted-foreground))" }}>
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                   style={{ width: 40, height: 40, border: "3px solid hsl(var(--primary) / 0.13)", borderTopColor: "hsl(var(--primary))", borderRadius: "50%", margin: "0 auto 12px" }} />
-                <p style={{ direction: "rtl" }}>AI يولّد مهامك اليومية…</p>
+                <p style={{ direction: "rtl" }}>{t("generatingMissions")}</p>
               </div>
             ) : (
               <div style={{ textAlign: "center", padding: 60 }}>

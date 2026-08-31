@@ -14,12 +14,13 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
+import { COMMUNITY_T } from "@/i18n/community-pages";
 
 type Panel = {
   id: string;
   path: string;
-  title: string;
-  desc: string;
+  title: keyof typeof COMMUNITY_T.en;
+  desc: keyof typeof COMMUNITY_T.en;
   icon: React.ReactNode;
 };
 
@@ -27,43 +28,37 @@ const PANELS: Panel[] = [
   {
     id: "dashboard",
     path: "/dashboard",
-    title: "Dashboard — لوحة الإحصاء",
-    desc: "Imperial dashboard and council reports.",
+    title: "dashboard", desc: "dashboard_desc",
     icon: <LayoutDashboard className="w-6 h-6" />,
   },
   {
     id: "missions",
     path: "/growth",
-    title: "Missions — المهام والمهمات",
-    desc: "Missions and task surfaces (Archon system).",
+    title: "missions", desc: "missions_desc",
     icon: <BrainCircuit className="w-6 h-6" />,
   },
   {
     id: "finance",
     path: "/admin/finance",
-    title: "Finance 70/30 — المالية",
-    desc: "70/30 revenue split and finance controls.",
+    title: "finance", desc: "finance_desc",
     icon: <Coins className="w-6 h-6" />,
   },
   {
     id: "revenue",
     path: "/admin/revenue",
-    title: "Revenue — الإيرادات",
-    desc: "Revenue ledger and admin accounting.",
+    title: "revenue", desc: "revenue_desc",
     icon: <Landmark className="w-6 h-6" />,
   },
   {
     id: "wallet",
     path: "/wallet",
-    title: "Wallet — المحفظة",
-    desc: "Treasury and wallet operations.",
+    title: "wallet", desc: "wallet_desc",
     icon: <Wallet className="w-6 h-6" />,
   },
   {
     id: "statistics",
     path: "/leaderboard",
-    title: "Statistics — الإحصائيات",
-    desc: "Leaderboards and platform statistics.",
+    title: "statistics", desc: "statistics_desc",
     icon: <BarChart3 className="w-6 h-6" />,
   },
 ];
@@ -71,6 +66,7 @@ const PANELS: Panel[] = [
 export default function AmisPage() {
   const { user, loading } = useAuth();
   const { lang } = useLang();
+  const ct = COMMUNITY_T[lang] ?? COMMUNITY_T.en;
   const dir = lang === "ar" ? "rtl" : "ltr";
   const [, setLocation] = useLocation();
 
@@ -105,16 +101,14 @@ export default function AmisPage() {
           <ShieldAlert className="w-8 h-8" />
         </span>
         <h1 className="text-2xl font-black uppercase tracking-wider text-foreground">
-          AMIS — لوحة التحكم
+           AMIS — {ct.admin_title}
         </h1>
         <p className="max-w-md text-sm text-muted-foreground">
-          هذا المدخل مخصص للإدارة فقط. سيتم تحويلك للاختيار الرئيسي.
-          <br />
-          Site control is restricted to administrators.
+           {ct.admin_only}
         </p>
         <Button onClick={() => setLocation("/login")} data-testid="button-back-choice">
           <Lock className="w-4 h-4" />
-          العودة للاختيار
+           {ct.back_choice}
         </Button>
       </div>
     );
@@ -134,10 +128,10 @@ export default function AmisPage() {
           </span>
           <div>
             <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-foreground">
-              AMIS <span className="text-primary text-lg align-middle">لوحة التحكم</span>
+               AMIS <span className="text-primary text-lg align-middle">{ct.admin_title}</span>
             </h1>
             <p className="text-sm text-muted-foreground">
-              Site control — {user.username}
+               {ct.admin_subtitle} — {user.username}
             </p>
           </div>
         </div>
@@ -160,8 +154,8 @@ export default function AmisPage() {
                     </span>
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
                   </div>
-                  <h2 className="mt-4 text-base font-bold text-foreground">{panel.title}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{panel.desc}</p>
+                   <h2 className="mt-4 text-base font-bold text-foreground">{ct[panel.title]}</h2>
+                   <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{ct[panel.desc]}</p>
                 </CardContent>
               </Card>
             </Link>

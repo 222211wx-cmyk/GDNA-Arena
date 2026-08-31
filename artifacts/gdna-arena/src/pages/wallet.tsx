@@ -12,28 +12,33 @@ import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 import { Separator } from "@workspace/gdna-ds/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
+import { useLang } from "@/contexts/LangContext";
+import { financeT } from "@/i18n/finance-copy";
+import { isArabic, techT } from "@/i18n/tech-surfaces-copy";
+import { formatSurfaceNumber, localeForSurfaceB } from "@/i18n/locale-surfaces-b-copy";
+import type { Lang } from "@/contexts/LangContext";
 import {
   useWalletData, useFinanceMode,
   type LedgerEntry, type Beneficiary,
 } from "@/hooks/use-finance";
 
 // ── Formatting ──────────────────────────────────────────────────────────────────
-function fmtMinor(minor: number, currency: string): string {
+function fmtMinor(minor: number, currency: string, lang: Lang): string {
   const code = (currency || "usd").toUpperCase();
   try {
-    return new Intl.NumberFormat("fr-MA", {
+    return new Intl.NumberFormat(localeForSurfaceB[lang], {
       style: "currency",
       currency: code,
       minimumFractionDigits: 2,
     }).format(minor / 100);
   } catch {
-    return `${(minor / 100).toFixed(2)} ${code}`;
+    return `${formatSurfaceNumber(lang, minor / 100, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`;
   }
 }
 
-function fmtTimestamp(ts: string): string {
+function fmtTimestamp(ts: string, lang: Lang): string {
   try {
-    return new Intl.DateTimeFormat("fr-MA", { dateStyle: "short", timeStyle: "short" }).format(new Date(ts));
+    return new Intl.DateTimeFormat(localeForSurfaceB[lang], { dateStyle: "short", timeStyle: "short" }).format(new Date(ts));
   } catch {
     return ts;
   }
@@ -42,6 +47,8 @@ function fmtTimestamp(ts: string): string {
 // ── Simulation banner ───────────────────────────────────────────────────────────
 function SimulationBanner() {
   const {simulation}=useFinanceMode();
+  const { lang } = useLang();
+  const t = (text: string) => financeT(lang, text);
   if (!simulation) return null;
   return (
     <div
@@ -50,10 +57,9 @@ function SimulationBanner() {
     >
       <FlaskConical className="w-4 h-4 text-primary shrink-0 mt-0.5" />
       <div className="text-sm">
-        <p className="font-medium text-foreground">Test / Simulation Mode</p>
+        <p className="font-medium text-foreground">{t("Test / Simulation Mode")}</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          All balances and payouts shown here are simulated. No real money is moved. Fiat
-          settlement runs against Stripe test accounts only.
+          {t("All balances and payouts shown here are simulated. No real money is moved. Fiat settlement runs against Stripe test accounts only.")}
         </p>
       </div>
     </div>
@@ -62,15 +68,18 @@ function SimulationBanner() {
 
 // ── Status badge ────────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
+  const { lang } = useLang();
   const map: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     completed: "default", settled: "default", paid: "default", simulated: "secondary",
     pending: "secondary", processing: "secondary", failed: "destructive", refunded: "outline",
   };
-  return <Badge variant={map[status.toLowerCase()] ?? "outline"}>{status}</Badge>;
+  return <Badge variant={map[status.toLowerCase()] ?? "outline"}>{financeT(lang, status)}</Badge>;
 }
 
 // ── Beneficiary capability card ─────────────────────────────────────────────────
 function BeneficiaryCard({ b }: { b: Beneficiary }) {
+  const { lang } = useLang();
+  const t = (text: string) => financeT(lang, text);
   const canPayout = b.canPayout && b.chargesEnabled && b.payoutsEnabled;
   return (
     <div className="rounded-lg border border-border/50 bg-card/30 p-4 space-y-3" data-testid={`card-beneficiary-${b.id}`}>
@@ -88,29 +97,29 @@ function BeneficiaryCard({ b }: { b: Beneficiary }) {
             ? <ShieldCheck className="w-4 h-4 text-green-500" />
             : <ShieldAlert className="w-4 h-4 text-orange-400" />}
           <span className={`text-xs font-medium ${canPayout ? "text-green-500" : "text-orange-400"}`}>
-            {canPayout ? "Active" : "Restricted"}
+            {t(canPayout ? "Active" : "Restricted")}
           </span>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <span className={`w-2 h-2 rounded-full ${b.chargesEnabled ? "bg-green-500" : "bg-muted-foreground/40"}`} />
-          Charges {b.chargesEnabled ? "enabled" : "disabled"}
+          {t("Charges")} {t(b.chargesEnabled ? "enabled" : "disabled")}
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <span className={`w-2 h-2 rounded-full ${b.payoutsEnabled ? "bg-green-500" : "bg-muted-foreground/40"}`} />
-          Payouts {b.payoutsEnabled ? "enabled" : "disabled"}
+          {t("Payouts")} {t(b.payoutsEnabled ? "enabled" : "disabled")}
         </div>
         {b.termsAccepted && (
           <div className="col-span-2 flex items-center gap-1.5 text-muted-foreground">
             <ShieldCheck className="w-3 h-3 text-green-500" />
-            Terms accepted{b.termsVersion ? ` (${b.termsVersion})` : ""}
+            {t("Terms accepted")}{b.termsVersion ? ` (${b.termsVersion})` : ""}
           </div>
         )}
       </div>
       {b.requirementsDue.length > 0 && (
         <div className="rounded-md bg-orange-500/10 border border-orange-500/30 px-3 py-2">
-          <p className="text-xs font-medium text-orange-400 mb-1">Requirements due</p>
+          <p className="text-xs font-medium text-orange-400 mb-1">{t("Requirements due")}</p>
           <ul className="space-y-0.5">
             {b.requirementsDue.map((r) => <li key={r} className="text-xs text-orange-300/80">{r}</li>)}
           </ul>
@@ -123,7 +132,7 @@ function BeneficiaryCard({ b }: { b: Beneficiary }) {
       )}
       <Link href="/finance/onboarding">
         <Button size="sm" variant="outline" className="w-full mt-1" data-testid={`button-manage-beneficiary-${b.id}`}>
-          {b.canPayout ? "Manage account" : "Complete setup"} <ChevronRight className="w-3 h-3 ml-1" />
+          {t(b.canPayout ? "Manage account" : "Complete setup")} <ChevronRight className="w-3 h-3 ml-1" />
         </Button>
       </Link>
     </div>
@@ -132,6 +141,8 @@ function BeneficiaryCard({ b }: { b: Beneficiary }) {
 
 // ── Ledger entry row ────────────────────────────────────────────────────────────
 function LedgerRow({ entry }: { entry: LedgerEntry }) {
+  const { lang } = useLang();
+  const t = (text: string) => financeT(lang, text);
   return (
     <div className="flex items-start gap-3 py-3 border-b border-border/30 last:border-0" data-testid={`row-ledger-entry-${entry.id}`}>
       <div className="w-8 h-8 rounded-full bg-background flex items-center justify-center border border-border/40 shrink-0 mt-0.5">
@@ -140,17 +151,17 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-medium text-foreground">{entry.type}</span>
-          {entry.immutable && <Badge variant="outline" className="text-[10px] px-1.5 py-0">immutable</Badge>}
+           {entry.immutable && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{techT(lang, "immutable")}</Badge>}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5 truncate" data-testid={`text-ledger-ref-${entry.id}`}>
-          Ref: {entry.id}
+          {t("Ref")}: {entry.id}
         </p>
         <p className="text-xs text-muted-foreground/60 mt-0.5 flex items-center gap-1">
-          <Clock className="w-3 h-3" />{fmtTimestamp(entry.createdAt)}
+           <Clock className="w-3 h-3" />{fmtTimestamp(entry.createdAt, lang)}
         </p>
       </div>
       <span className="font-semibold text-sm shrink-0 mt-0.5 tabular-nums" data-testid={`text-ledger-amount-${entry.id}`}>
-        {fmtMinor(entry.amountMinor, entry.currency)}
+         {fmtMinor(entry.amountMinor, entry.currency, lang)}
       </span>
     </div>
   );
@@ -172,8 +183,10 @@ function WalletSkeleton() {
 
 // ── Guest ───────────────────────────────────────────────────────────────────────
 function GuestWallet() {
+  const { lang } = useLang();
+  const t = (text: string) => financeT(lang, text);
   return (
-    <div className="min-h-[calc(100dvh-4rem)] flex items-center justify-center px-4">
+    <div dir={isArabic(lang) ? "rtl" : "ltr"} className="min-h-[calc(100dvh-4rem)] flex items-center justify-center px-4">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md w-full text-center">
         <Card className="bg-card/50 border-primary/20">
           <CardContent className="p-10 space-y-4">
@@ -181,21 +194,21 @@ function GuestWallet() {
               <Coins className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-foreground">Your Wallet</h2>
+              <h2 className="text-xl font-bold text-foreground">{t("wallet_yours")}</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Sign in to see your balance, fiat account, and transaction history.
+                {t("wallet_sign_in")}
               </p>
             </div>
             <div className="flex flex-col gap-2">
               <Link href="/login">
-                <Button className="w-full" data-testid="button-login-wallet">Log in to access wallet</Button>
+                <Button className="w-full" data-testid="button-login-wallet">{t("wallet_log_in")}</Button>
               </Link>
               <Link href="/register">
-                <Button variant="outline" className="w-full" data-testid="button-register-wallet">Create a free account</Button>
+                <Button variant="outline" className="w-full" data-testid="button-register-wallet">{t("Create a free account")}</Button>
               </Link>
             </div>
             <p className="text-xs text-muted-foreground/60 border-t border-border/30 pt-4">
-              Arena Qaisypro coins are virtual credits with no monetary value and cannot be exchanged for cash.
+              {t("wallet_blockchain_disclaimer")}
             </p>
           </CardContent>
         </Card>
@@ -208,6 +221,8 @@ function GuestWallet() {
 // Finance wallet retains the newer ledger, beneficiary, and simulation workflows.
 export default function Wallet() {
   const { user } = useAuth();
+  const { lang } = useLang();
+  const t = (text: string) => financeT(lang, text);
   const { isOnline } = useConnectivity();
   const { state, refetch } = useWalletData();
   const [activeTab, setActiveTab] = useState<"coins" | "fiat">("coins");
@@ -229,19 +244,19 @@ export default function Wallet() {
   const canAnyPayout = beneficiaries.some((b) => b.canPayout);
 
   return (
-    <div className="min-h-[calc(100dvh-4rem)] max-w-3xl mx-auto px-4 py-6 md:py-8 space-y-6">
+    <div dir={isArabic(lang) ? "rtl" : "ltr"} className="min-h-[calc(100dvh-4rem)] max-w-3xl mx-auto px-4 py-6 md:py-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Wallet</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Your coins and fiat account</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("wallet_title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("Your coins and fiat account")}</p>
         </div>
         <Button
           variant="ghost" size="sm" onClick={() => refetch()}
           disabled={!isOnline || isLoading} data-testid="button-refresh-wallet"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          <span className="sr-only">Refresh</span>
+          <span className="sr-only">{t("Refresh")}</span>
         </Button>
       </div>
 
@@ -250,7 +265,7 @@ export default function Wallet() {
       {!isOnline && (
         <div className="flex items-center gap-2 rounded-lg bg-orange-500/10 border border-orange-500/30 px-4 py-2.5 text-sm text-orange-400">
           <WifiOff className="w-4 h-4 shrink-0" />
-          You are offline. Wallet data may be stale and actions are disabled.
+          {t("You are offline. Wallet data may be stale and actions are disabled.")}
         </div>
       )}
 
@@ -258,7 +273,7 @@ export default function Wallet() {
         <div className="flex items-center gap-3 rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3">
           <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
           <p className="text-sm text-destructive flex-1">{(state as { status: "error"; error: string }).error}</p>
-          <Button size="sm" variant="outline" onClick={() => refetch()} data-testid="button-retry-wallet">Retry</Button>
+          <Button size="sm" variant="outline" onClick={() => refetch()} data-testid="button-retry-wallet">{t("Retry")}</Button>
         </div>
       )}
 
@@ -277,7 +292,7 @@ export default function Wallet() {
               }`}
               data-testid="tab-coins"
             >
-              <Coins className="w-4 h-4" /> Game Coins
+              <Coins className="w-4 h-4" /> {t("Game Coins")}
             </button>
             <button
               role="tab" aria-selected={activeTab === "fiat"} onClick={() => setActiveTab("fiat")}
@@ -288,7 +303,7 @@ export default function Wallet() {
               }`}
               data-testid="tab-fiat"
             >
-              <CircleDollarSign className="w-4 h-4" /> Fiat Account
+              <CircleDollarSign className="w-4 h-4" /> {t("Fiat Account")}
             </button>
           </div>
 
@@ -297,17 +312,17 @@ export default function Wallet() {
             <motion.div key="coins" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
               <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border/30 px-3 py-2 text-xs text-muted-foreground">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                Arena Qaisypro coins are virtual credits with no monetary value and cannot be redeemed for cash.
+                 {t("wallet_blockchain_disclaimer")}
               </div>
               <Card className="bg-card/50 border-primary/20">
                 <CardContent className="p-6 flex flex-col items-center text-center">
                   <Coins className="w-10 h-10 text-primary mb-3" />
-                  <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Coin Balance</p>
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">{t("wallet_balance")}</p>
                   <p className="text-4xl font-black text-primary neon-text-glow tabular-nums" data-testid="text-wallet-balance">
-                    {coinBalance.toLocaleString()}
+                     {formatSurfaceNumber(lang, coinBalance)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest">
-                    Coins — virtual, no cash value
+                     {t("wallet_coins")} — {t("wallet_blockchain_disclaimer")}
                   </p>
                 </CardContent>
               </Card>
@@ -321,18 +336,18 @@ export default function Wallet() {
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {[
-                      { label: "Available", value: fiat.available, color: "text-green-500", testId: "text-fiat-available" },
-                      { label: "Pending", value: fiat.pending, color: "text-orange-400", testId: "text-fiat-pending" },
-                      { label: "Reserved", value: fiat.reserved, color: "text-muted-foreground", testId: "text-fiat-reserved" },
-                      { label: "Paid Out", value: fiat.paid, color: "text-primary", testId: "text-fiat-paid" },
-                      { label: "Total Income", value: fiat.income, color: "text-green-500", testId: "text-fiat-income" },
-                      { label: "Total Expense", value: fiat.expense, color: "text-destructive", testId: "text-fiat-expense" },
+                       { label: t("Available"), value: fiat.available, color: "text-green-500", testId: "text-fiat-available" },
+                       { label: t("Pending"), value: fiat.pending, color: "text-orange-400", testId: "text-fiat-pending" },
+                       { label: t("Reserved"), value: fiat.reserved, color: "text-muted-foreground", testId: "text-fiat-reserved" },
+                       { label: t("Paid Out"), value: fiat.paid, color: "text-primary", testId: "text-fiat-paid" },
+                       { label: t("Total Income"), value: fiat.income, color: "text-green-500", testId: "text-fiat-income" },
+                       { label: t("Total Expense"), value: fiat.expense, color: "text-destructive", testId: "text-fiat-expense" },
                     ].map((item) => (
                       <Card key={item.label} className="bg-card/40 border-border/30">
                         <CardContent className="p-4">
                           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{item.label}</p>
                           <p className={`text-lg font-bold tabular-nums ${item.color}`} data-testid={item.testId}>
-                            {fmtMinor(item.value, fiat.currency)}
+                             {fmtMinor(item.value, fiat.currency, lang)}
                           </p>
                           <p className="text-xs text-muted-foreground/50 mt-0.5 uppercase">{fiat.currency}</p>
                         </CardContent>
@@ -343,13 +358,13 @@ export default function Wallet() {
                   {canAnyPayout && fiat.available > 0 && (
                     <div className="flex items-center justify-between rounded-lg bg-green-500/10 border border-green-500/30 px-4 py-3">
                       <div>
-                        <p className="text-sm font-medium text-green-400">Payout available (simulated)</p>
+                         <p className="text-sm font-medium text-green-400">{t("Payout available (simulated)")}</p>
                         <p className="text-xs text-green-400/70 mt-0.5">
-                          {fmtMinor(fiat.available, fiat.currency)} ready to transfer
+                            {fmtMinor(fiat.available, fiat.currency, lang)} {t("ready to transfer")}
                         </p>
                       </div>
                       <Link href="/finance/onboarding">
-                        <Button size="sm" data-testid="button-initiate-payout">Request payout</Button>
+                         <Button size="sm" data-testid="button-initiate-payout">{t("Request payout")}</Button>
                       </Link>
                     </div>
                   )}
@@ -357,14 +372,14 @@ export default function Wallet() {
                   <Card className="bg-card/40 border-border/30">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm uppercase tracking-widest text-muted-foreground">
-                        Immutable Ledger Entries
+                         {t("Immutable Ledger Entries")}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="px-4 pb-4">
                       {entries.length === 0 ? (
                         <div className="py-8 text-center">
                           <Banknote className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-                          <p className="text-sm text-muted-foreground">No ledger entries yet.</p>
+                           <p className="text-sm text-muted-foreground">{t("No ledger entries yet.")}</p>
                         </div>
                       ) : (
                         <div>{entries.map((entry) => <LedgerRow key={entry.id} entry={entry} />)}</div>
@@ -379,14 +394,14 @@ export default function Wallet() {
                       <CircleDollarSign className="w-7 h-7 text-muted-foreground/50" />
                     </div>
                     <div>
-                      <p className="font-semibold text-foreground">No fiat account yet</p>
+                       <p className="font-semibold text-foreground">{t("No fiat account yet")}</p>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Complete beneficiary onboarding to simulate payouts through Stripe test mode.
+                         {t("Complete beneficiary onboarding to simulate payouts through Stripe test mode.")}
                       </p>
                     </div>
                     <Link href="/finance/onboarding">
                       <Button data-testid="button-start-onboarding">
-                        Set up payout account <ChevronRight className="w-4 h-4 ml-1" />
+                         {t("Set up payout account")} <ChevronRight className="w-4 h-4 ml-1" />
                       </Button>
                     </Link>
                   </CardContent>
@@ -396,7 +411,7 @@ export default function Wallet() {
               {beneficiaries.length > 0 && (
                 <div className="space-y-2">
                   <Separator />
-                  <h3 className="text-xs uppercase tracking-widest text-muted-foreground pt-2">Payout Accounts</h3>
+                   <h3 className="text-xs uppercase tracking-widest text-muted-foreground pt-2">{t("Payout Accounts")}</h3>
                   <div className="space-y-2">
                     {beneficiaries.map((b) => <BeneficiaryCard key={b.id} b={b} />)}
                   </div>
@@ -410,7 +425,6 @@ export default function Wallet() {
   );
 }
 if (false) {
-const useLang = () => ({ t: (key: string) => key });
 type Transaction = {
   id: string | number;
   type: string;
@@ -424,7 +438,8 @@ const txConfig = (_type: string) => ({ icon: Loader2, color: "" });
 const timeAgo = (timestamp: string) => timestamp;
 function DiscardWallet() {
   const { user } = useAuth();
-  const { t } = useLang();
+  const { lang } = useLang();
+  const t = (text: string) => financeT(lang, text);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -450,24 +465,24 @@ function DiscardWallet() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         className="max-w-md w-full text-center border border-primary/20 rounded-2xl bg-card/80 p-10">
         <Coins className="w-14 h-14 text-primary mx-auto mb-4 drop-shadow-[0_0_16px_rgba(255,215,0,0.4)]" />
-        <h2 className="text-foreground font-black text-2xl mb-2">Your Wallet</h2>
+        <h2 className="text-foreground font-black text-2xl mb-2">{t("wallet_yours")}</h2>
         <p className="text-muted-foreground text-sm mb-6">
-          Sign in to see your GDNA coin balance, transaction history, and daily rewards.
+          {t("wallet_sign_in")}
         </p>
         <div className="flex flex-col gap-3">
           <Link href="/login">
             <button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-black py-3 rounded-xl transition-all">
-              ⚡ Log In to Access Wallet
+              ⚡ {t("wallet_log_in")}
             </button>
           </Link>
           <Link href="/register">
             <button className="w-full border border-primary/30 text-primary hover:bg-primary/10 font-semibold py-3 rounded-xl transition-all text-sm">
-              New? Create a free account
+              {t("New? Create a free account")}
             </button>
           </Link>
         </div>
         <p className="text-muted-foreground text-xs mt-6">
-          ⚠️ GDNA Arena coins are virtual credits with no monetary value.
+          ⚠️ {t("wallet_blockchain_disclaimer")}
         </p>
       </motion.div>
     </div>
@@ -476,24 +491,24 @@ function DiscardWallet() {
   return (
     <div className="min-h-[calc(100vh-4rem)] p-4 md:p-8 max-w-4xl mx-auto space-y-8">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-        <h1 className="text-4xl md:text-5xl font-black uppercase tracking-wider neon-text-glow mb-2">Wallet</h1>
-        <p className="text-muted-foreground uppercase tracking-widest text-sm">Your coin history & balance</p>
+        <h1 className="text-4xl md:text-5xl font-black uppercase tracking-wider neon-text-glow mb-2">{t("wallet_title")}</h1>
+        <p className="text-muted-foreground uppercase tracking-widest text-sm">{t("Your coin history & balance")}</p>
       </motion.div>
 
       {/* Smart Domain Widget */}
       <SmartDomainWidget domainId="business" label="Module Business" />
 
-      {/* Balance + Stats */}
+      {/* Account summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }} className="md:col-span-1">
           <Card className="bg-card/50 border-primary/30 h-full">
             <CardContent className="p-6 flex flex-col items-center justify-center text-center h-full">
               <Coins className="w-10 h-10 text-primary mb-3 drop-shadow-[0_0_12px_rgba(0,212,255,0.8)]" />
-              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Balance</p>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">{t("wallet_balance")}</p>
               <p className="text-4xl font-black text-primary neon-text-glow" data-testid="text-wallet-balance">
-                {balance.toLocaleString()}
+                {formatSurfaceNumber(lang, balance)}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">COINS</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("wallet_coins")}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -501,9 +516,9 @@ function DiscardWallet() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.15 }} className="md:col-span-2">
           <div className="grid grid-cols-3 gap-4 h-full">
             {[
-              { label: "Games Played", value: totalGames, color: "text-foreground" },
-              { label: "Coins Won", value: totalWon.toLocaleString(), color: "text-primary" },
-              { label: "Daily Claims", value: dailyClaims, color: "text-green-400" },
+              { label: t("wallet_games_played"), value: formatSurfaceNumber(lang, totalGames), color: "text-foreground" },
+              { label: t("Coins Won"), value: formatSurfaceNumber(lang, totalWon), color: "text-primary" },
+              { label: t("Daily Claims"), value: formatSurfaceNumber(lang, dailyClaims), color: "text-green-400" },
             ].map((stat) => (
               <Card key={stat.label} className="bg-card/50 border-primary/20">
                 <CardContent className="p-4 text-center">
@@ -516,9 +531,9 @@ function DiscardWallet() {
         </motion.div>
       </div>
 
-      {/* Transaction History */}
+      {/* Ledger list */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <h2 className="text-lg font-bold uppercase tracking-widest text-muted-foreground mb-4">Transaction History</h2>
+        <h2 className="text-lg font-bold uppercase tracking-widest text-muted-foreground mb-4">{t("wallet_transaction_history")}</h2>
 
         {loading && (
           <div className="flex justify-center py-12">
@@ -530,7 +545,7 @@ function DiscardWallet() {
           <Card className="bg-card/30 border-primary/10">
             <CardContent className="p-12 text-center">
               <Coins className="w-12 h-12 text-primary/30 mx-auto mb-3" />
-              <p className="text-muted-foreground uppercase tracking-widest text-sm">No transactions yet. Play a game!</p>
+              <p className="text-muted-foreground uppercase tracking-widest text-sm">{t("wallet_no_transactions")}. {t("wallet_play_to_earn")}.</p>
             </CardContent>
           </Card>
         )}

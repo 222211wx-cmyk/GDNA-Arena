@@ -6,6 +6,8 @@ import {
   Crown, Star, Megaphone, Smile, Send, Check,
 } from "lucide-react";
 import { useLang } from "@/contexts/LangContext";
+import { task39Text } from "@/i18n/task39";
+import { formatNumber, formatRelative, isArabic, techT } from "@/i18n/tech-surfaces-copy";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -38,15 +40,6 @@ const goldBox = {
   boxShadow: "0 4px 24px hsl(var(--background) / 0.5)",
 };
 
-function timeAgo(iso: string) {
-  const d = new Date(iso).getTime();
-  const diff = (Date.now() - d) / 1000;
-  if (diff < 60) return "now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return `${Math.floor(diff / 86400)}d`;
-}
-
 function getYtId(url?: string) {
   if (!url) return null;
   const m = url.match(/^[A-Za-z0-9_-]{11}$/);
@@ -55,6 +48,8 @@ function getYtId(url?: string) {
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublished: () => void }) {
+  const { lang } = useLang();
+  const tx = (key: keyof typeof import("@/i18n/task39").task39) => task39Text(lang, key);
   const [tab, setTab] = useState<"video" | "story" | "article">("video");
   const [title, setTitle]     = useState("");
   const [content, setContent] = useState("");
@@ -65,13 +60,13 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
   const [done, setDone]       = useState(false);
 
   const TABS: { key: "video" | "story" | "article"; label: string; icon: typeof Video }[] = [
-    { key: "video",   label: "Video",   icon: Video    },
-    { key: "story",   label: "Story",   icon: BookOpen },
-    { key: "article", label: "Article", icon: FileText },
+    { key: "video",   label: tx("video"),   icon: Video    },
+    { key: "story",   label: tx("story"),   icon: BookOpen },
+    { key: "article", label: tx("article"), icon: FileText },
   ];
 
   async function submit() {
-    if (!content.trim()) { setError("Content is required"); return; }
+    if (!content.trim()) { setError(tx("contentRequired")); return; }
     setLoading(true); setError("");
     try {
       const r = await fetch(`${BASE()}/api/press/post`, {
@@ -80,10 +75,10 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
         credentials: "include",
         body: JSON.stringify({ type: tab, title, content, video_url: videoUrl, author }),
       });
-      if (!r.ok) { const j = await r.json(); setError(j.error ?? "Error"); setLoading(false); return; }
+      if (!r.ok) { const j = await r.json(); setError(j.error ?? techT(lang, "genericError")); setLoading(false); return; }
       setDone(true);
       setTimeout(() => { onClose(); onPublished(); }, 1200);
-    } catch { setError("Connection error"); setLoading(false); }
+    } catch { setError(tx("connectionError")); setLoading(false); }
   }
 
   return (
@@ -104,9 +99,9 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}>
             <Upload className="w-5 h-5" style={{ color: GOLD }} />
           </div>
-          <div className="flex-1" dir="rtl">
-            <p className="font-black text-foreground text-base">Publish Your Content</p>
-            <p className="text-xs" style={{ color: GOLD_A(0.55) }}>For journalists and global correspondents</p>
+          <div className="flex-1" dir={isArabic(lang) ? "rtl" : "ltr"}>
+            <p className="font-black text-foreground text-base">{tx("publishYour")}</p>
+            <p className="text-xs" style={{ color: GOLD_A(0.55) }}>{tx("journalists")}</p>
           </div>
           <button onClick={onClose} className="text-white/40 hover:text-foreground transition-colors p-1">
             <X className="w-4 h-4" />
@@ -127,38 +122,38 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
         </div>
 
         {/* Form */}
-        <div className="px-6 pb-6 space-y-3" dir="rtl">
+        <div className="px-6 pb-6 space-y-3" dir={isArabic(lang) ? "rtl" : "ltr"}>
           <input className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-            placeholder="Your name / Media organization"
+            placeholder={tx("authorPlaceholder")}
             value={author} onChange={e => setAuthor(e.target.value)} />
 
           <input className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-            placeholder={tab === "video" ? "Video title" : tab === "story" ? "Story title" : "Article title"}
+            placeholder={tab === "video" ? tx("videoTitle") : tab === "story" ? tx("storyTitle") : tx("articleTitle")}
             value={title} onChange={e => setTitle(e.target.value)} />
 
           {tab === "video" && (
             <input className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none"
               style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-              placeholder="YouTube ID or video URL"
+              placeholder={tx("videoUrl")}
               value={videoUrl} onChange={e => setVideoUrl(e.target.value)} />
           )}
 
           <textarea className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none resize-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
             rows={4}
-            placeholder={tab === "video" ? "Video description..." : tab === "story" ? "Write your story here..." : "Write your article here..."}
+            placeholder={tab === "video" ? tx("videoDescription") : tab === "story" ? tx("writeStory") : tx("writeArticle")}
             value={content} onChange={e => setContent(e.target.value)} />
 
-          {error && <p className="text-destructive text-xs text-right">{error}</p>}
+          {error && <p className="text-destructive text-xs text-end">{error}</p>}
 
           <button onClick={submit} disabled={loading || done}
             className="w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2"
             style={{ background: done ? "#16a34a" : GOLD, color: "#000" }}>
-            {done ? <><Check className="w-4 h-4" /> Published!</> :
-             loading ? "Publishing..." :
-             <><Send className="w-4 h-4" /> Publish Now</>}
+            {done ? <><Check className="w-4 h-4" /> {tx("published")}</> :
+             loading ? tx("publishing") :
+             <><Send className="w-4 h-4" /> {tx("publishNow")}</>}
           </button>
         </div>
       </motion.div>
@@ -168,6 +163,8 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
 
 // ─── Video Card ───────────────────────────────────────────────────────────────
 function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => void }) {
+  const { lang } = useLang();
+  const tx = (key: keyof typeof import("@/i18n/task39").task39) => task39Text(lang, key);
   const ytId = getYtId(post.video_url);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -209,12 +206,12 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
         </div>
       )}
 
-      <div className="p-4" dir="rtl">
+      <div className="p-4" dir={isArabic(lang) ? "rtl" : "ltr"}>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-xs font-black px-2 py-0.5 rounded-lg" style={{ background: GOLD_DIM, color: GOLD }}>
-            <Video className="w-3 h-3 inline mr-1" />Video
+            <Video className="w-3 h-3 inline mr-1" />{tx("video")}
           </span>
-          <span className="text-xs" style={{ color: GOLD_A(0.4) }}>{timeAgo(post.created_at)}</span>
+           <span className="text-xs" style={{ color: GOLD_A(0.4) }}>{formatRelative(lang, post.created_at)}</span>
         </div>
         {post.title && <h3 className="font-black text-foreground text-base mb-1 leading-tight">{post.title}</h3>}
         <p className="text-sm leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.75)" }}>{post.content}</p>
@@ -230,13 +227,13 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
             className="flex items-center gap-1.5 text-sm font-bold transition-all"
             style={{ color: liked ? GOLD : "rgba(255,255,255,0.5)" }}>
             <Heart className={`w-4 h-4 ${liked ? "fill-current" : ""}`} />
-            {post.likes + (liked ? 1 : 0)}
+             {formatNumber(lang, post.likes + (liked ? 1 : 0))}
           </button>
           <button onClick={() => { setShowComments(!showComments); if (!showComments) loadComments(); }}
             className="flex items-center gap-1.5 text-sm font-bold transition-all"
             style={{ color: "rgba(255,255,255,0.5)" }}>
             <MessageCircle className="w-4 h-4" />
-            {post.comment_count} comments
+             {formatNumber(lang, post.comment_count)} {tx("comments")}
           </button>
         </div>
 
@@ -246,7 +243,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }} className="mt-3 overflow-hidden">
               <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">No comments yet</p>}
+                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">{tx("noComments")}</p>}
                 {comments.map(c => (
                   <div key={c.id} className="flex gap-2">
                     <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-black"
@@ -261,7 +258,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
               <div className="flex gap-2">
                 <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none"
                   style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-                  placeholder="Add a comment..."
+                  placeholder={tx("addComment")}
                   value={newComment} onChange={e => setNewComment(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && submitComment()} />
                 <button onClick={submitComment}
@@ -280,6 +277,8 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
 
 // ─── Text Card (Story / Article) ──────────────────────────────────────────────
 function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => void }) {
+  const { lang } = useLang();
+  const tx = (key: keyof typeof import("@/i18n/task39").task39) => task39Text(lang, key);
   const [expanded, setExpanded] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -309,20 +308,20 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
   function handleLike() { if (!liked) { setLiked(true); onLike(post.id); } }
 
   const accentColor = isStory ? "#a78bfa" : "#38bdf8";
-  const typeLabel   = isStory ? "Story" : "Article";
+  const typeLabel   = isStory ? tx("story") : tx("article");
   const TypeIcon    = isStory ? BookOpen : FileText;
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       className="rounded-2xl overflow-hidden" style={goldBox}>
       <div style={{ height: 2, background: `linear-gradient(90deg,${accentColor},transparent)` }} />
-      <div className="p-5" dir="rtl">
+      <div className="p-5" dir={isArabic(lang) ? "rtl" : "ltr"}>
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs font-black px-2 py-0.5 rounded-lg flex items-center gap-1"
             style={{ background: `${accentColor}20`, color: accentColor }}>
             <TypeIcon className="w-3 h-3" /> {typeLabel}
           </span>
-          <span className="text-xs" style={{ color: GOLD_A(0.4) }}>{timeAgo(post.created_at)}</span>
+           <span className="text-xs" style={{ color: GOLD_A(0.4) }}>{formatRelative(lang, post.created_at)}</span>
         </div>
 
         {post.title && <h3 className="font-black text-foreground text-lg mb-2 leading-tight">{post.title}</h3>}
@@ -335,7 +334,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
           <button onClick={() => setExpanded(!expanded)}
             className="flex items-center gap-1 text-xs font-bold mb-3"
             style={{ color: accentColor }}>
-            {expanded ? <><ChevronUp className="w-3 h-3" /> Read Less</> : <><ChevronDown className="w-3 h-3" /> Read More</>}
+            {expanded ? <><ChevronUp className="w-3 h-3" /> {tx("readLess")}</> : <><ChevronDown className="w-3 h-3" /> {tx("readMore")}</>}
           </button>
         )}
 
@@ -350,13 +349,13 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
             className="flex items-center gap-1.5 text-sm font-bold transition-all"
             style={{ color: liked ? GOLD : "rgba(255,255,255,0.5)" }}>
             <Heart className={`w-4 h-4 ${liked ? "fill-current" : ""}`} />
-            {post.likes + (liked ? 1 : 0)}
+             {formatNumber(lang, post.likes + (liked ? 1 : 0))}
           </button>
           <button onClick={() => { setShowComments(!showComments); if (!showComments) loadComments(); }}
             className="flex items-center gap-1.5 text-sm font-bold transition-all"
             style={{ color: "rgba(255,255,255,0.5)" }}>
             <MessageCircle className="w-4 h-4" />
-            {post.comment_count} comments
+             {formatNumber(lang, post.comment_count)} {tx("comments")}
           </button>
         </div>
 
@@ -365,7 +364,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }} className="mt-3 overflow-hidden">
               <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">No comments yet</p>}
+                {comments.length === 0 && <p className="text-xs text-white/30 text-center py-2">{tx("noComments")}</p>}
                 {comments.map(c => (
                   <div key={c.id} className="flex gap-2">
                     <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-black"
@@ -380,7 +379,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
               <div className="flex gap-2">
                 <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none"
                   style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
-                  placeholder="Add a comment..."
+                  placeholder={tx("addComment")}
                   value={newComment} onChange={e => setNewComment(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && submitComment()} />
                 <button onClick={submitComment}
@@ -399,6 +398,8 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
 
 // ─── Poll Card ────────────────────────────────────────────────────────────────
 function PollCard({ poll: initial }: { poll: Poll }) {
+  const { lang } = useLang();
+  const tx = (key: keyof typeof import("@/i18n/task39").task39) => task39Text(lang, key);
   const [poll, setPoll]   = useState(initial);
   const [voted, setVoted] = useState<string | null>(null);
 
@@ -430,10 +431,10 @@ function PollCard({ poll: initial }: { poll: Poll }) {
   return (
     <div className="rounded-2xl overflow-hidden" style={goldBox}>
       <div style={{ height: 2, background: "linear-gradient(90deg,#a78bfa,hsl(var(--primary)))" }} />
-      <div className="p-5" dir="rtl">
+      <div className="p-5" dir={isArabic(lang) ? "rtl" : "ltr"}>
         <div className="flex items-center gap-2 mb-3">
           <Smile className="w-4 h-4" style={{ color: "#a78bfa" }} />
-          <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#a78bfa" }}>Poll</span>
+          <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#a78bfa" }}>{tx("poll")}</span>
         </div>
         <h3 className="font-black text-foreground text-base leading-tight mb-4">{poll.question}</h3>
         <div className="space-y-2.5">
@@ -443,11 +444,11 @@ function PollCard({ poll: initial }: { poll: Poll }) {
             const color = palette[i];
             return (
               <button key={opt.key} onClick={() => vote(opt.key)} disabled={!!voted}
-                className="w-full rounded-xl overflow-hidden relative transition-all text-right"
+                className="w-full rounded-xl overflow-hidden relative transition-all text-start"
                 style={{ background: `${color}12`, border: `1.5px solid ${isChosen ? color : color + "40"}` }}>
                 {/* Progress fill */}
                 {voted && (
-                  <div className="absolute inset-y-0 left-0 transition-all duration-700"
+                  <div className="absolute inset-y-0 start-0 transition-all duration-700"
                     style={{ width: `${p}%`, background: `${color}25` }} />
                 )}
                 <div className="relative flex items-center justify-between px-4 py-2.5">
@@ -464,7 +465,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
         </div>
         {voted && (
           <p className="text-xs text-center mt-3" style={{ color: GOLD_A(0.5) }}>
-            {total} total votes · Thank you for participating
+             {formatNumber(lang, total)} {tx("totalVotesThanks")}
           </p>
         )}
       </div>
@@ -474,6 +475,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
 
 // ─── Sponsor Card ─────────────────────────────────────────────────────────────
 function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
+  const { lang } = useLang();
   return (
     <div className="shrink-0 rounded-2xl p-5 flex flex-col items-center gap-3 text-center w-48"
       style={{ background: BLACK, border: `1.5px solid ${sponsor.color}40`, boxShadow: `0 4px 20px ${sponsor.color}15` }}>
@@ -487,7 +489,7 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
       </div>
       <div className="text-xs font-bold px-3 py-1 rounded-full"
         style={{ background: `${sponsor.color}20`, color: sponsor.color }}>
-        Official Sponsor
+        {task39Text(lang, "sponsor")}
       </div>
     </div>
   );
@@ -495,7 +497,7 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function PressPage() {
-  const { t } = useLang();
+  const { lang } = useLang();
   const [posts, setPosts]       = useState<PressPost[]>([]);
   const [polls, setPolls]       = useState<Poll[]>([]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
@@ -525,14 +527,14 @@ export default function PressPage() {
   }
 
   const FILTERS: { key: typeof filter; label: string }[] = [
-    { key: "all",     label: "All"      },
-    { key: "video",   label: "Video"    },
-    { key: "story",   label: "Stories"  },
-    { key: "article", label: "Articles" },
+    { key: "all",     label: task39Text(lang, "all")      },
+    { key: "video",   label: task39Text(lang, "video")    },
+    { key: "story",   label: task39Text(lang, "stories")  },
+    { key: "article", label: task39Text(lang, "articles") },
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: "hsl(var(--background))" }}>
+    <div dir={isArabic(lang) ? "rtl" : "ltr"} className="min-h-screen" style={{ background: "hsl(var(--background))" }}>
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden" style={{ background: `linear-gradient(135deg, hsl(var(--card)) 0%, ${GOLD_A(0.1)} 100%)` }}>
         {/* Star particles */}
@@ -547,19 +549,18 @@ export default function PressPage() {
 
         <div className="relative container mx-auto px-4 py-10 md:py-14">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div dir="rtl">
+             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-xs font-black px-3 py-1 rounded-full"
                   style={{ background: GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}` }}>
-                  👑 EMPIRE ETERNAL
+                   {techT(lang, "pressBadge")}
                 </span>
               </div>
-              <h1 className="text-4xl md:text-6xl font-black leading-none mb-2">
-                <span style={{ color: "white" }}>GLOBAL</span>{" "}
-                <span style={{ color: GOLD, textShadow: `0 0 40px ${GOLD_A(0.376)}` }}>PRESS</span>
-              </h1>
+               <h1 className="text-4xl md:text-6xl font-black leading-none mb-2" style={{ color: GOLD, textShadow: `0 0 40px ${GOLD_A(0.376)}` }}>
+                 {techT(lang, "pressBrand")}
+               </h1>
               <p className="text-sm md:text-base" style={{ color: GOLD_A(0.6) }}>
-                The Empire's official media platform · Video · Stories · Articles
+                 {techT(lang, "pressSub")}
               </p>
             </div>
 
@@ -567,12 +568,12 @@ export default function PressPage() {
               className="flex items-center gap-3 px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:scale-105 shrink-0"
               style={{ background: GOLD, color: "hsl(var(--primary-foreground))", boxShadow: `0 8px 32px ${GOLD_A(0.251)}` }}>
               <Upload className="w-5 h-5" />
-              Publish Content
+              {task39Text(lang, "publishContent")}
             </button>
           </div>
 
           {/* Filter tabs */}
-          <div className="flex gap-2 mt-8 overflow-x-auto pb-1" dir="rtl">
+           <div className="flex gap-2 mt-8 overflow-x-auto pb-1">
             {FILTERS.map(f => (
               <button key={f.key} onClick={() => setFilter(f.key)}
                 className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all"
@@ -592,9 +593,9 @@ export default function PressPage() {
 
           {/* Left: Feed */}
           <div className="lg:col-span-2 space-y-6">
-            <div dir="rtl" className="flex items-center gap-2 mb-2">
+             <div className="flex items-center gap-2 mb-2">
               <Newspaper className="w-5 h-5" style={{ color: GOLD }} />
-              <h2 className="font-black text-foreground text-lg">Correspondent Reports</h2>
+              <h2 className="font-black text-foreground text-lg">{task39Text(lang, "correspondentReports")}</h2>
             </div>
 
             {loading ? (
@@ -605,8 +606,8 @@ export default function PressPage() {
             ) : posts.length === 0 ? (
               <div className="text-center py-16" style={{ color: GOLD_A(0.4) }}>
                 <Newspaper className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p className="font-bold">No posts yet</p>
-                <p className="text-sm mt-1">Be the first to publish!</p>
+                <p className="font-bold">{task39Text(lang, "noPosts")}</p>
+                <p className="text-sm mt-1">{task39Text(lang, "firstPublish")}</p>
               </div>
             ) : (
               posts.map(p =>
@@ -622,9 +623,9 @@ export default function PressPage() {
 
             {/* Sponsors */}
             <div>
-              <div dir="rtl" className="flex items-center gap-2 mb-4">
+               <div className="flex items-center gap-2 mb-4">
                 <Star className="w-5 h-5" style={{ color: GOLD }} />
-                <h2 className="font-black text-foreground text-base">Sponsorship</h2>
+                <h2 className="font-black text-foreground text-base">{task39Text(lang, "sponsorship")}</h2>
               </div>
               <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
                 {sponsors.map(s => <SponsorCard key={s.id} sponsor={s} />)}
@@ -633,9 +634,9 @@ export default function PressPage() {
 
             {/* Fun & Opinions */}
             <div>
-              <div dir="rtl" className="flex items-center gap-2 mb-4">
+               <div className="flex items-center gap-2 mb-4">
                 <Smile className="w-5 h-5" style={{ color: "#a78bfa" }} />
-                <h2 className="font-black text-foreground text-base">Fun &amp; Opinions</h2>
+                <h2 className="font-black text-foreground text-base">{task39Text(lang, "funOpinions")}</h2>
               </div>
               <div className="space-y-4">
                 {polls.map(poll => <PollCard key={poll.id} poll={poll} />)}

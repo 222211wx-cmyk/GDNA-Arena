@@ -1,16 +1,13 @@
-/**
- * AMIS / الأصدقاء — complete rewrite
- * Fix: removed BASE_URL helper — API calls use /api/... directly (no prefix)
- * Layout: two stacked sections, no tabs, no extra buttons
- *   Section 1 — أصدقائي   : friends list  + 📞 📹 💬 remove
- *   Section 2 — جميع المستخدمين : all other users  + 📞 📹 إضافة
- */
+/** AMIS — friends, discovery, calls, and hosted stars. */
 import { useState, useEffect, useCallback } from "react";
 import { useAuth }        from "../contexts/AuthContext";
 import { useCallContext } from "../contexts/CallContext";
 import { Phone, Video, UserPlus, Users, MessageSquare, Loader2, Bell, UserCheck } from "lucide-react";
 import { useLocation }    from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLang } from "@/contexts/LangContext";
+import { friendsCopy, friendsNumber, friendsRelativeTime } from "@/i18n/friends-copy";
+import type { Lang } from "@/contexts/LangContext";
 
 const GOLD  = "hsl(var(--primary))";
 const GOLD_A = (alpha: number) => `hsl(var(--primary) / ${alpha})`;
@@ -44,13 +41,12 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
   );
 }
 
-function StatusBadge({ lastSeenAt }: { lastSeenAt?: string | null }) {
-  if (!lastSeenAt) return <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>○ غير متصل</span>;
+function StatusBadge({ lastSeenAt, lang }: { lastSeenAt?: string | null; lang: Lang }) {
+  if (!lastSeenAt) return <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>○ {friendsCopy(lang, "offline")}</span>;
   const m = Math.floor((Date.now() - new Date(lastSeenAt).getTime()) / 60000);
-  if (m < 5)  return <span style={{ fontSize: 11, color: GREEN,  fontWeight: 700 }}>● متصل الآن</span>;
-  if (m < 30) return <span style={{ fontSize: 11, color: GOLD,   fontWeight: 700 }}>● مشغول</span>;
-  const ago = m < 60 ? `${m} د` : m < 1440 ? `${Math.floor(m/60)} س` : `${Math.floor(m/1440)} ي`;
-  return <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>○ آخر ظهور {ago}</span>;
+  if (m < 5)  return <span style={{ fontSize: 11, color: GREEN,  fontWeight: 700 }}>● {friendsCopy(lang, "onlineNow")}</span>;
+  if (m < 30) return <span style={{ fontSize: 11, color: GOLD,   fontWeight: 700 }}>● {friendsCopy(lang, "busy")}</span>;
+  return <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>○ {friendsCopy(lang, "lastSeen", { time: friendsRelativeTime(lang, lastSeenAt) })}</span>;
 }
 
 function SectionTitle({ label }: { label: string }) {
@@ -65,14 +61,14 @@ function SectionTitle({ label }: { label: string }) {
 
 /* ── Small icon action button ── */
 function ActBtn({
-  icon, label, color, bg, border, onClick, disabled,
+  icon, label, ariaLabel, color, bg, border, onClick, disabled,
 }: {
-  icon: React.ReactNode; label?: string; color: string;
+  icon: React.ReactNode; label?: string; ariaLabel: string; color: string;
   bg: string; border: string;
   onClick: () => void; disabled?: boolean;
 }) {
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button onClick={onClick} disabled={disabled} aria-label={ariaLabel}
       style={{
         background: bg, border, borderRadius: 10,
         padding: label ? "7px 12px" : "8px 10px",
@@ -87,6 +83,9 @@ function ActBtn({
 }
 
 export default function FriendsPage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof friendsCopy>[1], values?: Record<string, string | number>) =>
+    friendsCopy(lang, key, values);
   const { user, loading: authLoading } = useAuth();
   const call        = useCallContext();
   const [, navigate] = useLocation();
@@ -120,13 +119,12 @@ export default function FriendsPage() {
         fetch("/api/citizens?limit=200",   { credentials: "include" }),
         fetch("/api/stars",                { credentials: "include" }),
       ]);
-      const fData = fRes.ok ? (await fRes.json() as { following: Citizen[] }) : { following: [] };
-      const cData = cRes.ok ? (await cRes.json() as { citizens: Citizen[] })  : { citizens: [] };
-      if (sRes.ok) {
-        const sData = await sRes.json() as { stars: Star[]; dailyLimit: number; remainingToday: number };
-        setStars(sData.stars ?? []);
-        setStarQuota({ remaining: sData.remainingToday ?? 0, limit: sData.dailyLimit ?? 3 });
-      }
+      if (!fRes.ok || !cRes.ok || !sRes.ok) throw new Error();
+      const fData = await fRes.json() as { following: Citizen[] };
+      const cData = await cRes.json() as { citizens: Citizen[] };
+      const sData = await sRes.json() as { stars: Star[]; dailyLimit: number; remainingToday: number };
+      setStars(sData.stars ?? []);
+      setStarQuota({ remaining: sData.remainingToday ?? 0, limit: sData.dailyLimit ?? 3 });
 
       const list = fData.following ?? [];
       const ids  = new Set(list.map(f => f.id));
@@ -134,10 +132,12 @@ export default function FriendsPage() {
       setFriendIds(ids);
       // exclude self, exclude already-friends
       setAllUsers((cData.citizens ?? []).filter(c => c.id !== user.id));
+    } catch {
+      showToast(t("loadError"), false);
     } finally {
       setPageLoading(false);
     }
-  }, [user]);
+  }, [user, lang]);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
@@ -148,8 +148,10 @@ export default function FriendsPage() {
       const res = await fetch(`/api/social/v2/follow/${encodeURIComponent(c.username)}`, {
         method: "POST", credentials: "include",
       });
-      if (res.ok) { await loadData(); showToast(`✅ تمت إضافة @${c.username}`); }
-      else        { showToast("تعذّر الإضافة، حاول مجدداً", false); }
+      if (res.ok) { await loadData(); showToast(t("addedToast", { username: c.username })); }
+      else        { showToast(t("addError"), false); }
+    } catch {
+      showToast(t("addError"), false);
     } finally { setAddingId(null); }
   };
 
@@ -157,11 +159,17 @@ export default function FriendsPage() {
   const removeFriend = async (c: Citizen) => {
     setRemovingId(c.id);
     try {
-      await fetch(`/api/social/v2/follow/${encodeURIComponent(c.username)}`, {
+      const res = await fetch(`/api/social/v2/follow/${encodeURIComponent(c.username)}`, {
         method: "DELETE", credentials: "include",
       });
+      if (!res.ok) {
+        showToast(t("removeError"), false);
+        return;
+      }
       await loadData();
-      showToast(`تم إزالة @${c.username}`);
+      showToast(t("removedToast", { username: c.username }));
+    } catch {
+      showToast(t("removeError"), false);
     } finally { setRemovingId(null); }
   };
 
@@ -169,13 +177,14 @@ export default function FriendsPage() {
   const openDM = async (c: Citizen) => {
     setDmLoadingId(c.id);
     try {
-      await fetch("/api/messages/rooms", {
+      const res = await fetch("/api/messages/rooms", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetUsername: c.username, type: "direct" }),
       });
+      if (!res.ok) throw new Error();
       navigate("/messages");
-    } catch { showToast("تعذّر فتح المحادثة", false); }
+    } catch { showToast(t("dmError"), false); }
     finally  { setDmLoadingId(null); }
   };
 
@@ -190,34 +199,34 @@ export default function FriendsPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast(`⭐ ${s.fullName} ${s.invited ? "في محادثتك" : "قبل الاستضافة! افتح الرسائل"} 👑`);
+        showToast(t(s.invited ? "starAlreadyHostedToast" : "starHostedToast", { name: s.fullName }));
         navigate("/messages");
       } else {
-        showToast(data.error ?? "تعذّرت الاستضافة، حاول مجدداً", false);
+        showToast(typeof data.error === "string" ? data.error : t("starError"), false);
       }
-    } catch { showToast("تعذّرت الاستضافة، حاول مجدداً", false); }
+    } catch { showToast(t("starError"), false); }
     finally { setInvitingStar(null); }
   };
 
   /* ── Auth loading ── */
   if (authLoading) return (
-    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", display: "flex",
+    <div dir={lang === "ar" ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: "hsl(var(--background))", display: "flex",
       alignItems: "center", justifyContent: "center" }}>
-      <Loader2 size={36} style={{ color: GOLD, animation: "spin 1s linear infinite" }} />
+      <Loader2 size={36} role="status" aria-label={t("loadingFriends")} style={{ color: GOLD, animation: "spin 1s linear infinite" }} />
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 
   /* ── Not logged in ── */
   if (!user) return (
-    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", display: "flex",
+    <div dir={lang === "ar" ? "rtl" : "ltr"} style={{ minHeight: "100vh", background: "hsl(var(--background))", display: "flex",
       alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14, color: "hsl(var(--foreground))" }}>
       <Users size={52} style={{ opacity: 0.15 }} />
-      <p style={{ color: "hsl(var(--muted-foreground))", fontSize: 14 }}>سجّل دخولك للوصول لقائمة أصدقائك</p>
+       <p style={{ color: "hsl(var(--muted-foreground))", fontSize: 14 }}>{t("loginPrompt")}</p>
       <button onClick={() => navigate("/login")}
         style={{ background: GOLD, color: "#000", border: "none", borderRadius: 12,
           padding: "10px 32px", fontWeight: 900, cursor: "pointer", fontSize: 14 }}>
-        تسجيل الدخول
+         {t("login")}
       </button>
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
     </div>
@@ -226,12 +235,13 @@ export default function FriendsPage() {
   const discoverList = allUsers.filter(u => !friendIds.has(u.id));
 
   return (
-    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", color: "hsl(var(--foreground))", paddingBottom: 80 }} dir="rtl">
+    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", color: "hsl(var(--foreground))", paddingBottom: 80 }} dir={lang === "ar" ? "rtl" : "ltr"}>
 
       {/* ── Toast ── */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: -24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            role={toast.ok ? "status" : "alert"} aria-live="polite"
             style={{ position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)", zIndex: 9999,
               background: toast.ok ? "#071a07" : "#1a0707",
               border: `1px solid ${toast.ok ? GREEN : "#f44"}60`,
@@ -253,15 +263,15 @@ export default function FriendsPage() {
               padding: "12px 20px", display: "flex", alignItems: "center", gap: 12 }}>
             <Bell size={16} style={{ color: GREEN, flexShrink: 0 }} />
             <span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>
-              📞 مكالمة واردة من <span style={{ color: GREEN }}>@{incoming.from}</span>
-              {incoming.video ? " · فيديو" : " · صوتية"}
+               📞 {t("incomingCall")} <span style={{ color: GREEN }}>@{incoming.from}</span>
+               {incoming.video ? ` · ${t("videoCallType")}` : ` · ${t("audioCallType")}`}
             </span>
             <button onClick={() => call.answerCall()}
               style={{ background: GREEN, color: "#000", border: "none", borderRadius: 9,
-                padding: "7px 20px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>✅ رد</button>
+                 padding: "7px 20px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>✅ {t("answer")}</button>
             <button onClick={() => call.rejectCall()}
               style={{ background: "#1a0505", color: "#f55", border: "1px solid #500",
-                borderRadius: 9, padding: "7px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>❌ رفض</button>
+                 borderRadius: 9, padding: "7px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>❌ {t("reject")}</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -270,7 +280,7 @@ export default function FriendsPage() {
       <div style={{ background: "hsl(var(--card))", borderBottom: `1px solid ${GOLD_A(0.094)}`, padding: "22px 24px 18px" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <h1 style={{ margin: "0 0 2px", fontSize: 22, fontWeight: 900, letterSpacing: 2 }}>
-            <span style={{ color: GOLD }}>◈</span> الأصدقاء
+             <span style={{ color: GOLD }}>◈</span> {t("friends")}
           </h1>
           <p style={{ margin: 0, color: "#ffffff30", fontSize: 12 }}>@{user.username}</p>
         </div>
@@ -281,15 +291,15 @@ export default function FriendsPage() {
 
         {pageLoading ? (
           <div style={{ textAlign: "center", padding: 60 }}>
-            <Loader2 size={34} style={{ color: GOLD, animation: "spin 1s linear infinite" }} />
-            <p style={{ color: "hsl(var(--muted-foreground))", marginTop: 10, fontSize: 13 }}>جارٍ التحميل...</p>
+             <Loader2 size={34} role="status" aria-label={t("loadingFriends")} style={{ color: GOLD, animation: "spin 1s linear infinite" }} />
+             <p style={{ color: "hsl(var(--muted-foreground))", marginTop: 10, fontSize: 13 }}>{t("loading")}</p>
           </div>
         ) : (
           <>
-            {/* ══ SECTION 0: قاعة النجوم ══ */}
+            {/* Stars Hall */}
             {stars.length > 0 && (
               <>
-                <SectionTitle label={`⭐ قاعة النجوم — استضف نجماً عالمياً (${starQuota.remaining}/${starQuota.limit} اليوم)`} />
+                <SectionTitle label={`⭐ ${t("starsHall", { remaining: friendsNumber(lang, starQuota.remaining), limit: friendsNumber(lang, starQuota.limit) })}`} />
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
                   gap: 10, marginBottom: 28 }}>
                   {stars.map(s => (
@@ -313,7 +323,8 @@ export default function FriendsPage() {
                         icon={invitingStar === s.username
                           ? <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} />
                           : <MessageSquare size={13} />}
-                        label={s.invited ? "مراسلة" : "استضافة"}
+                        label={t(s.invited ? "message" : "host")}
+                        ariaLabel={t(s.invited ? "messageStar" : "hostStar", { name: s.fullName })}
                         color={s.invited ? GREEN : "#000"}
                         bg={s.invited ? "#071a07" : GOLD}
                         border={s.invited ? `1px solid ${GREEN}50` : "1px solid hsl(var(--primary))"}
@@ -325,15 +336,15 @@ export default function FriendsPage() {
               </>
             )}
 
-            {/* ══ SECTION 1: أصدقائي ══ */}
-            <SectionTitle label={`👥 أصدقائي (${friends.length})`} />
+            {/* Friends */}
+            <SectionTitle label={`👥 ${t("myFriends", { count: friendsNumber(lang, friends.length) })}`} />
 
             {friends.length === 0 ? (
               <div style={{ textAlign: "center", padding: "20px 0 32px",
                 background: "hsl(var(--card))", borderRadius: 14, border: "1px dashed #ffffff12",
                 color: "hsl(var(--muted-foreground))", fontSize: 13, marginBottom: 28 }}>
                 <Users size={32} style={{ opacity: 0.1, marginBottom: 8 }} />
-                <p style={{ margin: 0 }}>لا أصدقاء بعد — أضف من القائمة أدناه 👇</p>
+                <p style={{ margin: 0 }}>{t("noFriends")}</p>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 28 }}>
@@ -345,19 +356,23 @@ export default function FriendsPage() {
                     <Avatar name={f.username} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 800, fontSize: 15 }}>@{f.username}</div>
-                      <StatusBadge lastSeenAt={f.lastSeenAt} />
+                      <StatusBadge lastSeenAt={f.lastSeenAt} lang={lang} />
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <ActBtn icon={<MessageSquare size={14} />} label="رسالة"
+                      <ActBtn icon={<MessageSquare size={14} />} label={t("message")}
+                        ariaLabel={t("messageUser", { username: f.username })}
                         color={GOLD} bg={GOLD_A(0.071)} border={`1px solid ${GOLD_A(0.188)}`}
                         onClick={() => void openDM(f)} disabled={dmLoadingId === f.id} />
-                      <ActBtn icon={<Phone size={14} />} label="صوتي"
+                      <ActBtn icon={<Phone size={14} />} label={t("voice")}
+                        ariaLabel={t("voiceCallUser", { username: f.username })}
                         color={GREEN} bg="#071a07" border={`1px solid ${GREEN}50`}
                         onClick={() => call.startCall(f.username, false)} />
-                      <ActBtn icon={<Video size={14} />} label="فيديو"
+                      <ActBtn icon={<Video size={14} />} label={t("video")}
+                        ariaLabel={t("videoCallUser", { username: f.username })}
                         color="#09f" bg="#07101a" border="1px solid #09f5"
                         onClick={() => call.startCall(f.username, true)} />
                       <ActBtn icon={removingId === f.id ? <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} /> : <UserCheck size={13} />}
+                        ariaLabel={t("removeUser", { username: f.username })}
                         color="#f44" bg="#130303" border="1px solid #400"
                         onClick={() => void removeFriend(f)} disabled={removingId === f.id} />
                     </div>
@@ -366,13 +381,13 @@ export default function FriendsPage() {
               </div>
             )}
 
-            {/* ══ SECTION 2: جميع المستخدمين ══ */}
-            <SectionTitle label={`🌐 جميع المستخدمين (${discoverList.length})`} />
+            {/* User discovery */}
+            <SectionTitle label={`🌐 ${t("allUsers", { count: friendsNumber(lang, discoverList.length) })}`} />
 
             {discoverList.length === 0 && !pageLoading ? (
               <div style={{ textAlign: "center", padding: 40, color: "hsl(var(--muted-foreground))", fontSize: 13 }}>
                 <UserCheck size={32} style={{ opacity: 0.12, marginBottom: 8 }} />
-                <p style={{ margin: 0 }}>أضفت جميع المستخدمين المتاحين 🎉</p>
+                <p style={{ margin: 0 }}>{t("allAdded")}</p>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -386,21 +401,24 @@ export default function FriendsPage() {
                     {/* Nom + statut */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 800, fontSize: 15 }}>@{c.username}</div>
-                      <StatusBadge lastSeenAt={c.lastSeenAt} />
+                      <StatusBadge lastSeenAt={c.lastSeenAt} lang={lang} />
                     </div>
-                    {/* Actions: 📞 📹 + إضافة */}
+                    {/* Call and add actions */}
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <ActBtn icon={<Phone size={14} />}
+                        ariaLabel={t("voiceCallUser", { username: c.username })}
                         color={GREEN} bg="#071a07" border={`1px solid ${GREEN}40`}
                         onClick={() => call.startCall(c.username, false)} />
                       <ActBtn icon={<Video size={14} />}
+                        ariaLabel={t("videoCallUser", { username: c.username })}
                         color="#09f" bg="#07101a" border="1px solid #09f4"
                         onClick={() => call.startCall(c.username, true)} />
                       <ActBtn
                         icon={addingId === c.id
                           ? <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} />
                           : <UserPlus size={13} />}
-                        label={addingId === c.id ? "" : "إضافة"}
+                        label={addingId === c.id ? "" : t("add")}
+                        ariaLabel={t("addUser", { username: c.username })}
                         color={GOLD} bg={GOLD_A(0.082)} border={`1px solid ${GOLD_A(0.251)}`}
                         onClick={() => void addFriend(c)} disabled={addingId === c.id} />
                     </div>

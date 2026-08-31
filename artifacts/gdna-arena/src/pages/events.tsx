@@ -2,6 +2,9 @@ import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Globe2, Calendar, Radio, Zap, Trophy, Clock, MapPin, Flame } from "lucide-react";
 import { Link } from "wouter";
+import { useLang } from "@/contexts/LangContext";
+import { contentCopy } from "@/i18n/content-discovery-copy";
+import { formatDate, formatNumber, interpolate, surfaceCopy } from "@/i18n/content-surfaces-copy";
 
 interface PulseEvent {
   id: number; title: string; titleAr: string | null; domain: string;
@@ -25,22 +28,17 @@ const DOMAIN_META: Record<string, { label: string; color: string; icon: string }
 
 const DOMAINS = ["all", "sport", "tech", "music", "business", "cinema"];
 
-function formatDate(d: string) {
-  try {
-    return new Date(d).toLocaleDateString("en", { day: "numeric", month: "long", year: "numeric" });
-  } catch { return d; }
-}
-
 function daysUntil(d: string) {
   const diff = new Date(d).getTime() - Date.now();
   if (diff < 0) return null;
   const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  return `${days} days`;
+  return days;
 }
 
 export default function EventsPage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
+  const s = surfaceCopy(lang);
   const [events,  setEvents]  = useState<PulseEvent[]>([]);
   const [filter,  setFilter]  = useState("all");
   const [loading, setLoading] = useState(true);
@@ -65,7 +63,7 @@ export default function EventsPage() {
   const liveCount = events.filter(e => e.isLive).length;
 
   return (
-    <div className="min-h-screen" style={{ background: DARK_BG, color: "#e5ffe5" }}>
+    <div className="min-h-screen" dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: DARK_BG, color: "#e5ffe5" }}>
       {/* ── Hero ── */}
       <div className="relative overflow-hidden border-b" style={{ borderColor: BORDER_G }}>
         <div className="absolute inset-0 pointer-events-none" style={{
@@ -79,29 +77,28 @@ export default function EventsPage() {
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border mb-5 text-xs font-bold tracking-widest"
             style={{ borderColor: `${GREEN}50`, background: `${GREEN}10`, color: GREEN }}>
             <Globe2 className="w-3.5 h-3.5" />
-            LIVE INTERNATIONAL EVENTS — EMPIRE TRACKER
+             {s.eventsTracker}
           </div>
           <h1 className="text-4xl md:text-6xl font-black mb-3" style={{ color: "hsl(var(--foreground))" }}>
-            GLOBAL <span style={{ color: GREEN }}>EVENTS</span>
+            {t("eventsTitle")}
           </h1>
           <p className="text-muted-foreground text-lg mb-8 max-w-2xl mx-auto">
-            The world's biggest moments — sport, tech, music, business. 
-            Empire citizens track them all in real-time.
+             {s.eventsIntro}
           </p>
           <div className="flex justify-center gap-8">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1.5 text-2xl font-black text-red-400">
                 <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" /> {liveCount}
               </div>
-              <div className="text-xs text-muted-foreground">Live Now</div>
+               <div className="text-xs text-muted-foreground">{s.liveNow}</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-black" style={{ color: GREEN }}>{events.length}</div>
-              <div className="text-xs text-muted-foreground">Total Events</div>
+               <div className="text-2xl font-black" style={{ color: GREEN }}>{formatNumber(events.length, lang)}</div>
+               <div className="text-xs text-muted-foreground">{s.totalEvents}</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-black text-yellow-400">{events.filter(e => e.impactScore >= 90).length}</div>
-              <div className="text-xs text-muted-foreground">Mega Events</div>
+              <div className="text-2xl font-black text-yellow-400">{formatNumber(events.filter(e => e.impactScore >= 90).length, lang)}</div>
+               <div className="text-xs text-muted-foreground">{s.megaEvents}</div>
             </div>
           </div>
         </div>
@@ -117,7 +114,7 @@ export default function EventsPage() {
               <button key={d} onClick={() => setFilter(d)}
                 className="px-4 py-1.5 rounded-full text-xs font-bold border transition-all"
                 style={{ borderColor: active ? (meta?.color ?? GREEN) : BORDER_G, background: active ? `${meta?.color ?? GREEN}20` : "transparent", color: active ? (meta?.color ?? GREEN) : "#888" }}>
-                {d === "all" ? "🌍 ALL" : `${meta?.icon} ${meta?.label}`}
+                 {d === "all" ? `🌍 ${t("all")}` : `${meta?.icon} ${s[d as keyof typeof s] ?? meta?.label}`}
               </button>
             );
           })}
@@ -126,7 +123,7 @@ export default function EventsPage() {
         {loading && (
           <div className="text-center py-20">
             <div className="w-12 h-12 rounded-full border-4 animate-spin mx-auto mb-3" style={{ borderColor: GREEN, borderTopColor: "transparent" }} />
-            <p className="text-muted-foreground text-sm">Loading global events...</p>
+            <p className="text-muted-foreground text-sm">{t("loading")}</p>
           </div>
         )}
 
@@ -135,7 +132,7 @@ export default function EventsPage() {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-xs font-black text-red-400 tracking-widest">🔴 LIVE RIGHT NOW</span>
+               <span className="text-xs font-black text-red-400 tracking-widest">{s.liveRightNow}</span>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               {live.map(ev => <EventCard key={ev.id} event={ev} highlight />)}
@@ -147,12 +144,12 @@ export default function EventsPage() {
         {!loading && (
           <div>
             <div className="text-xs font-black text-muted-foreground tracking-widest mb-4">
-              {filter === "all" ? "UPCOMING EVENTS — SORTED BY DATE" : `UPCOMING ${DOMAIN_META[filter]?.label?.toUpperCase()} EVENTS`}
+               {filter === "all" ? s.upcomingSorted : interpolate(s.upcomingDomain, { domain: s[filter as keyof typeof s] ?? DOMAIN_META[filter]?.label ?? filter })}
             </div>
             {upcoming.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
                 <Globe2 className="w-12 h-12 mx-auto mb-3 opacity-20" style={{ color: GREEN }} />
-                <p>No upcoming events in this domain.</p>
+                <p>{t("noUpcomingEvents")}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -171,7 +168,7 @@ export default function EventsPage() {
           <Link href="/pulse">
             <button className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm border transition-all hover:opacity-90"
               style={{ background: `${GREEN}15`, borderColor: `${GREEN}40`, color: GREEN }}>
-              <Radio className="w-4 h-4" /> Join the discussion on Empire Pulse
+               <Radio className="w-4 h-4" /> {s.joinPulse}
             </button>
           </Link>
         </div>
@@ -181,9 +178,12 @@ export default function EventsPage() {
 }
 
 function EventCard({ event: ev, highlight = false }: { event: PulseEvent; highlight?: boolean }) {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
+  const s = surfaceCopy(lang);
   const dm      = DOMAIN_META[ev.domain] ?? { color: GREEN, icon: "🌍", label: ev.domain };
   const days    = daysUntil(ev.eventDate);
-  const isPast  = !days && !ev.isLive;
+  const isPast  = days === null && !ev.isLive;
   const impact  = ev.impactScore;
 
   return (
@@ -201,33 +201,33 @@ function EventCard({ event: ev, highlight = false }: { event: PulseEvent; highli
           <h3 className="font-bold text-sm leading-snug">{ev.title}</h3>
           {ev.isLive && (
             <span className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-black border border-red-500/30">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> {t("live")}
             </span>
           )}
-          {!ev.isLive && days && (
+           {!ev.isLive && days !== null && (
             <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
               style={{ background: `${GREEN}15`, color: GREEN, border: `1px solid ${GREEN}30` }}>
-              {days}
+               {days === 0 ? t("today") : days === 1 ? t("tomorrow") : t("days").replace("{count}", formatNumber(days, lang))}
             </span>
           )}
           {isPast && (
-            <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] text-muted-foreground border border-border">Ended</span>
+            <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] text-muted-foreground border border-border">{t("ended")}</span>
           )}
         </div>
         <div className="flex items-center gap-3 mt-1 flex-wrap text-[10px] text-muted-foreground">
-          <span style={{ color: dm.color }}>{dm.icon} {dm.label}</span>
+           <span style={{ color: dm.color }}>{dm.icon} {s[ev.domain as keyof typeof s] ?? dm.label}</span>
           <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" /> {ev.country} {ev.location}</span>
-          <span className="flex items-center gap-1"><Calendar className="w-2.5 h-2.5" /> {formatDate(ev.eventDate)}</span>
+           <span className="flex items-center gap-1"><Calendar className="w-2.5 h-2.5" /> {formatDate(ev.eventDate, lang, { day: "numeric", month: "long", year: "numeric" })}</span>
         </div>
         {/* Impact bar */}
         <div className="flex items-center gap-2 mt-2">
-          <span className="text-[10px] text-muted-foreground w-12 shrink-0">Impact</span>
+           <span className="text-[10px] text-muted-foreground w-12 shrink-0">{s.impact}</span>
           <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#ffffff10" }}>
             <motion.div className="h-full rounded-full"
               initial={{ width: 0 }} animate={{ width: `${impact}%` }} transition={{ duration: 1, ease: "easeOut" }}
               style={{ background: `linear-gradient(90deg, ${dm.color}, ${GREEN})` }} />
           </div>
-          <span className="text-[10px] font-black" style={{ color: dm.color }}>{impact}</span>
+           <span className="text-[10px] font-black" style={{ color: dm.color }}>{formatNumber(impact, lang)}</span>
         </div>
       </div>
     </div>

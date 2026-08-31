@@ -115,6 +115,7 @@ function PageWrapper() {
           <Route path="/games/arena-strike" component={ArenaStrikeGame} />
           <Route path="/games/penalty-king" component={PenaltyKingGame} />
           <Route path="/games/globalstar" component={GlobalStarApp} />
+          <Route path="/games/globalstar/admin/withdrawals" component={GlobalStarApp} />
           <Route path="/games/globalstar/figures/:id" component={GlobalStarApp} />
           <Route path="/games/globalstar/:rest*" component={GlobalStarApp} />
           <Route path="/legends" component={LegendsPage} />

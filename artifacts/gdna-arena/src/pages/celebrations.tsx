@@ -8,6 +8,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
+import { useLang } from "@/contexts/LangContext";
+import { contentCopy } from "@/i18n/content-discovery-copy";
+import { formatNumber, interpolate, localeFor, relativeTime, surfaceCopy } from "@/i18n/content-surfaces-copy";
 
 interface Celebration {
   id: number; title: string; titleAr: string | null; category: string;
@@ -41,24 +44,31 @@ const ENTRY_TYPE_ICON: Record<string, ReactNode> = {
   idea:  <Lightbulb className="w-3 h-3" />,
 };
 
-function timeAgo(d: string) {
-  const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
-  if (m < 1) return "just now"; if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+function daysLabel(d: string, isLive: boolean, lang: Parameters<typeof surfaceCopy>[0]) {
+  if (isLive) return null;
+  const s = surfaceCopy(lang);
+  const diff = new Date(d).getTime() - Date.now();
+  if (diff < 0) return s.ended;
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return s.today;
+  if (days === 1) return s.tomorrow;
+  return new Intl.RelativeTimeFormat(localeFor(lang), { numeric: "always" }).format(days, "day");
 }
 
-function daysLabel(d: string, isLive: boolean) {
-  if (isLive) return null;
-  const diff = new Date(d).getTime() - Date.now();
-  if (diff < 0) return "Ended";
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  return `${days} days`;
+function entryTypeLabel(entryType: string, copy: ReturnType<typeof surfaceCopy>) {
+  const labels: Record<string, string> = {
+    text: copy.text,
+    idea: copy.idea,
+    art: copy.art,
+    video: copy.video,
+  };
+  return labels[entryType] ?? entryType;
 }
 
 export default function CelebrationsPage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
+  const s = surfaceCopy(lang);
   const { user } = useAuth();
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
   const [selected,   setSelected]       = useState<Celebration | null>(null);
@@ -97,10 +107,10 @@ export default function CelebrationsPage() {
       body: JSON.stringify({ content: content.trim(), mediaUrl: mediaUrl.trim() || undefined, entryType }),
     });
     const data = await res.json() as { coinsEarned?: number; error?: string };
-    if (!res.ok) { setError(data.error ?? "Error"); setSubmitting(false); return; }
+    if (!res.ok) { setError(data.error ?? s.error); setSubmitting(false); return; }
     setContent(""); setMediaUrl("");
     if (data.coinsEarned) {
-      setToast(`+${data.coinsEarned} Coins earned! 🎉`);
+      setToast(`+${formatNumber(data.coinsEarned, lang)} ${s.coins}! 🎉`);
       setTimeout(() => setToast(null), 4000);
     }
     // Reload entries
@@ -123,7 +133,7 @@ export default function CelebrationsPage() {
   const upcoming = celebrations.filter(c => !c.isLive);
 
   return (
-    <div className="min-h-screen" style={{ background: DARK_BG, color: "#e5ffe5" }}>
+    <div className="min-h-screen" dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: DARK_BG, color: "#e5ffe5" }}>
       {/* ── Hero ── */}
       <div className="relative overflow-hidden border-b" style={{ borderColor: BORDER_G }}>
         <div className="absolute inset-0 pointer-events-none" style={{
@@ -136,29 +146,29 @@ export default function CelebrationsPage() {
         <div className="relative max-w-5xl mx-auto px-4 py-14 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border mb-5 text-xs font-bold tracking-widest"
             style={{ borderColor: "#FFD70050", background: "#FFD70010", color: "#FFD700" }}>
-            <Trophy className="w-3.5 h-3.5" /> EMPIRE CELEBRATIONS HUB
+             <Trophy className="w-3.5 h-3.5" /> {s.celebrationsHub}
           </div>
           <h1 className="text-4xl md:text-6xl font-black mb-3" style={{ color: "hsl(var(--foreground))" }}>
-            CELEBRATIONS <span style={{ color: "#FFD700" }}>PROTOCOL</span>
+            {t("celebrationsTitle")}
           </h1>
           <p className="text-muted-foreground text-lg mb-6 max-w-2xl mx-auto">
-            Share Art · Ideas · Videos during global celebrations.<br />
-            <span className="text-yellow-400 font-bold">Best contribution = 🏛️ Imperial Laurel + +500 Coins</span>
+             {s.celebrationsIntro}<br />
+             <span className="text-yellow-400 font-bold">{s.bestContribution}</span>
           </p>
           <div className="flex justify-center gap-8">
             <div className="text-center">
               <div className="text-2xl font-black text-red-400 flex items-center gap-1.5 justify-center">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {live.length}
+                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {formatNumber(live.length, lang)}
               </div>
-              <div className="text-xs text-muted-foreground">Live Events</div>
+               <div className="text-xs text-muted-foreground">{s.liveEvents}</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-black" style={{ color: GREEN }}>{celebrations.length}</div>
-              <div className="text-xs text-muted-foreground">Total Events</div>
+               <div className="text-2xl font-black" style={{ color: GREEN }}>{formatNumber(celebrations.length, lang)}</div>
+               <div className="text-xs text-muted-foreground">{s.totalEvents}</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-black text-yellow-400">500</div>
-              <div className="text-xs text-muted-foreground">Top Coins Prize</div>
+               <div className="text-2xl font-black text-yellow-400">{formatNumber(500, lang)}</div>
+               <div className="text-xs text-muted-foreground">{s.topCoinsPrize}</div>
             </div>
           </div>
         </div>
@@ -177,7 +187,7 @@ export default function CelebrationsPage() {
 
       <div className="max-w-6xl mx-auto px-4 py-10">
         {/* Smart Domain Widget */}
-        <SmartDomainWidget domainId="competitions" label="Module Compétitions" />
+        <SmartDomainWidget domainId="competitions" label={s.competitionsModule} />
 
         <div className="grid lg:grid-cols-[320px_1fr] gap-6">
           {/* ── Event list ── */}
@@ -186,14 +196,14 @@ export default function CelebrationsPage() {
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-xs font-black text-red-400 tracking-widest">🔴 LIVE CELEBRATIONS</span>
+                   <span className="text-xs font-black text-red-400 tracking-widest">{s.liveCelebrations}</span>
                 </div>
-                {live.map(c => <CelebCard key={c.id} cel={c} isActive={selected?.id === c.id} onClick={() => void openCelebration(c)} />)}
+                 {live.map(c => <CelebCard key={c.id} cel={c} lang={lang} isActive={selected?.id === c.id} onClick={() => void openCelebration(c)} />)}
               </div>
             )}
             <div>
-              <div className="text-xs font-black text-muted-foreground tracking-widest mb-3">UPCOMING CELEBRATIONS</div>
-              {upcoming.map(c => <CelebCard key={c.id} cel={c} isActive={selected?.id === c.id} onClick={() => void openCelebration(c)} />)}
+               <div className="text-xs font-black text-muted-foreground tracking-widest mb-3">{s.upcomingCelebrations}</div>
+               {upcoming.map(c => <CelebCard key={c.id} cel={c} lang={lang} isActive={selected?.id === c.id} onClick={() => void openCelebration(c)} />)}
             </div>
           </div>
 
@@ -209,14 +219,14 @@ export default function CelebrationsPage() {
                       <h2 className="text-xl font-black">{selected.title}</h2>
                       {selected.isLive && (
                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-black border border-red-500/30">
-                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> {t("live")}
                         </span>
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground">{selected.description}</p>
                     <div className="flex items-center gap-4 mt-3 text-xs">
-                      <span className="font-bold" style={{ color: GREEN }}>+{selected.coinsReward} Coins per entry</span>
-                      <span className="font-bold text-yellow-400">🏛️ Best entry: +{selected.topContributorCoins} Coins + Imperial Laurel</span>
+                       <span className="font-bold" style={{ color: GREEN }}>+{formatNumber(selected.coinsReward, lang)} {s.perEntry}</span>
+                       <span className="font-bold text-yellow-400">🏛️ {s.bestEntry}: +{formatNumber(selected.topContributorCoins, lang)} {s.coins} + {s.imperialLaurel}</span>
                     </div>
                   </div>
                 </div>
@@ -231,9 +241,9 @@ export default function CelebrationsPage() {
                     </div>
                     <div>
                       <div className="font-bold text-sm">{user.username}</div>
-                      <div className="text-xs text-muted-foreground">Submit your contribution</div>
+                       <div className="text-xs text-muted-foreground">{s.submitContribution}</div>
                     </div>
-                    <div className="ml-auto text-xs font-bold text-yellow-400">+{selected.coinsReward} Coins</div>
+                     <div className="ms-auto text-xs font-bold text-yellow-400">+{formatNumber(selected.coinsReward, lang)} {s.coins}</div>
                   </div>
                   {/* Entry type */}
                   <div className="flex gap-2 flex-wrap">
@@ -241,18 +251,18 @@ export default function CelebrationsPage() {
                       <button key={t} onClick={() => setEntryType(t)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all capitalize"
                         style={{ borderColor: entryType === t ? "#FFD70060" : BORDER_G, background: entryType === t ? "#FFD70015" : "transparent", color: entryType === t ? "#FFD700" : "hsl(var(--muted-foreground))" }}>
-                        {ENTRY_TYPE_ICON[t]} {t}
+                         {ENTRY_TYPE_ICON[t]} {s[t]}
                       </button>
                     ))}
                   </div>
                   <textarea value={content} onChange={e => setContent(e.target.value)}
-                    placeholder={`Share your ${entryType} — analysis, tribute, art, or idea...`}
+                     placeholder={interpolate(s.shareEntry, { type: s[entryType] })}
                     maxLength={600} rows={3}
                     className="w-full px-3 py-2 rounded-xl border resize-none text-sm focus:outline-none"
                     style={{ background: "#050a05", borderColor: BORDER_G, color: "#e5ffe5" }} />
                   {(entryType === "video" || entryType === "art") && (
                     <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)}
-                      placeholder="YouTube URL for video/art presentation..."
+                      placeholder={t("celebrationMediaPlaceholder")}
                       className="w-full px-3 py-2 rounded-xl border text-sm focus:outline-none"
                       style={{ background: "#050a05", borderColor: BORDER_G, color: "#e5ffe5" }} />
                   )}
@@ -267,15 +277,15 @@ export default function CelebrationsPage() {
                       className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-black transition-all active:scale-95 disabled:opacity-40"
                       style={{ background: "#FFD700", color: "#000" }}>
                       <Send className="w-4 h-4" />
-                      {submitting ? "Submitting..." : `Submit ${entryType.charAt(0).toUpperCase()+entryType.slice(1)}`}
+                       {submitting ? s.submitting : interpolate(s.submit, { type: s[entryType] })}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="p-4 rounded-2xl border text-center" style={{ background: CARD_BG, borderColor: BORDER_G }}>
-                  <p className="text-muted-foreground text-sm mb-3">Login to participate and compete for the Imperial Laurel</p>
+                   <p className="text-muted-foreground text-sm mb-3">{s.loginParticipate}</p>
                   <Link href="/login">
-                    <button className="px-5 py-2 rounded-xl font-bold text-xs text-black" style={{ background: GREEN }}>Join the Empire</button>
+                     <button className="px-5 py-2 rounded-xl font-bold text-xs text-black" style={{ background: GREEN }}>{t("joinEmpire")}</button>
                   </Link>
                 </div>
               )}
@@ -283,12 +293,12 @@ export default function CelebrationsPage() {
               {/* Entries */}
               <div>
                 <div className="text-xs font-black text-muted-foreground tracking-widest mb-3">
-                  CONTRIBUTIONS — {entries.length} entries
+                   {s.contributions} — {formatNumber(entries.length, lang)} {s.entries}
                 </div>
                 {entries.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground">
                     <Sparkles className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">Be the first to contribute.</p>
+                     <p className="text-sm">{s.firstContribution}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -309,12 +319,12 @@ export default function CelebrationsPage() {
                             {e.hasImperialLaurel && (
                               <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
                                 style={{ background: "#FFD70020", color: "#FFD700", border: "1px solid #FFD70040" }}>
-                                🏛️ IMPERIAL LAUREL
+                                 🏛️ {s.imperialLaurel}
                               </span>
                             )}
                             <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
-                              {ENTRY_TYPE_ICON[e.entryType]} {e.entryType}
-                              <span className="ml-2">{timeAgo(e.createdAt)}</span>
+                              {ENTRY_TYPE_ICON[e.entryType]} {entryTypeLabel(e.entryType, s)}
+                              <span className="ms-2">{relativeTime(e.createdAt, lang)}</span>
                             </span>
                           </div>
                           <p className="text-sm leading-relaxed mb-2" style={{ color: "#d1ffd1" }}>{e.content}</p>
@@ -344,8 +354,8 @@ export default function CelebrationsPage() {
           ) : (
             <div className="hidden lg:flex items-center justify-center text-muted-foreground flex-col gap-4">
               <Trophy className="w-16 h-16 opacity-10" style={{ color: "#FFD700" }} />
-              <p className="font-bold text-lg">Select a celebration</p>
-              <p className="text-sm opacity-60">Join the empire's greatest moments</p>
+               <p className="font-bold text-lg">{s.selectCelebration}</p>
+               <p className="text-sm opacity-60">{s.greatestMoments}</p>
             </div>
           )}
         </div>
@@ -354,21 +364,22 @@ export default function CelebrationsPage() {
   );
 }
 
-function CelebCard({ cel, isActive, onClick }: { cel: Celebration; isActive: boolean; onClick: () => void }) {
+function CelebCard({ cel, isActive, onClick, lang }: { cel: Celebration; isActive: boolean; onClick: () => void; lang: Parameters<typeof surfaceCopy>[0] }) {
+  const s = surfaceCopy(lang);
   const cat = CAT_META[cel.category] ?? { color: GREEN, icon: "🎉", label: cel.category };
-  const days = daysLabel(cel.date, cel.isLive);
+  const days = daysLabel(cel.date, cel.isLive, lang);
   return (
-    <button onClick={onClick} className="w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all mb-2"
+    <button onClick={onClick} className="w-full flex items-start gap-3 p-3 rounded-xl border text-left rtl:text-right transition-all mb-2"
       style={{ background: isActive ? `${cel.color}10` : CARD_BG, borderColor: isActive ? `${cel.color}50` : BORDER_G }}>
       <span className="text-2xl shrink-0">{cel.icon}</span>
       <div className="flex-1 min-w-0">
         <div className="font-bold text-sm leading-snug truncate">{cel.title}</div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] font-bold" style={{ color: cat.color }}>{cat.icon} {cat.label}</span>
-          {cel.isLive && <span className="flex items-center gap-0.5 text-[10px] text-red-400 font-bold"><div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />LIVE</span>}
+           <span className="text-[10px] font-bold" style={{ color: cat.color }}>{cat.icon} {s[cel.category as keyof typeof s] ?? cat.label}</span>
+           {cel.isLive && <span className="flex items-center gap-0.5 text-[10px] text-red-400 font-bold"><div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />{s.live}</span>}
           {!cel.isLive && days && <span className="text-[10px] text-muted-foreground">{days}</span>}
         </div>
-        <div className="text-[10px] text-yellow-400 font-bold mt-0.5">🏛️ Top: +{cel.topContributorCoins} Coins</div>
+         <div className="text-[10px] text-yellow-400 font-bold mt-0.5">🏛️ {s.top}: +{formatNumber(cel.topContributorCoins, lang)} {s.coins}</div>
       </div>
     </button>
   );

@@ -4,11 +4,105 @@ import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useLegal } from "@/contexts/LegalContext";
 import { useLang } from "@/contexts/LangContext";
+import type { Lang } from "@/contexts/LangContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
+
+type AgeGateCopyKey =
+  | "title"
+  | "body"
+  | "dateLabel"
+  | "save"
+  | "denied"
+  | "loginHint"
+  | "loginLink"
+  | "registerHint"
+  | "registerLink"
+  | "back"
+  | "verificationFailed";
+
+const AGE_GATE_COPY = {
+  title: {
+    en: "Games are 18+",
+    fr: "Jeux réservés aux 18+",
+    ar: "قسم الألعاب +18",
+    es: "Juegos solo para mayores de 18",
+    de: "Spiele ab 18",
+  },
+  body: {
+    en: "This section requires 18+ under the laws of your country.",
+    fr: "Cette section est réservée aux 18+ selon les lois de votre pays.",
+    ar: "هذا القسم يتطلب +18 حسب قوانين بلدك",
+    es: "Esta sección requiere ser mayor de 18 años según las leyes de tu país.",
+    de: "Dieser Bereich ist gemäß den Gesetzen deines Landes erst ab 18 Jahren zugänglich.",
+  },
+  dateLabel: {
+    en: "Enter your date of birth once",
+    fr: "Saisissez votre date de naissance une seule fois",
+    ar: "أدخل تاريخ ميلادك لمرة واحدة",
+    es: "Introduce tu fecha de nacimiento una vez",
+    de: "Geburtsdatum einmalig eingeben",
+  },
+  save: {
+    en: "Verify age",
+    fr: "Vérifier l'âge",
+    ar: "تحقق من العمر",
+    es: "Verificar edad",
+    de: "Alter bestätigen",
+  },
+  denied: {
+    en: "Access to Games is blocked for users under 18. All other sections remain available.",
+    fr: "L'accès aux Jeux est bloqué aux moins de 18 ans. Toutes les autres sections restent accessibles.",
+    ar: "تم منع الدخول إلى الألعاب لمن هم أقل من 18 سنة. باقي الأقسام متاحة لك.",
+    es: "El acceso a Juegos está bloqueado para menores de 18 años. Las demás secciones siguen disponibles.",
+    de: "Der Zugang zu den Spielen ist für Personen unter 18 Jahren gesperrt. Alle anderen Bereiche bleiben verfügbar.",
+  },
+  loginHint: {
+    en: "Already have an account?",
+    fr: "Vous avez déjà un compte ?",
+    ar: "هل لديك حساب بالفعل؟",
+    es: "¿Ya tienes una cuenta?",
+    de: "Du hast bereits ein Konto?",
+  },
+  loginLink: {
+    en: "Log in",
+    fr: "Se connecter",
+    ar: "تسجيل الدخول",
+    es: "Iniciar sesión",
+    de: "Anmelden",
+  },
+  registerHint: {
+    en: "New here?",
+    fr: "Nouveau ici ?",
+    ar: "جديد هنا؟",
+    es: "¿Nuevo aquí?",
+    de: "Neu hier?",
+  },
+  registerLink: {
+    en: "Create account",
+    fr: "Créer un compte",
+    ar: "إنشاء حساب",
+    es: "Crear cuenta",
+    de: "Konto erstellen",
+  },
+  back: {
+    en: "Back to the Empire",
+    fr: "Retour à l'Empire",
+    ar: "الرجوع إلى الإمبراطورية",
+    es: "Volver al Imperio",
+    de: "Zurück zum Imperium",
+  },
+  verificationFailed: {
+    en: "Age verification failed. Please try again.",
+    fr: "La vérification de l’âge a échoué. Veuillez réessayer.",
+    ar: "فشل التحقق من العمر. يُرجى المحاولة مرة أخرى.",
+    es: "No se pudo verificar la edad. Inténtalo de nuevo.",
+    de: "Die Altersüberprüfung ist fehlgeschlagen. Bitte versuche es erneut.",
+  },
+} satisfies Record<AgeGateCopyKey, Record<Lang, string>>;
 
 export default function AgeGate({ active }: { active?: boolean }) {
   const { country } = useLegal();
@@ -24,81 +118,7 @@ export default function AgeGate({ active }: { active?: boolean }) {
   const isActiveGame = active ?? (location.startsWith("/games/") && !isXpOnlyGame);
   if (!isActiveGame || (!loading && user?.isAdult === true)) return null;
 
-  const T = {
-    title:  {
-      en: "Games are 18+",
-      ar: "قسم الألعاب +18",
-      fr: "Jeux réservés aux 18+",
-      es: "Juegos solo para mayores de 18",
-      de: "Spiele nur ab 18",
-    },
-    body:   {
-      en: "This section requires 18+ under the laws of your country.",
-      ar: "هذا القسم يتطلب +18 حسب قوانين بلدك",
-      fr: "Cette section est réservée aux 18+ selon les lois de votre pays.",
-      es: "Esta sección requiere ser mayor de 18 años según las leyes de tu país.",
-      de: "Dieser Bereich ist gemäß den Gesetzen Ihres Landes erst ab 18 Jahren zugänglich.",
-    },
-    dateLabel: {
-      en: "Enter your date of birth once",
-      ar: "أدخل تاريخ ميلادك لمرة واحدة",
-      fr: "Saisissez votre date de naissance une seule fois",
-      es: "Introduce tu fecha de nacimiento una vez",
-      de: "Geben Sie einmalig Ihr Geburtsdatum ein",
-    },
-    save: {
-      en: "Verify age",
-      ar: "تحقق من العمر",
-      fr: "Vérifier l'âge",
-      es: "Verificar edad",
-      de: "Alter prüfen",
-    },
-    denied: {
-      en: "Access to Games is blocked for users under 18. All other sections remain available.",
-      ar: "تم منع الدخول إلى الألعاب لمن هم أقل من 18 سنة. باقي الأقسام متاحة لك.",
-      fr: "L'accès aux Jeux est bloqué aux moins de 18 ans. Toutes les autres sections restent accessibles.",
-      es: "El acceso a Juegos está bloqueado para menores de 18 años. Las demás secciones siguen disponibles.",
-      de: "Der Spielezugang ist für unter 18-Jährige gesperrt. Alle anderen Bereiche bleiben verfügbar.",
-    },
-    loginHint: {
-      en: `Already have an account?`,
-      ar: `هل لديك حساب بالفعل؟`,
-      fr: `Vous avez déjà un compte ?`,
-      es: `¿Ya tienes una cuenta?`,
-      de: `Haben Sie bereits ein Konto?`,
-    },
-    loginLink: {
-      en: `Log in`,
-      ar: `تسجيل الدخول`,
-      fr: `Se connecter`,
-      es: `Iniciar sesión`,
-      de: `Anmelden`,
-    },
-    registerHint: {
-      en: `New here?`,
-      ar: `جديد هنا؟`,
-      fr: `Nouveau ici ?`,
-      es: `¿Nuevo aquí?`,
-      de: `Neu hier?`,
-    },
-    registerLink: {
-      en: `Create account`,
-      ar: `إنشاء حساب`,
-      fr: `Créer un compte`,
-      es: `Crear cuenta`,
-      de: `Konto erstellen`,
-    },
-    back: {
-      en: "Back to the Empire",
-      ar: "الرجوع إلى الإمبراطورية",
-      fr: "Retour à l'Empire",
-      es: "Volver al Imperio",
-      de: "Zurück zum Imperium",
-    },
-  };
-
-  const t = (k: keyof typeof T): string =>
-    (T[k] as Record<string, string>)[lang] ?? (T[k] as Record<string, string>)["en"];
+  const t = (key: AgeGateCopyKey): string => AGE_GATE_COPY[key][lang];
 
   const saveBirthDate = async () => {
     setError("");
@@ -110,11 +130,18 @@ export default function AgeGate({ active }: { active?: boolean }) {
         credentials: "include",
         body: JSON.stringify({ birthDate }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Age verification failed");
+      const data: { error?: unknown } | null = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(typeof data?.error === "string" ? data.error : t("verificationFailed"));
+        return;
+      }
+      if (!data) {
+        setError(t("verificationFailed"));
+        return;
+      }
       await refreshUser();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Age verification failed");
+    } catch {
+      setError(t("verificationFailed"));
     } finally {
       setSaving(false);
     }

@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLang } from "@/contexts/LangContext";
+import { contentCopy } from "@/i18n/content-discovery-copy";
+import { isArabic, techT } from "@/i18n/tech-surfaces-copy";
+import { formatSurfaceDate, formatSurfaceNumber } from "@/i18n/locale-surfaces-b-copy";
 
 interface NeuralStatus {
   online: boolean;
@@ -23,6 +27,8 @@ const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 if (false) {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 function DiscardNeuralCorePage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
   const [status, setStatus] = useState<NeuralStatus | null>(null);
   const [insights, setInsights] = useState<Insights | null>(null);
   const [query, setQuery] = useState("");
@@ -103,14 +109,14 @@ function DiscardNeuralCorePage() {
 
           {/* IQ Score */}
           <div className="border border-yellow-500/30 bg-yellow-500/5 rounded-xl p-5 text-center">
-            <div className="text-xs text-yellow-500/60 tracking-widest mb-1">INTELLIGENCE SCORE</div>
+            <div className="text-xs text-yellow-500/60 tracking-widest mb-1">{t("intelligence")}</div>
             <motion.div
               key={Math.floor(iq)}
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               className="text-6xl font-black text-yellow-400"
             >
-              {iq.toFixed(1)}
+              {formatSurfaceNumber(lang, iq, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}
             </motion.div>
             <div className="text-xs text-gray-500 mt-1">/ 100 MAX</div>
             <div className="mt-3 h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -149,7 +155,7 @@ function DiscardNeuralCorePage() {
                   <div key={d.domain}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-gray-300 capitalize">{d.domain}</span>
-                      <span className="text-yellow-400">{d.count}</span>
+                      <span className="text-yellow-400">{formatSurfaceNumber(lang, Number(d.count))}</span>
                     </div>
                     <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
                       <div
@@ -178,7 +184,7 @@ function DiscardNeuralCorePage() {
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && askNeural()}
-                  placeholder="Query the neural core in any language..."
+                  placeholder={t("queryPlaceholder")}
                   className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500"
                 />
                 <button
@@ -208,11 +214,11 @@ function DiscardNeuralCorePage() {
           {status?.last_evolution && (
             <div className="border border-purple-500/30 bg-purple-500/5 rounded-xl p-5">
               <div className="text-xs text-purple-400 tracking-widest mb-3">
-                🧬 LAST EVOLUTION — CYCLE #{status.last_evolution.cycle_number}
+                🧬 LAST EVOLUTION — CYCLE #{formatSurfaceNumber(lang, status.last_evolution.cycle_number)}
               </div>
               <p className="text-sm text-gray-300 leading-relaxed">{status.last_evolution.report}</p>
               <div className="text-xs text-gray-600 mt-2">
-                {new Date(status.last_evolution.evolved_at).toLocaleString()}
+                {formatSurfaceDate(lang, status.last_evolution.evolved_at, { dateStyle: "medium", timeStyle: "short" })}
               </div>
             </div>
           )}
@@ -230,7 +236,7 @@ function DiscardNeuralCorePage() {
                     }`} />
                     <span className="text-gray-300">{p.description}</span>
                     <span className="ml-auto text-xs text-gray-600 flex-shrink-0">
-                      {Math.round(p.confidence * 100)}%
+                       {formatSurfaceNumber(lang, Math.round(p.confidence * 100))}%
                     </span>
                   </div>
                 ))}
@@ -270,7 +276,7 @@ function DiscardNeuralCorePage() {
               >
                 ⬡
               </motion.div>
-              <p className="text-gray-500 text-sm">Connecting to Neural Core...</p>
+              <p className="text-gray-500 text-sm">{t("connecting")}</p>
             </div>
           )}
         </div>
@@ -286,13 +292,16 @@ function DiscardNeuralCorePage() {
         >
           ● AUTONOMOUS — SELF-EVOLVING — ETERNAL
         </motion.span>
-        <span>{new Date().toISOString().slice(0, 19).replace("T", " ")} UTC</span>
+        <span>{formatSurfaceDate(lang, Date.now(), { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC" })} UTC</span>
       </div>
     </div>
   );
 }
 }
 export default function NeuralCorePage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1], values?: Record<string, string | number>) => contentCopy(lang, key, values);
+  const tx = (key: Parameters<typeof techT>[1]) => techT(lang, key);
   const [status, setStatus] = useState<NeuralStatus | null>(null);
   const [insights, setInsights] = useState<Insights | null>(null);
   const [query, setQuery] = useState("");
@@ -326,15 +335,15 @@ export default function NeuralCorePage() {
         body: JSON.stringify({ query }),
       });
       const d = await r.json();
-      setAnswer(d.answer ?? "No response");
-    } catch { setAnswer("Neural core unreachable"); }
+      setAnswer(d.answer ?? t("noResponse"));
+    } catch { setAnswer(t("unreachable")); }
     setQuerying(false);
   };
 
   const iq = status?.last_evolution?.intelligence_score ?? 0;
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono pt-16 pb-20">
+    <div dir={isArabic(lang) ? "rtl" : "ltr"} className="min-h-screen bg-background text-foreground font-mono pt-16 pb-20">
 
       {/* Header */}
       <div className="relative border-b border-primary/20 px-6 py-8 text-center overflow-hidden">
@@ -344,14 +353,14 @@ export default function NeuralCorePage() {
           transition={{ duration: 2, repeat: Infinity }}
           className="text-primary text-xs tracking-[0.4em] mb-2"
         >
-          ⬡ EMPIRE NEURAL CORE — {status?.version ?? "ENC v1.0"}
+           ⬡ {tx("empireNeuralCore")} — {status?.version ?? "ENC v1.0"}
         </motion.div>
         <h1 className="text-4xl md:text-6xl font-black tracking-tight">
-          <span className="text-foreground">NEURAL</span>{" "}
-          <span className="text-primary">CORE</span>
+          <span className="text-foreground">{t("neuralTitle").split(" ")[0]}</span>{" "}
+          <span className="text-primary">{t("neuralTitle").split(" ").slice(1).join(" ")}</span>
         </h1>
         <p className="mt-2 text-muted-foreground text-sm tracking-widest">
-          AUTONOMOUS SELF-EVOLVING INTELLIGENCE BACKBONE
+          {t("neuralSub")}
         </p>
 
         {/* Live pulse dot */}
@@ -361,7 +370,7 @@ export default function NeuralCorePage() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
           <span className="text-primary text-xs tracking-widest">
-            {status?.online ? "ONLINE — LEARNING" : "INITIALIZING..."}
+            {status?.online ? t("online") : t("initializing")}
           </span>
         </div>
       </div>
@@ -373,16 +382,16 @@ export default function NeuralCorePage() {
 
           {/* IQ Score */}
           <div className="border border-primary/30 bg-primary/5 rounded-xl p-5 text-center">
-            <div className="text-xs text-primary/60 tracking-widest mb-1">INTELLIGENCE SCORE</div>
+            <div className="text-xs text-primary/60 tracking-widest mb-1">{t("intelligence")}</div>
             <motion.div
               key={Math.floor(iq)}
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               className="text-6xl font-black text-primary"
             >
-              {iq.toFixed(1)}
+             {formatSurfaceNumber(lang, iq, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}
             </motion.div>
-            <div className="text-xs text-muted-foreground mt-1">/ 100 MAX</div>
+             <div className="text-xs text-muted-foreground mt-1">{tx("max100")}</div>
             <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
@@ -395,22 +404,22 @@ export default function NeuralCorePage() {
 
           {/* Core Stats */}
           {[
-            { label: "MEMORIES", value: status?.total_memories ?? "—", icon: "🧠" },
-            { label: "PATTERNS", value: status?.total_patterns ?? "—", icon: "🔮" },
-            { label: "EVOLUTIONS", value: status?.total_evolutions ?? "—", icon: "🧬" },
+            { label: t("memories"), value: status?.total_memories ?? "—", icon: "🧠" },
+            { label: t("patterns"), value: status?.total_patterns ?? "—", icon: "🔮" },
+            { label: t("evolutions"), value: status?.total_evolutions ?? "—", icon: "🧬" },
           ].map(s => (
             <div key={s.label} className="border border-border rounded-xl p-4 flex items-center gap-4">
               <span className="text-2xl">{s.icon}</span>
               <div>
                 <div className="text-xs text-muted-foreground tracking-widest">{s.label}</div>
-                <div className="text-2xl font-black text-foreground">{s.value}</div>
+                 <div className="text-2xl font-black text-foreground">{typeof s.value === "number" ? formatSurfaceNumber(lang, s.value) : s.value}</div>
               </div>
             </div>
           ))}
 
           {/* Domain Breakdown */}
           <div className="border border-border rounded-xl p-5">
-            <div className="text-xs text-muted-foreground tracking-widest mb-3">MEMORY BY DOMAIN</div>
+            <div className="text-xs text-muted-foreground tracking-widest mb-3">{t("memoryDomain")}</div>
             <div className="space-y-2">
               {status?.domain_breakdown?.slice(0, 6).map((d) => {
                 const total = status.total_memories || 1;
@@ -419,7 +428,7 @@ export default function NeuralCorePage() {
                   <div key={d.domain}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-foreground/80 capitalize">{d.domain}</span>
-                      <span className="text-primary">{d.count}</span>
+                       <span className="text-primary">{formatSurfaceNumber(lang, Number(d.count))}</span>
                     </div>
                     <div className="h-1 bg-muted rounded-full overflow-hidden">
                       <div
@@ -440,7 +449,7 @@ export default function NeuralCorePage() {
           {/* Neural Query Terminal */}
           <div className="border border-primary/30 rounded-xl overflow-hidden">
             <div className="bg-primary/10 px-5 py-3 flex items-center gap-2 border-b border-primary/20">
-              <span className="text-primary text-sm tracking-widest">⬡ NEURAL QUERY TERMINAL</span>
+              <span className="text-primary text-sm tracking-widest">{t("neuralTerminal")}</span>
             </div>
             <div className="p-5">
               <div className="flex gap-3">
@@ -448,7 +457,7 @@ export default function NeuralCorePage() {
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && askNeural()}
-                  placeholder="Query the neural core in any language..."
+                  placeholder={t("queryPlaceholder")}
                   className="flex-1 bg-card border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary"
                 />
                 <button
@@ -456,7 +465,7 @@ export default function NeuralCorePage() {
                   disabled={querying}
                   className="bg-primary text-primary-foreground px-5 py-2.5 rounded-lg font-bold text-sm hover:bg-primary/90 disabled:opacity-50 transition-all"
                 >
-                  {querying ? "..." : "ASK"}
+                  {querying ? "..." : t("ask")}
                 </button>
               </div>
               <AnimatePresence>
@@ -466,7 +475,7 @@ export default function NeuralCorePage() {
                     animate={{ opacity: 1, y: 0 }}
                     className="mt-4 bg-card border border-border rounded-lg p-4 text-sm text-foreground/80 leading-relaxed"
                   >
-                    <span className="text-primary text-xs tracking-widest block mb-2">⬡ ENC RESPONSE</span>
+                    <span className="text-primary text-xs tracking-widest block mb-2">{t("response")}</span>
                     {answer}
                   </motion.div>
                 )}
@@ -478,11 +487,11 @@ export default function NeuralCorePage() {
           {status?.last_evolution && (
             <div className="border border-purple-500/30 bg-purple-500/5 rounded-xl p-5">
               <div className="text-xs text-purple-400 tracking-widest mb-3">
-                🧬 LAST EVOLUTION — CYCLE #{status.last_evolution.cycle_number}
+                 {t("lastEvolution", { count: formatSurfaceNumber(lang, status.last_evolution.cycle_number) })}
               </div>
               <p className="text-sm text-foreground/80 leading-relaxed">{status.last_evolution.report}</p>
               <div className="text-xs text-muted-foreground mt-2">
-                {new Date(status.last_evolution.evolved_at).toLocaleString()}
+                 {formatSurfaceDate(lang, status.last_evolution.evolved_at, { dateStyle: "medium", timeStyle: "short" })}
               </div>
             </div>
           )}
@@ -490,7 +499,7 @@ export default function NeuralCorePage() {
           {/* Active Patterns */}
           {(insights?.active_patterns?.length ?? 0) > 0 && (
             <div className="border border-border rounded-xl p-5">
-              <div className="text-xs text-muted-foreground tracking-widest mb-3">🔮 ACTIVE PATTERNS</div>
+              <div className="text-xs text-muted-foreground tracking-widest mb-3">{t("activePatterns")}</div>
               <div className="space-y-2">
                 {insights!.active_patterns.slice(0, 5).map((p, i) => (
                   <div key={i} className="flex items-start gap-3 text-sm">
@@ -500,7 +509,7 @@ export default function NeuralCorePage() {
                     }`} />
                     <span className="text-foreground/80">{p.description}</span>
                     <span className="ml-auto text-xs text-muted-foreground flex-shrink-0">
-                      {Math.round(p.confidence * 100)}%
+                       {formatSurfaceNumber(lang, Math.round(p.confidence * 100))}%
                     </span>
                   </div>
                 ))}
@@ -511,7 +520,7 @@ export default function NeuralCorePage() {
           {/* Recent Memories Stream */}
           {(insights?.recent_memories?.length ?? 0) > 0 && (
             <div className="border border-border rounded-xl p-5">
-              <div className="text-xs text-muted-foreground tracking-widest mb-3">📥 LIVE MEMORY STREAM</div>
+              <div className="text-xs text-muted-foreground tracking-widest mb-3">{t("memoryStream")}</div>
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {insights!.recent_memories.map((m, i) => (
                   <motion.div
@@ -540,7 +549,7 @@ export default function NeuralCorePage() {
               >
                 ⬡
               </motion.div>
-              <p className="text-muted-foreground text-sm">Connecting to Neural Core...</p>
+              <p className="text-muted-foreground text-sm">{t("connecting")}</p>
             </div>
           )}
         </div>
@@ -548,15 +557,15 @@ export default function NeuralCorePage() {
 
       {/* Bottom status bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-primary/20 px-6 py-2 flex items-center justify-between text-xs text-muted-foreground z-20">
-        <span>ENC — EMPIRE NEURAL CORE © GDNA ARENA</span>
+         <span>ENC — {tx("empireNeuralCore")} © GDNA ARENA</span>
         <motion.span
           animate={{ opacity: [0.4, 1, 0.4] }}
           transition={{ duration: 1, repeat: Infinity }}
           className="text-primary"
         >
-          ● AUTONOMOUS — SELF-EVOLVING — ETERNAL
+           {tx("autonomousFooter")}
         </motion.span>
-        <span>{new Date().toISOString().slice(0, 19).replace("T", " ")} UTC</span>
+         <span>{formatSurfaceDate(lang, Date.now(), { dateStyle: "medium", timeStyle: "short" })}</span>
       </div>
     </div>
   );

@@ -2,29 +2,12 @@ import { useEffect, useState } from "react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
-
-const DNA_LABELS = {
-  discipline: "Discipline",
-  resilience: "Resilience",
-  precision: "Precision",
-  awareness: "Awareness",
-  growth: "Growth",
-  clarity: "Clarity",
-  strategy: "Strategy",
-  leadership: "Leadership",
-  logic: "Logic",
-  influence: "Influence",
-  empathy: "Empathy",
-  expression: "Expression",
-  creation: "Creation",
-  enterprise: "Enterprise",
-  persistence: "Persistence",
-  vision: "Vision",
-  wisdom: "Wisdom",
-  curiosity: "Curiosity",
-};
+import { useLang } from "@/contexts/LangContext";
+import { sharedCopy } from "@/i18n/shared-components-copy";
 
 export default function BotPanel() {
+  const { lang } = useLang();
+  const copy = sharedCopy(lang).bot;
   const [fortress, setFortress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
@@ -34,11 +17,11 @@ export default function BotPanel() {
     let live = true;
     fetch("/api/fortress/bots")
       .then(async (response) => {
-        if (!response.ok) throw new Error("Unable to load the fortress.");
+        if (!response.ok) throw new Error("fortress_load_failed");
         return response.json();
       })
       .then((data) => live && setFortress(data))
-      .catch(() => live && setError("The Fortress is temporarily unavailable."))
+      .catch(() => live && setError("load"))
       .finally(() => live && setLoading(false));
     return () => { live = false; };
   }, []);
@@ -48,30 +31,30 @@ export default function BotPanel() {
     setError("");
     try {
       const response = await fetch(`/api/fortress/bots/${botId}/challenge`, { method: "POST" });
-      if (!response.ok) throw new Error("Unable to issue a new challenge.");
+      if (!response.ok) throw new Error("challenge_failed");
       const { bot } = await response.json();
       setFortress((current) => ({
         ...current,
         bots: current.bots.map((item) => item.id === bot.id ? bot : item),
       }));
     } catch {
-      setError("Could not issue a new challenge. Please try again.");
+      setError("challenge");
     } finally {
       setUpdatingId(null);
     }
   }
 
   if (loading) {
-    return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-72 animate-pulse rounded-xl bg-muted" />)}</div>;
+    return <div dir={lang === "ar" ? "rtl" : "ltr"} role="status" aria-label={copy.loading} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <div key={i} aria-hidden="true" className="h-72 animate-pulse rounded-xl bg-muted" />)}</div>;
   }
 
   if (error && !fortress) {
-    return <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</p>;
+    return <p dir={lang === "ar" ? "rtl" : "ltr"} className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{copy.loadError}</p>;
   }
 
   return (
-    <section aria-label="GDN-SMART FORTRESS bots">
-      {error && <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+    <section dir={lang === "ar" ? "rtl" : "ltr"} aria-label={copy.sectionLabel}>
+      {error && <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error === "challenge" ? copy.challengeError : copy.loadError}</p>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {fortress?.bots.map((bot) => (
           <Card key={bot.id} className="border-primary/25 bg-card">
@@ -84,24 +67,24 @@ export default function BotPanel() {
                     <CardDescription>{bot.title}</CardDescription>
                   </div>
                 </div>
-                <Badge variant="outline" className="border-primary/40 text-primary">ACTIVE</Badge>
+                <Badge variant="outline" className="border-primary/40 text-primary">{copy.active}</Badge>
               </div>
               <p className="text-xs text-muted-foreground">{bot.focus}</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-primary">Current challenge</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary">{copy.currentChallenge}</p>
                 <p className="mt-2 font-semibold text-foreground">{bot.activeChallenge.title}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{bot.activeChallenge.description}</p>
                 <p className="mt-2 text-sm font-medium text-primary">{bot.activeChallenge.reward}</p>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(bot.dna).map(([trait, score]) => (
-                  <Badge key={trait} variant="secondary" className="text-[10px]">{DNA_LABELS[trait] ?? trait} {score}</Badge>
+                  <Badge key={trait} variant="secondary" className="text-[10px]">{copy.dna[trait] ?? trait} {score}</Badge>
                 ))}
               </div>
               <Button className="w-full" onClick={() => requestChallenge(bot.id)} disabled={updatingId === bot.id}>
-                {updatingId === bot.id ? "Preparing..." : "تحدي جديد"}
+                {updatingId === bot.id ? copy.preparing : copy.newChallenge}
               </Button>
             </CardContent>
           </Card>

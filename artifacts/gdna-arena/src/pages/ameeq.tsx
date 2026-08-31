@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/components/social/social-i18n";
+import { useLang } from "@/contexts/LangContext";
 
 const EMPLOYEE_NAME = "Ameeq AI";
 const OWNER = "Arena Qaisypro";
@@ -30,8 +31,11 @@ type CouncilReport = {
 };
 
 export default function AmeeqPage() {
+  const { lang } = useLang();
+  const copy = lang === "fr" ? { greeting: "Bonjour. Posez-moi n'importe quelle question.", placeholder: "Écrivez votre commande ici...", send: "Envoyer", typing: "écrit…" } : lang === "es" ? { greeting: "Hola. Pregúntame lo que quieras.", placeholder: "Escribe tu orden aquí...", send: "Enviar", typing: "está escribiendo…" } : lang === "de" ? { greeting: "Hallo. Frag mich, was du möchtest.", placeholder: "Gib hier deinen Auftrag ein…", send: "Senden", typing: "schreibt gerade…" } : lang === "en" ? { greeting: "Hello. Ask me anything.", placeholder: "Write your command here...", send: "Send", typing: "is typing…" } : { greeting: "مرحبا. اسألني أي شيء.", placeholder: "اكتب أمرك هنا...", send: "إرسال", typing: "كيكتب…" };
+  const de = (fallback: string, german: string) => lang === "de" ? german : fallback;
   const [messages, setMessages] = useState<Msg[]>([
-    { from: "ai", text: "مرحبا. اسألني أي شيء." },
+     { from: "ai", text: copy.greeting },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,7 +69,7 @@ export default function AmeeqPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessages((m) => [...m, { from: "ai", text: `⚠️ ${data.error ?? "وقع مشكل. عاود من بعد."}` }]);
+        setMessages((m) => [...m, { from: "ai", text: `⚠️ ${data.error ?? de("وقع مشكل. عاود من بعد.", "Etwas ist schiefgelaufen. Bitte versuche es später erneut.")}` }]);
         return;
       }
       setMessages((m) => [
@@ -79,24 +83,24 @@ export default function AmeeqPage() {
         },
       ]);
     } catch {
-      setMessages((m) => [...m, { from: "ai", text: "⚠️ الموظف مشغول حالياً. عاود من بعد." }]);
+      setMessages((m) => [...m, { from: "ai", text: de("⚠️ الموظف مشغول حالياً. عاود من بعد.", "⚠️ Der Mitarbeiter ist gerade beschäftigt. Bitte versuche es später erneut.") }]);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div dir="rtl" lang="ar" style={{
+    <div dir={lang === "ar" ? "rtl" : "ltr"} lang={lang} style={{
       background: "hsl(var(--background))", color: "hsl(var(--foreground))", fontFamily: "'Tajawal', sans-serif",
       margin: 0, display: "flex", flexDirection: "column", height: "calc(100vh - 115px)", minHeight: 420,
     }}>
       <header style={{ background: "hsl(var(--card))", padding: 15, textAlign: "center", borderBottom: "2px solid hsl(var(--primary))" }}>
         <div style={{ fontSize: 11, color: "hsl(var(--primary))" }}>
-          🏛️ موظف حكومي رقم {EMPLOYEE_ID} | تابع لـ {OWNER}
+           🏛️ {de("موظف حكومي رقم", "Regierungsmitarbeiter Nr.")} {EMPLOYEE_ID} | {de("تابع لـ", "zugehörig zu")} {OWNER}
         </div>
         <h1 style={{ margin: "6px 0 0" }}>👑 {EMPLOYEE_NAME}</h1>
         <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", marginTop: 4 }}>
-          الحاكم الخارجي السيادي — رئيس مجلس الذكاء الإمبراطوري
+           {de("الحاكم الخارجي السيادي — رئيس مجلس الذكاء الإمبراطوري", "Souveräner externer Statthalter — Vorsitzender des Imperialen Geheimdienstrats")}
         </div>
       </header>
 
@@ -105,23 +109,23 @@ export default function AmeeqPage() {
           <button onClick={() => setShowReport(s => !s)}
             style={{ background: "none", border: "none", color: "hsl(var(--primary))", cursor: "pointer",
               fontWeight: 700, fontSize: 13, width: "100%", textAlign: "right", padding: 0 }}>
-            🏛️ تقرير المجلس الإمبراطوري: {report.headline} {showReport ? "▲" : "▼"}
+             🏛️ {de("تقرير المجلس الإمبراطوري:", "Bericht des Imperialen Rats:")} {report.headline} {showReport ? "▲" : "▼"}
           </button>
           {showReport && (
             <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: "hsl(var(--muted-foreground))" }}>
               {report.report.state_of_empire && <p style={{ margin: "0 0 8px" }}>{report.report.state_of_empire}</p>}
               {!!report.report.predictions?.length && (
-                <div><b style={{ color: "hsl(var(--primary))" }}>🔮 التنبؤات:</b>
+                 <div><b style={{ color: "hsl(var(--primary))" }}>🔮 {de("التنبؤات:", "Prognosen:")}</b>
                   <ul style={{ margin: "4px 0 8px", paddingRight: 18 }}>
                     {report.report.predictions.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
               )}
               {!!report.report.research?.length && (
-                <div><b style={{ color: "hsl(var(--primary))" }}>🔬 البحوث الجماعية:</b>
+                 <div><b style={{ color: "hsl(var(--primary))" }}>🔬 {de("البحوث الجماعية:", "Gemeinsame Forschung:")}</b>
                   <ul style={{ margin: "4px 0 8px", paddingRight: 18 }}>
                     {report.report.research.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
               )}
               {!!report.report.directives?.length && (
-                <div><b style={{ color: "hsl(var(--primary))" }}>⚔️ التوجيهات نحو الريادة:</b>
+                 <div><b style={{ color: "hsl(var(--primary))" }}>⚔️ {de("التوجيهات نحو الريادة:", "Leitlinien für die Führungsrolle:")}</b>
                   <ul style={{ margin: "4px 0 0", paddingRight: 18 }}>
                     {report.report.directives.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
               )}
@@ -146,9 +150,9 @@ export default function AmeeqPage() {
                 <div>{msg.text}</div>
                 {msg.empireNote && msg.ownerDomain && (
                   <div style={{ marginTop: 10 }}>
-                    🏛️ <b>ملاحظة رسمية:</b> هذا الأمر يخص {OWNER}.
+                     🏛️ <b>{de("ملاحظة رسمية:", "Offizieller Hinweis:")}</b> {de("هذا الأمر يخص", "Dieser Auftrag betrifft")} {OWNER}.
                     <br />
-                    للوصول:{" "}
+                     {de("للوصول:", "Zugriff:")}{" "}
                     <a href={`https://${msg.ownerDomain}`} target="_blank" rel="noreferrer" style={{ color: "hsl(var(--primary))" }}>
                       {msg.ownerDomain}
                     </a>
@@ -164,7 +168,7 @@ export default function AmeeqPage() {
         ))}
         {busy && (
           <div style={{ margin: "10px 0", padding: "12px 18px", borderRadius: 12, maxWidth: "80%", background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
-            ⏳ {EMPLOYEE_NAME} كيكتب…
+            ⏳ {EMPLOYEE_NAME} {copy.typing}
           </div>
         )}
       </div>
@@ -174,7 +178,7 @@ export default function AmeeqPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") sendCommand(); }}
-          placeholder="اكتب أمرك هنا..."
+          placeholder={copy.placeholder}
           maxLength={500}
           style={{ flex: 1, padding: 14, borderRadius: 10, border: "none", background: "hsl(var(--muted))", color: "hsl(var(--foreground))", outline: "none" }}
         />
@@ -183,7 +187,7 @@ export default function AmeeqPage() {
           disabled={busy}
           style={{ padding: "14px 25px", marginRight: 10, borderRadius: 10, border: "none", background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", fontWeight: "bold", cursor: "pointer", opacity: busy ? 0.6 : 1 }}
         >
-          إرسال
+          {copy.send}
         </button>
       </footer>
     </div>

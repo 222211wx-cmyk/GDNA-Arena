@@ -9,32 +9,33 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
 import { Scale } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { localeForLang, localeSurfacesAText } from "@/i18n/locale-surfaces-a-copy";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
 // ── Nav items ──────────────────────────────────────────────────────────────────
 // جميع الأقسام ظاهرة فالتنقل الرئيسي
 const NAV_ITEMS = [
-  { name: "Home",     emoji: null,  icon: null,                     path: "/",                 highlight: false },
-  { name: "الساحة",   emoji: "⚔️",  icon: <Gamepad2      size={15} />, path: "/games",    highlight: true  },
-  { name: "المتجر",   emoji: "🛒",  icon: <ShoppingBag   size={15} />, path: "/shop",     highlight: true  },
-  { name: "المهام",   emoji: "🎯",  icon: <BrainCircuit  size={15} />, path: "/growth",   highlight: true  },
-  { name: "FORTRESS", emoji: "🏰",  icon: <BrainCircuit  size={15} />, path: "/fortress", highlight: true  },
-  { name: "SPORT",    emoji: "⚽",  icon: <Trophy    size={15} />,  path: "/sport",            highlight: false },
-  { name: "MUSIC",    emoji: "🎵",  icon: <Music     size={15} />,  path: "/music",            highlight: false },
-  { name: "CINEMA",   emoji: "🎬",  icon: <Film      size={15} />,  path: "/cinema",           highlight: false },
-  { name: "NEWS",     emoji: "📰",  icon: <Newspaper size={15} />,  path: "/news",             highlight: false },
-  { name: "HERITAGE", emoji: "🏛️", icon: <Landmark  size={15} />,  path: "/chronicle",        highlight: false },
-  { name: "CLIPS",    emoji: "🎬",  icon: <Film      size={15} />,  path: "/clips",            highlight: false },
-  { name: "SMART",    emoji: "🧠",  icon: <BrainCircuit  size={15} />, path: "/smart",    highlight: false },
+  { labelKey: "nav_home",     emoji: null,  icon: null,                        path: "/",          highlight: false },
+  { labelKey: "nav_arena",    emoji: "⚔️", icon: <Gamepad2 size={15} />,       path: "/games",     highlight: true  },
+  { labelKey: "nav_shop",     emoji: "🛒", icon: <ShoppingBag size={15} />,    path: "/shop",      highlight: true  },
+  { labelKey: "nav_missions", emoji: "🎯", icon: <BrainCircuit size={15} />,   path: "/growth",    highlight: true  },
+  { labelKey: "nav_fortress", emoji: "🏰", icon: <BrainCircuit size={15} />,   path: "/fortress",  highlight: true  },
+  { labelKey: "nav_sport",    emoji: "⚽", icon: <Trophy size={15} />,         path: "/sport",     highlight: false },
+  { labelKey: "nav_music",    emoji: "🎵", icon: <Music size={15} />,          path: "/music",     highlight: false },
+  { labelKey: "nav_cinema",   emoji: "🎬", icon: <Film size={15} />,           path: "/cinema",    highlight: false },
+  { labelKey: "nav_news",     emoji: "📰", icon: <Newspaper size={15} />,      path: "/news",      highlight: false },
+  { labelKey: "nav_heritage", emoji: "🏛️", icon: <Landmark size={15} />,      path: "/chronicle", highlight: false },
+  { labelKey: "nav_clips",    emoji: "🎬", icon: <Film size={15} />,           path: "/clips",     highlight: false },
+  { labelKey: "nav_smart",    emoji: "🧠", icon: <BrainCircuit size={15} />,   path: "/smart",     highlight: false },
 ];
 
 // ── Four-door modules — exact brand names, no emojis, module-isolated ────────────
 // AMIS is admin-only site control (adminOnly). MESSAGERI and SOCIAL are public.
 const MODULE_ITEMS = [
-  { name: "MESSAGERI - المراسلات", icon: <Mail          size={15} />, path: "/messages", adminOnly: false },
-  { name: "SOCIAL - جهات الاتصال", icon: <MessageSquare size={15} />, path: "/social",   adminOnly: false },
-  { name: "AMIS - لوحة التحكم",     icon: <User          size={15} />, path: "/amis",     adminOnly: true  },
+  { labelKey: "nav_messageri", icon: <Mail size={15} />,          path: "/messages", adminOnly: false },
+  { labelKey: "nav_social",    icon: <MessageSquare size={15} />, path: "/social",   adminOnly: false },
+  { labelKey: "nav_amis",      icon: <User size={15} />,          path: "/amis",     adminOnly: true  },
 ];
 
 export function Navbar() {
@@ -50,6 +51,7 @@ export function Navbar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { t, lang, setLang } = useLang();
+  const locale = localeForLang(lang);
 
   useEffect(() => {
     // Unread badges are identity-bound too. Clear synchronously and abort the
@@ -161,7 +163,7 @@ export function Navbar() {
             const isDM      = item.path === "/messages";
             return (
               <Link
-                key={item.name}
+                key={item.path}
                 href={item.path}
                 className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
                   active
@@ -172,7 +174,7 @@ export function Navbar() {
                 }`}
               >
                 {item.emoji && <span className="text-base leading-none">{item.emoji}</span>}
-                {item.name}
+                {t(item.labelKey)}
                 {isDM && unreadDMs > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
                     {unreadDMs > 9 ? "9+" : unreadDMs}
@@ -188,7 +190,7 @@ export function Navbar() {
             const isDM   = item.path === "/messages";
             return (
               <Link
-                key={item.name}
+                key={item.path}
                 href={item.path}
                 data-testid={`nav-module-${item.path.replace("/", "")}`}
                 className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
@@ -198,7 +200,7 @@ export function Navbar() {
                 }`}
               >
                 {item.icon}
-                {item.name}
+                {t(item.labelKey)}
                 {isDM && unreadDMs > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
                     {unreadDMs > 9 ? "9+" : unreadDMs}
@@ -218,7 +220,7 @@ export function Navbar() {
             }`}
           >
             <Mic2 size={14} />
-            PRESS
+            {t("press")}
           </Link>
         </nav>
 
@@ -232,7 +234,7 @@ export function Navbar() {
                 <Search size={15} className="text-muted-foreground shrink-0" />
                 <input
                   type="text"
-                  placeholder="CR7, Messi, Coupe du Monde..."
+                  placeholder={t("nav_search_placeholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="bg-transparent outline-none text-foreground text-sm w-44 placeholder:text-muted-foreground"
@@ -255,11 +257,11 @@ export function Navbar() {
           {/* Legal Center link */}
           <Link
             href="/legal"
-            title="Legal Center"
+            title={t("legal_title")}
             className="hidden md:flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors text-xs border border-border hover:border-primary/30 rounded-lg px-2 py-1"
           >
             <Scale size={12} />
-            <span className="hidden lg:block">Legal</span>
+            <span className="hidden lg:block">{t("legal_title")}</span>
           </Link>
 
           {/* Language */}
@@ -297,14 +299,14 @@ export function Navbar() {
                 className="flex items-center gap-1 text-xs text-primary font-black uppercase tracking-widest hover:text-primary/80 transition-colors"
               >
                 <Trophy size={12} />
-                {user.balance.toLocaleString()}
+                {user.balance.toLocaleString(locale)}
               </Link>
               <Link href="/wallet"    title={t("wallet")}    className="text-muted-foreground hover:text-primary transition-colors"><Wallet         size={16} /></Link>
               <Link href="/dashboard" title={t("dashboard")} className="text-muted-foreground hover:text-primary transition-colors"><LayoutDashboard size={16} /></Link>
               <button
                 onClick={() => {
                   void logout().catch(error =>
-                    window.alert(error instanceof Error ? error.message : "Logout failed"));
+                    window.alert(error instanceof Error ? error.message : localeSurfacesAText(lang, "logoutFailed")));
                 }}
                 title={t("logout")}
                 className="text-muted-foreground hover:text-destructive transition-colors"
@@ -340,7 +342,7 @@ export function Navbar() {
               <input
                 autoFocus
                 type="text"
-                placeholder="CR7, Messi, Coupe du Monde..."
+                placeholder={t("nav_search_placeholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-transparent outline-none text-foreground text-sm flex-1 placeholder:text-muted-foreground"
@@ -358,7 +360,7 @@ export function Navbar() {
           const isDM     = item.path === "/messages";
           return (
             <Link
-              key={item.name}
+              key={item.path}
               href={item.path}
               onClick={() => setMobileOpen(false)}
               className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -370,7 +372,7 @@ export function Navbar() {
               }`}
             >
               {item.emoji && <span>{item.emoji}</span>}
-              {item.name}
+              {t(item.labelKey)}
               {isDM && unreadDMs > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
                   {unreadDMs > 9 ? "9+" : unreadDMs}
@@ -384,7 +386,7 @@ export function Navbar() {
           const isDM   = item.path === "/messages";
           return (
             <Link
-              key={item.name}
+              key={item.path}
               href={item.path}
               data-testid={`nav-module-mobile-${item.path.replace("/", "")}`}
               className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -392,7 +394,7 @@ export function Navbar() {
               }`}
             >
               {item.icon}
-              {item.name}
+              {t(item.labelKey)}
               {isDM && unreadDMs > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
                   {unreadDMs > 9 ? "9+" : unreadDMs}
@@ -420,13 +422,13 @@ export function Navbar() {
         <div className="md:hidden border-t border-border bg-background/98 px-4 py-4 space-y-1">
 
           {/* Nav links */}
-          {[...NAV_ITEMS, { name: "PRESS", emoji: "📡", icon: <Mic2 size={16} />, path: "/press", highlight: false }].map((item) => {
+          {[...NAV_ITEMS, { labelKey: "nav_press", emoji: "📡", icon: <Mic2 size={16} />, path: "/press", highlight: false }].map((item) => {
             const active   = isActive(item.path);
             const featured = item.highlight && !active;
             const isDM     = item.path === "/messages";
             return (
               <Link
-                key={item.name}
+                key={item.path}
                 href={item.path}
                 onClick={() => setMobileOpen(false)}
                 className={`relative flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
@@ -438,7 +440,7 @@ export function Navbar() {
                 }`}
               >
                 <span className="text-xl leading-none">{item.emoji ?? "›"}</span>
-                {item.name}
+                {t(item.labelKey)}
                 {isDM && unreadDMs > 0 && (
                   <span className="ml-auto min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
                     {unreadDMs > 9 ? "9+" : unreadDMs}
@@ -454,7 +456,7 @@ export function Navbar() {
               const active = isActive(item.path);
               return (
                 <Link
-                  key={item.name}
+                  key={item.path}
                   href={item.path}
                   onClick={() => setMobileOpen(false)}
                   data-testid={`nav-module-menu-${item.path.replace("/", "")}`}
@@ -463,7 +465,7 @@ export function Navbar() {
                   }`}
                 >
                   {item.icon}
-                  {item.name}
+                  {t(item.labelKey)}
                 </Link>
               );
             })}
@@ -492,7 +494,7 @@ export function Navbar() {
               <button onClick={() => {
                 setMobileOpen(false);
                 void logout().catch(error =>
-                  window.alert(error instanceof Error ? error.message : "Logout failed"));
+                  window.alert(error instanceof Error ? error.message : localeSurfacesAText(lang, "logoutFailed")));
               }}
                 className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-destructive w-full hover:bg-destructive/10 transition-all">
                 <LogOut size={16} /> {t("logout")}

@@ -19,13 +19,15 @@ export function Navbar() {
     { path: '/news', label: t('news'), icon: Newspaper },
     { path: '/traditions', label: t('traditions'), icon: Landmark },
     { path: '/about', label: t('about'), icon: Info },
-    { path: '/earnings', label: 'أرباحي', icon: Coins },
+    { path: '/earnings', label: t('earnings'), icon: Coins },
   ];
 
   const languages = [
     { code: 'ar', label: 'العربية' },
     { code: 'en', label: 'English' },
     { code: 'fr', label: 'Français' },
+    { code: 'es', label: 'Español' },
+    { code: 'de', label: 'Deutsch' },
   ];
 
   return (
@@ -69,7 +71,7 @@ export function Navbar() {
               {languages.map((lang) => (
                 <DropdownMenuItem
                   key={lang.code}
-                  onClick={() => setLanguage(lang.code as 'en' | 'ar' | 'fr')}
+                  onClick={() => setLanguage(lang.code as 'en' | 'ar' | 'fr' | 'es' | 'de')}
                   data-testid={`language-${lang.code}`}
                 >
                   {lang.label}

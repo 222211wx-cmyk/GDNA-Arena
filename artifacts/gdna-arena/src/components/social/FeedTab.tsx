@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import FeedCard from "./FeedCard";
 import Avatar from "./Avatar";
-import { GOLD, GOLD_A, DOMAIN_ICONS, DOMAINS, timeAgo, api } from "./social-i18n";
+import { GOLD, GOLD_A, DOMAIN_ICONS, DOMAINS, api, useSocialI18n } from "./social-i18n";
 import type { FeedPost } from "./social-types";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
@@ -46,7 +46,7 @@ function TrendingSection({ st, dir }: { st: Record<string, string>; dir: string 
             <div style={{ padding: "0 14px 12px", borderTop: "1px solid #ffffff08" }}>
               {data.topPosts.length > 0 && (
                 <div style={{ marginTop: 10 }}>
-                  <p style={{ margin: "0 0 6px", fontSize: 10, fontWeight: 800, color: "#ffffff40", textTransform: "uppercase", letterSpacing: 1 }}>Hot Posts</p>
+                  <p style={{ margin: "0 0 6px", fontSize: 10, fontWeight: 800, color: "#ffffff40", textTransform: "uppercase", letterSpacing: 1 }}>{st.hot_posts}</p>
                   {data.topPosts.slice(0, 3).map((p: any) => (
                     <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid #ffffff05" }}>
                       <Avatar name={p.username} size={22} />
@@ -83,7 +83,8 @@ interface Props {
   dir: string;
 }
 
-export default function FeedTab({ user, st, dir }: Props) {
+export default function FeedTab({ user }: Props) {
+  const { st, dir } = useSocialI18n();
   const { isOnline } = useConnectivity();
   const [posts,    setPosts]    = useState<FeedPost[]>([]);
   const [content,  setContent]  = useState("");
@@ -173,7 +174,7 @@ export default function FeedTab({ user, st, dir }: Props) {
   const filtered = filter === "all" ? posts : posts.filter(p => p.domain === filter);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div dir={dir} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Composer */}
       {user ? (
         <div style={{ background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.13)}`, borderRadius: 12, padding: 16 }}>
@@ -181,17 +182,19 @@ export default function FeedTab({ user, st, dir }: Props) {
             <Avatar name={user.username} />
             <textarea value={content} onChange={e => setContent(e.target.value)}
               placeholder={st.post_placeholder} maxLength={500} dir={dir} rows={3}
+              aria-label={st.post_placeholder}
               style={{ flex: 1, background: "transparent", border: "none", color: "hsl(var(--foreground))", resize: "none", fontSize: 14, outline: "none", lineHeight: 1.5 }} />
           </div>
           {/* Optional media URL — image or YouTube */}
           {showImg && (
             <div style={{ marginTop: 8 }}>
               <input value={mediaUrl} onChange={e => setMediaUrl(e.target.value)}
-                placeholder={st.image_url ?? "Image or YouTube URL…"}
+                placeholder={st.image_url}
+                aria-label={st.image_url}
                 style={{ width: "100%", background: "hsl(var(--background))", border: `1px solid ${isYouTube ? "#ef4444" : GOLD_A(0.13)}`, borderRadius: 8, padding: "8px 12px", color: "hsl(var(--foreground))", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
               {isYouTube && (
                 <p style={{ margin: "5px 0 0", fontSize: 11, color: "#ef4444", display: "flex", alignItems: "center", gap: 4 }}>
-                  <Video size={11} /> YouTube video will be embedded
+                  <Video size={11} /> {st.youtube_embed}
                 </p>
               )}
             </div>
@@ -207,7 +210,8 @@ export default function FeedTab({ user, st, dir }: Props) {
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={() => { setShowImg(v => !v); if (showImg) setMediaUrl(""); }}
-                title={st.attach_image ?? "Attach Media"}
+                title={st.attach_image}
+                 aria-label={st.attach_image}
                 style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${GOLD_A(0.15)}`, background: showImg ? GOLD_A(0.13) : "hsl(var(--secondary))", color: showImg ? (isYouTube ? "#ef4444" : GOLD) : "hsl(var(--muted-foreground))", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {isYouTube ? <Video size={14} /> : <Image size={14} />}
               </button>
@@ -250,7 +254,7 @@ export default function FeedTab({ user, st, dir }: Props) {
       </div>
 
       {/* Posts */}
-      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 40 }}>…</div>}
+      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 40 }}>{st.loading}</div>}
       {!loading && filtered.length === 0 && (
         <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 60, fontSize: 14 }}>
           {feedScope === "following" ? st.no_following_posts : st.no_posts}

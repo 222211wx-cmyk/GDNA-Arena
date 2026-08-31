@@ -23,7 +23,7 @@ export default function LiveTab({ user, st }: Props) {
           </p>
           {call.liveStatus === "live" && (
             <span style={{ background: "#ef4444", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 800, animation: "pulse 1s infinite" }}>
-              ● LIVE
+              ● {st.live}
             </span>
           )}
         </div>

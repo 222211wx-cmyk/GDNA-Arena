@@ -11,6 +11,9 @@ import {
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { task39Text } from "@/i18n/task39";
+import { isArabic, techT, type TechCopyKey } from "@/i18n/tech-surfaces-copy";
+import { formatSurfaceNumber, localeForSurfaceB } from "@/i18n/locale-surfaces-b-copy";
 import {
   Landmark, Zap, BrainCircuit, MapPin, Calendar,
   TrendingUp, Vote, Gamepad2, ArrowRight, Clock,
@@ -71,10 +74,13 @@ interface ChronicleAiPredictions {
 
 export default function Chronicle() {
   const { t, lang } = useLang();
+  const tx = (key: TechCopyKey) => techT(lang, key);
   const [tick, setTick] = useState(0);
   const [aiPredictions, setAiPredictions] = useState<ChronicleAiPredictions | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const quarterLabel = (quarter: number, year: number) =>
+    `Q${formatSurfaceNumber(lang, quarter)} ${formatSurfaceNumber(lang, year, { useGrouping: false })}`;
 
   const { data: traditions, isLoading: tradLoading } = useGetGsTraditions();
   const { data: ranking } = useGetGsRanking();
@@ -101,7 +107,14 @@ export default function Chronicle() {
     })
       .then(r => r.json())
       .then(d => setAiPredictions(d.predictions ?? null))
-      .catch(() => {})
+      .catch(() => setAiPredictions({
+        q3_2026: t("chrono_pred_1"),
+        q4_2026: t("chrono_pred_2"),
+        q1_2027: t("chrono_pred_3"),
+        q2_2027: t("chrono_pred_4"),
+        oracle_quote: t("chrono_vision_desc"),
+        confidence_score: "92",
+      }))
       .finally(() => setAiLoading(false));
   }, [lang]);
 
@@ -111,7 +124,7 @@ export default function Chronicle() {
   const heritages  = traditions?.traditions?.slice(0, 6) ?? [];
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] max-w-6xl mx-auto px-4 py-10 space-y-14">
+    <div dir={isArabic(lang) ? "rtl" : "ltr"} className="min-h-[calc(100vh-4rem)] max-w-6xl mx-auto px-4 py-10 space-y-14">
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
       <motion.div
@@ -177,8 +190,8 @@ export default function Chronicle() {
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed">{t("chrono_heritage_desc")}</p>
                   <div className="grid grid-cols-2 gap-2 pt-2">
-                    {["🏛️ Archaeological", "🎭 Cultural", "🕌 Religious", "📜 Historical"].map(tag => (
-                      <span key={tag} className="text-xs px-2 py-1 rounded border border-yellow-400/20 text-yellow-400/80 font-mono bg-yellow-400/5 truncate">{tag}</span>
+                    {(["archaeological", "cultural", "religious", "historical"] as const).map(tag => (
+                      <span key={tag} className="text-xs px-2 py-1 rounded border border-yellow-400/20 text-yellow-400/80 font-mono bg-yellow-400/5 truncate">{task39Text(lang, tag)}</span>
                     ))}
                   </div>
                   <Link href="/games/globalstar/traditions">
@@ -231,10 +244,10 @@ export default function Chronicle() {
 
               {heritages.length === 0 && !tradLoading && (
                 <div className="grid grid-cols-1 gap-3">
-                  {[
-                    { name: "Pyramids of Giza", country: "Egypt", period: "2580–2560 BC" },
-                    { name: "Alhambra Palace", country: "Spain", period: "1238–1358 AD" },
-                    { name: "Petra", country: "Jordan", period: "4th Century BC" },
+                   {[
+                     { name: tx("chronPyramid"), country: tx("chronEgypt"), period: tx("chronPyramidPeriod") },
+                     { name: tx("chronAlhambra"), country: tx("chronSpain"), period: tx("chronAlhambraPeriod") },
+                     { name: tx("chronPetra"), country: tx("chronJordan"), period: tx("chronPetraPeriod") },
                   ].map((h, i) => (
                     <Card key={i} className="bg-card/30 border-yellow-400/20">
                       <CardContent className="p-4 flex items-start gap-3">
@@ -268,7 +281,7 @@ export default function Chronicle() {
                       {fig.name?.charAt(0)}
                     </div>
                     <p className="font-bold text-xs truncate">{fig.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{fig.votes?.toLocaleString()} {t("hub_votes")}</p>
+                     <p className="text-xs text-muted-foreground font-mono">{formatSurfaceNumber(lang, fig.votes ?? 0)} {t("hub_votes")}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -297,11 +310,7 @@ export default function Chronicle() {
                   <CardContent className="p-5">
                     <s.icon className={`w-5 h-5 mx-auto mb-2 ${s.color}`} />
                     <p className={`text-2xl md:text-3xl font-black font-mono tabular-nums ${s.color}`}>
-                      {s.count >= 1_000_000
-                        ? `${(s.count / 1_000_000).toFixed(1)}M`
-                        : s.count >= 1000
-                          ? `${Math.floor(s.count / 1000)}K`
-                          : s.count}
+                       {new Intl.NumberFormat(localeForSurfaceB[lang], { notation: "compact", maximumFractionDigits: 1 }).format(s.count)}
                       {s.suffix}
                     </p>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">{s.label}</p>
@@ -327,7 +336,7 @@ export default function Chronicle() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className={`w-2 h-2 rounded-full bg-green-400 ${tick % 2 === 0 ? "opacity-100" : "opacity-30"} transition-opacity`} />
-                      <span className="text-xs font-mono text-green-400">LIVE</span>
+                      <span className="text-xs font-mono text-green-400">{task39Text(lang, "live")}</span>
                     </div>
                   </div>
                   {(ranking?.ranking ?? []).slice(0, 5).map((domain, i) => (
@@ -336,7 +345,7 @@ export default function Chronicle() {
                       <div className="flex-1 space-y-1">
                         <div className="flex justify-between text-xs">
                           <span className="font-medium">{domain.domainLabel}</span>
-                          <span className="text-primary font-mono">{(domain as any).totalVotes?.toLocaleString()}</span>
+                            <span className="text-primary font-mono">{formatSurfaceNumber(lang, (domain as any).totalVotes ?? 0)}</span>
                         </div>
                         <div className="h-1.5 rounded-full bg-border/50 overflow-hidden">
                           <motion.div
@@ -374,7 +383,7 @@ export default function Chronicle() {
                   {hotNews.map((article, i) => (
                     <div key={article.id} className="space-y-1.5 pb-3 border-b border-border/30 last:border-0 last:pb-0">
                       {article.isBreaking && (
-                        <Badge variant="destructive" className="text-xs px-2 py-0.5">BREAKING</Badge>
+                        <Badge variant="destructive" className="text-xs px-2 py-0.5">{task39Text(lang, "breaking")}</Badge>
                       )}
                       <p className="font-semibold text-sm line-clamp-2">{article.title}</p>
                       <p className="text-xs text-muted-foreground line-clamp-1">{article.summary}</p>
@@ -383,7 +392,7 @@ export default function Chronicle() {
                   ))}
                   {hotNews.length === 0 && (
                     <div className="space-y-3">
-                      {["GlobalStar reaches 2.4M votes milestone", "Arena Strike breaks daily play records"].map((h, i) => (
+                       {[tx("chronNews1"), tx("chronNews2")].map((h, i) => (
                         <div key={i} className="pb-3 border-b border-border/30 last:border-0 last:pb-0">
                           <p className="font-semibold text-sm">{h}</p>
                         </div>
@@ -437,10 +446,10 @@ export default function Chronicle() {
                 {aiPredictions && !aiLoading && (
                   <div className="space-y-4">
                     {[
-                      { quarter: "Q3 2026", text: aiPredictions.q3_2026, meta: PRED_META[0] },
-                      { quarter: "Q4 2026", text: aiPredictions.q4_2026, meta: PRED_META[1] },
-                      { quarter: "Q1 2027", text: aiPredictions.q1_2027, meta: PRED_META[2] },
-                      { quarter: "Q2 2027", text: aiPredictions.q2_2027, meta: PRED_META[3] },
+                       { quarter: quarterLabel(3, 2026), text: aiPredictions.q3_2026, meta: PRED_META[0] },
+                       { quarter: quarterLabel(4, 2026), text: aiPredictions.q4_2026, meta: PRED_META[1] },
+                       { quarter: quarterLabel(1, 2027), text: aiPredictions.q1_2027, meta: PRED_META[2] },
+                       { quarter: quarterLabel(2, 2027), text: aiPredictions.q2_2027, meta: PRED_META[3] },
                     ].filter(p => p.text).map((pred, i) => (
                       <motion.div
                         key={pred.quarter}
@@ -457,7 +466,7 @@ export default function Chronicle() {
                               <span className={`text-xs font-black font-mono ${pred.meta.color}`}>{pred.quarter}</span>
                               <div className="flex items-center gap-1.5">
                                 <span className={`text-xs font-black font-mono ${pred.meta.color}`}>
-                                  {aiPredictions.confidence_score ?? "92"}%
+                                   {formatSurfaceNumber(lang, Number(aiPredictions.confidence_score ?? 92))}%
                                 </span>
                                 <Badge className={`text-xs px-1.5 py-0 ${pred.meta.color} bg-current/10 border-current/30`}>
                                   {t("chrono_confidence")}
@@ -500,9 +509,9 @@ export default function Chronicle() {
               className="grid md:grid-cols-3 gap-4"
             >
               {[
-                { icon: Gamepad2, phase: "Q3 2026", text: aiPredictions.q3_2026 ?? t("chrono_future_1"), color: "text-primary",    bg: "bg-primary/10",    border: "border-primary/30" },
-                { icon: Globe,    phase: "Q4 2026", text: aiPredictions.q4_2026 ?? t("chrono_future_2"), color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/30" },
-                { icon: Star,     phase: "Q1 2027", text: aiPredictions.q1_2027 ?? t("chrono_future_3"), color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30" },
+                 { icon: Gamepad2, phase: quarterLabel(3, 2026), text: aiPredictions.q3_2026 ?? t("chrono_future_1"), color: "text-primary",    bg: "bg-primary/10",    border: "border-primary/30" },
+                 { icon: Globe,    phase: quarterLabel(4, 2026), text: aiPredictions.q4_2026 ?? t("chrono_future_2"), color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/30" },
+                 { icon: Star,     phase: quarterLabel(1, 2027), text: aiPredictions.q1_2027 ?? t("chrono_future_3"), color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30" },
               ].map((item, i) => (
                 <motion.div
                   key={item.phase}
@@ -539,9 +548,12 @@ export default function Chronicle() {
                 <h3 className="text-xl font-black uppercase tracking-wider text-purple-400">{t("chrono_vision_title")}</h3>
                 <p className="text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed">{t("chrono_vision_desc")}</p>
                 <div className="flex flex-wrap justify-center gap-3 pt-2">
-                  {["🌍 180+ Countries", "🤖 OpenAI Powered", "⚖️ GDPR Certified", "🏛️ Heritage Preserved", "🎮 4 Games", "📡 Real-Time"].map(tag => (
+                   {(["countries", "aiPowered", "gdpr", "heritage", "fourGames", "realTime"] as TechCopyKey[]).map(key => {
+                     const tag = tx(key);
+                     return (
                     <span key={tag} className="text-xs px-3 py-1 rounded-full border border-purple-400/20 text-purple-400/80 bg-purple-400/5 font-mono">{tag}</span>
-                  ))}
+                     );
+                   })}
                 </div>
                 <div className="flex flex-wrap gap-3 justify-center pt-2">
                   <Link href="/empire">

@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getLegendImageUrl } from "@/lib/legend-images";
+import { useLang } from "@/contexts/LangContext";
+import { coreCopy } from "@/i18n/core-auth-copy";
+import { formatDate, formatNumber, interpolate, relativeTime, surfaceCopy } from "@/i18n/content-surfaces-copy";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Legend {
@@ -47,25 +50,18 @@ function StatBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-function timeAgo(d: string) {
-  const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 // TAB 1 — NOSTALGIA DNA (GREEN THEME — PAST)
 // ══════════════════════════════════════════════════════════════════════════════
 function NostalgiaTab({ legend }: { legend: Legend }) {
+  const { lang } = useLang();
+  const s = surfaceCopy(lang);
   const imageUrl = getLegendImageUrl(legend.name, legend.imageUrl);
   const stages = [
-    { key: "childhood",    icon: "🌱", label: "CHILDHOOD",    color: GREEN,       border: `${GREEN}40` },
-    { key: "training",     icon: "⚔️", label: "TRAINING",     color: "#22d3ee",   border: "rgba(34,211,238,0.4)" },
-    { key: "breakthrough", icon: "💥", label: "BREAKTHROUGH", color: "#fb923c",   border: "rgba(251,146,60,0.4)" },
-    { key: "stardom",      icon: "👑", label: "STARDOM",      color: "#FFD700",   border: "rgba(255,215,0,0.4)" },
+    { key: "childhood", icon: "🌱", label: s.childhood, color: GREEN, border: `${GREEN}40` },
+    { key: "training", icon: "⚔️", label: s.training, color: "#22d3ee", border: "rgba(34,211,238,0.4)" },
+    { key: "breakthrough", icon: "💥", label: s.breakthrough, color: "#fb923c", border: "rgba(251,146,60,0.4)" },
+    { key: "stardom", icon: "👑", label: s.stardom, color: "#FFD700", border: "rgba(255,215,0,0.4)" },
   ] as const;
 
   return (
@@ -73,9 +69,9 @@ function NostalgiaTab({ legend }: { legend: Legend }) {
       <div className="text-center py-4">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold tracking-widest"
           style={{ background: `${GREEN}10`, borderColor: `${GREEN}40`, color: GREEN }}>
-          <Dna className="w-3.5 h-3.5" /> NOSTALGIA DNA — THE PAST IS ALIVE
+           <Dna className="w-3.5 h-3.5" /> {s.nostalgiaHero}
         </div>
-        <p className="text-xs text-muted-foreground mt-2">Every legend begins with a story. This is theirs.</p>
+         <p className="text-xs text-muted-foreground mt-2">{s.nostalgiaIntro}</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
@@ -88,13 +84,13 @@ function NostalgiaTab({ legend }: { legend: Legend }) {
         </div>
         <div className="flex-1 space-y-4">
           <h2 className="text-2xl font-black">{legend.name}</h2>
-          <div className="relative border-l-2 pl-6 space-y-6" style={{ borderColor: `${GREEN}40` }}>
+          <div className="relative border-l-2 pl-6 rtl:border-l-0 rtl:border-r-2 rtl:pl-0 rtl:pr-6 space-y-6" style={{ borderColor: `${GREEN}40` }}>
             {stages.map((s) => {
               const text = legend.bio?.[s.key];
               if (!text) return null;
               return (
                 <motion.div key={s.key} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
-                  <div className="absolute -left-2.5 w-5 h-5 rounded-full flex items-center justify-center text-xs" style={{ background: s.border, border: `1px solid ${s.color}` }}>
+                  <div className="absolute -left-2.5 rtl:left-auto rtl:-right-2.5 w-5 h-5 rounded-full flex items-center justify-center text-xs" style={{ background: s.border, border: `1px solid ${s.color}` }}>
                     {s.icon}
                   </div>
                   <div className="p-4 rounded-2xl border" style={{ borderColor: s.border, background: `${s.color}05` }}>
@@ -115,6 +111,8 @@ function NostalgiaTab({ legend }: { legend: Legend }) {
 // TAB 2 — PEAK MOMENTS (PRESENT)
 // ══════════════════════════════════════════════════════════════════════════════
 function MomentsTab({ legend }: { legend: Legend }) {
+  const { lang } = useLang();
+  const s = surfaceCopy(lang);
   const { user } = useAuth();
   const [rewarded, setRewarded] = useState<Set<string>>(new Set());
   const [toasts,   setToasts]   = useState<{ id: number; msg: string }[]>([]);
@@ -141,9 +139,9 @@ function MomentsTab({ legend }: { legend: Legend }) {
     <div className="space-y-6">
       <div className="text-center py-4">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-bold tracking-widest">
-          <Video className="w-3.5 h-3.5" /> PEAK MOMENTS — TOP ACHIEVEMENTS
+           <Video className="w-3.5 h-3.5" /> {s.momentsHero}
         </div>
-        {user && <p className="text-xs text-green-400 mt-2 font-bold">▶ Watch any video to earn +20 XP</p>}
+         {user && <p className="text-xs text-green-400 mt-2 font-bold">{s.watchReward}</p>}
       </div>
       <AnimatePresence>
         {toasts.map(t => (
@@ -188,6 +186,8 @@ function MomentsTab({ legend }: { legend: Legend }) {
 // TAB 3 — GLOBAL ARENA (FUTURE — live lectures, debates, conferences)
 // ══════════════════════════════════════════════════════════════════════════════
 function GlobalArenaTab({ legend }: { legend: Legend }) {
+  const { lang } = useLang();
+  const s = surfaceCopy(lang);
   const { user } = useAuth();
   const [events, setEvents] = useState<ArenaEv[]>([]);
   const [joining, setJoining] = useState<number | null>(null);
@@ -222,15 +222,15 @@ function GlobalArenaTab({ legend }: { legend: Legend }) {
       <div className="text-center py-4">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold tracking-widest"
           style={{ background: "rgba(167,139,250,0.1)", borderColor: "rgba(167,139,250,0.4)", color: "#a78bfa" }}>
-          <Globe2 className="w-3.5 h-3.5" /> GLOBAL ARENA — LECTURES · DEBATES · CONFERENCES
+           <Globe2 className="w-3.5 h-3.5" /> {s.arenaHero}
         </div>
-        <p className="text-xs text-muted-foreground mt-2">Join events to earn <span className="text-yellow-400 font-bold">+50 Coins</span> per session</p>
+         <p className="text-xs text-muted-foreground mt-2">{s.joinReward}</p>
       </div>
 
       {live.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-red-400 text-xs font-bold">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> LIVE NOW
+             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {s.liveNow}
           </div>
           {live.map(ev => (
             <div key={ev.id} className="p-4 rounded-2xl border bg-red-500/5 border-red-500/30">
@@ -241,15 +241,15 @@ function GlobalArenaTab({ legend }: { legend: Legend }) {
                     <div className="font-bold text-sm">{ev.title}</div>
                     {ev.speaker && <div className="text-xs text-muted-foreground mt-0.5">🎤 {ev.speaker}</div>}
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">LIVE</span>
-                      <span className="text-xs text-muted-foreground">{TYPE_ICON[ev.eventType]} {ev.eventType}</span>
+                       <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">{s.live}</span>
+                      <span className="text-xs text-muted-foreground">{TYPE_ICON[ev.eventType]} {s[ev.eventType as keyof typeof s] ?? ev.eventType}</span>
                     </div>
                   </div>
                 </div>
                 <button onClick={() => void handleJoin(ev.id)} disabled={!user || joined.has(ev.id) || joining === ev.id}
                   className="shrink-0 px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 disabled:opacity-40"
                   style={{ background: joined.has(ev.id) ? "#22c55e20" : "rgba(255,215,0,0.2)", color: joined.has(ev.id) ? "#22c55e" : "#FFD700", border: `1px solid ${joined.has(ev.id) ? "#22c55e40" : "rgba(255,215,0,0.4)"}` }}>
-                  {joined.has(ev.id) ? "✓ Joined +50 🪙" : user ? "JOIN +50 🪙" : "Login to Join"}
+                   {joined.has(ev.id) ? s.joined : user ? s.join : s.loginJoin}
                 </button>
               </div>
               {ev.youtubeId && (
@@ -266,7 +266,7 @@ function GlobalArenaTab({ legend }: { legend: Legend }) {
       )}
 
       <div className="space-y-3">
-        <div className="text-xs font-bold text-muted-foreground tracking-widest">UPCOMING EVENTS</div>
+         <div className="text-xs font-bold text-muted-foreground tracking-widest">{s.upcomingEvents}</div>
         {upcoming.map((ev, i) => (
           <motion.div key={ev.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
             className="flex items-center gap-3 p-4 rounded-2xl border border-border/50 bg-card hover:border-primary/20 transition-colors">
@@ -275,11 +275,11 @@ function GlobalArenaTab({ legend }: { legend: Legend }) {
               <div className="font-bold text-sm truncate">{ev.title}</div>
               {ev.speaker && <div className="text-xs text-muted-foreground">🎤 {ev.speaker}</div>}
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-muted-foreground">{TYPE_ICON[ev.eventType]} {ev.eventType}</span>
+                <span className="text-xs text-muted-foreground">{TYPE_ICON[ev.eventType]} {s[ev.eventType as keyof typeof s] ?? ev.eventType}</span>
                 <span className="text-xs text-muted-foreground">·</span>
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {new Date(ev.eventDate).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+                   {formatDate(ev.eventDate, lang)}
                 </span>
               </div>
             </div>
@@ -293,7 +293,7 @@ function GlobalArenaTab({ legend }: { legend: Legend }) {
         {upcoming.length === 0 && live.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <Globe className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">No arena events yet for this domain.</p>
+             <p className="text-sm">{s.noArena}</p>
           </div>
         )}
       </div>
@@ -305,6 +305,9 @@ function GlobalArenaTab({ legend }: { legend: Legend }) {
 // TAB 4 — COMMUNICATION HUB (Discord + Instagram style)
 // ══════════════════════════════════════════════════════════════════════════════
 function CommsTab({ legend }: { legend: Legend }) {
+  const { lang } = useLang();
+  const copy = coreCopy(lang);
+  const s = surfaceCopy(lang);
   const { user } = useAuth();
   const [subTab, setSubTab] = useState<"chat" | "stories">("chat");
 
@@ -350,11 +353,11 @@ function CommsTab({ legend }: { legend: Legend }) {
       body: JSON.stringify({ message: message.trim() }),
     });
     const data = await res.json() as { xpEarned: number; coinsEarned: number; error?: string };
-    if (!res.ok) { alert(data.error ?? "Error"); setSending(false); return; }
+    if (!res.ok) { alert(data.error ?? s.error); setSending(false); return; }
     setMessage("");
     void loadChat();
     if (data.xpEarned) {
-      setChatToast(`+${data.xpEarned} XP +${data.coinsEarned} Coins 🔥`);
+      setChatToast(`+${formatNumber(data.xpEarned, lang)} XP +${formatNumber(data.coinsEarned, lang)} ${s.coins} 🔥`);
       setTimeout(() => setChatToast(null), 3000);
     }
     setSending(false);
@@ -369,11 +372,11 @@ function CommsTab({ legend }: { legend: Legend }) {
       body: JSON.stringify({ content: storyText.trim(), type: "text" }),
     });
     const data = await res.json() as { coinsEarned: number; error?: string };
-    if (!res.ok) { alert(data.error ?? "Error"); setPostingStory(false); return; }
+    if (!res.ok) { alert(data.error ?? s.error); setPostingStory(false); return; }
     setStoryText("");
     void loadStories();
     if (data.coinsEarned) {
-      setStoryToast(`+${data.coinsEarned} Coins earned! 📖`);
+      setStoryToast(`+${formatNumber(data.coinsEarned, lang)} ${s.coins}! 📖`);
       setTimeout(() => setStoryToast(null), 3000);
     }
     setPostingStory(false);
@@ -384,14 +387,14 @@ function CommsTab({ legend }: { legend: Legend }) {
       <div className="text-center py-4">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-bold tracking-widest"
           style={{ background: "rgba(34,211,238,0.1)", borderColor: "rgba(34,211,238,0.4)", color: "#22d3ee" }}>
-          <MessageSquare className="w-3.5 h-3.5" /> COMMUNICATION HUB
+           <MessageSquare className="w-3.5 h-3.5" /> {s.communicationHub}
         </div>
-        <p className="text-xs text-muted-foreground mt-1">Chat · Stories · Connect · Share</p>
+         <p className="text-xs text-muted-foreground mt-1">{s.communicationIntro}</p>
       </div>
 
       {/* Sub-tabs */}
       <div className="flex rounded-xl border border-border overflow-hidden">
-        {([["chat", "💬 Live Chat", "Debate"], ["stories", "📖 Stories", "24h Posts"]] as const).map(([id, label, sub]) => (
+         {([["chat", s.liveChat, s.debate], ["stories", s.stories, s.posts24]] as const).map(([id, label, sub]) => (
           <button key={id} onClick={() => setSubTab(id as "chat" | "stories")}
             className={`flex-1 py-2.5 text-xs font-bold transition-all ${subTab === id ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}>
             {label} <span className="ml-1 opacity-60 font-normal">{sub}</span>
@@ -402,12 +405,12 @@ function CommsTab({ legend }: { legend: Legend }) {
       {/* ─ CHAT ─ */}
       {subTab === "chat" && (
         <div className="space-y-3">
-          {user && <p className="text-center text-xs text-yellow-400 font-bold">+50 XP + +50 Coins per debate message</p>}
+           {user && <p className="text-center text-xs text-yellow-400 font-bold">{s.debateReward}</p>}
           <div className="h-72 overflow-y-auto space-y-2 p-3 rounded-2xl border border-border/40 bg-black/20">
             {debates.length === 0 && (
               <div className="text-center py-10 text-muted-foreground text-sm">
                 <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                Be the first to speak in this arena.
+                 {s.firstSpeak}
               </div>
             )}
             {debates.map(d => (
@@ -420,7 +423,7 @@ function CommsTab({ legend }: { legend: Legend }) {
                 <div className="flex-1 bg-card/60 rounded-xl px-3 py-2 border border-border/40">
                   <div className="flex items-center gap-2 mb-0.5">
                     <Link href={`/citizen/${d.username}`} className="text-xs font-bold hover:text-primary transition-colors">{d.username}</Link>
-                    <span className="text-[10px] text-muted-foreground ml-auto">{timeAgo(d.createdAt)}</span>
+                     <span className="text-[10px] text-muted-foreground ms-auto">{relativeTime(d.createdAt, lang)}</span>
                   </div>
                   <p className="text-sm text-foreground/85 leading-relaxed">{d.message}</p>
                 </div>
@@ -433,7 +436,7 @@ function CommsTab({ legend }: { legend: Legend }) {
           <div className="flex gap-2">
             <input value={message} onChange={e => setMessage(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); }}}
-              placeholder={user ? "Speak in the arena..." : "Login to join the debate..."}
+               placeholder={user ? s.speakPlaceholder : s.loginDebatePlaceholder}
               disabled={!user} maxLength={500}
               className="flex-1 px-4 py-2.5 rounded-xl bg-card border border-border focus:border-primary focus:outline-none text-sm disabled:opacity-50" />
             <button onClick={() => void sendMessage()} disabled={!user || !message.trim() || sending}
@@ -460,17 +463,17 @@ function CommsTab({ legend }: { legend: Legend }) {
                   {user.username.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-sm font-bold">{user.username}</span>
-                <span className="ml-auto text-xs text-yellow-400 font-bold">+10 Coins per story</span>
+                 <span className="ms-auto text-xs text-yellow-400 font-bold">{s.storyReward}</span>
               </div>
               <textarea value={storyText} onChange={e => setStoryText(e.target.value)}
-                placeholder="Share a moment, insight, or tribute... (expires in 24h)"
+                placeholder={copy.storyPlaceholder}
                 maxLength={280} rows={3}
                 className="w-full px-3 py-2 rounded-xl bg-background border border-border focus:border-primary focus:outline-none text-sm resize-none" />
               <div className="flex justify-between items-center">
                 <span className="text-xs text-muted-foreground">{storyText.length}/280</span>
                 <button onClick={() => void postStory()} disabled={!storyText.trim() || postingStory}
                   className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 active:scale-95 transition-all">
-                  {postingStory ? "Posting..." : "📖 Post Story"}
+                   {postingStory ? s.posting : s.postStoryButton}
                 </button>
               </div>
             </div>
@@ -485,25 +488,25 @@ function CommsTab({ legend }: { legend: Legend }) {
           {stories.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-20" />
-              <p className="text-sm">No stories yet — post the first one.</p>
+               <p className="text-sm">{s.noStories}</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {stories.map(s => {
-                const hoursLeft = Math.max(0, Math.floor((new Date(s.expiresAt).getTime() - Date.now()) / 3600000));
+              {stories.map(story => {
+                const hoursLeft = Math.max(0, Math.floor((new Date(story.expiresAt).getTime() - Date.now()) / 3600000));
                 return (
-                  <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  <motion.div key={story.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                     className="p-4 rounded-2xl border border-border/50 bg-card">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary/60 to-yellow-500/60 flex items-center justify-center text-[10px] font-black text-black">
-                        {s.username.charAt(0).toUpperCase()}
+                        {story.username.charAt(0).toUpperCase()}
                       </div>
-                      <Link href={`/citizen/${s.username}`} className="text-xs font-bold hover:text-primary transition-colors">{s.username}</Link>
-                      <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <Clock className="w-3 h-3" /> {hoursLeft}h left
+                      <Link href={`/citizen/${story.username}`} className="text-xs font-bold hover:text-primary transition-colors">{story.username}</Link>
+                       <span className="ms-auto flex items-center gap-1 text-[10px] text-muted-foreground">
+                         <Clock className="w-3 h-3" /> {interpolate(s.hoursLeft, { count: formatNumber(hoursLeft, lang) })}
                       </span>
                     </div>
-                    <p className="text-sm text-foreground/85 leading-relaxed">{s.content}</p>
+                    <p className="text-sm text-foreground/85 leading-relaxed">{story.content}</p>
                   </motion.div>
                 );
               })}
@@ -519,6 +522,9 @@ function CommsTab({ legend }: { legend: Legend }) {
 // MAIN HUB PAGE
 // ══════════════════════════════════════════════════════════════════════════════
 export default function LegendHubPage() {
+  const { lang } = useLang();
+  const copy = coreCopy(lang);
+  const s = surfaceCopy(lang);
   const params  = useParams<{ id: string }>();
   const [legend, setLegend] = useState<Legend | null>(null);
   const [loading, setLoading] = useState(true);
@@ -535,20 +541,20 @@ export default function LegendHubPage() {
   }, [params.id]);
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center" dir={lang === "ar" ? "rtl" : "ltr"}>
       <div className="text-center space-y-3">
         <div className="w-16 h-16 rounded-full border-4 border-primary border-t-transparent animate-spin mx-auto" />
-        <p className="text-muted-foreground text-sm">Loading Neural Archive...</p>
+        <p className="text-muted-foreground text-sm">{s.loadingArchive}</p>
       </div>
     </div>
   );
 
   if (!legend) return (
-    <div className="min-h-screen flex items-center justify-center p-8 text-center">
+    <div className="min-h-screen flex items-center justify-center p-8 text-center" dir={lang === "ar" ? "rtl" : "ltr"}>
       <div>
         <div className="text-6xl mb-4">⚠️</div>
-        <h2 className="text-2xl font-bold mb-2">Legend Not Found</h2>
-        <Link href="/legends"><button className="text-primary hover:underline">← Back to TOP 10</button></Link>
+        <h2 className="text-2xl font-bold mb-2">{s.legendNotFound}</h2>
+        <Link href="/legends"><button className="text-primary hover:underline">← {s.backTop}</button></Link>
       </div>
     </div>
   );
@@ -557,14 +563,14 @@ export default function LegendHubPage() {
   const imageUrl = getLegendImageUrl(legend.name, legend.imageUrl);
 
   const TABS = [
-    { id: "nostalgia" as Tab, label: "NOSTALGIA DNA",    icon: <Dna className="w-4 h-4" />,          color: GREEN },
-    { id: "moments"   as Tab, label: "PEAK MOMENTS",     icon: <Video className="w-4 h-4" />,         color: meta.color },
-    { id: "arena"     as Tab, label: "GLOBAL ARENA",     icon: <Globe2 className="w-4 h-4" />,        color: "#a78bfa" },
-    { id: "comms"     as Tab, label: "COMMUNICATION HUB",icon: <MessageSquare className="w-4 h-4" />, color: "#22d3ee" },
+    { id: "nostalgia" as Tab, label: s.nostalgiaTab, icon: <Dna className="w-4 h-4" />, color: GREEN },
+    { id: "moments" as Tab, label: s.momentsTab, icon: <Video className="w-4 h-4" />, color: meta.color },
+    { id: "arena" as Tab, label: s.arenaTab, icon: <Globe2 className="w-4 h-4" />, color: "#a78bfa" },
+    { id: "comms" as Tab, label: s.commsTab, icon: <MessageSquare className="w-4 h-4" />, color: "#22d3ee" },
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" dir={lang === "ar" ? "rtl" : "ltr"}>
       {/* Header */}
       <div className="relative border-b border-primary/10 overflow-hidden"
         style={{ background: `linear-gradient(135deg, #000 0%, ${meta.bg} 100%)` }}>
@@ -573,7 +579,7 @@ export default function LegendHubPage() {
         <div className="max-w-5xl mx-auto px-4 py-8">
           <Link href="/legends">
             <button className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm mb-6">
-              <ArrowLeft className="w-4 h-4" /> Back to TOP 10 LEGENDS
+              <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {s.backTop}
             </button>
           </Link>
           <div className="flex items-center gap-4">
@@ -588,13 +594,13 @@ export default function LegendHubPage() {
                 <h1 className="text-2xl md:text-3xl font-black">{legend.name}</h1>
                 <div className="px-2 py-0.5 rounded-full text-xs font-black text-black"
                   style={{ background: legend.rank === 1 ? "linear-gradient(135deg,#FFD700,#FFA500)" : meta.color }}>
-                  {legend.rank === 1 ? "CHAMPION" : `#${legend.rank}`}
+                  {legend.rank === 1 ? s.champion : `#${formatNumber(legend.rank, lang)}`}
                 </div>
               </div>
               <div className="flex gap-3 text-xs text-muted-foreground">
-                <span style={{ color: meta.color }}>{meta.icon} {legend.domain.toUpperCase()}</span>
+                <span style={{ color: meta.color }}>{meta.icon} {(s[legend.domain as keyof typeof s] ?? legend.domain).toUpperCase()}</span>
                 <span>· {legend.nationality}</span>
-                <span>· Score: <strong style={{ color: meta.color }}>{legend.score.toLocaleString()}</strong></span>
+                <span>· {copy.score}: <strong style={{ color: meta.color }}>{formatNumber(legend.score, lang)}</strong></span>
               </div>
               <div className="flex gap-2 mt-2">
                 {TABS.map(t => (

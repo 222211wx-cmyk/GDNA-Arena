@@ -3,13 +3,15 @@ import { useGetGsTraditions } from '@workspace/api-client-react';
 import { useLanguage } from '@/globalstar/contexts/language-context';
 import { Navbar } from '@/globalstar/components/navbar';
 import { NewsTicker } from '@/globalstar/components/news-ticker';
+import { aboutTraditionsCopy } from '@/globalstar/i18n/about-traditions-copy';
 import { Card } from '@workspace/gdna-ds/components/ui/card';
 import { Badge } from '@workspace/gdna-ds/components/ui/badge';
 import { Skeleton } from '@workspace/gdna-ds/components/ui/skeleton';
 import { Landmark, MapPin, Calendar } from 'lucide-react';
 
 export default function Traditions() {
-  const { t } = useLanguage();
+  const { language } = useLanguage();
+  const copy = aboutTraditionsCopy(language);
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
   const { data: traditionsData, isLoading } = useGetGsTraditions(
     selectedCategory ? { category: selectedCategory } : undefined
@@ -18,7 +20,7 @@ export default function Traditions() {
   const categories = ['All', 'Cultural', 'Archaeological', 'Historical', 'Religious'];
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <Navbar />
       <NewsTicker />
 
@@ -26,23 +28,38 @@ export default function Traditions() {
         <div className="flex items-center gap-3 mb-8">
           <Landmark className="w-8 h-8 text-primary" />
           <h1 className="text-4xl md:text-5xl font-bold" data-testid="traditions-title">
-            {t('traditions')}
+            {copy.traditions.title}
           </h1>
         </div>
 
         <p className="text-lg text-muted-foreground mb-8 max-w-3xl">
-          Explore cultural heritage sites and archaeological treasures from around the world
+          {copy.traditions.intro}
         </p>
 
         {/* Category Filter */}
-        <div className="mb-8 flex flex-wrap gap-2" data-testid="category-filters">
+        <div
+          className="mb-8 flex flex-wrap gap-2"
+          data-testid="category-filters"
+          role="group"
+          aria-label={copy.traditions.filtersLabel}
+        >
           <Badge
             variant={selectedCategory === undefined ? 'default' : 'outline'}
             className="cursor-pointer"
             onClick={() => setSelectedCategory(undefined)}
+            role="button"
+            tabIndex={0}
+            aria-pressed={selectedCategory === undefined}
+            aria-label={copy.traditions.filterLabel(copy.traditions.categories.All)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setSelectedCategory(undefined);
+              }
+            }}
             data-testid="filter-all-categories"
           >
-            All Categories
+            {copy.traditions.categories.All}
           </Badge>
           {categories.slice(1).map((category) => (
             <Badge
@@ -50,15 +67,30 @@ export default function Traditions() {
               variant={selectedCategory === category ? 'default' : 'outline'}
               className="cursor-pointer"
               onClick={() => setSelectedCategory(category)}
+              role="button"
+              tabIndex={0}
+              aria-pressed={selectedCategory === category}
+              aria-label={copy.traditions.filterLabel(copy.traditions.categories[category])}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedCategory(category);
+                }
+              }}
               data-testid={`filter-${category.toLowerCase()}`}
             >
-              {category}
+              {copy.traditions.categories[category]}
             </Badge>
           ))}
         </div>
 
         {isLoading ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div
+            className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
+            role="status"
+            aria-live="polite"
+            aria-label={copy.traditions.loading}
+          >
             {[...Array(6)].map((_, i) => (
               <Skeleton key={i} className="h-96" />
             ))}
@@ -87,10 +119,12 @@ export default function Traditions() {
                 
                 <div className="p-6">
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
-                    <Badge variant="secondary">{tradition.category}</Badge>
+                    <Badge variant="secondary">
+                      {copy.traditions.categories[tradition.category] ?? tradition.category}
+                    </Badge>
                     {tradition.isArchaeological && (
                       <Badge variant="outline" className="border-primary text-primary">
-                        {t('archaeological')}
+                        {copy.traditions.archaeological}
                       </Badge>
                     )}
                   </div>
@@ -116,7 +150,7 @@ export default function Traditions() {
           </div>
         ) : (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">No traditions found</p>
+            <p className="text-muted-foreground">{copy.traditions.empty}</p>
           </div>
         )}
       </main>

@@ -5,6 +5,8 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Radio, StopCircle, Mic, MicOff, Video, VideoOff, Users, X } from "lucide-react";
+import { SOCIAL_T } from "@/components/social/social-i18n";
+import { useLang } from "@/contexts/LangContext";
 
 interface LiveStream { liveId: string; host: string; title: string; domain: string; }
 
@@ -20,17 +22,16 @@ interface Props {
 }
 
 const DOMAINS = [
-  { value: "general", label: "General", icon: "🌍" },
-  { value: "sport",   label: "Sport",   icon: "⚽" },
-  { value: "music",   label: "Music",   icon: "🎵" },
-  { value: "cinema",  label: "Cinema",  icon: "🎬" },
-  { value: "tech",    label: "Tech",    icon: "💡" },
-  { value: "art",     label: "Arts",    icon: "🎨" },
+  { value: "general", icon: "🌍" }, { value: "sport", icon: "⚽" }, { value: "music", icon: "🎵" },
+  { value: "cinema", icon: "🎬" }, { value: "tech", icon: "💡" }, { value: "art", icon: "🎨" },
 ];
 
 export default function LiveStoryRecorder({
   liveStatus, localStream, currentLiveId, activeLives, onStartLive, onEndLive, onJoinLive, remoteStream
 }: Props) {
+  const { lang } = useLang();
+  const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
+  const isRTL = lang === "ar";
   const localVideoRef  = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [showCompose,  setShowCompose]  = useState(false);
@@ -67,15 +68,15 @@ export default function LiveStoryRecorder({
 
   // ── Active live view ───────────────────────────────────────────────────────
   if (liveStatus === "live" && localStream) return (
-    <div className="relative rounded-xl overflow-hidden" style={{ height: 360, background: "hsl(var(--background))" }}>
+    <div dir={isRTL ? "rtl" : "ltr"} className="relative rounded-xl overflow-hidden" style={{ height: 360, background: "hsl(var(--background))" }}>
       <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
 
       {/* LIVE badge */}
-      <div className="absolute top-3 left-3 flex items-center gap-2">
+      <div className="absolute top-3 start-3 flex items-center gap-2">
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-black text-white"
           style={{ background: "#ef4444" }}>
           <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-          LIVE
+          {st.live}
         </div>
         <div className="px-2 py-1 rounded-full text-xs font-mono" style={{ background: "rgba(0,0,0,0.6)", color: "hsl(var(--foreground))" }}>
           {fmt(duration)}
@@ -86,11 +87,13 @@ export default function LiveStoryRecorder({
       <div className="absolute bottom-3 inset-x-3 flex items-center justify-between">
         <div className="flex gap-2">
           <button onClick={() => setMicMuted(v => !v)}
+            aria-label={micMuted ? st.unmute : st.mute}
             className="w-10 h-10 rounded-full flex items-center justify-center"
             style={{ background: micMuted ? "#ef4444" : "rgba(0,0,0,0.6)" }}>
             {micMuted ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-white" />}
           </button>
           <button onClick={() => setVideoOff(v => !v)}
+            aria-label={videoOff ? st.enable_video : st.disable_video}
             className="w-10 h-10 rounded-full flex items-center justify-center"
             style={{ background: videoOff ? "#ef4444" : "rgba(0,0,0,0.6)" }}>
             {videoOff ? <VideoOff className="w-4 h-4 text-white" /> : <Video className="w-4 h-4 text-white" />}
@@ -99,7 +102,7 @@ export default function LiveStoryRecorder({
         <button onClick={onEndLive}
           className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black text-white"
           style={{ background: "#ef4444" }}>
-          <StopCircle className="w-4 h-4" /> End Stream
+          <StopCircle className="w-4 h-4" /> {st.end_stream}
         </button>
       </div>
     </div>
@@ -109,18 +112,19 @@ export default function LiveStoryRecorder({
   if (watchingId && remoteStream) {
     const liveInfo = activeLives.find(l => l.liveId === watchingId);
     return (
-      <div className="relative rounded-xl overflow-hidden" style={{ height: 300, background: "hsl(var(--background))" }}>
+      <div dir={isRTL ? "rtl" : "ltr"} className="relative rounded-xl overflow-hidden" style={{ height: 300, background: "hsl(var(--background))" }}>
         <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-        <div className="absolute top-3 left-3 flex items-center gap-2">
+        <div className="absolute top-3 start-3 flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-black text-white" style={{ background: "#ef4444" }}>
-            <div className="w-2 h-2 rounded-full bg-white animate-pulse" /> LIVE
+            <div className="w-2 h-2 rounded-full bg-white animate-pulse" /> {st.live}
           </div>
           <span className="text-xs text-white font-bold" style={{ background: "rgba(0,0,0,0.6)", padding: "2px 8px", borderRadius: 20 }}>
             {liveInfo?.host} — {liveInfo?.title}
           </span>
         </div>
         <button onClick={() => { setWatchingId(null); }}
-          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
+          aria-label={st.close}
+          className="absolute top-3 end-3 w-8 h-8 rounded-full flex items-center justify-center"
           style={{ background: "rgba(0,0,0,0.6)" }}>
           <X className="w-4 h-4 text-white" />
         </button>
@@ -129,14 +133,14 @@ export default function LiveStoryRecorder({
   }
 
   return (
-    <div className="space-y-4">
+    <div dir={isRTL ? "rtl" : "ltr"} className="space-y-4">
       {/* Start live button */}
       {liveStatus === "idle" && (
         <button onClick={() => setShowCompose(v => !v)}
           className="w-full flex items-center justify-center gap-2 py-3 text-sm font-black uppercase tracking-wider transition-all active:scale-95"
           style={{ background: showCompose ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.08)", border: "1px solid #ef444440", color: "#ef4444" }}>
           <Radio className="w-4 h-4" />
-          Go Live
+          {st.go_live}
         </button>
       )}
 
@@ -147,17 +151,18 @@ export default function LiveStoryRecorder({
             className="overflow-hidden space-y-3 p-4" style={{ border: "1px solid #ef444430", background: "rgba(239,68,68,0.04)" }}>
 
             <input value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="Stream title..."
+              placeholder={st.stream_title}
+              aria-label={st.stream_title}
               className="w-full px-3 py-2 text-sm focus:outline-none"
               style={{ background: "hsl(var(--card))", border: "1px solid #ffffff15", color: "hsl(var(--foreground))" }}
-              dir="rtl" />
+              dir={isRTL ? "rtl" : "ltr"} />
 
             <div className="flex flex-wrap gap-1.5">
               {DOMAINS.map(d => (
                 <button key={d.value} onClick={() => setDomain(d.value)}
                   className="px-3 py-1 text-xs font-bold transition-all"
                   style={{ border: `1px solid ${domain === d.value ? "#ef4444" : "#ffffff10"}`, background: domain === d.value ? "rgba(239,68,68,0.15)" : "transparent", color: domain === d.value ? "#ef4444" : "#ffffff40" }}>
-                  {d.icon} {d.label}
+                  {d.icon} {st[d.value]}
                 </button>
               ))}
             </div>
@@ -166,7 +171,7 @@ export default function LiveStoryRecorder({
               onClick={() => { onStartLive(title.trim(), domain); setShowCompose(false); }}
               className="w-full py-2.5 text-sm font-black text-white uppercase tracking-wider disabled:opacity-40 transition-all active:scale-95"
               style={{ background: "#ef4444" }}>
-              📡 Start Now
+              📡 {st.start_now}
             </button>
           </motion.div>
         )}
@@ -176,7 +181,7 @@ export default function LiveStoryRecorder({
       {activeLives.length > 0 && (
         <div className="space-y-2">
           <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "#ef444460" }}>
-            Live Now — {activeLives.length} streaming
+             {st.active_lives} — {activeLives.length} {st.streaming}
           </p>
           {activeLives.map(live => (
             <div key={live.liveId} className="flex items-center justify-between p-3"
@@ -191,7 +196,7 @@ export default function LiveStoryRecorder({
               <button onClick={() => { onJoinLive(live.liveId); setWatchingId(live.liveId); }}
                 className="px-3 py-1 text-xs font-bold text-white"
                 style={{ background: "#ef4444" }}>
-                <Users className="w-3 h-3 inline mr-1" />Join
+                <Users className="w-3 h-3 inline me-1" />{st.join_live}
               </button>
             </div>
           ))}
@@ -200,7 +205,7 @@ export default function LiveStoryRecorder({
 
       {activeLives.length === 0 && liveStatus === "idle" && !showCompose && (
         <p className="text-center text-xs py-2" style={{ color: "#ffffff20" }}>
-          No live streams right now — be the first to go live
+           {st.no_live_streams}
         </p>
       )}
     </div>

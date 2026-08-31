@@ -8,7 +8,11 @@ import {
   Radio, Calendar, Flame, MessageSquare, Eye
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLang } from "@/contexts/LangContext";
+import type { Lang } from "@/contexts/LangContext";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
+import { gameLocaleText } from "@/i18n/game-locale-copy";
+import { formatSurfaceDate, formatSurfaceNumber } from "@/i18n/locale-surfaces-b-copy";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Post {
@@ -27,19 +31,19 @@ interface Stats {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const DOMAIN_TABS = [
-  { id: "all",      label: "ALL",      icon: <Globe className="w-3.5 h-3.5" />,   color: "text-white" },
-  { id: "sport",    label: "SPORT",    icon: <Trophy className="w-3.5 h-3.5" />,  color: "text-cyan-400" },
-  { id: "tech",     label: "TECH",     icon: <Cpu className="w-3.5 h-3.5" />,     color: "text-purple-400" },
-  { id: "music",    label: "MUSIC",    icon: <Music className="w-3.5 h-3.5" />,   color: "text-pink-400" },
-  { id: "business", label: "BUSINESS", icon: <Briefcase className="w-3.5 h-3.5" />, color: "text-green-400" },
-  { id: "cinema",   label: "CINEMA",   icon: <Film className="w-3.5 h-3.5" />,    color: "text-orange-400" },
+  { id: "all",      key: "domain_all",      icon: <Globe className="w-3.5 h-3.5" />,   color: "text-white" },
+  { id: "sport",    key: "domain_sport",    icon: <Trophy className="w-3.5 h-3.5" />,  color: "text-cyan-400" },
+  { id: "tech",     key: "domain_tech",     icon: <Cpu className="w-3.5 h-3.5" />,     color: "text-purple-400" },
+  { id: "music",    key: "domain_music",    icon: <Music className="w-3.5 h-3.5" />,   color: "text-pink-400" },
+  { id: "business", key: "domain_business", icon: <Briefcase className="w-3.5 h-3.5" />, color: "text-green-400" },
+  { id: "cinema",   key: "domain_cinema",   icon: <Film className="w-3.5 h-3.5" />,    color: "text-orange-400" },
 ];
 
 const POST_TYPES = [
-  { id: "post",    label: "📢 Update" },
-  { id: "victory", label: "🏆 Victory" },
-  { id: "tribute", label: "👑 Tribute" },
-  { id: "vision",  label: "🔮 Vision" },
+  { id: "post",    key: "post_type_post" },
+  { id: "victory", key: "post_type_victory" },
+  { id: "tribute", key: "post_type_tribute" },
+  { id: "vision",  key: "post_type_vision" },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
@@ -54,23 +58,23 @@ const DOMAIN_COLORS: Record<string, string> = {
   business: "#4ade80", cinema: "#fb923c", general: "#C9A84C",
 };
 
-function timeAgo(dateStr: string) {
+function timeAgo(dateStr: string, t: (key: string) => string, lang: Lang) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return t("time_just_now");
+  if (m < 60) return `${formatSurfaceNumber(lang, m)}${t("time_min_ago")}`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return `${formatSurfaceNumber(lang, h)}${t("time_hour_ago")}`;
+  return `${formatSurfaceNumber(lang, Math.floor(h / 24))}${t("time_day_ago")}`;
 }
 
 // ── Empire Stats Bar ──────────────────────────────────────────────────────────
-function StatsBar({ stats }: { stats: Stats | null }) {
+function StatsBar({ stats, t, lang }: { stats: Stats | null; t: (k: string) => string; lang: Lang }) {
   const items = [
-    { icon: <Users className="w-4 h-4" />, label: "Citizens", value: stats?.users.toLocaleString() ?? "—", color: "text-primary" },
-    { icon: <MessageSquare className="w-4 h-4" />, label: "Voices", value: stats?.posts.toLocaleString() ?? "—", color: "text-cyan-400" },
-    { icon: <Coins className="w-4 h-4" />, label: "Coins Circulating", value: stats?.coinsCirculating.toLocaleString() ?? "—", color: "text-yellow-400" },
-    { icon: <Star className="w-4 h-4" />, label: "Total XP", value: stats?.totalXp.toLocaleString() ?? "—", color: "text-purple-400" },
+    { icon: <Users className="w-4 h-4" />, label: t("pulse_citizens_stat"), value: stats ? formatSurfaceNumber(lang, stats.users) : "—", color: "text-primary" },
+    { icon: <MessageSquare className="w-4 h-4" />, label: t("pulse_voices_stat"), value: stats ? formatSurfaceNumber(lang, stats.posts) : "—", color: "text-cyan-400" },
+    { icon: <Coins className="w-4 h-4" />, label: t("pulse_coins_stat"), value: stats ? formatSurfaceNumber(lang, stats.coinsCirculating) : "—", color: "text-yellow-400" },
+    { icon: <Star className="w-4 h-4" />, label: t("pulse_xp_stat"), value: stats ? formatSurfaceNumber(lang, stats.totalXp) : "—", color: "text-purple-400" },
   ];
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -88,7 +92,9 @@ function StatsBar({ stats }: { stats: Stats | null }) {
 }
 
 // ── Live Events Ticker ────────────────────────────────────────────────────────
-function EventsPanel({ events }: { events: Event[] }) {
+function EventsPanel({ events, lang }: { events: Event[]; lang: Lang }) {
+  const { t: eventsT } = useLang();
+  const eventTitle = (event: Event) => lang === "ar" && event.titleAr ? event.titleAr : event.title;
   const live = events.filter(e => e.isLive);
   const upcoming = events.filter(e => !e.isLive).slice(0, 8);
 
@@ -97,12 +103,12 @@ function EventsPanel({ events }: { events: Event[] }) {
       <div className="p-4 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-primary" />
-          <span className="font-bold text-sm">INTERNATIONAL EVENTS</span>
+          <span className="font-bold text-sm">{eventsT("pulse_intl_events")}</span>
         </div>
         {live.length > 0 && (
           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40">
             <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-xs font-bold text-red-400">{live.length} LIVE</span>
+            <span className="text-xs font-bold text-red-400">{formatSurfaceNumber(lang, live.length)} {eventsT("pulse_live")}</span>
           </div>
         )}
       </div>
@@ -113,26 +119,29 @@ function EventsPanel({ events }: { events: Event[] }) {
             <div key={ev.id} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: `${ev.color}15`, border: `1px solid ${ev.color}30` }}>
               <span className="text-xl">{ev.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm truncate" style={{ color: ev.color }}>{ev.title}</div>
+                <div className="font-bold text-sm truncate" style={{ color: ev.color }}>{eventTitle(ev)}</div>
                 <div className="text-xs text-muted-foreground">{ev.country} {ev.location}</div>
               </div>
-              <div className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-black">LIVE</div>
+              <div className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-black">{eventsT("pulse_live")}</div>
             </div>
           ))}
         </div>
       )}
 
       <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto">
+        {upcoming.length === 0 && live.length === 0 && (
+          <p className="py-4 text-center text-xs text-muted-foreground">{gameLocaleText(lang, "noEvents")}</p>
+        )}
         {upcoming.map((ev, i) => (
           <motion.div key={ev.id} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
             className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
             <span className="text-lg shrink-0">{ev.icon}</span>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate">{ev.title}</div>
-              <div className="text-xs text-muted-foreground">{ev.country} · {new Date(ev.eventDate).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</div>
+              <div className="text-sm font-medium truncate">{eventTitle(ev)}</div>
+              <div className="text-xs text-muted-foreground">{ev.country} · {formatSurfaceDate(lang, ev.eventDate, { month: "short", day: "numeric", year: "numeric" })}</div>
             </div>
             <div className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded" style={{ color: ev.color, background: `${ev.color}15` }}>
-              {ev.impactScore}
+              {formatSurfaceNumber(lang, ev.impactScore)}
             </div>
           </motion.div>
         ))}
@@ -142,34 +151,21 @@ function EventsPanel({ events }: { events: Event[] }) {
 }
 
 // ── Post Card ─────────────────────────────────────────────────────────────────
-function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => Promise<boolean> }) {
-  const { isOnline } = useConnectivity();
+function PostCard({ post, onLike, lang }: { post: Post; onLike: (id: number) => Promise<boolean>; lang: Lang }) {
   const [liked, setLiked] = useState(false);
-  const [reported, setReported] = useState(false);
+  const [likeError, setLikeError] = useState(false);
+  const { t } = useLang();
   const domColor = DOMAIN_COLORS[post.domain] ?? "#C9A84C";
 
   const handleLike = async () => {
-    if (liked || !isOnline) return;
-    if (await onLike(post.id)) setLiked(true);
-  };
-
-  const handleReport = async () => {
-    if (reported || !isOnline) return;
-    const reason = window.prompt("⚖️ بلّغ عن سرقة محتوى — علاش هاد المنشور مسروق؟");
-    if (!reason?.trim()) return;
-    const r = await fetch("/api/rights/report", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contentType: "pulse_post", contentId: post.id, reason: reason.trim() }),
-    });
-    if (r.ok) setReported(true);
-    else {
-      const j = await r.json().catch(() => ({} as { error?: string }));
-      window.alert((j as { error?: string }).error ?? "فشل التبليغ");
+    if (liked) return;
+    setLiked(true);
+    setLikeError(false);
+    if (!await onLike(post.id)) {
+      setLiked(false);
+      setLikeError(true);
     }
   };
-
-  const earnings = parseFloat((post as unknown as { earnings?: string }).earnings ?? "0") || 0;
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -185,33 +181,22 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => Promis
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <Link href={`/citizen/${post.username}`} className="font-bold text-sm hover:text-primary transition-colors">{post.username}</Link>
             <span className={`text-xs px-2 py-0.5 rounded-full border ${TYPE_COLORS[post.type] ?? TYPE_COLORS.post}`}>
-              {POST_TYPES.find(t => t.id === post.type)?.label ?? post.type}
+              {t(POST_TYPES.find(item => item.id === post.type)?.key ?? "post_type_post")}
             </span>
             <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: domColor, background: `${domColor}15`, border: `1px solid ${domColor}30` }}>
-              {post.domain.toUpperCase()}
+              {t(`domain_${post.domain}`)}
             </span>
-            <span className="text-xs text-muted-foreground ml-auto">{timeAgo(post.createdAt)}</span>
+            <span className="text-xs text-muted-foreground ml-auto">{timeAgo(post.createdAt, t, lang)}</span>
           </div>
           {/* Content */}
           <p className="text-sm text-foreground/90 leading-relaxed mb-3">{post.content}</p>
           {/* Actions */}
-          <div className="flex items-center gap-4">
-            <button onClick={() => void handleLike()} disabled={!isOnline || liked}
-              className={`flex items-center gap-1.5 text-xs transition-all active:scale-95 ${liked ? "text-red-400" : "text-muted-foreground hover:text-red-400"}`}>
-              <Heart className={`w-4 h-4 ${liked ? "fill-red-400" : ""}`} />
-              {post.likes + (liked ? 1 : 0)}
-            </button>
-            {earnings > 0 && (
-              <span className="text-xs font-bold" style={{ color: "#C9A84C" }} title="أرباح صاحب المحتوى">
-                💰 {earnings.toFixed(2)}
-              </span>
-            )}
-            <button onClick={() => void handleReport()} disabled={!isOnline || reported}
-              className={`text-xs ml-auto transition-all ${reported ? "text-green-400" : "text-muted-foreground/60 hover:text-red-400"}`}
-              title="بلّغ عن سرقة محتوى">
-              {reported ? "✅ تم التبليغ" : "🚨"}
-            </button>
-          </div>
+          <button onClick={() => void handleLike()} aria-label={gameLocaleText(lang, "likeAction")}
+            className={`flex items-center gap-1.5 text-xs transition-all active:scale-95 ${liked ? "text-red-400" : "text-muted-foreground hover:text-red-400"}`}>
+            <Heart className={`w-4 h-4 ${liked ? "fill-red-400" : ""}`} />
+            {formatSurfaceNumber(lang, post.likes + (liked ? 1 : 0))}
+          </button>
+          {likeError && <p className="mt-1 text-xs text-destructive" role="alert">{gameLocaleText(lang, "likeFailed")}</p>}
         </div>
       </div>
     </motion.div>
@@ -221,16 +206,19 @@ function PostCard({ post, onLike }: { post: Post; onLike: (id: number) => Promis
 // ── Compose Box ────────────────────────────────────────────────────────────────
 function ComposeBox({ onPosted }: { onPosted: () => void }) {
   const { user } = useAuth();
+  const { t: ct, lang } = useLang();
   const { isOnline } = useConnectivity();
   const [content, setContent] = useState("");
   const [domain, setDomain] = useState("general");
   const [type, setType] = useState("post");
   const [sending, setSending] = useState(false);
   const [xpToast, setXpToast] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const submit = async () => {
     if (!content.trim() || sending || !isOnline) return;
     setSending(true);
+    setSubmitError("");
     try {
       const res = await fetch("/api/pulse/post", {
         method: "POST", credentials: "include",
@@ -242,7 +230,11 @@ function ComposeBox({ onPosted }: { onPosted: () => void }) {
         setContent("");
         if (data.xpEarned) { setXpToast(true); setTimeout(() => setXpToast(false), 3000); }
         onPosted();
+      } else {
+        setSubmitError(data.error ?? gameLocaleText(lang, "postFailed"));
       }
+    } catch {
+      setSubmitError(gameLocaleText(lang, "postFailed"));
     } finally { setSending(false); }
   };
 
@@ -252,69 +244,86 @@ function ComposeBox({ onPosted }: { onPosted: () => void }) {
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/60 to-yellow-500/60 flex items-center justify-center text-xs font-black text-black">
           {user?.username?.charAt(0).toUpperCase() ?? "?"}
         </div>
-        <span className="text-sm font-bold text-foreground">{user ? user.username : "Guest"}</span>
-        {user && <span className="text-xs text-green-400 ml-auto">+20 XP per post</span>}
+        <span className="text-sm font-bold text-foreground">{user ? user.username : ct("pulse_guest")}</span>
+        {user && <span className="text-xs text-green-400 ml-auto">{ct("pulse_xp_per_post")}</span>}
       </div>
       <textarea
         value={content} onChange={e => setContent(e.target.value)}
-        placeholder={user ? "What moves the empire today?..." : "Login to post to the empire feed..."}
+        placeholder={user ? ct("pulse_compose_placeholder") : ct("pulse_compose_guest")}
         disabled={!user}
         maxLength={280} rows={3}
         className="w-full px-3 py-2 rounded-xl bg-background border border-border focus:border-primary focus:outline-none text-sm placeholder-muted-foreground resize-none disabled:opacity-50"
       />
       <div className="flex items-center gap-2 flex-wrap">
         <select value={domain} onChange={e => setDomain(e.target.value)} disabled={!user}
+          aria-label={gameLocaleText(lang, "selectDomain")}
           className="text-xs px-2 py-1.5 rounded-lg bg-muted border border-border focus:outline-none disabled:opacity-50">
-          {DOMAIN_TABS.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+          {DOMAIN_TABS.filter(d => d.id !== "all").map(d => <option key={d.id} value={d.id}>{ct(d.key)}</option>)}
         </select>
         <select value={type} onChange={e => setType(e.target.value)} disabled={!user}
+          aria-label={gameLocaleText(lang, "selectPostType")}
           className="text-xs px-2 py-1.5 rounded-lg bg-muted border border-border focus:outline-none disabled:opacity-50">
-          {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          {POST_TYPES.map(pt => <option key={pt.id} value={pt.id}>{ct(pt.key)}</option>)}
         </select>
-        <span className="text-xs text-muted-foreground ml-auto">{content.length}/280</span>
+        <span className="text-xs text-muted-foreground ml-auto">{formatSurfaceNumber(lang, content.length)}/{formatSurfaceNumber(lang, 280)}</span>
         <button onClick={() => void submit()} disabled={!content.trim() || sending || !user || !isOnline}
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-40 active:scale-95 transition-all">
-          <Send className="w-3.5 h-3.5" /> {sending ? "Sending..." : "Post"}
+          <Send className="w-3.5 h-3.5" /> {sending ? ct("pulse_sending") : ct("pulse_post_btn")}
         </button>
       </div>
       <AnimatePresence>
         {xpToast && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="text-center text-green-400 text-xs font-bold">⚡ +20 XP earned!</motion.div>
+            className="text-center text-green-400 text-xs font-bold">{ct("pulse_xp_earned")}</motion.div>
         )}
       </AnimatePresence>
+      {submitError && <p className="text-center text-xs text-destructive" role="alert">{submitError}</p>}
     </div>
   );
 }
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 export default function PulsePage() {
+  const { t, lang } = useLang();
+  const dir = lang === "ar" ? "rtl" : "ltr";
   const [posts, setPosts]     = useState<Post[]>([]);
   const [events, setEvents]   = useState<Event[]>([]);
   const [stats, setStats]     = useState<Stats | null>(null);
   const [domain, setDomain]   = useState("all");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const loadPosts = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    if (!silent) setLoadError(false);
     const url = `/api/pulse/feed${domain !== "all" ? `?domain=${domain}` : ""}`;
     try {
       const res = await fetch(url, { credentials: "include" });
       const data = await res.json() as { posts: Post[] };
+      if (!res.ok) throw new Error("feed");
       setPosts(data.posts ?? []);
+    } catch {
+      if (!silent) setLoadError(true);
     } finally { if (!silent) setLoading(false); }
   }, [domain]);
 
   const loadAll = useCallback(async () => {
-    await Promise.all([
+    const results = await Promise.allSettled([
       loadPosts(),
       fetch("/api/pulse/events", { credentials: "include" })
-        .then(r => r.json() as Promise<{ events: Event[] }>)
+        .then(r => {
+          if (!r.ok) throw new Error("events");
+          return r.json() as Promise<{ events: Event[] }>;
+        })
         .then(d => setEvents(d.events ?? [])),
       fetch("/api/pulse/stats", { credentials: "include" })
-        .then(r => r.json() as Promise<Stats>)
+        .then(r => {
+          if (!r.ok) throw new Error("stats");
+          return r.json() as Promise<Stats>;
+        })
         .then(d => setStats(d)),
     ]);
+    if (results.some(result => result.status === "rejected")) setLoadError(true);
   }, [loadPosts]);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
@@ -324,28 +333,32 @@ export default function PulsePage() {
   }, [loadPosts]);
 
   const handleLike = async (postId: number) => {
-    const response = await fetch(`/api/pulse/post/${postId}/like`, { method: "POST", credentials: "include" });
-    return response.ok;
+    try {
+      const response = await fetch(`/api/pulse/post/${postId}/like`, { method: "POST", credentials: "include" });
+      return response.ok;
+    } catch {
+      return false;
+    }
   };
 
   const liveCount = events.filter(e => e.isLive).length;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" dir={dir}>
       {/* Hero */}
       <div className="relative overflow-hidden border-b border-primary/10 bg-gradient-to-b from-black via-background to-background">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-20%,rgba(201,168,76,0.12),transparent_70%)]" />
         <div className="relative max-w-6xl mx-auto px-4 py-12 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary text-xs font-bold tracking-widest mb-5">
-            <Radio className="w-3.5 h-3.5 animate-pulse" /> EMPIRE PULSE — LIVE FEED
-            {liveCount > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-black">{liveCount} LIVE</span>}
+            <Radio className="w-3.5 h-3.5 animate-pulse" /> {t("pulse_live_badge")}
+            {liveCount > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-black">{formatSurfaceNumber(lang, liveCount)} {t("pulse_live")}</span>}
           </div>
           <h1 className="text-5xl md:text-6xl font-black tracking-tight mb-3">
-            <span className="text-foreground">EMPIRE </span>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-600">PULSE</span>
+             <span className="text-foreground">{t("pulse_hero_empire")} </span>
+             <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-600">{t("pulse_hero_pulse")}</span>
           </h1>
           <p className="text-muted-foreground max-w-xl mx-auto text-base">
-            Connect · Events · Vision · Progress · Growth · Prosperity · Occasions
+            {t("pulse_tagline")}
           </p>
         </div>
       </div>
@@ -354,14 +367,14 @@ export default function PulsePage() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Stats */}
         <div className="mb-8">
-          <StatsBar stats={stats} />
+          <StatsBar stats={stats} t={t} lang={lang} />
         </div>
 
         <div className="flex gap-6 flex-col lg:flex-row">
           {/* Feed (main) */}
           <div className="flex-1 min-w-0 space-y-5">
             {/* Smart Domain Widget */}
-            <SmartDomainWidget domainId="social" label="Module Social & Stream" />
+            <SmartDomainWidget domainId="social" label={t("pulse_social_module")} />
 
             {/* Compose */}
             <ComposeBox onPosted={() => void loadPosts(true)} />
@@ -373,24 +386,28 @@ export default function PulsePage() {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-all ${
                     domain === d.id ? "bg-primary/20 border-primary/50 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/30"
                   }`}>
-                  {d.icon} {d.label}
+                  {d.icon} {t(d.key)}
                 </button>
               ))}
             </div>
 
             {/* Posts */}
             {loading ? (
-              <div className="space-y-3">
+              <div className="space-y-3" role="status" aria-label={gameLocaleText(lang, "loading")}>
                 {Array.from({length: 4}).map((_,i) => <div key={i} className="h-28 bg-card/40 rounded-2xl animate-pulse" />)}
+              </div>
+            ) : loadError ? (
+              <div className="text-center py-16 text-destructive" role="alert">
+                <p>{gameLocaleText(lang, "loadFailed")}</p>
               </div>
             ) : posts.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground">
                 <Flame className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p>No posts yet — be the first voice in this domain.</p>
+                <p>{t("pulse_no_posts")}</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {posts.map(p => <PostCard key={p.id} post={p} onLike={handleLike} />)}
+                {posts.map(p => <PostCard key={p.id} post={p} onLike={handleLike} lang={lang} />)}
               </div>
             )}
           </div>
@@ -398,20 +415,20 @@ export default function PulsePage() {
           {/* Sidebar — Events */}
           <div className="w-full lg:w-80 shrink-0">
             <div className="sticky top-20 space-y-4">
-              <EventsPanel events={events} />
+              <EventsPanel events={events} lang={lang} />
 
               {/* Empire Vision */}
               <div className="rounded-2xl bg-card border border-yellow-400/20 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <Crown className="w-4 h-4 text-yellow-400" />
-                  <span className="font-bold text-sm text-yellow-400">EMPIRE VISION</span>
+                  <span className="font-bold text-sm text-yellow-400">{t("pulse_empire_vision")}</span>
                 </div>
                 {[
-                  { icon:"🌍", label:"Global Citizens",   value:"195 Countries" },
-                  { icon:"⚡", label:"Neural Engine",      value:"v1.0 Active" },
-                  { icon:"🏆", label:"Legends Tracked",    value:"10 / ∞" },
-                  { icon:"🎓", label:"Education Hub",      value:"Coming Soon" },
-                  { icon:"🔗", label:"Blockchain Layer",   value:"Roadmap Q3" },
+                  { icon:"🌍", label: t("pulse_vision_countries"),   value: t("pulse_vision_countries_val") },
+                  { icon:"⚡", label: t("pulse_vision_neural"),       value: t("pulse_vision_neural_val") },
+                  { icon:"🏆", label: t("pulse_vision_legends"),      value: t("pulse_vision_legends_val") },
+                  { icon:"🎓", label: t("pulse_vision_education"),    value: t("pulse_vision_education_val") },
+                  { icon:"🔗", label: t("pulse_vision_blockchain"),   value: t("pulse_vision_blockchain_val") },
                 ].map(item => (
                   <div key={item.label} className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">{item.icon} {item.label}</span>

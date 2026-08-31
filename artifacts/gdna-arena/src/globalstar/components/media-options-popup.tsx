@@ -1,5 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Youtube, Download, Play, Headphones } from 'lucide-react';
+import { useLanguage } from '../contexts/language-context';
+import { gsCopy } from '../gs-copy';
 
 interface MediaItem {
   id: number;
@@ -23,6 +25,9 @@ function getYouTubeId(item: MediaItem): string | null {
 }
 
 export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProps) {
+  const { language } = useLanguage();
+  const c = gsCopy(language);
+  const direction = language === 'ar' ? 'rtl' : 'ltr';
   if (!item) return null;
 
   const ytId = getYouTubeId(item);
@@ -36,15 +41,15 @@ export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProp
     ? [
         {
           icon: <Youtube className="w-5 h-5" />,
-          label: 'مشاهدة على يوتيوب',
-          sub: 'Watch on YouTube',
+          label: c.watchYoutube,
+          sub: c.watchYoutube,
           href: ytWatchUrl,
           gold: true,
         },
         {
           icon: <Download className="w-5 h-5" />,
-          label: 'تحميل الفيديو MP4',
-          sub: 'Download MP4',
+          label: c.downloadVideo,
+          sub: c.downloadVideo,
           href: ytVideoDownload,
           gold: false,
         },
@@ -52,15 +57,15 @@ export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProp
     : [
         {
           icon: <Youtube className="w-5 h-5" />,
-          label: 'استماع على يوتيوب',
-          sub: 'Listen on YouTube',
+          label: c.listenYoutube,
+          sub: c.listenYoutube,
           href: ytWatchUrl,
           gold: true,
         },
         {
           icon: <Download className="w-5 h-5" />,
-          label: 'تحميل الصوت MP3',
-          sub: 'Download MP3',
+          label: c.downloadAudio,
+          sub: c.downloadAudio,
           href: ytMp3Download,
           gold: false,
         },
@@ -76,6 +81,7 @@ export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProp
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.88)' }}
+          dir={direction}
           onClick={onClose}
         >
           <motion.div
@@ -89,6 +95,7 @@ export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProp
               border: '1.5px solid #FFD700',
               boxShadow: '0 0 48px rgba(255,215,0,0.18), 0 8px 48px rgba(0,0,0,0.7)',
             }}
+            dir={direction}
             onClick={e => e.stopPropagation()}
           >
             {/* Gold top bar */}
@@ -108,11 +115,12 @@ export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProp
               <div className="flex-1 min-w-0">
                 <p className="font-black text-sm text-white leading-tight truncate">{item.title}</p>
                 <p className="text-xs mt-0.5" style={{ color: 'rgba(255,215,0,0.6)' }}>
-                  {isVideo ? 'اختر طريقة المشاهدة' : 'اختر طريقة الاستماع'}
+                  {isVideo ? c.chooseWatch : c.chooseListen}
                 </p>
               </div>
               <button
                 onClick={onClose}
+                aria-label={c.mediaOptionsClose}
                 className="text-white/40 hover:text-white transition-colors shrink-0 p-1"
               >
                 <X className="w-4 h-4" />
@@ -152,7 +160,7 @@ export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProp
                   >
                     {opt.icon}
                   </span>
-                  <div className="flex-1 min-w-0 text-right" dir="rtl">
+                  <div className="flex-1 min-w-0 text-start">
                     <p className="font-black text-sm leading-tight">{opt.label}</p>
                     <p
                       className="text-xs mt-0.5"
@@ -167,7 +175,7 @@ export function MediaOptionsPopup({ item, kind, onClose }: MediaOptionsPopupProp
 
             {/* Footer note */}
             <p className="text-center text-xs pb-4" style={{ color: 'rgba(255,215,0,0.3)' }}>
-              EMPIRE ETERNAL · GLOBALSTAR
+              {c.mediaOptionsBrand}
             </p>
           </motion.div>
         </motion.div>

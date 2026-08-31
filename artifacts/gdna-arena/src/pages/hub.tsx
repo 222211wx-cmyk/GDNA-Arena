@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { useLang } from "@/contexts/LangContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatNumber, surfaceCopy } from "@/i18n/content-surfaces-copy";
 import {
   useGetGsDomains, useGetGsRanking, useGetGsNews, useGetGsFigures,
 } from "@workspace/api-client-react";
@@ -19,38 +20,29 @@ import {
 } from "lucide-react";
 
 // ── Imperial AI Decrees ──────────────────────────────────────────────────────
-const DECREES = [
-  { flag: "🇸🇦", text: "Intel: Record-breaking music votes in the last 24 hours" },
-  { flag: "🇫🇷", text: "IA Prédiction: Hausse de 40% des tributes dans Football" },
-  { flag: "🇬🇧", text: "AI Alert: Arena Strike trending — 3× normal tribute flow this hour" },
-  { flag: "🇲🇦", text: "Alert: Crypto Clash is defying all predictions this week" },
-  { flag: "🌍", text: "System: AI Oracle processed 12,400 tributes — 99.8% accuracy confirmed" },
-  { flag: "🇸🇦", text: "Imperial Update: Prediction algorithm v4.2 successfully deployed" },
-  { flag: "🇫🇷", text: "Décret: Algorithme de classement impérial v4.2 déployé avec succès" },
-];
-
 const GAMES = [
-  { id: "neon-racer",   name: "Neon Racer",   genre: "Racing",    players: 1247, hot: true,  reward: "20–80",   accent: "#00D4FF", bg: "rgba(0,212,255,0.06)",   border: "rgba(0,212,255,0.25)" },
-  { id: "crypto-clash", name: "Crypto Clash", genre: "Strategy",  players: 893,  hot: false, reward: "30–120",  accent: "#FFD700", bg: "rgba(255,215,0,0.06)",   border: "rgba(255,215,0,0.25)" },
-  { id: "arena-strike", name: "Arena Strike", genre: "Combat",    players: 2041, hot: true,  reward: "50–200",  accent: "#FF4444", bg: "rgba(255,68,68,0.06)",   border: "rgba(255,68,68,0.25)" },
-  { id: "globalstar",   name: "GlobalStar",   genre: "Tribute",   players: 5820, hot: true,  reward: "10–50",   accent: "#C9A84C", bg: "rgba(201,168,76,0.06)",  border: "rgba(201,168,76,0.25)", external: true },
+  { id: "neon-racer", name: "Neon Racer", genre: "racing" as const, players: 1247, hot: true, reward: "20–80", accent: "#00D4FF", bg: "rgba(0,212,255,0.06)", border: "rgba(0,212,255,0.25)" },
+  { id: "crypto-clash", name: "Crypto Clash", genre: "strategy" as const, players: 893, hot: false, reward: "30–120", accent: "#FFD700", bg: "rgba(255,215,0,0.06)", border: "rgba(255,215,0,0.25)" },
+  { id: "arena-strike", name: "Arena Strike", genre: "combat" as const, players: 2041, hot: true, reward: "50–200", accent: "#FF4444", bg: "rgba(255,68,68,0.06)", border: "rgba(255,68,68,0.25)" },
+  { id: "globalstar", name: "GlobalStar", genre: "tribute" as const, players: 5820, hot: true, reward: "10–50", accent: "#C9A84C", bg: "rgba(201,168,76,0.06)", border: "rgba(201,168,76,0.25)", external: true },
 ];
 
-function getRank(xp: number) {
-  if (xp < 500)  return { label: "Foot Soldier I",  color: "#8B7355" };
-  if (xp < 1000) return { label: "Foot Soldier II", color: "#8B7355" };
-  if (xp < 2000) return { label: "Knight I",        color: "#aaa9ad" };
-  if (xp < 3500) return { label: "Knight II",       color: "#aaa9ad" };
-  if (xp < 5000) return { label: "Commander I",     color: "#C9A84C" };
-  if (xp < 7500) return { label: "Commander II",    color: "#C9A84C" };
-  return { label: "Imperial Champion", color: "#00D4FF" };
+function getRank(xp: number, s: ReturnType<typeof surfaceCopy>) {
+  if (xp < 500) return { label: s.footSoldier1, color: "#8B7355" };
+  if (xp < 1000) return { label: s.footSoldier2, color: "#8B7355" };
+  if (xp < 2000) return { label: s.knight1, color: "#aaa9ad" };
+  if (xp < 3500) return { label: s.knight2, color: "#aaa9ad" };
+  if (xp < 5000) return { label: s.commander1, color: "#C9A84C" };
+  if (xp < 7500) return { label: s.commander2, color: "#C9A84C" };
+  return { label: s.imperialChampion, color: "#00D4FF" };
 }
 
 // ── The Oracle (Quick Chat) ───────────────────────────────────────────────────
 function TheOracle() {
   const { t, lang } = useLang();
+  const s = surfaceCopy(lang);
   const [messages, setMessages] = useState<Array<{ role: "user" | "ai"; text: string }>>([
-    { role: "ai", text: ({ en: "The Oracle hears you. Ask your question, citizen.", ar: "الأوراكل يسمعك. اطرح سؤالك أيها المواطن.", fr: "L'Oracle vous écoute. Posez votre question.", dz: "الأوراكل يسمعك. سول.", } as Partial<Record<string, string>>)[lang] ?? "The Oracle hears you. Ask your question, citizen." },
+    { role: "ai", text: s.oracleGreeting },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,6 +50,9 @@ function TheOracle() {
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => {
+    setMessages(current => current.length === 1 && current[0].role === "ai" ? [{ role: "ai", text: s.oracleGreeting }] : current);
+  }, [lang]);
 
   const send = async () => {
     const msg = input.trim();
@@ -75,7 +70,7 @@ function TheOracle() {
       const data = await res.json();
       setMessages(m => [...m, { role: "ai", text: data.reply ?? "…" }]);
     } catch {
-      setMessages(m => [...m, { role: "ai", text: "Oracle connection disrupted. Reconnecting…" }]);
+      setMessages(m => [...m, { role: "ai", text: s.oracleError }]);
     } finally {
       setLoading(false);
     }
@@ -100,7 +95,7 @@ function TheOracle() {
         {loading && (
           <div className="flex gap-2 items-center">
             <span className="text-sm" style={{ color: "hsl(var(--primary))" }}>◈</span>
-            <span className="text-xs font-mono animate-pulse" style={{ color: "hsl(var(--primary) / 0.38)" }}>Oracle is consulting the void…</span>
+            <span className="text-xs font-mono animate-pulse" style={{ color: "hsl(var(--primary) / 0.38)" }}>{s.oracleThinking}</span>
           </div>
         )}
         <div ref={bottomRef} />
@@ -129,6 +124,7 @@ function TheOracle() {
 // ══════════════════════════════════════════════════════════════════════════════
 export default function Hub() {
   const { t, lang } = useLang();
+  const s = surfaceCopy(lang);
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [decreeIdx, setDecreeIdx] = useState(0);
@@ -155,7 +151,11 @@ export default function Hub() {
   const topFigures  = figures?.figures?.slice(0, 3) ?? [];
   const topDomains  = domains?.domains?.slice(0, 4) ?? [];
   const latestNews  = news?.articles?.slice(0, 3) ?? [];
-  const rank        = user ? getRank(user.xp) : null;
+  const rank        = user ? getRank(user.xp, s) : null;
+  const DECREES = [
+    { flag: "🌍", text: s.decree1 }, { flag: "⚽", text: s.decree2 }, { flag: "⚔️", text: s.decree3 },
+    { flag: "🪙", text: s.decree4 }, { flag: "◈", text: s.decree5 },
+  ];
 
   // Empire census (live totals)
   const totalVotes = ranking?.ranking?.reduce((s: number, d: any) =>
@@ -177,7 +177,7 @@ export default function Hub() {
   const SECTIONS = [
     { icon: "⚖️",   label: "GlobalStar",       path: "/games/globalstar",  accent: "#C9A84C" },
     { icon: "⚔️",   label: t("games"),          path: "/games",             accent: "#FF4444" },
-    { icon: "🧠",   label: "Mind Forge",        path: "/growth",            accent: "#8B5CF6" },
+    { icon: "🧠",   label: s.mindForge,          path: "/growth",            accent: "#8B5CF6" },
     { icon: "📜",   label: t("nav_chronicle"),  path: "/chronicle",         accent: "#FFD700" },
     { icon: "📡",   label: t("news"),           path: "/news",              accent: "#22C55E" },
     { icon: "♔",    label: t("empire_title"),   path: "/empire",            accent: "#C9A84C" },
@@ -186,7 +186,7 @@ export default function Hub() {
   ];
 
   return (
-    <div className="min-h-screen px-4 py-8 max-w-7xl mx-auto space-y-8 relative"
+    <div className="min-h-screen px-4 py-8 max-w-7xl mx-auto space-y-8 relative" dir={lang === "ar" ? "rtl" : "ltr"}
       style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(var(--primary) / 0.04) 0%, transparent 60%)" }}>
 
       {/* ── IMPERIAL INTELLIGENCE FEED ─────────────────────────────── */}
@@ -199,7 +199,7 @@ export default function Hub() {
         <div className="flex items-center gap-2 shrink-0">
           <ShieldCheck className="w-4 h-4 animate-pulse" style={{ color: "hsl(var(--primary))" }} />
           <span className="text-xs font-mono font-black uppercase tracking-[0.3em]" style={{ color: "hsl(var(--primary))" }}>
-            Imperial Intelligence
+             {s.imperialIntelligence}
           </span>
         </div>
         <div className="w-px h-4 shrink-0" style={{ background: "hsl(var(--primary) / 0.19)" }} />
@@ -216,7 +216,7 @@ export default function Hub() {
         <Link href="/chat" className="ml-auto shrink-0">
           <button className="h-6 px-3 text-xs font-mono uppercase tracking-wider"
             style={{ border: "1px solid hsl(var(--primary) / 0.19)", color: "hsl(var(--primary) / 0.38)" }}>
-            Oracle →
+             {s.oracle} →
           </button>
         </Link>
       </motion.div>
@@ -232,7 +232,7 @@ export default function Hub() {
           {t("hub_title")}
         </h1>
         <p className="text-xs font-mono tracking-[0.4em] uppercase" style={{ color: "hsl(var(--primary) / 0.31)" }}>
-          Imperial Command Center · Throne Room · Salle du Trône
+           {s.commandCenter}
         </p>
       </motion.div>
 
@@ -257,10 +257,10 @@ export default function Hub() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px"
         style={{ background: "hsl(var(--primary) / 0.08)", border: "1px solid hsl(var(--primary) / 0.13)" }}>
         {[
-          { val: totalVotes > 0 ? (totalVotes / 1000000).toFixed(1) + "M+" : "2.4M+", label: t("hub_stat_votes"), labelAr: "Votes Cast",      glyph: "◈" },
-          { val: "847K+",                                                               label: t("hub_stat_games"), labelAr: "Battles Fought",  glyph: "⚔" },
-          { val: "156K+",                                                               label: t("hub_stat_users"), labelAr: "Citizens",        glyph: "◉" },
-          { val: "99.8%",                                                               label: t("hub_stat_ai"),    labelAr: "Oracle Accuracy", glyph: "✦" },
+          { val: totalVotes > 0 ? formatNumber(totalVotes, lang) : "2.4M+", label: t("hub_stat_votes"), sub: s.votesCast, glyph: "◈" },
+          { val: "847K+", label: t("hub_stat_games"), sub: s.battlesFought, glyph: "⚔" },
+          { val: "156K+", label: t("hub_stat_users"), sub: s.citizens, glyph: "◉" },
+          { val: "99.8%", label: t("hub_stat_ai"), sub: s.oracleAccuracy, glyph: "✦" },
         ].map((s, i) => (
           <motion.div key={s.label}
             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.07 }}
@@ -270,7 +270,7 @@ export default function Hub() {
             <div className="text-xl mb-1" style={{ color: "hsl(var(--primary) / 0.19)" }}>{s.glyph}</div>
             <p className="text-2xl md:text-3xl font-black font-mono imperial-gold">{s.val}</p>
             <p className="text-xs uppercase tracking-wider mt-0.5" style={{ color: "#ffffff40" }}>{s.label}</p>
-            <p className="text-xs mt-0.5" style={{ color: "hsl(var(--primary) / 0.21)" }}>{s.labelAr}</p>
+            <p className="text-xs mt-0.5" style={{ color: "hsl(var(--primary) / 0.21)" }}>{s.sub}</p>
           </motion.div>
         ))}
       </div>
@@ -286,11 +286,11 @@ export default function Hub() {
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚖️</span>
                 <div>
-                  <p className="text-xs font-mono tracking-widest uppercase" style={{ color: "hsl(var(--primary) / 0.38)" }}>Tribute Hall</p>
+                  <p className="text-xs font-mono tracking-widest uppercase" style={{ color: "hsl(var(--primary) / 0.38)" }}>{s.tributeHall}</p>
                   <h2 className="font-black text-sm uppercase tracking-wider">{t("hub_gs_title")}</h2>
                 </div>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid hsl(var(--primary) / 0.25)", color: "hsl(var(--primary))" }}>LIVE</span>
+              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid hsl(var(--primary) / 0.25)", color: "hsl(var(--primary))" }}>{s.live}</span>
             </div>
 
             {topDomains.map((d: any, i: number) => (
@@ -300,7 +300,7 @@ export default function Hub() {
                   <span className="text-xl">{d.icon}</span>
                   <div>
                     <p className="text-xs font-bold">{d.label}</p>
-                    <p className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.38)" }}>{d.totalVotes?.toLocaleString()} tribute</p>
+                    <p className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.38)" }}>{formatNumber(d.totalVotes ?? 0, lang)} {s.tribute}</p>
                   </div>
                 </div>
                 <TrendingUp className="w-3.5 h-3.5" style={{ color: "hsl(var(--primary) / 0.38)" }} />
@@ -317,7 +317,7 @@ export default function Hub() {
                       {i === 0 ? "♔" : "#" + (i + 1)}
                     </span>
                     <p className="text-xs font-medium truncate flex-1">{f.name}</p>
-                    <span className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.5)" }}>{f.votes?.toLocaleString()}</span>
+                    <span className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.5)" }}>{formatNumber(f.votes ?? 0, lang)}</span>
                   </div>
                 ))}
               </div>
@@ -342,12 +342,12 @@ export default function Hub() {
               boxShadow: "0 0 40px hsl(var(--primary) / 0.06)" }}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.38)" }}>Imperial Oracle</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.38)" }}>{s.imperialOracle}</p>
                 <h2 className="font-black text-sm uppercase tracking-wider imperial-gold">GDN-AI</h2>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-xs font-mono text-green-400">ACTIVE</span>
+                <span className="text-xs font-mono text-green-400">{s.active}</span>
               </div>
             </div>
             <div className="flex-1">
@@ -368,10 +368,10 @@ export default function Hub() {
             style={{ border: "1px solid hsl(var(--primary) / 0.13)", background: "hsl(var(--primary) / 0.01)" }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>Order of Champions</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>{s.orderChampions}</p>
                 <h2 className="font-black text-sm uppercase tracking-wider">{t("leaderboard")}</h2>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid hsl(var(--primary) / 0.15)", color: "hsl(var(--primary) / 0.38)" }}>TOP 5</span>
+              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid hsl(var(--primary) / 0.15)", color: "hsl(var(--primary) / 0.38)" }}>{s.topFive}</span>
             </div>
 
             {leaders.length === 0 ? (
@@ -379,7 +379,7 @@ export default function Hub() {
                 <Loader2 className="w-5 h-5 animate-spin" style={{ color: "hsl(var(--primary) / 0.25)" }} />
               </div>
             ) : leaders.map((p, i) => {
-              const r = getRank(p.xp);
+               const r = getRank(p.xp, s);
               return (
                 <div key={p.id} className="flex items-center gap-2.5 p-2"
                   style={{ background: "hsl(var(--primary) / 0.02)", border: "1px solid hsl(var(--primary) / 0.06)" }}>
@@ -394,8 +394,8 @@ export default function Hub() {
                     <p className="text-xs font-mono" style={{ color: r.color }}>{r.label}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-xs font-black font-mono" style={{ color: "hsl(var(--primary))" }}>{p.balance.toLocaleString()}</p>
-                    <p className="text-xs text-white/30 font-mono">{p.xp} XP</p>
+                     <p className="text-xs font-black font-mono" style={{ color: "hsl(var(--primary))" }}>{formatNumber(p.balance, lang)}</p>
+                     <p className="text-xs text-white/30 font-mono">{formatNumber(p.xp, lang)} XP</p>
                   </div>
                 </div>
               );
@@ -420,7 +420,7 @@ export default function Hub() {
           <div className="flex items-center gap-4">
             <div className="h-px w-8" style={{ background: "#FF444450" }} />
             <div>
-              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#FF444460" }}>The Battle Arena</p>
+              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#FF444460" }}>{s.battleArena}</p>
               <h2 className="font-black uppercase tracking-wider">{t("hub_gaming_title")}</h2>
             </div>
           </div>
@@ -444,8 +444,8 @@ export default function Hub() {
               }
             >
               {playResult.win
-                ? `♔ ${t("hub_win_msg")} · +${playResult.coins} coins · +${playResult.xpEarned} XP`
-                : `⚔️ ${t("hub_lose_msg")} · +${playResult.coins} coins — honour in defeat`}
+                ? `♔ ${t("hub_win_msg")} · +${formatNumber(playResult.coins, lang)} ${s.coins} · +${formatNumber(playResult.xpEarned, lang)} XP`
+                : `⚔️ ${t("hub_lose_msg")} · +${formatNumber(playResult.coins, lang)} ${s.coins} — ${s.honourDefeat}`}
             </motion.div>
           )}
         </AnimatePresence>
@@ -462,16 +462,16 @@ export default function Hub() {
                     {g.hot ? "🔥" : "⚔"}
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-black font-mono" style={{ color: g.accent }}>{g.players.toLocaleString()}</p>
+                    <p className="text-xs font-black font-mono" style={{ color: g.accent }}>{formatNumber(g.players, lang)}</p>
                     <p className="text-xs" style={{ color: `${g.accent}50` }}>{t("hub_online")}</p>
                   </div>
                 </div>
                 <div>
                   <p className="font-black text-sm" style={{ color: g.accent }}>{g.name}</p>
-                  <p className="text-xs" style={{ color: `${g.accent}60` }}>{g.genre}</p>
+                  <p className="text-xs" style={{ color: `${g.accent}60` }}>{s[g.genre]}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.5)" }}>Reward: {g.reward} coins</span>
+                  <span className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.5)" }}>{s.reward}: {g.reward} {s.coins}</span>
                 </div>
                 <button
                   onClick={() => handlePlay(g.id, g.external)}
@@ -486,7 +486,7 @@ export default function Hub() {
                 >
                   {playing === g.id
                     ? <Loader2 className="w-3 h-3 animate-spin mx-auto" />
-                    : g.external ? "Enter" : "⚔ " + t("hub_play_btn")}
+                    : g.external ? s.enter : "⚔ " + t("hub_play_btn")}
                 </button>
               </div>
             </motion.div>
@@ -503,11 +503,11 @@ export default function Hub() {
             style={{ border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.04)" }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "rgba(139,92,246,0.6)" }}>Mind Forge</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "rgba(139,92,246,0.6)" }}>{s.mindForge}</p>
                 <h2 className="font-black text-sm uppercase tracking-wider" style={{ color: "rgb(139,92,246)" }}>{t("hub_nlp_title")}</h2>
               </div>
               <Link href="/growth">
-                <button className="text-xs font-mono" style={{ color: "rgba(139,92,246,0.5)" }}>Forge →</button>
+                <button className="text-xs font-mono" style={{ color: "rgba(139,92,246,0.5)" }}>{s.forge} →</button>
               </Link>
             </div>
 
@@ -562,11 +562,11 @@ export default function Hub() {
             style={{ border: "1px solid hsl(var(--primary) / 0.15)", background: "hsl(var(--primary) / 0.02)" }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>The Archives</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>{s.archives}</p>
                 <h2 className="font-black text-sm uppercase tracking-wider" style={{ color: "hsl(var(--primary))" }}>{t("nav_chronicle")}</h2>
               </div>
               <Link href="/chronicle">
-                <button className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.31)" }}>Archives →</button>
+                <button className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.31)" }}>{s.archive} →</button>
               </Link>
             </div>
 
@@ -605,14 +605,14 @@ export default function Hub() {
             <div className="flex items-center gap-4">
               <div className="h-px w-8" style={{ background: "#22C55E50" }} />
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#22C55E60" }}>Imperial Dispatches</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#22C55E60" }}>{s.imperialDispatches}</p>
                 <h2 className="font-black uppercase tracking-wider">{t("hub_news_title")}</h2>
               </div>
             </div>
             <Link href="/news">
               <button className="text-xs font-mono uppercase px-3 py-1"
                 style={{ border: "1px solid #22C55E20", color: "#22C55E60" }}>
-                All News →
+                {s.allNews} →
               </button>
             </Link>
           </div>
@@ -625,7 +625,7 @@ export default function Hub() {
                   {a.isBreaking && (
                     <span className="text-xs font-black px-2 py-0.5 uppercase tracking-widest"
                       style={{ background: "rgba(255,68,68,0.15)", color: "#FF4444", border: "1px solid #FF444430" }}>
-                      ⚡ Breaking
+                      ⚡ {s.breaking}
                     </span>
                   )}
                   <h3 className="font-bold text-xs line-clamp-2">{a.title}</h3>
@@ -646,7 +646,7 @@ export default function Hub() {
             style={{ border: "1px solid hsl(var(--primary) / 0.19)", background: "hsl(var(--primary) / 0.04)" }}>
             <span className="text-3xl">♔</span>
             <div className="flex-1">
-              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.38)" }}>The Constitution</p>
+              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.38)" }}>{s.constitution}</p>
               <p className="font-black uppercase tracking-wider" style={{ color: "hsl(var(--primary))" }}>{t("empire_title")}</p>
               <p className="text-xs mt-0.5" style={{ color: "#ffffff30" }}>{t("hub_empire_desc")}</p>
             </div>
@@ -659,7 +659,7 @@ export default function Hub() {
             style={{ border: "1px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.04)" }}>
             <span className="text-3xl">⚖</span>
             <div className="flex-1">
-              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "rgba(59,130,246,0.6)" }}>Imperial Law</p>
+              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "rgba(59,130,246,0.6)" }}>{s.law}</p>
               <p className="font-black uppercase tracking-wider" style={{ color: "rgba(59,130,246,0.9)" }}>{t("legal_title")}</p>
               <p className="text-xs mt-0.5" style={{ color: "#ffffff30" }}>{t("hub_legal_desc")}</p>
             </div>
@@ -681,14 +681,14 @@ export default function Hub() {
                 {user.username.slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>Citizen of the Empire</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>{s.citizenEmpire}</p>
                 <p className="font-black text-lg uppercase tracking-wider" style={{ color: "hsl(var(--primary))" }}>{user.username}</p>
                 <p className="text-xs font-bold font-mono" style={{ color: rank.color }}>{rank.label}</p>
                 <div className="flex items-center gap-3 text-xs font-mono mt-1" style={{ color: "#ffffff40" }}>
-                  <span>⚡ {user.xp} XP</span>
-                  <span>◈ {user.balance.toLocaleString()} coins</span>
-                  <span>⚔ {user.gamesPlayed} battles</span>
-                  <span>♔ {user.wins} victories</span>
+                  <span>⚡ {formatNumber(user.xp, lang)} XP</span>
+                  <span>◈ {formatNumber(user.balance, lang)} {s.coins}</span>
+                  <span>⚔ {formatNumber(user.gamesPlayed, lang)} {s.battles}</span>
+                  <span>♔ {formatNumber(user.wins, lang)} {s.victories}</span>
                 </div>
               </div>
             </div>
@@ -727,7 +727,7 @@ export default function Hub() {
           ))}
         </div>
         <p className="text-xs font-mono tracking-[0.4em] uppercase" style={{ color: "hsl(var(--primary) / 0.15)" }}>
-          ◈ · SOVEREIGNTY · LEGACY · IMMORTALITY · ◈
+          ◈ · {s.sovereignty} · ◈
         </p>
       </motion.div>
 

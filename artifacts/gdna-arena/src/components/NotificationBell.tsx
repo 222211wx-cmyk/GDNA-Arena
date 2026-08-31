@@ -4,6 +4,8 @@ import { Bell, BellRing, X, CheckCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
 import { api } from "./social/social-i18n";
+import { SOCIAL_T } from "./social/social-i18n";
+import { useLang } from "@/contexts/LangContext";
 
 interface Notif {
   id: number; type: string; title: string; body: string;
@@ -12,15 +14,17 @@ interface Notif {
 
 const GREEN = "#22c55e";
 
-function timeAgo(d: string) {
+function timeAgo(d: string, st: Record<string, string>) {
   const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
-  if (m < 1) return "just now"; if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (m < 1) return st.just_now; if (m < 60) return `${m}m ${st.ago}`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h ${st.ago}`;
+  return `${Math.floor(h / 24)}d ${st.ago}`;
 }
 
 export function NotificationBell() {
   const { user } = useAuth();
+  const { lang } = useLang();
+  const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const [open,    setOpen]    = useState(false);
   const [notifs,  setNotifs]  = useState<Notif[]>([]);
   const [unread,  setUnread]  = useState(0);
@@ -76,6 +80,7 @@ export function NotificationBell() {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => { setOpen(o => !o); if (!open) void load(); }}
+        aria-label={st.notifications}
         className="relative w-9 h-9 rounded-xl flex items-center justify-center border transition-all hover:opacity-80"
         style={{ borderColor: unread > 0 ? `${GREEN}50` : "#ffffff15", background: unread > 0 ? `${GREEN}10` : "transparent" }}>
         {unread > 0
@@ -98,14 +103,14 @@ export function NotificationBell() {
 
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#22c55e15" }}>
-              <span className="text-sm font-black" style={{ color: GREEN }}>⚡ NOTIFICATIONS</span>
+              <span className="text-sm font-black" style={{ color: GREEN }}>⚡ {st.notifications}</span>
               <div className="flex items-center gap-2">
                 {unread > 0 && (
                   <button onClick={() => void markAll()} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                    <CheckCheck className="w-3 h-3" /> Mark all read
+                    <CheckCheck className="w-3 h-3" /> {st.mark_read}
                   </button>
                 )}
-                <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <button onClick={() => setOpen(false)} aria-label={st.close} className="text-muted-foreground hover:text-foreground transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -116,7 +121,7 @@ export function NotificationBell() {
               {notifs.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground">
                   <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: GREEN }} />
-                  <p className="text-xs">No notifications yet</p>
+                  <p className="text-xs">{st.no_notifications}</p>
                 </div>
               ) : (
                 notifs.map(n => {
@@ -127,7 +132,7 @@ export function NotificationBell() {
                       <div className="flex-1 min-w-0">
                         <div className={`text-xs font-bold mb-0.5 ${!n.isRead ? "" : "text-muted-foreground"}`}>{n.title}</div>
                         <p className="text-[11px] text-muted-foreground leading-relaxed">{n.body}</p>
-                        <div className="text-[10px] text-muted-foreground mt-1">{timeAgo(n.createdAt)}</div>
+                        <div className="text-[10px] text-muted-foreground mt-1">{timeAgo(n.createdAt, st)}</div>
                       </div>
                       {!n.isRead && <div className="w-1.5 h-1.5 rounded-full mt-1 shrink-0" style={{ background: GREEN }} />}
                     </div>

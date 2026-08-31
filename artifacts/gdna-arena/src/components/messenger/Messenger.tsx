@@ -32,6 +32,7 @@ import { useCallContext } from "../../contexts/CallContext";
 import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
+import { getMessengerCopy, getMessengerIntlLocale } from "@/i18n/messenger-complete-copy";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
 import {
   decryptAttachmentBlob,
@@ -75,17 +76,20 @@ function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
 
 // ── Date separators ───────────────────────────────────────────────────────────
 function dayKey(iso: string) { const d = new Date(iso); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
-function dayLabel(iso: string, lang: string) {
+function localeFor(lang: string) {
+  return lang === "ar" ? "ar-MA" : lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-GB";
+}
+function dayLabel(iso: string, lang: string, st: Record<string, string>) {
   const d = new Date(iso), now = new Date();
   const today = dayKey(now.toISOString()) === dayKey(iso);
   const y = new Date(now); y.setDate(y.getDate() - 1);
   const yesterday = dayKey(y.toISOString()) === dayKey(iso);
-  if (today) return lang === "ar" ? "اليوم" : lang === "fr" ? "Aujourd'hui" : "Today";
-  if (yesterday) return lang === "ar" ? "أمس" : lang === "fr" ? "Hier" : "Yesterday";
-  return d.toLocaleDateString(lang === "ar" ? "ar-MA" : lang === "fr" ? "fr-FR" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+  if (today) return st.today;
+  if (yesterday) return st.yesterday;
+  return d.toLocaleDateString(localeFor(lang), { day: "numeric", month: "long", year: "numeric" });
 }
-function clockTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function clockTime(iso: string, lang: string) {
+  return new Date(iso).toLocaleTimeString(localeFor(lang), { hour: "2-digit", minute: "2-digit" });
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -224,7 +228,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
         <Settings size={17} style={{ color: GOLD }} />
         <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, flex: 1 }}>{activeRoom ? (st.msg_settings ?? "Messenger settings") : (st.settings_general ?? st.msg_settings ?? "Settings")}</p>
         {!inline && (
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: 6 }}><X size={18} /></button>
+          <button onClick={onClose} aria-label={st.close ?? st.back} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: 6 }}><X size={18} /></button>
         )}
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 16px" }}>
@@ -237,7 +241,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
               onChange={v => save({ readReceipts: v })} disabled={!isOnline} />
             <p className="mt-0.5 mb-1.5 mx-1 text-[10.5px] text-muted-foreground">{st.receipts_hint ?? ""}</p>
             {activeRoom && (
-              <ToggleRow label={`${st.mute_conv ?? "Mute conversation"} · ${activeRoom.type === "group" ? (activeRoom.name ?? "Group") : ""}`.trim()}
+              <ToggleRow label={`${st.mute_conv} · ${activeRoom.type === "group" ? (activeRoom.name ?? st.group) : ""}`.trim()}
                 value={muted} onChange={toggleMute} disabled={!isOnline} />
             )}
             {activeRoom && (
@@ -272,6 +276,9 @@ const SOLIDARITY_STATUS_COLORS: Record<string, string> = {
   focused:   "#a78bfa",
   offline:   "#6b7280",
 };
+function solidarityStatusLabel(status: string, st: Record<string, string>) {
+  return st[`relay_status_${status}`] ?? status;
+}
 interface Contact {
   id: number;
   username: string;
@@ -364,7 +371,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
       <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10 }}>
         <Users size={17} style={{ color: GOLD }} />
         <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, flex: 1 }}>{title}</p>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: 6 }}><X size={18} /></button>
+        <button onClick={onClose} aria-label={st.close ?? st.back} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: 6 }}><X size={18} /></button>
       </div>
       <div style={{ padding: "10px 14px" }}>
         <div style={{ position: "relative" }}>
@@ -386,7 +393,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
             <p style={{ color: "#666", fontSize: 13, margin: "0 0 12px" }}>{st.no_contacts ?? "Could not load citizens"}</p>
             <button onClick={() => fetchContacts(q, 0, true)}
               style={{ background: GOLD_A(0.125), border: `1px solid ${GOLD_A(0.188)}`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
-              Retry
+              {st.retry}
             </button>
           </div>
         )}
@@ -408,7 +415,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
               <div style={{ flex: 1, overflow: "hidden" }}>
                 <p style={{ margin: 0, fontWeight: 700, color: "#fff", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.username}</p>
                 <p style={{ margin: 0, fontSize: 12, color: statusColor }}>
-                  {solStatus ? solStatus : (online ? (st.online ?? "Online") : (st.offline ?? "Offline"))}
+                  {solStatus ? solidarityStatusLabel(solStatus, st) : (online ? st.online : st.offline)}
                 </p>
               </div>
               {callMode ? (
@@ -436,7 +443,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
             <button onClick={loadMore} disabled={loadingMore}
               style={{ display: "inline-flex", alignItems: "center", gap: 6, background: GOLD_A(0.082), border: `1px solid ${GOLD_A(0.145)}`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: loadingMore ? "default" : "pointer", fontSize: 13, fontWeight: 700, opacity: loadingMore ? 0.7 : 1 }}>
               {loadingMore ? <LoaderCircle size={14} className="animate-spin" /> : <ChevronRight size={14} />}
-              {loadingMore ? "Loading…" : (st.load_more ?? "Load more")}
+              {loadingMore ? (st.loading ?? "Loading…") : (st.load_more ?? "Load more")}
             </button>
           </div>
         )}
@@ -515,7 +522,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
       {!loading && loadError && (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "32px 16px", textAlign: "center" }}>
           <p style={{ color: "#ef4444", fontSize: 13, margin: 0 }}>{loadError}</p>
-          <Button variant="outline" size="sm" onClick={loadCommunities}>{st.retry ?? "Retry"}</Button>
+          <Button variant="outline" size="sm" onClick={loadCommunities}>{st.retry}</Button>
         </div>
       )}
       {!loading && !loadError && groups.length === 0 && (
@@ -533,7 +540,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
               {typeof g.icon === "string" && g.icon ? g.icon : <Users size={22} style={{ color: "#666" }} />}
             </div>
             <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
-              <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name ?? "Assembly"}</p>
+              <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name ?? st.assembly}</p>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 3, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 12, color: "#ffffff40" }}>
                   <Users size={11} style={{ display: "inline", marginRight: 3 }} />
@@ -542,7 +549,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
                 {typeof g.activeInitiativeCount === "number" && g.activeInitiativeCount > 0 && (
                   <span style={{ fontSize: 11, color: GOLD, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
                     <HandHeart size={11} />
-                    {g.activeInitiativeCount} active
+                    {g.activeInitiativeCount} {st.active}
                   </span>
                 )}
               </div>
@@ -562,8 +569,8 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
                   variant="outline"
                   className="h-9 px-3 text-xs gap-1"
                   style={{ color: GOLD, borderColor: GOLD_A(0.188) }}
-                  onClick={() => onViewRelay(g.id, g.name ?? "Assembly")}
-                  aria-label={`Solidarity actions for ${g.name ?? "Assembly"}`}
+                  onClick={() => onViewRelay(g.id, g.name ?? st.assembly)}
+                  aria-label={st.solidarity_actions_for.replace("{name}", g.name ?? st.assembly)}
                   data-testid={`relay-btn-${g.id}`}
                 >
                   <HandHeart size={12} />
@@ -581,8 +588,9 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
 }
 
 // ── Appels ────────────────────────────────────────────────────────────────────
-function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline }: {
+function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline }: {
   st: Record<string, string>;
+  lang: string;
   user: { id: number; username: string };
   onNewCall: () => void;
   connectionTest: "idle" | "testing" | "ready" | "unstable" | "failed";
@@ -616,11 +624,11 @@ function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection, isOn
   const statusLabel = (s: string) =>
     s === "missed" ? (st.call_missed ?? "Missed") : s === "answered" ? (st.call_answered ?? "Answered") : (st.call_ended ?? "Ended");
   const connectionResult = connectionTest === "ready"
-    ? { label: "Agora path ready for a call", className: "border-chart-3/40 bg-chart-3/10 text-chart-3" }
+    ? { label: st.call_ready, className: "border-chart-3/40 bg-chart-3/10 text-chart-3" }
     : connectionTest === "unstable"
-      ? { label: "Network is unstable — call quality may be affected", className: "border-primary/40 bg-primary/10 text-primary" }
+      ? { label: st.call_unstable, className: "border-primary/40 bg-primary/10 text-primary" }
       : connectionTest === "failed"
-        ? { label: "Unable to reach Agora — try another network", className: "border-destructive/40 bg-destructive/10 text-destructive" }
+        ? { label: st.call_failed, className: "border-destructive/40 bg-destructive/10 text-destructive" }
         : null;
 
   function statusIcon(r: CallRecord) {
@@ -635,12 +643,12 @@ function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection, isOn
         <div className="flex items-center gap-2">
           <Wifi className="h-4 w-4 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
-            <p className="m-0 text-sm font-bold text-card-foreground">Call connection</p>
-            <p className="m-0 text-xs text-muted-foreground">Check your Agora call path before dialing.</p>
+            <p className="m-0 text-sm font-bold text-card-foreground">{st.call_connection}</p>
+            <p className="m-0 text-xs text-muted-foreground">{st.call_connection_help}</p>
           </div>
           <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => isOnline ? onTestConnection() : onOffline()} disabled={connectionTest === "testing" || !isOnline}>
             {connectionTest === "testing" && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
-            {connectionTest === "testing" ? "Testing…" : "Test connection"}
+            {connectionTest === "testing" ? st.call_testing : st.call_test}
           </Button>
         </div>
         {connectionResult && (
@@ -682,7 +690,7 @@ function AppelsTab({ st, user, onNewCall, connectionTest, onTestConnection, isOn
               )}
             </div>
           </div>
-          <p style={{ margin: 0, fontSize: 11, color: "#ffffff25" }}>{timeAgo(r.startedAt, st)}</p>
+          <p style={{ margin: 0, fontSize: 11, color: "#ffffff25" }}>{timeAgo(r.startedAt, st, getMessengerIntlLocale(lang))}</p>
         </div>
       ))}
     </div>
@@ -694,14 +702,14 @@ function resolveUrl(url: string): string {
   return url.startsWith("/api/") ? api(url) : url;
 }
 
-function attachmentLabel(metadata: SecureAttachmentMetadata): string {
-  if (metadata.kind === "audio") return "🎤 Voice note";
-  if (metadata.kind === "video") return "🎥 Video";
-  if (metadata.kind === "image") return "🖼️ Image";
+function attachmentLabel(metadata: SecureAttachmentMetadata, st: Record<string, string>): string {
+  if (metadata.kind === "audio") return `🎤 ${st.voice_note}`;
+  if (metadata.kind === "video") return `🎥 ${st.call_video}`;
+  if (metadata.kind === "image") return `🖼️ ${st.attach_image}`;
   return `📁 ${metadata.name}`;
 }
 
-async function decryptMessageForUser(message: DmMessage, userId: number): Promise<DmMessage> {
+async function decryptMessageForUser(message: DmMessage, userId: number, st: Record<string, string>): Promise<DmMessage> {
   let next = { ...message };
   if (message.content && isE2EMessage(message.content)) {
     try {
@@ -711,7 +719,7 @@ async function decryptMessageForUser(message: DmMessage, userId: number): Promis
       } else if (payload?.kind === "attachment") {
         next = {
           ...next,
-          content: attachmentLabel(payload.attachment),
+          content: attachmentLabel(payload.attachment, st),
           secureAttachment: payload.attachment,
           encrypted: true,
         };
@@ -719,7 +727,7 @@ async function decryptMessageForUser(message: DmMessage, userId: number): Promis
     } catch {
       next = {
         ...next,
-        content: "🔐 This message belongs to another secure device key",
+        content: `🔐 ${st.secure_other_device}`,
         encrypted: true,
         decryptionFailed: true,
       };
@@ -733,11 +741,11 @@ async function decryptMessageForUser(message: DmMessage, userId: number): Promis
         content: replyPayload?.kind === "text"
           ? replyPayload.text
           : replyPayload?.kind === "attachment"
-            ? attachmentLabel(replyPayload.attachment)
-            : "🔐 Encrypted message",
+            ? attachmentLabel(replyPayload.attachment, st)
+            : `🔐 ${st.encrypted_message}`,
       };
     } catch {
-      next.replyTo = { ...message.replyTo, content: "🔐 Encrypted message" };
+      next.replyTo = { ...message.replyTo, content: `🔐 ${st.encrypted_message}` };
     }
   }
   return next;
@@ -748,6 +756,8 @@ function SecureAttachment({ url, metadata, mine }: {
   metadata: SecureAttachmentMetadata;
   mine: boolean;
 }) {
+  const { lang } = useLang();
+  const st = { ...(SOCIAL_T[lang] ?? SOCIAL_T.en), ...getMessengerCopy(lang) };
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -773,10 +783,10 @@ function SecureAttachment({ url, metadata, mine }: {
   }, [url, metadata.key, metadata.iv]);
 
   if (failed) {
-    return <p className="m-0 text-xs text-destructive">🔐 Unable to decrypt attachment</p>;
+    return <p className="m-0 text-xs text-destructive">🔐 {st.decrypt_attachment_failed}</p>;
   }
   if (!objectUrl) {
-    return <div className="flex min-h-9 items-center gap-2 text-xs opacity-70"><LoaderCircle size={14} className="animate-spin" />Decrypting…</div>;
+    return <div className="flex min-h-9 items-center gap-2 text-xs opacity-70"><LoaderCircle size={14} className="animate-spin" />{st.decrypting}</div>;
   }
   if (metadata.kind === "audio") {
     return <audio controls src={objectUrl} style={{ maxWidth: 220, height: 38 }} />;
@@ -845,7 +855,7 @@ function IdentityBoundMessenger({ variant, user }: {
   user: AuthUser | null;
 }) {
   const { lang } = useLang();
-  const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
+  const st = { ...(SOCIAL_T[lang] ?? SOCIAL_T.en), ...getMessengerCopy(lang) };
   const dir = lang === "ar" ? "rtl" : "ltr";
   const call = useCallContext();
   const { isOnline } = useConnectivity();
@@ -882,15 +892,7 @@ function IdentityBoundMessenger({ variant, user }: {
   const [showRelay,     setShowRelay]     = useState(false);
   const [relayRoomId,   setRelayRoomId]   = useState<number | null>(null);
   const [relayRoomName, setRelayRoomName] = useState<string | null>(null);
-  const offlineToast = lang === "ar"
-    ? "أنت غير متصل — هذا الإجراء غير متاح الآن"
-    : lang === "fr"
-      ? "Vous êtes hors ligne — cette action est indisponible."
-      : lang === "es"
-        ? "No tienes conexión; esta acción no está disponible."
-        : lang === "de"
-          ? "Sie sind offline – diese Aktion ist nicht verfügbar."
-          : "You are offline — this action is unavailable.";
+  const offlineToast = st.offline_action;
   const blockOffline = useCallback(() => setToast(offlineToast), [offlineToast]);
 
   const pendingRef = useRef<PendingFile[]>([]);
@@ -1129,15 +1131,15 @@ function IdentityBoundMessenger({ variant, user }: {
               content: payload?.kind === "text"
                 ? payload.text
                 : payload?.kind === "attachment"
-                  ? attachmentLabel(payload.attachment)
-                  : "🔐 Encrypted message",
+                  ? attachmentLabel(payload.attachment, st)
+                  : `🔐 ${st.encrypted_message}`,
             } : room.lastMessage,
           };
         } catch {
           return {
             ...room,
             lastMessage: room.lastMessage
-              ? { ...room.lastMessage, content: "🔐 Encrypted message" }
+              ? { ...room.lastMessage, content: `🔐 ${st.encrypted_message}` }
               : room.lastMessage,
           };
         }
@@ -1197,7 +1199,7 @@ function IdentityBoundMessenger({ variant, user }: {
       if (typeof detail.recipientUserId === "number" && detail.recipientUserId !== user?.id) return;
       if (detail.roomId === activeRoomIdRef.current) {
         if (user) {
-          void decryptMessageForUser(detail.message, user.id).then(message => {
+          void decryptMessageForUser(detail.message, user.id, st).then(message => {
             if (mountedRef.current && detail.roomId === activeRoomIdRef.current) appendMessage(message);
           });
         }
@@ -1236,7 +1238,7 @@ function IdentityBoundMessenger({ variant, user }: {
       if (!r.ok) return;
       const j = await r.json();
       const decrypted = user
-        ? await Promise.all(((j.messages ?? []) as DmMessage[]).map(message => decryptMessageForUser(message, user.id)))
+        ? await Promise.all(((j.messages ?? []) as DmMessage[]).map(message => decryptMessageForUser(message, user.id, st)))
         : [];
       // Only commit if this room is still the active one (guards stale responses
       // from a previously opened room resolving late) and we're still mounted.
@@ -1261,9 +1263,9 @@ function IdentityBoundMessenger({ variant, user }: {
   }
 
   function getPeerName(room: DmRoom): string {
-    if (room.type === "group") return room.name ?? "Group";
+    if (room.type === "group") return room.name ?? st.group;
     const other = room.members.find(m => m.username !== user?.username);
-    return other?.username ?? "Chat";
+    return other?.username ?? st.chat;
   }
 
   // Open a room by id from a FRESH rooms fetch so members are populated.
@@ -1291,7 +1293,7 @@ function IdentityBoundMessenger({ variant, user }: {
     if (!isOnline) { blockOffline(); return; }
     const r = await fetch(api("/api/messages/rooms"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "group", roomName: groupName || "Group", icon: "" }), credentials: "include",
+      body: JSON.stringify({ type: "group", roomName: groupName || st.group, icon: "" }), credentials: "include",
     });
     if (r.ok) {
       const j = await r.json();
@@ -1325,13 +1327,13 @@ function IdentityBoundMessenger({ variant, user }: {
         const keysResponse = await fetch(api(`/api/messages/rooms/${roomId}/e2e-keys`), {
           credentials: "include",
         });
-        if (!keysResponse.ok) throw new Error("Unable to load secure room keys");
+        if (!keysResponse.ok) throw new Error(st.secure_keys_failed);
         const keyData = await keysResponse.json() as {
           keys?: E2ERecipientKey[];
           missingUserIds?: number[];
         };
         if (keyData.missingUserIds?.length || !keyData.keys?.length) {
-          throw new Error("A room member has not enabled secure messaging yet");
+          throw new Error(st.secure_member_unavailable);
         }
         const body = {
           ...baseBody,
@@ -1343,11 +1345,11 @@ function IdentityBoundMessenger({ variant, user }: {
         });
         if (r.status !== 409 || attempt === 1) break;
       }
-      if (!r) throw new Error("Message not sent");
+      if (!r) throw new Error(st.send_failed);
       if (r.ok) {
         const j = await r.json();
         const decryptedMessage = user
-          ? await decryptMessageForUser(j.message as DmMessage, user.id)
+          ? await decryptMessageForUser(j.message as DmMessage, user.id, st)
           : j.message as DmMessage;
         if (mountedRef.current && activeRoomIdRef.current === roomId) appendMessage(decryptedMessage);
         if (!override) { setText(""); setReplyTo(null); if (textRef.current) textRef.current.style.height = "auto"; }
@@ -1359,7 +1361,7 @@ function IdentityBoundMessenger({ variant, user }: {
         return false;
       }
     } catch (error) {
-      setToast(error instanceof Error ? `🔐 ${error.message}` : (st.send_failed ?? "Message not sent"));
+      setToast(error instanceof Error ? `🔐 ${error.message}` : st.send_failed);
       return false;
     } finally { setSending(false); }
   }
@@ -1367,18 +1369,18 @@ function IdentityBoundMessenger({ variant, user }: {
   async function deleteMessage(msgId: number) {
     if (!activeRoom) return;
     if (!isOnline) { blockOffline(); return; }
-    if (!window.confirm("حذف هذه الرسالة عند جميع الأطراف؟")) return;
+    if (!window.confirm(st.delete_everyone_confirm)) return;
     setMenuMsgId(null);
     const r = await fetch(api(`/api/messages/rooms/${activeRoom.id}/messages/${msgId}`), {
       method: "DELETE", credentials: "include",
     });
     if (r.ok) {
       setMessages(prev => prev.filter(m => m.id !== msgId));
-      setToast("تم حذف الرسالة عند جميع الأطراف");
+      setToast(st.deleted_everyone);
       loadRooms();
     } else {
       const j = await r.json().catch(() => ({} as { error?: string }));
-      setToast(j.error ?? "Error");
+      setToast(j.error ?? st.error);
     }
   }
 
@@ -1392,13 +1394,13 @@ function IdentityBoundMessenger({ variant, user }: {
     try {
       const text = await navigator.clipboard.readText();
       if (!text) {
-        setToast("Clipboard is empty");
+        setToast(st.clipboard_empty);
         return;
       }
       setText(current => `${current}${current ? " " : ""}${text}`);
       setShowAttachTray(false);
     } catch {
-      setToast("استعمل Ctrl+V أو الضغط المطول للصق");
+      setToast(st.paste_hint);
     }
   }
 
@@ -1456,14 +1458,14 @@ function IdentityBoundMessenger({ variant, user }: {
         setMessages(prev => prev.map(m => m.id === msg.id ? {
           ...m, reactions: prevReactions, myReaction: prevMyReaction,
         } : m));
-        setToast(st.send_failed ?? "Could not update reaction — please try again");
+        setToast(st.reaction_failed);
       }
     } catch {
       // Fix #5: network failure → restore exact previous state
       setMessages(prev => prev.map(m => m.id === msg.id ? {
         ...m, reactions: prevReactions, myReaction: prevMyReaction,
       } : m));
-      setToast(st.send_failed ?? "Could not update reaction — please try again");
+      setToast(st.reaction_failed);
     }
   }
 
@@ -1512,7 +1514,7 @@ function IdentityBoundMessenger({ variant, user }: {
   async function uploadAndSend(
     file: File | Blob,
     pendingId: string,
-    fallbackName = "attachment",
+    fallbackName = st.attachment,
     onProgress: (pct: number) => void = () => {},
   ): Promise<"sent" | "failed" | "cancelled"> {
     if (!activeRoom) return "failed";
@@ -1523,7 +1525,7 @@ function IdentityBoundMessenger({ variant, user }: {
       const originalName = file instanceof File ? file.name : `${fallbackName}.webm`;
       encryptedAttachment = await encryptAttachmentBlob(file, originalName);
     } catch {
-      setToast("🔐 Unable to encrypt attachment");
+      setToast(`🔐 ${st.encrypt_attachment_failed}`);
       return "failed";
     }
     const r = await uploadWithProgress(encryptedAttachment.blob, `${fallbackName}.enc`, onProgress, (xhr) => {
@@ -1535,7 +1537,7 @@ function IdentityBoundMessenger({ variant, user }: {
     if (!r.ok) {
       setToast(r.status === 429
         ? (r.json.error ?? (st.upload_limit ?? "Upload limit reached — please wait a moment"))
-        : (r.json.error ?? "Upload failed"));
+        : (r.json.error ?? st.upload_failed));
       return "failed";
     }
     const j = r.json as { url: string };
@@ -1571,7 +1573,7 @@ function IdentityBoundMessenger({ variant, user }: {
         progress: 0,
       });
     }
-    if (tooBig) setToast("Max 25MB per file");
+    if (tooBig) setToast(st.max_file_size);
     setPending(prev => {
       const room = UPLOAD_BATCH_LIMIT - prev.length;
       if (staged.length > room) {
@@ -1685,7 +1687,7 @@ function IdentityBoundMessenger({ variant, user }: {
       recCancelledRef.current = false;
       rec.start();
       setRecording(true);
-    } catch { setToast("Microphone access denied — check permissions"); }
+    } catch { setToast(st.microphone_denied); }
   }
 
   function stopVoiceNote(discard = false) {
@@ -1716,7 +1718,7 @@ function IdentityBoundMessenger({ variant, user }: {
     let lastKey = "";
     for (const m of messages) {
       const k = dayKey(m.createdAt);
-      if (k !== lastKey) { out.push({ label: dayLabel(m.createdAt, lang), msgs: [m] }); lastKey = k; }
+      if (k !== lastKey) { out.push({ label: dayLabel(m.createdAt, lang, st), msgs: [m] }); lastKey = k; }
       else out[out.length - 1].msgs.push(m);
     }
     return out;
@@ -1756,23 +1758,23 @@ function IdentityBoundMessenger({ variant, user }: {
   ) : (
     <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.063)}`, flexShrink: 0 }}>
       <div className="mb-2 flex items-center gap-2 px-1">
-        <span className="text-[11px] font-semibold text-muted-foreground">الحذف التلقائي</span>
+        <span className="text-[11px] font-semibold text-muted-foreground">{st.auto_delete}</span>
         <select
           value={expireAfterHours ?? ""}
           onChange={event => setExpireAfterHours(event.target.value ? Number(event.target.value) : null)}
           className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
-          aria-label="مدة الحذف التلقائي"
+          aria-label={st.auto_delete_duration}
         >
-          <option value="">بدون حذف تلقائي</option>
-          <option value="1">ساعة</option>
-          <option value="6">6 ساعات</option>
-          <option value="12">12 ساعة</option>
-          <option value="24">24 ساعة</option>
-          <option value="168">أسبوع</option>
-          <option value="720">شهر</option>
-          <option value="2160">90 يوم</option>
+          <option value="">{st.no_auto_delete}</option>
+          <option value="1">1 {st.hour}</option>
+          <option value="6">6 {st.hours}</option>
+          <option value="12">12 {st.hours}</option>
+          <option value="24">24 {st.hours}</option>
+          <option value="168">1 {st.week}</option>
+          <option value="720">1 {st.month}</option>
+          <option value="2160">90 {st.days}</option>
         </select>
-        <span className="text-[10px] text-muted-foreground">الحذف اليدوي متاح دائماً</span>
+        <span className="text-[10px] text-muted-foreground">{st.manual_delete_available}</span>
       </div>
       {/* Reply preview bar */}
       {replyTo && (
@@ -1781,7 +1783,7 @@ function IdentityBoundMessenger({ variant, user }: {
           <div style={{ flex: 1, overflow: "hidden" }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: GOLD }}>{st.reply_preview ?? "Replying to"} {replyTo.username}</p>
             <p style={{ margin: 0, fontSize: 12, color: "#ffffff55", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {replyTo.type === "audio" ? "🎤 Voice note" : replyTo.type === "file" ? "📎 File" : (replyTo.content ?? "—")}
+              {replyTo.type === "audio" ? `🎤 ${st.voice_note}` : replyTo.type === "file" ? `📎 ${st.attach_file}` : (replyTo.content ?? "—")}
             </p>
           </div>
           <button onClick={() => setReplyTo(null)} title={st.cancel_reply ?? "Cancel reply"}
@@ -1869,7 +1871,7 @@ function IdentityBoundMessenger({ variant, user }: {
           {/* + button — inset inside the input shell */}
           <button
             onClick={() => { setShowAttachTray(v => !v); setShowEmoji(false); }}
-            aria-label="Attach"
+            aria-label={st.attach_file}
             disabled={recording || !isOnline}
             style={{
               position: "absolute",
@@ -1989,7 +1991,7 @@ function IdentityBoundMessenger({ variant, user }: {
       {dragOver && (
         <div style={{ position: "absolute", inset: 0, background: "#000000cc", zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
           <Paperclip size={40} style={{ color: GOLD, opacity: 0.8 }} />
-          <p style={{ margin: 0, color: GOLD, fontWeight: 800, fontSize: 15 }}>Drop to attach</p>
+          <p style={{ margin: 0, color: GOLD, fontWeight: 800, fontSize: 15 }}>{st.drop_to_attach}</p>
         </div>
       )}
       <AnimatePresence>
@@ -2051,7 +2053,9 @@ function IdentityBoundMessenger({ variant, user }: {
                     : (st.secure_key_loading ?? "Securing…")}
                   {" · "}
                   {activeRoom.type === "direct"
-                    ? (solStatus ?? (call.onlineUsers.includes(getPeerName(activeRoom)) ? `● ${st.online}` : st.offline))
+                    ? (solStatus
+                      ? solidarityStatusLabel(solStatus, st)
+                      : (call.onlineUsers.includes(getPeerName(activeRoom)) ? `● ${st.online}` : st.offline))
                     : (st.groups ?? "Group")}
                 </span>
               </p>
@@ -2110,7 +2114,7 @@ function IdentityBoundMessenger({ variant, user }: {
                       <div style={{ background: mine ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.07)", borderInlineStart: `3px solid ${mine ? "#000" : GOLD}`, borderRadius: 6, padding: "4px 8px", marginBottom: 6 }}>
                         <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: mine ? "#000000aa" : GOLD }}>{msg.replyTo.username}</p>
                         <p style={{ margin: 0, fontSize: 12, color: mine ? "#000000aa" : "#ffffff55", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
-                          {msg.replyTo.type === "audio" ? "🎤 Voice note" : msg.replyTo.type === "file" ? "📎 File" : (msg.replyTo.content ?? "—")}
+                      {msg.replyTo.type === "audio" ? `🎤 ${st.voice_note}` : msg.replyTo.type === "file" ? `📎 ${st.attach_file}` : (msg.replyTo.content ?? "—")}
                         </p>
                       </div>
                     )}
@@ -2126,14 +2130,14 @@ function IdentityBoundMessenger({ variant, user }: {
                         {msg.content}
                       </a>
                     ) : msg.type === "file" && msg.fileUrl ? (
-                      <img src={resolveUrl(msg.fileUrl)} alt="attachment" style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, display: "block" }}
-                        onError={e => { (e.target as HTMLImageElement).alt = "Image unavailable"; }} />
+                      <img src={resolveUrl(msg.fileUrl)} alt={st.attachment} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, display: "block" }}
+                        onError={e => { (e.target as HTMLImageElement).alt = st.image_unavailable ?? "Image unavailable"; }} />
                     ) : (
                       <p style={{ margin: 0, fontSize: 15, lineHeight: 1.45, color: mine ? "#000" : "#eaeaea", wordBreak: "break-word", whiteSpace: "pre-wrap" }} dir="auto">{msg.content}</p>
                     )}
                     <p style={{ margin: "3px 0 0", fontSize: 10.5, color: mine ? "#00000060" : "#ffffff35", textAlign: "end" }}>
-                      {clockTime(msg.createdAt)}
-                      {seen && <span aria-label="Seen" title="Seen" style={{ marginInlineStart: 5, fontSize: 12, fontWeight: 900, letterSpacing: -1 }}>✓✓</span>}
+                      {clockTime(msg.createdAt, lang)}
+                      {seen && <span aria-label={st.seen ?? "Seen"} title={st.seen ?? "Seen"} style={{ marginInlineStart: 5, fontSize: 12, fontWeight: 900, letterSpacing: -1 }}>✓✓</span>}
                     </p>
                     {/* Reactions row */}
                     {hasReactions && (
@@ -2250,7 +2254,8 @@ function IdentityBoundMessenger({ variant, user }: {
                 {/* Remove/cancel — always available; aborts XHR if in-flight */}
                 <button
                   onClick={() => removePending(p.id)}
-                  title={p.status === "uploading" ? "Cancel upload" : "Remove"}
+                  title={p.status === "uploading" ? (st.cancel_upload ?? "Cancel upload") : (st.remove ?? "Remove")}
+                  aria-label={p.status === "uploading" ? (st.cancel_upload ?? "Cancel upload") : (st.remove ?? "Remove")}
                   style={{ position: "absolute", top: -6, insetInlineEnd: -6, width: 22, height: 22, borderRadius: "50%", background: "#1a1a1a", border: `1px solid ${p.status === "uploading" ? "#ef4444" : GOLD_A(0.188)}`, color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                   <X size={12} />
                 </button>
@@ -2270,7 +2275,7 @@ function IdentityBoundMessenger({ variant, user }: {
               style={{ width: 42, height: 42, borderRadius: "50%", background: uploading ? "#1c1c1c" : GOLD, border: "none", color: uploading ? "#555" : "#000", cursor: uploading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Send size={18} />
             </button>
-            <button onClick={cancelPending} title="Cancel all"
+            <button onClick={cancelPending} title={st.cancel_all ?? "Cancel all"} aria-label={st.cancel_all ?? "Cancel all"}
               style={{ width: 34, height: 34, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#ef4444", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <X size={15} />
             </button>
@@ -2295,7 +2300,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
         {/* ── Top bar ── */}
         <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>MESSAGERI</p>
+          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>{st.messageri}</p>
           <button onClick={() => { setTab("settings"); activeRoomIdRef.current = null; setActiveRoom(null); }} title={st.nav_settings ?? "Settings"}
             data-testid="button-open-settings"
             style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: tab === "settings" ? GOLD_A(0.094) : "transparent", color: tab === "settings" ? GOLD : "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2351,14 +2356,14 @@ function IdentityBoundMessenger({ variant, user }: {
                         </p>
                         {room.lastMessage && (
                           <span style={{ fontSize: 11.5, color: room.unreadCount > 0 && !room.muted ? GOLD : "#ffffff30", flexShrink: 0, fontWeight: room.unreadCount > 0 ? 800 : 400 }}>
-                            {timeAgo(room.lastMessage.createdAt ?? "", st)}
+                            {timeAgo(room.lastMessage.createdAt ?? "", st, getMessengerIntlLocale(lang))}
                           </span>
                         )}
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginTop: 2 }}>
                         <p style={{ margin: 0, color: "#ffffff45", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} dir="auto">
                           {room.lastMessage
-                            ? (room.lastMessage.type === "audio" ? "Voice note" : room.lastMessage.type === "file" ? "Image" : room.lastMessage.type === "video" ? "Video" : room.lastMessage.content)
+                            ? (room.lastMessage.type === "audio" ? st.voice_note : room.lastMessage.type === "file" ? st.attach_image : room.lastMessage.type === "video" ? st.call_video : room.lastMessage.content)
                             : "—"}
                         </p>
                         {room.unreadCount > 0 && !room.muted && (
@@ -2383,6 +2388,7 @@ function IdentityBoundMessenger({ variant, user }: {
         {tab === "calls" && (
           <AppelsTab
             st={st}
+            lang={lang}
             user={user}
             onNewCall={() => setShowContacts("call")}
             connectionTest={call.connectionTest}
@@ -2469,7 +2475,7 @@ function IdentityBoundMessenger({ variant, user }: {
         </div>{/* end swipeable tab content */}
 
         {/* ── Fixed bottom destination bar (accessible tabs) ── */}
-        <div role="tablist" aria-label="AMIS destinations" data-testid="amis-tabbar"
+        <div role="tablist" aria-label={st.amis_destinations ?? "AMIS destinations"} data-testid="amis-tabbar"
           style={{ display: "flex", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.082)}`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
           {TAB_ORDER.map(k => {
             const active = tab === k;

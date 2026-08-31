@@ -5,6 +5,8 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Card } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
+import { COMMUNITY_T } from "@/i18n/community-pages";
+import { surfaceText } from "@/i18n/community-admin-surfaces-copy";
 
 interface Message {
   role: "user" | "assistant";
@@ -16,6 +18,8 @@ const SUGGESTED: Record<string, string[]> = {
   ar: ["✅ هل النظام الذكي نشط؟ أعطني تقريري", "كيف أربح عملات؟", "أفضل استراتيجية للألعاب؟", "اشرح play-to-earn"],
   fr: ["✅ Smart System actif? Montre mon rapport", "Comment gagner des pièces?", "Meilleure stratégie pour les jeux?", "Explique le play-to-earn"],
   dz: ["✅ واش النظام الذكي نشط؟ عطيني تقريري", "كيفاش نربح كوينز؟", "أفضل استراتيجية؟", "شرح ليا play-to-earn"],
+  es: ["✅ ¿Está activo mi sistema inteligente?", "¿Cómo gano monedas?", "¿La mejor estrategia para juegos?", "Explica play-to-earn"],
+  de: ["✅ Ist mein Smart System aktiv?", "Wie verdiene ich Coins?", "Was ist die beste Spielstrategie?", "Erkläre Play-to-Earn"],
 };
 
 const WELCOME: Record<string, string> = {
@@ -23,10 +27,13 @@ const WELCOME: Record<string, string> = {
   ar: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، الأعمال، الاجتماعي، المسابقات وXP في الوقت الفعلي. اسألني عن تقريرك الشخصي.",
   fr: "Grille neurale en ligne. ✅ GDN-SMART SYSTEM: ACTIF — surveillance Gaming, Education, Business, Social, Competitions & XP en temps reel. Demandez votre rapport personnalise.",
   dz: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، البيزنس، السوشيال وXP. سول على تقريرك الشخصي.",
+  es: "Red neuronal en línea. ✅ GDN-SMART SYSTEM: ACTIVO — supervisa juegos, educación, negocios, redes sociales, competiciones y XP en tiempo real. Pídeme tu informe personalizado.",
+  de: "Neuronales Netzwerk online. ✅ GDN-SMART SYSTEM: AKTIV — überwacht Gaming, Bildung, Business, Social, Wettbewerbe und XP in Echtzeit. Frag mich nach deinem persönlichen Bericht.",
 };
 
 export default function ChatPage() {
-  const { t, lang } = useLang();
+  const { lang } = useLang();
+  const ct = COMMUNITY_T[lang] ?? COMMUNITY_T.en;
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: WELCOME[lang] ?? WELCOME.en },
   ]);
@@ -65,13 +72,13 @@ export default function ChatPage() {
 
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error ?? "Server error");
+         throw new Error(errData.error ?? ct.server_error);
       }
 
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Connection failed");
+       setError(err instanceof Error ? err.message : ct.connection_failed);
     } finally {
       setLoading(false);
     }
@@ -87,7 +94,7 @@ export default function ChatPage() {
   const suggested = SUGGESTED[lang] ?? SUGGESTED.en;
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto p-4 md:p-8">
+    <div dir={lang === "ar" ? "rtl" : "ltr"} lang={lang === "de" ? "de-DE" : lang} className="min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto p-4 md:p-8">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -98,14 +105,14 @@ export default function ChatPage() {
             <Bot className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl md:text-4xl font-black uppercase tracking-wider neon-text-glow">
-            {t("chat_title")}
+            {surfaceText(lang, "chatTitle")}
           </h1>
           <span className="flex items-center gap-1 text-xs text-green-400 bg-green-400/10 border border-green-400/30 px-2 py-1 rounded-full">
-            <Zap className="w-3 h-3" /> ONLINE
+             <Zap className="w-3 h-3" /> {ct.online}
           </span>
         </div>
         <p className="text-muted-foreground text-sm uppercase tracking-widest">
-          {t("chat_sub")}
+          {surfaceText(lang, "chatSubtitle")}
         </p>
       </motion.div>
 
@@ -128,8 +135,8 @@ export default function ChatPage() {
               <div
                 className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-primary text-primary-foreground font-medium rounded-br-sm"
-                    : "bg-card border border-primary/20 text-foreground rounded-bl-sm"
+                    ? "bg-primary text-primary-foreground font-medium rounded-ee-sm"
+                    : "bg-card border border-primary/20 text-foreground rounded-es-sm"
                 }`}
                 dir="auto"
               >
@@ -152,9 +159,9 @@ export default function ChatPage() {
               <div className="shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/40">
                 <Bot className="w-4 h-4 text-primary" />
               </div>
-              <div className="bg-card border border-primary/20 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-2">
+              <div className="bg-card border border-primary/20 px-4 py-3 rounded-2xl rounded-es-sm flex items-center gap-2">
                 <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                <span className="text-muted-foreground text-sm">GDN-AI ...</span>
+                 <span className="text-muted-foreground text-sm">GDN-AI — {ct.thinking}</span>
               </div>
             </motion.div>
           )}
@@ -186,11 +193,12 @@ export default function ChatPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={t("chat_placeholder")}
+          placeholder={surfaceText(lang, "chatPlaceholder")}
           className="flex-1 h-12 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary"
           disabled={loading}
           dir="auto"
           data-testid="input-chat"
+           aria-label={surfaceText(lang, "chatPlaceholder")}
         />
         <Button
           onClick={() => sendMessage()}
@@ -199,6 +207,7 @@ export default function ChatPage() {
           data-testid="button-send"
         >
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+           <span className="sr-only">{ct.send_message}</span>
         </Button>
       </div>
     </div>

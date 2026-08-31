@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Play, Headphones, Download, Eye, Coins, Pause } from 'lucide-react';
+import { X, Play, Headphones, Download, Eye, Coins } from 'lucide-react';
+import { useLanguage } from '../contexts/language-context';
+import { leaderboardMediaCopy } from '../i18n/leaderboard-media-copy';
 
 export interface EmpireUpload {
   id: number;
@@ -21,15 +23,17 @@ interface EmpireMediaPopupProps {
   onClose: () => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  sport: 'الرياضة', press: 'الصحافة', art: 'الفن', knowledge: 'المعرفة',
-};
-
 export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
+  const { language, isRTL } = useLanguage();
+  const { media: c, locale } = leaderboardMediaCopy(language);
+  const direction = isRTL ? 'rtl' : 'ltr';
+  const number = new Intl.NumberFormat(locale);
+  const currency = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const [views, setViews] = useState(upload?.views ?? 0);
   const [playing, setPlaying] = useState(false);
   const [viewRecorded, setViewRecorded] = useState(false);
   const [mediaError, setMediaError] = useState(false);
+  const [mediaLoading, setMediaLoading] = useState(false);
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -38,6 +42,7 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
     setPlaying(false);
     setViewRecorded(false);
     setMediaError(false);
+    setMediaLoading(false);
   }, [upload?.id]);
 
   if (!upload) return null;
@@ -58,11 +63,13 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
 
   const handlePlay = async () => {
     setMediaError(false);
+    setMediaLoading(true);
     try {
       const response = await fetch(streamUrl, { method: 'HEAD', credentials: 'include' });
       if (!response.ok) {
         setPlaying(true);
         setMediaError(true);
+        setMediaLoading(false);
         return;
       }
       setPlaying(true);
@@ -70,12 +77,14 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
     } catch {
       setPlaying(true);
       setMediaError(true);
+    } finally {
+      setMediaLoading(false);
     }
   };
 
   const formatSize = (bytes: number) => {
-    if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes > 1024 * 1024) return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(bytes / 1024 / 1024)} MB`;
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(bytes / 1024)} KB`;
   };
 
   return (
@@ -87,6 +96,7 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          dir={direction}
           style={{ background: 'rgba(0,0,0,0.92)' }}
           onClick={onClose}
         >
@@ -96,6 +106,9 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
             exit={{ scale: 0.88, y: 24 }}
             transition={{ type: 'spring', stiffness: 300, damping: 26 }}
             className="relative w-full max-w-md rounded-2xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${c.dialog}: ${upload.title}`}
             style={{
               background: '#0a0800',
               border: '1.5px solid #FFD700',
@@ -116,11 +129,11 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
                   ? <Play className="w-5 h-5" style={{ color: '#FFD700' }} />
                   : <Headphones className="w-5 h-5" style={{ color: '#FFD700' }} />}
               </div>
-              <div className="flex-1 min-w-0" dir="rtl">
+               <div className="flex-1 min-w-0 text-start">
                 <p className="font-black text-sm text-white leading-tight truncate">{upload.title}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs" style={{ color: 'rgba(255,215,0,0.55)' }}>
-                    {CATEGORY_LABELS[upload.category] ?? upload.category}
+                     {c.categories[upload.category] ?? upload.category}
                   </span>
                   <span style={{ color: 'rgba(255,215,0,0.25)' }}>·</span>
                   <span className="text-xs" style={{ color: 'rgba(255,215,0,0.55)' }}>
@@ -128,7 +141,7 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
                   </span>
                 </div>
               </div>
-              <button onClick={onClose} className="text-white/40 hover:text-white transition-colors shrink-0 p-1">
+               <button onClick={onClose} aria-label={c.close} className="text-white/40 hover:text-white transition-colors shrink-0 p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -140,6 +153,8 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
               {!playing ? (
                 <button
                   onClick={handlePlay}
+                  disabled={mediaLoading}
+                  aria-label={isVideo ? c.playVideo : c.playAudio}
                   className="w-full rounded-xl flex items-center justify-center gap-3 py-5 transition-all hover:opacity-90 active:scale-[0.98]"
                   style={{ background: '#FFD700' }}
                 >
@@ -151,9 +166,9 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
                       ? <Play className="w-6 h-6 text-black fill-black" />
                       : <Headphones className="w-6 h-6 text-black" />}
                   </div>
-                  <div className="text-right" dir="rtl">
-                    <p className="font-black text-black text-base">{isVideo ? 'تشغيل الفيديو' : 'تشغيل الصوت'}</p>
-                    <p className="text-xs text-black/60">من خوادم الإمبراطورية</p>
+                   <div className="text-start">
+                     <p aria-live="polite" className="font-black text-black text-base">{mediaLoading ? c.loading : isVideo ? c.playVideo : c.playAudio}</p>
+                     <p className="text-xs text-black/60">{c.source}</p>
                   </div>
                 </button>
               ) : (
@@ -162,15 +177,16 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
                   style={{ border: '1.5px solid rgba(255,215,0,0.3)' }}
                 >
                   {mediaError ? (
-                    <div className="p-6 text-center" dir="rtl">
-                      <p className="font-bold text-sm text-red-300">ملف الميديا غير متوفر حالياً</p>
-                      <p className="mt-2 text-xs text-white/50">يمكن لصاحب الملف إعادة رفعه من مكتبة الإمبراطورية.</p>
+                     <div className="p-6 text-center" role="alert">
+                       <p className="font-bold text-sm text-red-300">{c.unavailable}</p>
+                      <p className="mt-2 text-xs text-white/50">{c.reupload}</p>
                     </div>
                   ) : isVideo ? (
                     <video
                       ref={mediaRef as React.RefObject<HTMLVideoElement>}
                       src={streamUrl}
                       controls
+                      aria-label={c.player(upload.title)}
                       autoPlay
                       onError={() => setMediaError(true)}
                       className="w-full"
@@ -185,15 +201,16 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
                         >
                           <Headphones className="w-5 h-5 animate-pulse" style={{ color: '#FFD700' }} />
                         </div>
-                        <div dir="rtl">
+                         <div className="text-start">
                           <p className="font-bold text-sm text-white">{upload.title}</p>
-                          <p className="text-xs" style={{ color: '#FFD700' }}>▶ يعزف الآن</p>
+                          <p className="text-xs" style={{ color: '#FFD700' }}>▶ {c.playing}</p>
                         </div>
                       </div>
                       <audio
                         ref={mediaRef as React.RefObject<HTMLAudioElement>}
                         src={streamUrl}
                         controls
+                      aria-label={c.player(upload.title)}
                         autoPlay
                       onError={() => setMediaError(true)}
                         className="w-full"
@@ -209,14 +226,15 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
               <a
                 href={downloadUrl}
                 download
+                aria-label={c.download}
                 className="flex items-center gap-3 w-full rounded-xl px-4 py-3 transition-all hover:opacity-80"
                 style={{ border: '1.5px solid rgba(255,215,0,0.4)', color: '#FFD700' }}
               >
                 <Download className="w-5 h-5 shrink-0" style={{ color: '#FFD700' }} />
-                <div className="flex-1 text-right" dir="rtl">
-                  <p className="font-black text-sm">{isVideo ? 'تحميل الفيديو MP4' : 'تحميل الصوت MP3'}</p>
+                 <div className="flex-1 text-start">
+                   <p className="font-black text-sm">{isVideo ? c.downloadVideo : c.downloadAudio}</p>
                   <p className="text-xs" style={{ color: 'rgba(255,215,0,0.45)' }}>
-                    {formatSize(upload.file_size)} · من خوادم GDNA
+                     {formatSize(upload.file_size)} · {c.source}
                   </p>
                 </div>
               </a>
@@ -225,14 +243,14 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
             {/* Stats */}
             <div className="flex items-center justify-between px-5 pb-4">
               <div className="flex items-center gap-1.5" style={{ color: 'rgba(255,215,0,0.5)' }}>
-                <Eye className="w-3.5 h-3.5" />
-                <span className="text-xs font-mono">{views.toLocaleString()} مشاهدة</span>
+                 <Eye aria-hidden="true" className="w-3.5 h-3.5" />
+                 <span className="text-xs font-mono">{c.views(number.format(views))}</span>
               </div>
               <div className="flex items-center gap-1.5" style={{ color: 'rgba(255,215,0,0.5)' }}>
-                <Coins className="w-3.5 h-3.5" />
-                <span className="text-xs font-mono">{parseFloat(String(upload.earnings)).toFixed(2)} عملة</span>
+                 <Coins aria-hidden="true" className="w-3.5 h-3.5" />
+                 <span className="text-xs font-mono">{c.earnings(currency.format(parseFloat(String(upload.earnings))))}</span>
               </div>
-              <p className="text-xs" style={{ color: 'rgba(255,215,0,0.25)' }}>EMPIRE ETERNAL</p>
+              <p className="text-xs" style={{ color: 'rgba(255,215,0,0.25)' }}>{c.brand}</p>
             </div>
           </motion.div>
         </motion.div>

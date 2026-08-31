@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
+import { coreCopy } from "@/i18n/core-auth-copy";
 
 const BRAND_STATEMENT =
   "منصة إمبراطورية حديثة - سمارت ودكاء اصطناعي حيوي مستقل ذات نظام داخلي سمارت لتطوير الذات والتنبؤات المستقبلية";
@@ -65,6 +66,7 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { login, user } = useAuth();
   const { lang } = useLang();
+  const copy = coreCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
 
   const [mode, setMode] = useState<"choice" | "auth">(user ? "choice" : "choice");
@@ -82,7 +84,7 @@ export default function Login() {
       await login(username, password, rememberMe);
       setMode("choice");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : copy.authFailed);
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +93,7 @@ export default function Login() {
   const enterDoor = (door: Door) => {
     if (door.adminOnly && !user?.isAdmin) {
       if (!user) { setMode("auth"); return; }
-      setError("هذا المدخل مخصص للإدارة فقط — Réservé aux administrateurs");
+      setError(copy.adminDenied);
       return;
     }
     setLocation(door.path);
@@ -141,7 +143,7 @@ export default function Login() {
                   data-testid="button-back-to-choice"
                 >
                   <ArrowLeft className="w-3 h-3" />
-                  العودة للاختيار
+                  {copy.back}
                 </button>
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {error && (
@@ -152,14 +154,14 @@ export default function Login() {
                   )}
                   <div className="space-y-2">
                     <Label htmlFor="username" className="text-xs uppercase tracking-widest text-muted-foreground">
-                      Player Name
+                      {copy.playerName}
                     </Label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
                       <Input
                         id="username"
                         type="text"
-                        placeholder="YourEmpireName"
+                        placeholder={copy.usernamePlaceholder}
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
@@ -171,14 +173,14 @@ export default function Login() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password" className="text-xs uppercase tracking-widest text-muted-foreground">
-                      Password
+                      {copy.password}
                     </Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
                       <Input
                         id="password"
                         type="password"
-                        placeholder="********"
+                        placeholder={copy.passwordPlaceholder}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
@@ -198,7 +200,7 @@ export default function Login() {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="h-4 w-4 accent-primary cursor-pointer"
                     />
-                    <span>تذكرني — Se souvenir de moi</span>
+                    <span>{copy.remember}</span>
                   </label>
                   <Button
                     type="submit"
@@ -206,12 +208,12 @@ export default function Login() {
                     disabled={isLoading}
                     data-testid="button-login"
                   >
-                    {isLoading ? "Authenticating..." : "Login"}
+                    {isLoading ? copy.authenticating : copy.signIn}
                   </Button>
                   <p className="text-center text-sm text-muted-foreground">
-                    No account?{" "}
+                    {copy.noAccount}{" "}
                     <Link href="/register" className="text-primary hover:underline font-semibold">
-                      Register here
+                      {copy.registerHere}
                     </Link>
                   </p>
                 </form>
@@ -266,7 +268,7 @@ export default function Login() {
                     {locked && (
                       <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs font-semibold text-primary">
                         <ShieldCheck className="w-3.5 h-3.5" />
-                        الإدارة فقط — Admin only
+                         {copy.adminOnly}
                       </div>
                     )}
                   </motion.button>
@@ -278,7 +280,7 @@ export default function Login() {
             <div className="mx-auto max-w-md space-y-3 pt-2">
               {user ? (
                 <p className="text-center text-sm text-muted-foreground" data-testid="text-signed-in">
-                  {user.isAdmin ? "مسجّل كمشرف — " : "مسجّل الدخول — "}
+                   {user.isAdmin ? copy.signedAdmin : copy.signedIn}
                   <span className="font-semibold text-primary">{user.username}</span>
                 </p>
               ) : (
@@ -290,7 +292,7 @@ export default function Login() {
                     data-testid="button-open-auth"
                   >
                     <Lock className="w-4 h-4" />
-                    تسجيل الدخول — Login
+                    {copy.signIn}
                   </Button>
                   <Button
                     type="button"
@@ -299,10 +301,10 @@ export default function Login() {
                     onClick={() => setLocation("/hub")}
                     data-testid="button-continue-as-guest"
                   >
-                    الدخول كزائر بلا حساب
+                    {copy.guest}
                   </Button>
                   <p className="text-center text-xs text-muted-foreground">
-                    يمكنك تصفح النسخة التجريبية الآن. الحساب مطلوب فقط للعمليات الحساسة.
+                    {copy.guestHint}
                   </p>
                 </>
               )}

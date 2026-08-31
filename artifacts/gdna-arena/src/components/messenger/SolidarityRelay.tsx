@@ -25,6 +25,8 @@ import {
 import Avatar from "../social/Avatar";
 import { GOLD, GOLD_A, timeAgo, api } from "../social/social-i18n";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
+import { useLang } from "@/contexts/LangContext";
+import { getMessengerCopy, getMessengerIntlLocale } from "@/i18n/messenger-complete-copy";
 
 // ── Backend-authoritative domain list ─────────────────────────────────────────
 const RELAY_DOMAINS = [
@@ -85,11 +87,11 @@ interface Initiative {
 }
 
 const SOLIDARITY_STATUSES = [
-  { value: "available", label: "Available", color: "#22c55e" },
-  { value: "listening", label: "Listening",  color: "#3b82f6" },
-  { value: "seeking",   label: "Seeking",    color: GOLD },
-  { value: "focused",   label: "Focused",    color: "#a78bfa" },
-  { value: "offline",   label: "Offline",    color: "#6b7280" },
+  { value: "available", color: "#22c55e" },
+  { value: "listening", color: "#3b82f6" },
+  { value: "seeking", color: GOLD },
+  { value: "focused", color: "#a78bfa" },
+  { value: "offline", color: "#6b7280" },
 ] as const;
 
 // ── i18n additions exported for social-i18n merge ─────────────────────────────
@@ -126,6 +128,7 @@ const SOLIDARITY_ST: Record<string, Record<string, string>> = {
     relay_validation_body: "Body is required",
     relay_validation_target: "Target must be a whole number from 3 to 1000",
     relay_submit_failed: "The initiative could not be launched. Please try again.",
+    relay_load_failed: "Could not load initiatives",
     relay_all_empire: "All empire",
     relay_scoped_to: "Assembly scope",
     // Fix #4 — domain labels
@@ -170,6 +173,7 @@ const SOLIDARITY_ST: Record<string, Record<string, string>> = {
     relay_validation_body: "الوصف مطلوب",
     relay_validation_target: "الهدف يجب أن يكون عدداً صحيحاً من 3 إلى 1000",
     relay_submit_failed: "تعذر إطلاق المبادرة. حاول مرة أخرى.",
+    relay_load_failed: "تعذّر تحميل المبادرات",
     relay_all_empire: "كل الإمبراطورية",
     relay_scoped_to: "نطاق الجمعية",
     // Fix #4 — domain labels
@@ -181,6 +185,18 @@ const SOLIDARITY_ST: Record<string, Record<string, string>> = {
     relay_domain_environment: "البيئة",
     relay_domain_technology:  "التكنولوجيا",
     relay_domain_community:   "المجتمع",
+  },
+  fr: {
+    relay_title: "Relais de solidarité", relay_score: "Score de solidarité", relay_completed: "Terminées", relay_initiatives: "Initiatives", relay_supports: "Soutiens",
+    relay_status_label: "Votre statut", relay_status_available: "Disponible", relay_status_listening: "À l’écoute", relay_status_seeking: "Recherche", relay_status_focused: "Concentré", relay_status_offline: "Hors ligne", relay_status_visible: "Visible par les autres citoyens",
+    relay_empty: "Aucune initiative — soyez le premier à mobiliser l’empire.", relay_create: "Soutenir l’empire", relay_title_placeholder: "Titre de l’initiative…", relay_body_placeholder: "Décrivez l’objectif et ce qui est nécessaire…", relay_target_placeholder: "Soutiens visés (ex. 50)", relay_domain_label: "Domaine", relay_room_label: "Communauté (facultatif)", relay_submit: "Lancer l’initiative", relay_submitting: "Lancement…", relay_support: "Soutenir", relay_withdraw: "Retirer le soutien", relay_cancel_initiative: "Annuler l’initiative", relay_completed_label: "Accomplie", relay_cancelled_label: "Annulée", relay_progress: "de l’objectif", relay_validation_title: "Le titre est requis", relay_validation_body: "La description est requise", relay_validation_target: "La cible doit être un nombre entier de 3 à 1000", relay_submit_failed: "L’initiative n’a pas pu être lancée. Réessayez.", relay_load_failed: "Impossible de charger les initiatives", relay_all_empire: "Tout l’empire", relay_scoped_to: "Portée de l’assemblée",
+    relay_domain_future: "Avenir", relay_domain_justice: "Justice", relay_domain_culture: "Culture", relay_domain_education: "Éducation", relay_domain_health: "Santé", relay_domain_environment: "Environnement", relay_domain_technology: "Technologie", relay_domain_community: "Communauté",
+  },
+  es: {
+    relay_title: "Red de solidaridad", relay_score: "Puntuación de solidaridad", relay_completed: "Completadas", relay_initiatives: "Iniciativas", relay_supports: "Apoyos",
+    relay_status_label: "Tu estado", relay_status_available: "Disponible", relay_status_listening: "Escuchando", relay_status_seeking: "Buscando", relay_status_focused: "Concentrado", relay_status_offline: "Desconectado", relay_status_visible: "Visible para otros ciudadanos",
+    relay_empty: "Aún no hay iniciativas; sé el primero en movilizar al imperio.", relay_create: "Apoya al imperio", relay_title_placeholder: "Título de la iniciativa…", relay_body_placeholder: "Describe el propósito y lo que se necesita…", relay_target_placeholder: "Seguidores objetivo (p. ej., 50)", relay_domain_label: "Dominio", relay_room_label: "Comunidad (opcional)", relay_submit: "Lanzar iniciativa", relay_submitting: "Lanzando…", relay_support: "Apoyar", relay_withdraw: "Retirar apoyo", relay_cancel_initiative: "Cancelar iniciativa", relay_completed_label: "Completada", relay_cancelled_label: "Cancelada", relay_progress: "del objetivo", relay_validation_title: "El título es obligatorio", relay_validation_body: "La descripción es obligatoria", relay_validation_target: "El objetivo debe ser un número entero entre 3 y 1000", relay_submit_failed: "No se pudo lanzar la iniciativa. Inténtalo de nuevo.", relay_load_failed: "No se pudieron cargar las iniciativas", relay_all_empire: "Todo el imperio", relay_scoped_to: "Ámbito de la asamblea",
+    relay_domain_future: "Futuro", relay_domain_justice: "Justicia", relay_domain_culture: "Cultura", relay_domain_education: "Educación", relay_domain_health: "Salud", relay_domain_environment: "Medio ambiente", relay_domain_technology: "Tecnología", relay_domain_community: "Comunidad",
   },
 };
 
@@ -228,7 +244,7 @@ function StatusSelector({
   return (
     <div className="flex flex-col gap-2 pb-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {st.relay_status_label ?? "Your stance"}
+        {st.relay_status_label}
       </p>
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative">
@@ -238,12 +254,13 @@ function StatusSelector({
             disabled={saving || !isOnline}
             aria-haspopup="listbox"
             aria-expanded={open}
+            aria-label={st.relay_status_aria}
           >
             {saving
               ? <Loader2 size={14} className="animate-spin" />
               : <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: current.color }} />
             }
-            {st[`relay_status_${current.value}`] ?? current.label}
+            {st[`relay_status_${current.value}`]}
             <ChevronDown size={13} className="text-muted-foreground" />
           </button>
           <AnimatePresence>
@@ -254,7 +271,7 @@ function StatusSelector({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.96 }}
                 transition={{ duration: 0.12 }}
-                className="absolute top-full mt-1 left-0 z-50 min-w-[160px] rounded-lg border border-border bg-popover shadow-lg overflow-hidden"
+                className="absolute top-full mt-1 start-0 z-50 min-w-[160px] rounded-lg border border-border bg-popover shadow-lg overflow-hidden"
               >
                 {SOLIDARITY_STATUSES.map(s => (
                   <button
@@ -265,7 +282,7 @@ function StatusSelector({
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-semibold text-popover-foreground hover:bg-accent"
                   >
                     <span className="h-2 w-2 rounded-full shrink-0" style={{ background: s.color }} />
-                    {st[`relay_status_${s.value}`] ?? s.label}
+                    {st[`relay_status_${s.value}`]}
                   </button>
                 ))}
               </motion.div>
@@ -275,13 +292,14 @@ function StatusSelector({
         <button
           onClick={toggleVisible}
           className="flex items-center gap-1.5 text-xs text-muted-foreground min-h-[44px] px-2"
-            disabled={saving || !profile || !isOnline}
+          disabled={saving || !profile || !isOnline}
+          aria-label={st.relay_visibility_aria}
         >
           <span
             className="inline-block h-3.5 w-3.5 rounded border border-border transition-colors"
             style={{ background: profile?.statusVisible ? GOLD : "transparent" }}
           />
-          {st.relay_status_visible ?? "Visible to others"}
+          {st.relay_status_visible}
         </button>
       </div>
     </div>
@@ -290,11 +308,12 @@ function StatusSelector({
 
 // ── InitiativeCard ─────────────────────────────────────────────────────────────
 function InitiativeCard({
-  initiative, currentUserId, st, onRefresh,
+  initiative, currentUserId, st, lang, onRefresh,
 }: {
   initiative: Initiative;
   currentUserId: number;
   st: Record<string, string>;
+  lang: string;
   onRefresh: () => void;
 }) {
   const { isOnline } = useConnectivity();
@@ -324,7 +343,7 @@ function InitiativeCard({
 
   async function cancelInitiative() {
     if (!isOnline) return;
-    if (!window.confirm(st.relay_cancel_confirm ?? "Cancel this initiative? This cannot be undone.")) return;
+    if (!window.confirm(st.relay_cancel_confirm)) return;
     setBusy(true);
     await fetch(api(`/api/solidarity/initiatives/${initiative.id}`), {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -349,26 +368,26 @@ function InitiativeCard({
             <p className="text-sm font-bold text-card-foreground truncate">{initiative.creatorUsername}</p>
             {initiative.roomName && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                <Users size={9} className="mr-1" />{initiative.roomName}
+                <Users size={9} className="me-1" />{initiative.roomName}
               </Badge>
             )}
-            <span className="text-[11px] text-muted-foreground ml-auto shrink-0">
+            <span className="text-[11px] text-muted-foreground ms-auto shrink-0">
               {domainIcon} {domainLabel}
             </span>
           </div>
-          <p className="text-[10.5px] text-muted-foreground mt-0.5">{timeAgo(initiative.createdAt, st)}</p>
+          <p className="text-[10.5px] text-muted-foreground mt-0.5">{timeAgo(initiative.createdAt, st, getMessengerIntlLocale(lang))}</p>
         </div>
         {/* Status badge — only for non-open */}
         {initiative.status === "completed" && (
           <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]">
             <CheckCircle2 size={10} style={{ color: "#22c55e" }} />
-            {st.relay_completed_label ?? "Accomplished"}
+            {st.relay_completed_label}
           </Badge>
         )}
         {initiative.status === "cancelled" && (
           <Badge variant="outline" className="shrink-0 gap-1 text-[10px] text-muted-foreground">
             <XCircle size={10} />
-            {st.relay_cancelled_label ?? "Cancelled"}
+            {st.relay_cancelled_label}
           </Badge>
         )}
       </div>
@@ -383,7 +402,7 @@ function InitiativeCard({
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-[11px]">
           <span className="font-bold text-card-foreground">
-            {initiative.supportCount} / {initiative.targetSupport} {st.relay_progress ?? "of target"}
+            {initiative.supportCount} / {initiative.targetSupport} {st.relay_progress}
           </span>
           <span className="text-muted-foreground">{pct}%</span>
         </div>
@@ -407,8 +426,8 @@ function InitiativeCard({
                 : <HandHeart size={13} />
               }
               {initiative.supportedByMe
-                ? (st.relay_withdraw ?? "Withdraw")
-                : (st.relay_support ?? "Stand with it")}
+                ? st.relay_withdraw
+                : st.relay_support}
             </Button>
           )}
           {isMine && (
@@ -419,8 +438,8 @@ function InitiativeCard({
               disabled={busy || !isOnline}
               onClick={cancelInitiative}
             >
-              <XCircle size={12} className="mr-1" />
-              {st.relay_cancel_initiative ?? "Cancel"}
+              <XCircle size={12} className="me-1" />
+              {st.relay_cancel_initiative}
             </Button>
           )}
         </div>
@@ -449,11 +468,11 @@ function CreateForm({
 
   function validate() {
     const e: Record<string, string> = {};
-    if (!title.trim()) e.title  = st.relay_validation_title  ?? "Title is required";
-    if (!body.trim())  e.body   = st.relay_validation_body   ?? "Body is required";
+    if (!title.trim()) e.title = st.relay_validation_title;
+    if (!body.trim()) e.body = st.relay_validation_body;
     const parsedTarget = Number(target);
     if (!Number.isInteger(parsedTarget) || parsedTarget < 3 || parsedTarget > 1000) {
-      e.target = st.relay_validation_target ?? "Target must be a whole number from 3 to 1000";
+      e.target = st.relay_validation_target;
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -482,13 +501,13 @@ function CreateForm({
         const responseBody = await r.json().catch(() => ({} as { error?: string }));
         setErrors(current => ({
           ...current,
-          form: responseBody.error ?? st.relay_submit_failed ?? "The initiative could not be launched. Please try again.",
+          form: responseBody.error ?? st.relay_submit_failed,
         }));
       }
     } catch {
       setErrors(current => ({
         ...current,
-        form: st.relay_submit_failed ?? "The initiative could not be launched. Please try again.",
+        form: st.relay_submit_failed,
       }));
     } finally { setSubmitting(false); }
   }
@@ -503,9 +522,9 @@ function CreateForm({
       <div className="flex items-center justify-between">
         <p className="text-sm font-bold text-card-foreground flex items-center gap-2">
           <Shield size={14} style={{ color: GOLD }} />
-          {st.relay_create ?? "Stand with the empire"}
+          {st.relay_create}
         </p>
-        <button onClick={onClose} className="text-muted-foreground p-1 hover:text-foreground" aria-label="Close">
+        <button onClick={onClose} className="text-muted-foreground p-1 hover:text-foreground" aria-label={st.close}>
           <X size={16} />
         </button>
       </div>
@@ -514,7 +533,8 @@ function CreateForm({
         <Input
           value={title}
           onChange={e => setTitle(e.target.value)}
-          placeholder={st.relay_title_placeholder ?? "Initiative title…"}
+          placeholder={st.relay_title_placeholder}
+          aria-label={st.relay_title_placeholder}
           dir="auto"
           className="h-10 text-sm"
           data-testid="input-initiative-title"
@@ -526,7 +546,8 @@ function CreateForm({
         <textarea
           value={body}
           onChange={e => setBody(e.target.value)}
-          placeholder={st.relay_body_placeholder ?? "Describe the purpose…"}
+          placeholder={st.relay_body_placeholder}
+          aria-label={st.relay_body_placeholder}
           dir="auto"
           rows={3}
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
@@ -538,7 +559,7 @@ function CreateForm({
       <div className="flex gap-2">
         {/* Fix #4: domain selector uses backend-authoritative values + i18n labels */}
         <Select value={domain} onValueChange={v => setDomain(v as RelayDomain)}>
-          <SelectTrigger className="h-10 flex-1 text-xs">
+          <SelectTrigger className="h-10 flex-1 text-xs" aria-label={st.relay_domain_aria}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -558,7 +579,8 @@ function CreateForm({
             step={1}
             value={target}
             onChange={e => setTarget(e.target.value)}
-            placeholder={st.relay_target_placeholder ?? "Target"}
+            placeholder={st.relay_target_placeholder}
+            aria-label={st.relay_target_aria}
             className="h-10 text-sm"
             data-testid="input-initiative-target"
           />
@@ -573,8 +595,8 @@ function CreateForm({
         data-testid="button-launch-initiative"
       >
         {submitting
-          ? <><Loader2 size={14} className="animate-spin" />{st.relay_submitting ?? "Launching…"}</>
-          : <><HandHeart size={14} />{st.relay_submit ?? "Launch initiative"}</>
+          ? <><Loader2 size={14} className="animate-spin" />{st.relay_submitting}</>
+          : <><HandHeart size={14} />{st.relay_submit}</>
         }
       </Button>
       {errors.form && (
@@ -600,8 +622,9 @@ interface Props {
 }
 
 export default function SolidarityRelay({
-  st, currentUserId, lang = "en", activeRoomId, activeRoomName, onClearRoom,
+  st, currentUserId, activeRoomId, activeRoomName, onClearRoom,
 }: Props) {
+  const { lang } = useLang();
   const { isOnline } = useConnectivity();
   const [profile, setProfile]       = useState<SolidarityProfile | null>(null);
   const [initiatives, setInitiatives] = useState<Initiative[]>([]);
@@ -636,16 +659,17 @@ export default function SolidarityRelay({
     await load();
   }, [load]);
 
-  // Merged i18n: caller-supplied st takes priority over SOLIDARITY_ST defaults
+  // Complete messenger copy takes priority, while preserving caller/API extensions.
   const merged: Record<string, string> = {
     ...(SOLIDARITY_ST[lang] ?? SOLIDARITY_ST.en),
     ...st,
+    ...getMessengerCopy(lang),
   };
 
   const isScoped = !!activeRoomId;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 overflow-hidden" dir={lang === "ar" ? "rtl" : "ltr"}>
 
       {/* ── Fix #3: Community-scope breadcrumb / "← All empire" ── */}
       {isScoped && (
@@ -657,14 +681,14 @@ export default function SolidarityRelay({
             onClick={onClearRoom}
             className="flex items-center gap-1.5 text-xs font-bold min-h-[44px] px-2"
             style={{ color: GOLD }}
-            aria-label={merged.relay_all_empire ?? "All empire"}
+            aria-label={merged.relay_all_empire}
           >
-            <ArrowLeft size={13} />
-            {merged.relay_all_empire ?? "All empire"}
+            <ArrowLeft size={13} className={lang === "ar" ? "rotate-180" : undefined} />
+            {merged.relay_all_empire}
           </button>
           <span className="text-xs text-muted-foreground">·</span>
           <span className="text-xs font-semibold text-muted-foreground truncate">
-            {activeRoomName ?? merged.relay_scoped_to ?? "Assembly scope"}
+            {activeRoomName ?? merged.relay_scoped_to}
           </span>
         </div>
       )}
@@ -677,17 +701,17 @@ export default function SolidarityRelay({
               <Shield size={16} style={{ color: GOLD }} className="mb-0.5" />
               <p className="text-base font-black" style={{ color: GOLD }}>{profile.score}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wide">
-                {merged.relay_score ?? "Score"}
+                {merged.relay_score}
               </p>
             </div>
             <div className="flex gap-5 flex-1">
               <div className="flex flex-col items-center">
                 <p className="text-sm font-bold text-card-foreground">{profile.initiativesCompleted}</p>
-                <p className="text-[10px] text-muted-foreground">{merged.relay_initiatives ?? "Initiatives"}</p>
+                <p className="text-[10px] text-muted-foreground">{merged.relay_initiatives}</p>
               </div>
               <div className="flex flex-col items-center">
                 <p className="text-sm font-bold text-card-foreground">{profile.supportsCompleted}</p>
-                <p className="text-[10px] text-muted-foreground">{merged.relay_supports ?? "Supports"}</p>
+                <p className="text-[10px] text-muted-foreground">{merged.relay_supports}</p>
               </div>
             </div>
           </div>
@@ -704,9 +728,10 @@ export default function SolidarityRelay({
           style={{ borderColor: GOLD_A(0.188), background: GOLD_A(0.039), color: GOLD }}
           data-testid="button-show-create"
           aria-expanded={showCreate}
+          aria-label={merged.relay_create_aria}
         >
           <Plus size={16} />
-          {merged.relay_create ?? "Stand with the empire"}
+          {merged.relay_create}
         </button>
       </div>
 
@@ -725,23 +750,24 @@ export default function SolidarityRelay({
       {/* ── Feed ── */}
       <div className="flex-1 overflow-y-auto px-3 pb-4 pt-3 flex flex-col gap-3">
         {loading && (
-          <>
+          <div role="status" aria-label={merged.relay_loading}>
             {[1, 2, 3].map(i => (
               <div key={i} className="h-36 rounded-xl bg-card/50 border border-border animate-pulse" />
             ))}
-          </>
+            <span className="sr-only">{merged.relay_loading}</span>
+          </div>
         )}
         {!loading && failed && (
           <div className="flex flex-col items-center gap-3 py-12">
-            <p className="text-sm text-muted-foreground">Could not load initiatives</p>
-            <Button variant="outline" size="sm" onClick={load}>Retry</Button>
+            <p className="text-sm text-muted-foreground">{merged.relay_load_failed}</p>
+            <Button variant="outline" size="sm" onClick={load}>{merged.retry}</Button>
           </div>
         )}
         {!loading && !failed && initiatives.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <HandHeart size={32} className="text-muted-foreground opacity-30" />
             <p className="text-sm text-muted-foreground">
-              {merged.relay_empty ?? "No initiatives yet — be the first to rally the empire."}
+              {merged.relay_empty}
             </p>
           </div>
         )}
@@ -751,6 +777,7 @@ export default function SolidarityRelay({
             initiative={initiative}
             currentUserId={currentUserId}
             st={merged}
+            lang={lang}
             onRefresh={load}
           />
         ))}

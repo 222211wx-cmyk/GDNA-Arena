@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGetGsNews, useGetGsDomains } from '@workspace/api-client-react';
 import { useLanguage } from '@/globalstar/contexts/language-context';
+import { newsVoteCopy } from '@/globalstar/i18n/news-vote-copy';
 import { Navbar } from '@/globalstar/components/navbar';
 import { NewsTicker } from '@/globalstar/components/news-ticker';
 import { Card } from '@workspace/gdna-ds/components/ui/card';
@@ -9,33 +10,38 @@ import { Skeleton } from '@workspace/gdna-ds/components/ui/skeleton';
 import { AlertCircle, Calendar, Newspaper } from 'lucide-react';
 
 export default function News() {
-  const { t } = useLanguage();
+  const { language, isRTL } = useLanguage();
+  const { news: c, locale } = newsVoteCopy(language);
   const [selectedDomain, setSelectedDomain] = useState<string | undefined>(undefined);
   const { data: domainsData } = useGetGsDomains();
-  const { data: newsData, isLoading } = useGetGsNews(selectedDomain ? { domain: selectedDomain } : undefined);
+  const { data: newsData, isLoading, isError } = useGetGsNews(selectedDomain ? { domain: selectedDomain } : undefined);
 
   const breakingNews = newsData?.articles.filter((a) => a.isBreaking) || [];
   const regularNews = newsData?.articles.filter((a) => !a.isBreaking) || [];
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="min-h-[100dvh] bg-background" dir={isRTL ? 'rtl' : 'ltr'}>
       <Navbar />
       <NewsTicker />
 
       <main className="container mx-auto px-4 py-12">
         <h1 className="text-4xl md:text-5xl font-bold mb-8" data-testid="news-title">
-          {t('news')}
+          {c.title}
         </h1>
 
         {/* Domain Filter */}
-        <div className="mb-8 flex flex-wrap gap-2" data-testid="domain-filters">
+        <div
+          className="mb-8 flex flex-wrap gap-2"
+          data-testid="domain-filters"
+          aria-label={c.domainFilters}
+        >
           <Badge
             variant={selectedDomain === undefined ? 'default' : 'outline'}
             className="cursor-pointer"
             onClick={() => setSelectedDomain(undefined)}
             data-testid="filter-all"
           >
-            {t('allDomains')}
+            {c.allDomains}
           </Badge>
           {domainsData?.domains.map((domain) => (
             <Badge
@@ -45,7 +51,7 @@ export default function News() {
               onClick={() => setSelectedDomain(domain.id)}
               data-testid={`filter-${domain.id}`}
             >
-              <span className="mr-1">{domain.icon}</span>
+              <span className="me-1">{domain.icon}</span>
               {domain.label}
             </Badge>
           ))}
@@ -56,7 +62,7 @@ export default function News() {
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-4">
               <AlertCircle className="w-5 h-5 text-destructive pulse-breaking" />
-              <h2 className="text-2xl font-bold text-destructive">{t('breakingNews')}</h2>
+              <h2 className="text-2xl font-bold text-destructive">{c.breakingNews}</h2>
             </div>
             <div className="grid md:grid-cols-2 gap-6">
               {breakingNews.map((article) => (
@@ -75,9 +81,9 @@ export default function News() {
                         />
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 text-start">
                       <Badge variant="destructive" className="mb-2 pulse-breaking">
-                        BREAKING
+                        {c.breaking}
                       </Badge>
                       <h3 className="font-bold text-lg mb-2">{article.title}</h3>
                       <p className="text-sm text-foreground/80 mb-3 line-clamp-2">{article.summary}</p>
@@ -86,7 +92,7 @@ export default function News() {
                         <span>•</span>
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {new Date(article.publishedAt).toLocaleDateString()}
+                          {new Date(article.publishedAt).toLocaleDateString(locale)}
                         </span>
                       </div>
                     </div>
@@ -99,10 +105,18 @@ export default function News() {
 
         {/* Regular News */}
         {isLoading ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div
+            className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
+            role="status"
+            aria-label={c.loading}
+          >
             {[...Array(6)].map((_, i) => (
               <Skeleton key={i} className="h-80" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="text-center py-12" role="alert">
+            <p className="text-destructive">{c.loadError}</p>
           </div>
         ) : regularNews.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -121,7 +135,7 @@ export default function News() {
                     />
                   </div>
                 )}
-                <div className="p-6">
+                <div className="p-6 text-start">
                   <div className="flex items-center gap-2 mb-3">
                     <Badge variant="secondary">{article.domainLabel}</Badge>
                   </div>
@@ -135,7 +149,7 @@ export default function News() {
                     <span>•</span>
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      {new Date(article.publishedAt).toLocaleDateString()}
+                      {new Date(article.publishedAt).toLocaleDateString(locale)}
                     </span>
                   </div>
                 </div>
@@ -144,7 +158,7 @@ export default function News() {
           </div>
         ) : (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">No news articles available</p>
+            <p className="text-muted-foreground">{c.empty}</p>
           </div>
         )}
       </main>

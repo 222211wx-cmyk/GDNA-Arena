@@ -7,10 +7,14 @@ import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { Lock, User, AlertCircle, CalendarDays } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLang } from "@/contexts/LangContext";
+import { coreCopy } from "@/i18n/core-auth-copy";
 
 export default function Register() {
   const [, setLocation] = useLocation();
   const { register } = useAuth();
+  const { lang } = useLang();
+  const copy = coreCopy(lang);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [birthDate, setBirthDate] = useState("");
@@ -25,7 +29,7 @@ export default function Register() {
       await register(username, password, birthDate);
       setLocation("/social");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      setError(err instanceof Error ? err.message : copy.registrationFailed);
     } finally {
       setIsLoading(false);
     }
@@ -43,9 +47,9 @@ export default function Register() {
       >
         <Card className="bg-card/50 backdrop-blur-sm border-primary/20 shadow-[0_0_50px_rgba(0,212,255,0.1)]">
           <CardHeader className="space-y-1 text-center pb-8">
-            <CardTitle className="text-3xl font-black uppercase tracking-wider neon-text-glow">Join The Arena</CardTitle>
+            <CardTitle className="text-3xl font-black uppercase tracking-wider neon-text-glow">{copy.registerTitle}</CardTitle>
             <CardDescription className="text-muted-foreground uppercase tracking-widest text-xs">
-              Create your player identity — start with 500 coins
+              {copy.registerSubtitle}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -57,13 +61,13 @@ export default function Register() {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="username" className="text-xs uppercase tracking-widest text-muted-foreground">Player Name</Label>
+                <Label htmlFor="username" className="text-xs uppercase tracking-widest text-muted-foreground">{copy.playerName}</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
                   <Input
                     id="username"
                     type="text"
-                    placeholder="CyberRacer99"
+                    placeholder={copy.usernamePlaceholder}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
@@ -77,7 +81,7 @@ export default function Register() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="birthDate" className="text-xs uppercase tracking-widest text-muted-foreground">
-                  Date of Birth — all ages welcome
+                  {copy.birthDate}
                 </Label>
                 <div className="relative">
                   <CalendarDays className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
@@ -93,18 +97,18 @@ export default function Register() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Registration is open to every age. Only Games requires 18+.
+                  {copy.ageNotice}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-xs uppercase tracking-widest text-muted-foreground">Password</Label>
+                <Label htmlFor="password" className="text-xs uppercase tracking-widest text-muted-foreground">{copy.password}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
                   <Input
                     id="password"
                     type="password"
                     autoComplete="new-password"
-                    placeholder="min. 6 characters"
+                    placeholder={copy.passwordHint}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
@@ -121,8 +125,7 @@ export default function Register() {
                >
                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                  <p>
-                   <span dir="rtl" lang="ar">احتفظ بكلمة المرور في مكان آمن: لا يمكن استعادتها عبر البريد الإلكتروني، ولا يمكن تغييرها إلا من الإعدادات أثناء تسجيل الدخول.</span>
-                   <span className="block mt-1" lang="fr">Gardez votre mot de passe en lieu sûr, idéalement dans un gestionnaire : il ne peut pas être récupéré par e-mail et ne peut être modifié que depuis les paramètres, une fois connecté.</span>
+                    {copy.recovery}
                  </p>
                </div>
               <Button
@@ -131,12 +134,12 @@ export default function Register() {
                 disabled={isLoading}
                 data-testid="button-register"
               >
-                {isLoading ? "Creating Account..." : "Enter The Arena"}
+                {isLoading ? copy.creating : copy.enter}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
-                Already a player?{" "}
+                {copy.already}{" "}
                 <Link href="/login" className="text-primary hover:underline font-semibold">
-                  Login here
+                  {copy.loginHere}
                 </Link>
               </p>
             </form>

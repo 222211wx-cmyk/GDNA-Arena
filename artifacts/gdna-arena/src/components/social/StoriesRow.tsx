@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Clock, Plus } from "lucide-react";
 import Avatar from "./Avatar";
-import { GOLD, GOLD_A, DOMAIN_ICONS, DOMAINS, timeAgo, api } from "./social-i18n";
+import { GOLD, GOLD_A, DOMAIN_ICONS, DOMAINS, timeAgo, api, useSocialI18n } from "./social-i18n";
 import type { Story } from "./social-types";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
@@ -21,9 +21,9 @@ function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
   );
 }
 
-function msLeft(expiresAt: string): string {
+function msLeft(expiresAt: string, st: Record<string, string>, locale: string): string {
   const h = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 3600000));
-  return h < 1 ? "< 1h" : `${h}h`;
+  return h < 1 ? st.less_than_hour : `${new Intl.NumberFormat(locale).format(h)}${st.hours_short}`;
 }
 
 // ── Story Viewer (fullscreen) ─────────────────────────────────────────────────
@@ -31,13 +31,14 @@ function StoryViewer({ story, st, dir, onClose, onLike, liked }: {
   story: Story; st: Record<string, string>; dir: string;
   onClose: () => void; onLike: () => void; liked: boolean;
 }) {
+  const { locale } = useSocialI18n();
   const { isOnline } = useConnectivity();
   const [toast, setToast] = useState("");
 
   // Screenshot detection: fire when window loses focus while story is visible
   useEffect(() => {
-    const handleBlur = () => setToast(st.screenshot_warning ?? "⚠️ Screenshot may have been taken");
-    const handleVis  = () => { if (document.visibilityState === "hidden") setToast(st.screenshot_warning ?? "⚠️ Screenshot may have been taken"); };
+    const handleBlur = () => setToast(st.screenshot_warning);
+    const handleVis  = () => { if (document.visibilityState === "hidden") setToast(st.screenshot_warning); };
     window.addEventListener("blur", handleBlur);
     document.addEventListener("visibilitychange", handleVis);
     return () => {
@@ -55,7 +56,7 @@ function StoryViewer({ story, st, dir, onClose, onLike, liked }: {
           onClick={e => e.stopPropagation()}
           style={{ background: "hsl(var(--card))", borderRadius: 16, overflow: "hidden", width: 380, maxWidth: "95vw", maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
           {story.imageUrl && (
-            <img src={story.imageUrl} alt="" style={{ width: "100%", maxHeight: 340, objectFit: "cover" }}
+            <img src={story.imageUrl} alt={st.story_media_alt} style={{ width: "100%", maxHeight: 340, objectFit: "cover" }}
               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
           )}
           <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
@@ -64,7 +65,7 @@ function StoryViewer({ story, st, dir, onClose, onLike, liked }: {
               <div style={{ flex: 1 }}>
                 <p style={{ margin: 0, fontWeight: 800, color: "hsl(var(--foreground))", fontSize: 13 }}>{story.username}</p>
                 <p style={{ margin: 0, fontSize: 11, color: "#ffffff40" }}>
-                  {timeAgo(story.createdAt, st)} · ⏳ {msLeft(story.expiresAt)}
+                  {timeAgo(story.createdAt, st, locale)} · ⏳ {msLeft(story.expiresAt, st, locale)}
                 </p>
               </div>
               <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 4 }}>
@@ -134,7 +135,7 @@ function AddStoryModal({ user, st, dir, onClose, onCreated }: {
           </button>
         </div>
         <p style={{ margin: "0 0 12px", fontSize: 11, color: "#ffffff40" }}>
-          <Clock size={11} style={{ display: "inline", marginRight: 4 }} />{st.stories_expire}
+          <Clock size={11} style={{ display: "inline", marginInlineEnd: 4 }} />{st.stories_expire}
         </p>
         <textarea value={content} onChange={e => setContent(e.target.value)}
           placeholder={st.story_text} maxLength={200} dir={dir} rows={3}
@@ -162,7 +163,8 @@ interface Props {
   dir: string;
 }
 
-export default function StoriesRow({ user, st, dir }: Props) {
+export default function StoriesRow({ user }: Props) {
+  const { st, dir, locale } = useSocialI18n();
   const { isOnline } = useConnectivity();
   const [stories,   setStories]   = useState<Story[]>([]);
   const [viewer,    setViewer]    = useState<Story | null>(null);
@@ -189,7 +191,7 @@ export default function StoriesRow({ user, st, dir }: Props) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div dir={dir} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Add story button + horizontal strip */}
       <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
         {/* Add Story button */}
@@ -206,14 +208,14 @@ export default function StoriesRow({ user, st, dir }: Props) {
             onClick={() => setViewer(story)}
             style={{ flexShrink: 0, width: 90, aspectRatio: "9/14", borderRadius: 12, overflow: "hidden", cursor: "pointer", border: `2px solid ${GOLD_A(0.19)}`, background: "hsl(var(--card))", position: "relative", padding: 0 }}>
             {story.imageUrl
-              ? <img src={story.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              ? <img src={story.imageUrl} alt={st.story_media_alt} style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
               : <div style={{ width: "100%", height: "100%", background: `linear-gradient(135deg, #111, #1a1a1a)` }} />
             }
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 55%)", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 6 }}>
               <Avatar name={story.username} size={20} />
               <p style={{ margin: "3px 0 0", fontSize: 10, fontWeight: 700, color: "hsl(var(--foreground))", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{story.username}</p>
-              <p style={{ margin: 0, fontSize: 9, color: GOLD_A(0.56) }}>⏳ {msLeft(story.expiresAt)}</p>
+               <p style={{ margin: 0, fontSize: 9, color: GOLD_A(0.56) }}>⏳ {msLeft(story.expiresAt, st, locale)}</p>
             </div>
           </motion.button>
         ))}
@@ -230,7 +232,7 @@ export default function StoriesRow({ user, st, dir }: Props) {
               onClick={() => setViewer(story)}
               style={{ borderRadius: 12, overflow: "hidden", cursor: "pointer", border: `1px solid ${GOLD_A(0.09)}`, background: "hsl(var(--card))", position: "relative", aspectRatio: "9/14" }}>
               {story.imageUrl
-                ? <img src={story.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                ? <img src={story.imageUrl} alt={st.story_media_alt} style={{ width: "100%", height: "100%", objectFit: "cover" }}
                     onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                 : <div style={{ width: "100%", height: "100%", background: `linear-gradient(135deg, #0d0d0d, #1a1a1a)` }} />
               }
@@ -241,14 +243,14 @@ export default function StoriesRow({ user, st, dir }: Props) {
                 </div>
                 <p style={{ margin: 0, fontSize: 11, color: "hsl(var(--foreground))", overflow: "hidden", textOverflow: "ellipsis", WebkitLineClamp: 2, display: "-webkit-box", WebkitBoxOrient: "vertical" as any }}>{story.content}</p>
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-                  <span style={{ fontSize: 10, color: GOLD_A(0.5) }}>⏳ {msLeft(story.expiresAt)}</span>
+                   <span style={{ fontSize: 10, color: GOLD_A(0.5) }}>⏳ {msLeft(story.expiresAt, st, locale)}</span>
                   <button onClick={e => { e.stopPropagation(); likeStory(story.id); }}
                     style={{ background: "none", border: "none", cursor: "pointer", color: likedSet.has(story.id) ? "#ef4444" : "#ffffff60", fontSize: 11, padding: 0 }}>
                     ❤️ {story.likes}
                   </button>
                 </div>
               </div>
-              <div style={{ position: "absolute", top: 8, right: 8, background: GOLD, borderRadius: 6, padding: "2px 5px", fontSize: 10, fontWeight: 700, color: "hsl(var(--primary-foreground))" }}>
+              <div style={{ position: "absolute", top: 8, insetInlineEnd: 8, background: GOLD, borderRadius: 6, padding: "2px 5px", fontSize: 10, fontWeight: 700, color: "hsl(var(--primary-foreground))" }}>
                 {DOMAIN_ICONS[story.domain] ?? "🌍"}
               </div>
             </motion.div>

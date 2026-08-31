@@ -45,11 +45,11 @@ export default function SearchDropdown({ q, st, dir, onClose }: Props) {
         boxShadow: "0 8px 40px rgba(0,0,0,0.85)",
       }}>
       {loading && (
-        <p style={{ padding: "14px 16px", color: "#ffffff40", margin: 0, fontSize: 13 }}>Searching…</p>
+        <p style={{ padding: "14px 16px", color: "#ffffff40", margin: 0, fontSize: 13 }}>{st.searching}</p>
       )}
       {!loading && total === 0 && results !== null && (
         <p style={{ padding: "14px 16px", color: "hsl(var(--muted-foreground))", margin: 0, fontSize: 13 }}>
-          No results for "{q}"
+          {st.no_results_for} "{q}"
         </p>
       )}
       {!loading && results && total > 0 && (

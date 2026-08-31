@@ -1,6 +1,9 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Upload, Video, Music, CheckCircle, AlertCircle, Loader2, Search, ChevronDown } from 'lucide-react';
+import { useLanguage } from '../contexts/language-context';
+import { adminUploadCopy } from '../i18n/admin-upload-copy';
+import { sharedCopy } from '@/i18n/shared-components-copy';
 
 interface UploadModalProps {
   open: boolean;
@@ -12,104 +15,17 @@ interface UploadModalProps {
   initialCategory?: string;
 }
 
-const CATEGORIES = [
-  { value: 'sport',     label: 'الرياضة', icon: '⚽' },
-  { value: 'press',     label: 'الصحافة', icon: '📰' },
-  { value: 'art',       label: 'الفن',    icon: '🎨' },
-  { value: 'knowledge', label: 'المعرفة', icon: '📚' },
-];
-
-// ─── Star / Topic catalogue ───────────────────────────────────────────────────
-const TAGS_BY_CATEGORY: Record<string, { group: string; items: string[] }[]> = {
-  sport: [
-    {
-      group: '⭐ نجوم كرة القدم',
-      items: [
-        'كريستيانو رونالدو (CR7)', 'ليونيل ميسي', 'كيليان مبابي', 'إيرلينغ هالاند',
-        'فينيسيوس جونيور', 'محمد صلاح', 'نيمار جونيور', 'لوكا مودريتش',
-        'كريم بنزمة', 'رونالدينيو', 'زين الدين زيدان', 'ثيبو كورتوا',
-        'روبرت ليفاندوفسكي', 'دوني فان دي بيك', 'جود بيلينغهام',
-      ],
-    },
-    {
-      group: '🏟️ الأندية',
-      items: [
-        'ريال مدريد', 'برشلونة', 'مانشستر سيتي', 'ليفربول', 'باريس سان جيرمان',
-        'بايرن ميونيخ', 'يوفنتوس', 'أرسنال', 'دورتموند', 'أتلتيكو مدريد',
-        'الاتحاد السعودي', 'الهلال السعودي', 'الاتحاد المغربي', 'الرجاء المغربي',
-      ],
-    },
-    {
-      group: '🏆 بطولات و مواضيع',
-      items: [
-        'كأس العالم 2026', 'دوري أبطال أوروبا', 'الدوري الإسباني', 'الدوري الإنجليزي',
-        'الدوري الفرنسي', 'الدوري الألماني', 'الدوري الإيطالي', 'كأس إفريقيا',
-        'الكرة الأفريقية', 'كرة القدم النسائية', 'الأولمبياد', 'دوري الأمم الأوروبية',
-        'السوبر الأوروبي', 'ميركاتو الصيف', 'إصابات و عودات',
-      ],
-    },
-    {
-      group: '🎽 رياضات أخرى',
-      items: [
-        'كرة السلة NBA', 'التنس العالمي', 'الفورمولا 1', 'الملاكمة',
-        'فنون قتالية MMA', 'السباحة', 'ألعاب القوى', 'الغولف',
-      ],
-    },
-  ],
-  press: [
-    {
-      group: '📰 أخبار و تحليلات',
-      items: [
-        'أخبار سياسية', 'اقتصاد و أعمال', 'قضايا اجتماعية', 'شؤون دولية',
-        'أخبار المغرب', 'الأخبار العاجلة', 'تحقيق صحفي', 'حوار حصري',
-        'تقرير ميداني', 'رأي و تعليق',
-      ],
-    },
-    {
-      group: '💻 تقنية و مجتمع',
-      items: [
-        'تقنية و ابتكار', 'ذكاء اصطناعي', 'شبكات اجتماعية', 'أمن رقمي',
-        'ريادة أعمال', 'استدامة و بيئة',
-      ],
-    },
-  ],
-  art: [
-    {
-      group: '🎵 موسيقى',
-      items: [
-        'موسيقى عربية', 'راب و هيب هوب', 'موسيقى أمازيغية', 'الشعبي المغربي',
-        'موسيقى دولية', 'كليب موسيقي', 'حفل مباشر', 'ألبوم جديد',
-      ],
-    },
-    {
-      group: '🎬 سينما و فن',
-      items: [
-        'سينما عالمية', 'مسلسلات عربية', 'أفلام مغربية', 'فن بصري',
-        'مسرح و أداء', 'رسوم متحركة', 'وثائقي فني',
-      ],
-    },
-  ],
-  knowledge: [
-    {
-      group: '📚 علم و معرفة',
-      items: [
-        'علم و بحوث', 'تعليم و ثقافة', 'تاريخ و حضارة', 'فلسفة و فكر',
-        'صحة و طب', 'علم النفس', 'بيئة و طبيعة', 'فضاء و كون',
-      ],
-    },
-    {
-      group: '🌍 ثقافة المغرب',
-      items: [
-        'الثقافة الأمازيغية', 'التراث المغربي', 'اللهجات المغربية', 'الطبخ المغربي',
-        'السياحة الداخلية', 'الحرف التقليدية',
-      ],
-    },
-  ],
-};
+const CATEGORY_META = [
+  { value: 'sport', icon: '⚽' }, { value: 'press', icon: '📰' },
+  { value: 'art', icon: '🎨' }, { value: 'knowledge', icon: '📚' },
+] as const;
 
 type Status = 'idle' | 'uploading' | 'success' | 'error';
 
 export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initialCategory }: UploadModalProps) {
+  const { language } = useLanguage();
+  const { upload: c, locale } = adminUploadCopy(language);
+  const uploadErrors = sharedCopy(language).uploadErrors;
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(initialCategory ?? 'sport');
   const [figureTag, setFigureTag] = useState(initialFigureTag ?? '');
@@ -149,10 +65,10 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
     const f = e.target.files?.[0];
     if (!f) return;
     if (!f.type.startsWith('video/') && !f.type.startsWith('audio/')) {
-      setErrorMsg('الرجاء اختيار ملف فيديو MP4 أو صوت MP3'); return;
+      setErrorMsg(c.invalidFile); return;
     }
     if (f.size > 500 * 1024 * 1024) {
-      setErrorMsg('حجم الملف أكبر من 500 ميغابايت'); return;
+      setErrorMsg(c.fileTooLarge); return;
     }
     setErrorMsg('');
     setFile(f);
@@ -161,13 +77,13 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
 
   // Filtered tags based on search query
   const filteredGroups = useMemo(() => {
-    const groups = TAGS_BY_CATEGORY[category] ?? [];
+    const groups = c.topics[category] ?? [];
     if (!tagSearch.trim()) return groups;
     const q = tagSearch.trim().toLowerCase();
     return groups
       .map(g => ({ ...g, items: g.items.filter(i => i.toLowerCase().includes(q)) }))
       .filter(g => g.items.length > 0);
-  }, [category, tagSearch]);
+  }, [category, tagSearch, c.topics]);
 
   const handleTagSelect = (tag: string) => {
     setFigureTag(tag);
@@ -176,8 +92,8 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
   };
 
   const handleSubmit = async () => {
-    if (!file) { setErrorMsg('اختر ملفاً أولاً'); return; }
-    if (!title.trim()) { setErrorMsg('أدخل عنوان المحتوى'); return; }
+    if (!file) { setErrorMsg(c.fileRequired); return; }
+    if (!title.trim()) { setErrorMsg(c.titleRequired); return; }
     setStatus('uploading');
     setProgress(0);
     setErrorMsg('');
@@ -198,23 +114,24 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
         };
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) { setProgress(100); resolve(); }
-          else { reject(new Error(`Server error ${xhr.status}`)); }
+          else { reject(new Error(uploadErrors.server(xhr.status))); }
         };
-        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.onerror = () => reject(new Error(uploadErrors.network));
         xhr.send(formData);
       });
 
       setStatus('success');
       onUploaded?.();
       setTimeout(() => { handleClose(); }, 2500);
-    } catch {
+    } catch (error) {
       setStatus('error');
-      setErrorMsg('فشل الرفع. تحقق من اتصالك وحاول مجدداً.');
+      setErrorMsg(error instanceof Error ? error.message : c.uploadFailed);
     }
   };
 
   const isVideo = file?.type.startsWith('video/') ?? true;
-  const fileSizeMB = file ? (file.size / 1024 / 1024).toFixed(1) : null;
+  const fileSizeMB = file ? new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(file.size / 1024 / 1024) : null;
+  const progressLabel = new Intl.NumberFormat(locale, { style: 'percent' }).format(progress / 100);
 
   return (
     <AnimatePresence>
@@ -225,6 +142,10 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          dir={language === 'ar' ? 'rtl' : 'ltr'}
+          role="dialog"
+          aria-modal="true"
+          aria-label={c.heading}
           style={{ background: 'rgba(0,0,0,0.92)' }}
           onClick={handleClose}
         >
@@ -251,12 +172,12 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                   style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.3)' }}>
                   <Upload className="w-5 h-5" style={{ color: '#FFD700' }} />
                 </div>
-                <div dir="rtl">
-                  <p className="font-black text-white text-base">رفع محتوى سيادي</p>
-                  <p className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>EMPIRE ETERNAL · GDNA SERVERS</p>
+                 <div>
+                   <p className="font-black text-white text-base">{c.heading}</p>
+                   <p className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>{c.serverLine}</p>
                 </div>
               </div>
-              <button onClick={handleClose} className="text-white/40 hover:text-white transition-colors p-1">
+               <button onClick={handleClose} aria-label={c.close} className="text-white/40 hover:text-white transition-colors p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -269,8 +190,8 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                 <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}>
                   <CheckCircle className="w-16 h-16 mb-4" style={{ color: '#FFD700' }} />
                 </motion.div>
-                <p className="font-black text-white text-xl mb-2">تم الرفع بنجاح!</p>
-                <p className="text-sm" style={{ color: 'rgba(255,215,0,0.6)' }}>محتواك الآن جزء من الإمبراطورية</p>
+                 <p className="font-black text-white text-xl mb-2">{c.success}</p>
+                 <p className="text-sm" style={{ color: 'rgba(255,215,0,0.6)' }}>{c.successDetail}</p>
                 {figureTag && (
                   <div className="mt-3 px-4 py-2 rounded-xl text-xs font-bold"
                     style={{ background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700' }}>
@@ -280,15 +201,16 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
               </div>
             ) : (
               <div className="overflow-y-auto flex-1">
-                <div className="p-5 space-y-4" dir="rtl">
+                 <div className="p-5 space-y-4">
 
                   {/* File picker */}
                   <div>
                     <label className="block text-xs font-bold mb-2" style={{ color: 'rgba(255,215,0,0.7)' }}>
-                      الملف · MP4 أو MP3 (حتى 500 ميغابايت)
+                       {c.fileLabel}
                     </label>
                     <button
                       onClick={() => fileRef.current?.click()}
+                       aria-label={file ? c.changeFile : c.chooseFile}
                       disabled={status === 'uploading'}
                       className="w-full rounded-xl py-4 flex flex-col items-center gap-2 transition-all hover:opacity-80 disabled:opacity-40"
                       style={{ border: '2px dashed rgba(255,215,0,0.35)', background: 'rgba(255,215,0,0.04)' }}
@@ -302,13 +224,13 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                             <span className="font-bold text-sm text-white truncate max-w-[200px]">{file.name}</span>
                           </div>
                           <span className="text-xs" style={{ color: 'rgba(255,215,0,0.5)' }}>
-                            {isVideo ? 'فيديو' : 'صوت'} · {fileSizeMB} MB
+                             {isVideo ? c.video : c.audio} · {fileSizeMB} MB
                           </span>
                         </>
                       ) : (
                         <>
                           <Upload className="w-8 h-8" style={{ color: 'rgba(255,215,0,0.4)' }} />
-                          <span className="text-sm" style={{ color: 'rgba(255,215,0,0.5)' }}>انقر لاختيار الملف</span>
+                           <span className="text-sm" style={{ color: 'rgba(255,215,0,0.5)' }}>{c.chooseFile}</span>
                         </>
                       )}
                     </button>
@@ -319,31 +241,29 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                   {/* Title */}
                   <div>
                     <label className="block text-xs font-bold mb-1.5" style={{ color: 'rgba(255,215,0,0.7)' }}>
-                      عنوان المحتوى
+                       {c.titleLabel}
                     </label>
                     <input value={title} onChange={e => setTitle(e.target.value)}
-                      disabled={status === 'uploading'} placeholder="أدخل عنواناً واضحاً..."
+                       disabled={status === 'uploading'} placeholder={c.titlePlaceholder}
                       className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition-all disabled:opacity-40"
                       style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,215,0,0.25)' }} />
                   </div>
 
-                  {/* هوية الرافع تؤخذ تلقائياً من حساب المواطن المسجّل */}
-
                   {/* Category */}
                   <div>
                     <label className="block text-xs font-bold mb-1.5" style={{ color: 'rgba(255,215,0,0.7)' }}>
-                      التصنيف
+                       {c.categoryLabel}
                     </label>
                     <div className="grid grid-cols-4 gap-2">
-                      {CATEGORIES.map(c => (
-                        <button key={c.value} onClick={() => handleCategoryChange(c.value)}
+                       {CATEGORY_META.map(item => (
+                         <button key={item.value} onClick={() => handleCategoryChange(item.value)}
                           disabled={status === 'uploading'}
                           className="rounded-xl py-2 text-center transition-all hover:opacity-80 disabled:opacity-40"
-                          style={category === c.value
+                           style={category === item.value
                             ? { background: '#FFD700', color: '#000' }
                             : { background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.2)', color: 'rgba(255,215,0,0.7)' }}>
-                          <div className="text-lg">{c.icon}</div>
-                          <div className="text-xs font-bold">{c.label}</div>
+                           <div className="text-lg">{item.icon}</div>
+                           <div className="text-xs font-bold">{c.categories[item.value]}</div>
                         </button>
                       ))}
                     </div>
@@ -352,7 +272,7 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                   {/* ── Star / Topic selector ──────────────────────────────── */}
                   <div>
                     <label className="block text-xs font-bold mb-1.5" style={{ color: 'rgba(255,215,0,0.7)' }}>
-                      📌 النجم أو الموضوع <span style={{ color: 'rgba(255,215,0,0.4)', fontWeight: 400 }}>(اختياري — يضمن وصول المحتوى للكتاب الصحيح)</span>
+                       📌 {c.tagLabel} <span style={{ color: 'rgba(255,215,0,0.4)', fontWeight: 400 }}>({c.tagOptional})</span>
                     </label>
 
                     {/* Selected tag pill */}
@@ -362,7 +282,7 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                           style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.4)' }}>
                           <span className="font-bold text-sm" style={{ color: '#FFD700' }}>{figureTag}</span>
                         </div>
-                        <button onClick={() => { setFigureTag(''); setTagDropOpen(true); }}
+                         <button onClick={() => { setFigureTag(''); setTagDropOpen(true); }} aria-label={c.removeTag}
                           className="p-1.5 rounded-lg transition-all hover:opacity-70"
                           style={{ background: 'rgba(255,50,50,0.15)', border: '1px solid rgba(255,50,50,0.3)' }}>
                           <X className="w-3.5 h-3.5 text-red-400" />
@@ -375,7 +295,7 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                       <button onClick={() => setTagDropOpen(true)} disabled={status === 'uploading'}
                         className="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all hover:opacity-80 disabled:opacity-40"
                         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,215,0,0.22)' }}>
-                        <span className="text-sm" style={{ color: 'rgba(255,215,0,0.45)' }}>اختر نجماً أو موضوعاً...</span>
+                         <span className="text-sm" style={{ color: 'rgba(255,215,0,0.45)' }}>{c.chooseTag}</span>
                         <ChevronDown className="w-4 h-4" style={{ color: 'rgba(255,215,0,0.4)' }} />
                       </button>
                     )}
@@ -389,9 +309,9 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                           style={{ borderBottom: '1px solid rgba(255,215,0,0.15)' }}>
                           <Search className="w-4 h-4 shrink-0" style={{ color: 'rgba(255,215,0,0.5)' }} />
                           <input autoFocus value={tagSearch} onChange={e => setTagSearch(e.target.value)}
-                            placeholder="ابحث عن نجم أو موضوع..."
+                             placeholder={c.searchTag} aria-label={c.searchTag}
                             className="flex-1 bg-transparent text-sm text-white placeholder:text-white/30 outline-none" />
-                          <button onClick={() => { setTagDropOpen(false); setTagSearch(''); }}
+                           <button onClick={() => { setTagDropOpen(false); setTagSearch(''); }} aria-label={c.closeSelector}
                             className="p-0.5 hover:opacity-70">
                             <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,215,0,0.4)' }} />
                           </button>
@@ -400,7 +320,7 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                         <div className="max-h-52 overflow-y-auto">
                           {filteredGroups.length === 0 ? (
                             <div className="py-4 text-center text-xs" style={{ color: 'rgba(255,215,0,0.4)' }}>
-                              لا توجد نتائج · يمكنك الكتابة مباشرة
+                               {c.noResults}
                             </div>
                           ) : (
                             filteredGroups.map(group => (
@@ -411,7 +331,7 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                                 </div>
                                 {group.items.map(item => (
                                   <button key={item} onClick={() => handleTagSelect(item)}
-                                    className="w-full text-right px-4 py-2 text-sm transition-all hover:opacity-80"
+                                    className={`w-full px-4 py-2 text-sm transition-all hover:opacity-80 ${language === 'ar' ? 'text-right' : 'text-left'}`}
                                     style={{ color: 'rgba(255,255,255,0.85)', borderBottom: '1px solid rgba(255,215,0,0.06)' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,215,0,0.08)')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -424,9 +344,9 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                           {/* Custom entry */}
                           {tagSearch.trim() && (
                             <button onClick={() => handleTagSelect(tagSearch.trim())}
-                              className="w-full text-right px-4 py-2.5 text-sm font-bold transition-all"
+                               className={`w-full px-4 py-2.5 text-sm font-bold transition-all ${language === 'ar' ? 'text-right' : 'text-left'}`}
                               style={{ color: '#FFD700', background: 'rgba(255,215,0,0.06)', borderTop: '1px solid rgba(255,215,0,0.15)' }}>
-                              ➕ أضف "{tagSearch.trim()}"
+                               ➕ {c.addCustom(tagSearch.trim())}
                             </button>
                           )}
                         </div>
@@ -447,10 +367,10 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                   {status === 'uploading' && (
                     <div>
                       <div className="flex justify-between text-xs mb-1.5" style={{ color: 'rgba(255,215,0,0.6)' }}>
-                        <span>جارٍ الرفع...</span>
-                        <span>{progress}%</span>
+                        <span>{c.uploading}</span>
+                         <span aria-label={c.uploadProgress(new Intl.NumberFormat(locale).format(progress))}>{progressLabel}</span>
                       </div>
-                      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,215,0,0.1)' }}>
+                       <div className="h-2 rounded-full overflow-hidden" role="progressbar" aria-label={c.uploading} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} style={{ background: 'rgba(255,215,0,0.1)' }}>
                         <motion.div className="h-full rounded-full"
                           style={{ background: 'linear-gradient(90deg, #FFD700, #FFA500)' }}
                           animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
@@ -463,12 +383,12 @@ export function UploadModal({ open, onClose, onUploaded, initialFigureTag, initi
                     className="w-full rounded-xl py-3.5 font-black text-black text-base transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2"
                     style={{ background: '#FFD700' }}>
                     {status === 'uploading'
-                      ? <><Loader2 className="w-5 h-5 animate-spin" /> جارٍ الرفع...</>
-                      : <><Upload className="w-5 h-5" /> رفع المحتوى</>}
+                      ? <><Loader2 className="w-5 h-5 animate-spin" /> {c.uploading}</>
+                      : <><Upload className="w-5 h-5" /> {c.uploadAction}</>}
                   </button>
 
                   <p className="text-center text-xs pb-1" style={{ color: 'rgba(255,215,0,0.3)' }}>
-                    كل 100 مشاهدة = 1 عملة ذهبية · أرباحك تُحسب تلقائياً
+                     {c.rewardNote}
                   </p>
                 </div>
               </div>

@@ -15,10 +15,40 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@workspace/gdna-ds/components/ui/alert-dialog";
 import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
+import { useLang } from "@/contexts/LangContext";
+import { finalLabelText } from "@/i18n/final-labels-copy";
 
 const BASE = import.meta.env.BASE_URL;
 const api = (p: string) => `${BASE}api${p}`;
 const MIN_SEC = 60; // owner rule: 1 minute minimum — NO maximum (any chrono above 1 min)
+const clipCopy = (lang: string) => {
+  const ar = lang === "ar", fr = lang === "fr", es = lang === "es";
+  return {
+    soundOn: ar ? "تشغيل الصوت" : fr ? "Activer le son" : es ? "Activar sonido" : "Turn sound on",
+    soundOff: ar ? "كتم الصوت" : fr ? "Couper le son" : es ? "Silenciar sonido" : "Mute sound",
+    editLabel: ar ? "تعديل عنوان الكليب" : fr ? "Modifier le titre du clip" : es ? "Editar título del clip" : "Edit clip title",
+    deleteLabel: ar ? "حذف الكليب" : fr ? "Supprimer le clip" : es ? "Eliminar clip" : "Delete clip",
+    editTitle: ar ? "تعديل عنوان الكليب" : fr ? "Modifier le titre du clip" : es ? "Editar título del clip" : "Edit clip title",
+    editDescription: ar ? "اختار عنوان واضح لعملك، حتى 120 حرفاً." : fr ? "Choisissez un titre clair pour votre œuvre, jusqu'à 120 caractères." : es ? "Elige un título claro para tu obra, hasta 120 caracteres." : "Choose a clear title for your work, up to 120 characters.",
+    titleLabel: ar ? "عنوان الكليب" : fr ? "Titre du clip" : es ? "Título del clip" : "Clip title",
+    cancel: ar ? "إلغاء" : fr ? "Annuler" : es ? "Cancelar" : "Cancel", save: ar ? "حفظ العنوان" : fr ? "Enregistrer le titre" : es ? "Guardar título" : "Save title",
+    deleteConfirm: ar ? "حذف الكليب نهائياً؟" : fr ? "Supprimer définitivement le clip ?" : es ? "¿Eliminar el clip permanentemente?" : "Delete clip permanently?",
+    deleteDescription: ar ? "سيتم حذف الفيديو والمشاهدات من الإمبراطورية. لا يمكن استرجاعه بعد ذلك." : fr ? "La vidéo et ses vues seront supprimées de l'Empire. Cette action est irréversible." : es ? "El video y sus vistas se eliminarán del Imperio. No se puede deshacer." : "The video and its views will be deleted from the Empire. This cannot be undone.",
+    deleteForever: ar ? "حذف نهائياً" : fr ? "Supprimer définitivement" : es ? "Eliminar permanentemente" : "Delete permanently",
+    minError: ar ? "المدة الدنيا: دقيقة واحدة. الكليبات الأقل من دقيقة غير مسموحة." : fr ? "Durée minimale : 1 minute. Les clips de moins d'une minute sont interdits." : es ? "Duración mínima: 1 minuto. No se permiten clips de menos de un minuto." : "Minimum duration: 1 minute. Clips shorter than one minute are not allowed.",
+    videoError: ar ? "تعذر قراءة الفيديو" : fr ? "Impossible de lire la vidéo" : es ? "No se pudo leer el vídeo" : "We could not read the video",
+    publishError: ar ? "فشل النشر" : fr ? "Échec de la publication" : es ? "Error al publicar" : "Publishing failed",
+    networkError: ar ? "فشل الاتصال — حاول مجدداً" : fr ? "Échec de connexion — réessayez" : es ? "Error de conexión — inténtalo de nuevo" : "Connection failed — try again",
+    titleUpdateError: ar ? "تعذر تعديل العنوان" : fr ? "Impossible de modifier le titre" : es ? "No se pudo editar el título" : "Could not edit the title",
+    titleUpdated: ar ? "تم تعديل عنوان الكليب" : fr ? "Titre du clip modifié" : es ? "Título del clip actualizado" : "Clip title updated",
+    retry: ar ? "حاول مجدداً" : fr ? "Réessayez" : es ? "Inténtalo de nuevo" : "Try again",
+    uploadTitle: ar ? "نشر كليب" : fr ? "Publier un clip" : es ? "Publicar un clip" : "Publish a clip",
+    clipPlaceholder: ar ? "عنوان الكليب..." : fr ? "Titre du clip..." : es ? "Título del clip..." : "Clip title...",
+    durationGuide: ar ? "المدة: دقيقة واحدة على الأقل · بلا حد أقصى." : fr ? "Durée : 1 minute minimum · Aucune limite maximale." : es ? "Duración: mínimo 1 minuto · Sin límite máximo." : "Duration: 1 minute minimum · No maximum limit.",
+    duration: ar ? "المدة" : fr ? "Durée" : es ? "Duración" : "Duration",
+    rightsGuide: ar ? "المدة: دقيقة واحدة على الأقل · بلا حد أقصى · حقوق المؤلف محفوظة لصاحب العمل" : fr ? "Durée : 1 minute minimum · Aucune limite maximale · Droits d’auteur réservés au propriétaire de l’œuvre" : es ? "Duración: mínimo 1 minuto · Sin límite máximo · Derechos de autor reservados al propietario de la obra" : "Duration: 1 minute minimum · No maximum limit · Copyright reserved by the owner of the work",
+  };
+};
 
 interface Clip {
   id: number; user_id: number; username: string; title: string;
@@ -39,6 +69,8 @@ function ClipCard({
   onUpdated: (id: number, title: string) => void;
   onDeleted: (id: number) => void;
 }) {
+  const { lang } = useLang();
+  const copy = clipCopy(lang);
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -82,14 +114,14 @@ function ClipCard({
         body: JSON.stringify({ title }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error ?? "تعذر تعديل العنوان");
+      if (!response.ok) throw new Error(data.error ?? copy.titleUpdateError);
       onUpdated(clip.id, data.clip.title);
       setEditOpen(false);
-      toast({ title: "تم تعديل عنوان الكليب" });
+      toast({ title: copy.titleUpdated });
     } catch (error) {
       toast({
-        title: "تعذر تعديل العنوان",
-        description: error instanceof Error ? error.message : "عاود المحاولة",
+        title: copy.titleUpdateError,
+        description: error instanceof Error ? error.message : copy.retry,
         variant: "destructive",
       });
     } finally {
@@ -107,15 +139,15 @@ function ClipCard({
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error ?? "تعذر حذف الكليب");
+        throw new Error(data.error ?? finalLabelText(lang, "clipsDeleteError"));
       }
       setDeleteOpen(false);
       onDeleted(clip.id);
-      toast({ title: "تم حذف الكليب" });
+      toast({ title: finalLabelText(lang, "clipsDeleted") });
     } catch (error) {
       toast({
-        title: "تعذر حذف الكليب",
-        description: error instanceof Error ? error.message : "عاود المحاولة",
+        title: finalLabelText(lang, "clipsDeleteError"),
+        description: error instanceof Error ? error.message : finalLabelText(lang, "tryAgain"),
         variant: "destructive",
       });
     } finally {
@@ -142,19 +174,19 @@ function ClipCard({
       </div>
       <div className="absolute top-3 right-3 flex gap-2">
         <Button type="button" variant="outline" size="icon" onClick={() => setMuted(m => !m)}
-          className="rounded-full bg-background/80 text-foreground" aria-label={muted ? "تشغيل الصوت" : "كتم الصوت"}>
+          className="rounded-full bg-background/80 text-foreground" aria-label={muted ? copy.soundOn : copy.soundOff}>
           {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </Button>
       </div>
       {canManage && (
         <div className="absolute top-3 left-3 flex gap-2">
           <Button type="button" variant="outline" size="icon" className="bg-background/80 text-foreground"
-            aria-label="تعديل عنوان الكليب"
+            aria-label={copy.editLabel}
             onClick={() => { setDraftTitle(clip.title); setEditOpen(true); }}>
             <Pencil />
           </Button>
           <Button type="button" variant="destructive" size="icon" className="bg-destructive/90"
-            aria-label="حذف الكليب" onClick={() => setDeleteOpen(true)}>
+            aria-label={copy.deleteLabel} onClick={() => setDeleteOpen(true)}>
             <Trash2 />
           </Button>
         </div>
@@ -167,36 +199,36 @@ function ClipCard({
         </div>
       )}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
-            <DialogTitle>تعديل عنوان الكليب</DialogTitle>
-            <DialogDescription>اختار عنوان واضح لعملك، حتى 120 حرفاً.</DialogDescription>
+            <DialogTitle>{copy.editTitle}</DialogTitle>
+            <DialogDescription>{copy.editDescription}</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={saveTitle}>
             <Input value={draftTitle} maxLength={120} dir="auto" autoFocus disabled={saving}
-              onChange={event => setDraftTitle(event.target.value)} aria-label="عنوان الكليب" />
+              onChange={event => setDraftTitle(event.target.value)} aria-label={copy.titleLabel} />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>إلغاء</Button>
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>{copy.cancel}</Button>
               <Button type="submit" disabled={saving || !draftTitle.trim()}>
-                {saving ? <Loader2 className="animate-spin" /> : <Pencil />} حفظ العنوان
+                {saving ? <Loader2 className="animate-spin" /> : <Pencil />} {copy.save}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent dir={lang === "ar" ? "rtl" : "ltr"}>
           <AlertDialogHeader>
-            <AlertDialogTitle>حذف الكليب نهائياً؟</AlertDialogTitle>
+            <AlertDialogTitle>{copy.deleteConfirm}</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم حذف الفيديو والمشاهدات من الإمبراطورية. لا يمكن استرجاعه بعد ذلك.
+              {copy.deleteDescription}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>إلغاء</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>{copy.cancel}</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground"
               disabled={deleting} onClick={event => { event.preventDefault(); void deleteClip(); }}>
-              {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />} حذف نهائياً
+              {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />} {copy.deleteForever}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -207,6 +239,8 @@ function ClipCard({
 
 // ── Upload modal ─────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const { lang } = useLang();
+  const copy = clipCopy(lang);
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [title, setTitle] = useState("");
@@ -223,9 +257,9 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
     v.onloadedmetadata = () => {
       URL.revokeObjectURL(url);
       setDuration(v.duration);
-      if (v.duration < MIN_SEC) setError("Durée minimale: 1 minute. Les clips de moins d'1 min sont interdits.");
+      if (v.duration < MIN_SEC) setError(copy.minError);
     };
-    v.onerror = () => { URL.revokeObjectURL(url); setError("ما قدرناش نقراو الفيديو"); };
+    v.onerror = () => { URL.revokeObjectURL(url); setError(copy.videoError); };
     v.src = url;
   };
 
@@ -243,38 +277,39 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
     xhr.onload = () => {
       setBusy(false);
       if (xhr.status === 200) { onDone(); onClose(); }
-      else { try { setError(JSON.parse(xhr.responseText).error ?? "فشل النشر"); } catch { setError("فشل النشر"); } }
+      else { try { setError(JSON.parse(xhr.responseText).error ?? copy.publishError); } catch { setError(copy.publishError); } }
     };
-    xhr.onerror = () => { setBusy(false); setError("فشل الاتصال — عاود المحاولة"); };
+    xhr.onerror = () => { setBusy(false); setError(copy.networkError); };
     xhr.send(fd);
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      dir={lang === "ar" ? "rtl" : "ltr"}
       className="fixed inset-0 z-[1100] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)" }}
       onClick={() => !busy && onClose()}>
       <div className="w-full max-w-md rounded-2xl border p-5 space-y-4"
         style={{ background: "#0a0a0a", borderColor: "#C9A84C50" }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h3 className="font-black text-lg" style={{ color: "#C9A84C" }}>🎬 نشر كليب</h3>
+           <h3 className="font-black text-lg" style={{ color: "#C9A84C" }}>🎬 {copy.uploadTitle}</h3>
           <button onClick={() => !busy && onClose()} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
         <div className="text-[11px] leading-relaxed rounded-lg border p-3 space-y-1" style={{ borderColor: "#C9A84C30", color: "#d4c391" }}>
-          <p>⏱️ Durée: <b>Minimum 1 min</b> · Pas de limite maximale.</p>
-          <p className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 shrink-0" /> حقوق الملكية الفكرية محمية: التسجيلة الأصلية (الأوريجينال) لصاحبها وحدو — كل ملف كيتسجل ببصمة رقمية، والنسخة طبق الأصل كترفض.</p>
-          <p>📱 التسجيل بالهاتف أو الكاميرا ديالك مسموح بالنشر — بشرط ما يكونش نفس الكرونو ديال الأصلية (ما شي نسخة مطابقة).</p>
+          <p>⏱️ {copy.durationGuide}</p>
+          <p className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 shrink-0" /> {finalLabelText(lang, "clipsRightsProtection")}</p>
+          <p>📱 {finalLabelText(lang, "clipsRecordingGuide")}</p>
         </div>
         <input type="file" accept="video/mp4,video/webm,video/quicktime"
           onChange={e => pick(e.target.files?.[0] ?? null)} disabled={busy}
           className="w-full text-xs text-gray-300 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-yellow-400/10 file:text-yellow-400" />
-        <p className="text-sm text-yellow-400">⚠️ Minimum 1 minute. Pas de limite maximale.</p>
+        <p className="text-sm text-yellow-400">⚠️ {copy.durationGuide}</p>
         {file && duration !== null && (
           <p className="text-xs font-mono" style={{ color: duration >= MIN_SEC ? "#22c55e" : "#ef4444" }}>
-            Durée: {fmtDur(Math.floor(duration))} {duration >= MIN_SEC ? "✅" : "❌"}
+            {copy.duration}: {fmtDur(Math.floor(duration))} {duration >= MIN_SEC ? "✅" : "❌"}
           </p>
         )}
         <input value={title} onChange={e => setTitle(e.target.value)} maxLength={120} dir="auto" disabled={busy}
-          placeholder="عنوان الكليب..." className="w-full px-3 py-2.5 rounded-lg bg-black border text-white text-sm outline-none"
+           placeholder={copy.clipPlaceholder} className="w-full px-3 py-2.5 rounded-lg bg-black border text-white text-sm outline-none"
           style={{ borderColor: "#C9A84C40" }} />
         {error && <p className="text-xs text-red-400" dir="auto">{error}</p>}
         {busy && (
@@ -286,7 +321,7 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
           disabled={busy || !file || !title.trim() || duration === null || duration < MIN_SEC}
           className="w-full py-3 rounded-xl font-black text-black disabled:opacity-40 flex items-center justify-center gap-2"
           style={{ background: "linear-gradient(135deg,#C9A84C,#FFD700)" }}>
-          {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> كيترفع... {progress}%</> : <><Upload className="w-4 h-4" /> نشر الكليب</>}
+          {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> {finalLabelText(lang, "uploading")} {progress}%</> : <><Upload className="w-4 h-4" /> {finalLabelText(lang, "publishClip")}</>}
         </button>
       </div>
     </motion.div>
@@ -295,6 +330,8 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function ClipsPage() {
+  const { lang } = useLang();
+  const copy = clipCopy(lang);
   const { user } = useAuth();
   const [clips, setClips] = useState<Clip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -323,22 +360,22 @@ export default function ClipsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen pt-20 pb-12" style={{ background: "#050505" }}>
+    <div className="min-h-screen pt-20 pb-12" dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: "#050505" }}>
       <div className="max-w-lg mx-auto px-4 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="font-black text-2xl flex items-center gap-2 text-white">
-            <Clapperboard className="w-6 h-6" style={{ color: "#C9A84C" }} /> CLIPS <span style={{ color: "#C9A84C" }}>— كليبسز</span>
+            <Clapperboard className="w-6 h-6" style={{ color: "#C9A84C" }} /> {finalLabelText(lang, "clipsHeading")}
           </h1>
           {user && (
             <button onClick={() => setShowUpload(true)}
               className="px-4 py-2 rounded-xl font-bold text-sm text-black flex items-center gap-1.5"
               style={{ background: "linear-gradient(135deg,#C9A84C,#FFD700)" }}>
-              <Upload className="w-4 h-4" /> نشر
+              <Upload className="w-4 h-4" /> {finalLabelText(lang, "publish")}
             </button>
           )}
         </div>
         <p className="text-[11px] font-mono" style={{ color: "#C9A84C99" }}>
-          Durée: Minimum 1 min · Pas de limite maximale · Droits d'auteur réservés à l'employeur
+          {copy.rightsGuide}
         </p>
 
         {loading ? (
@@ -347,8 +384,8 @@ export default function ClipsPage() {
           <div className="h-[50vh] rounded-2xl border flex flex-col items-center justify-center gap-3 text-center px-6"
             style={{ borderColor: "#C9A84C30" }}>
             <Clapperboard className="w-10 h-10" style={{ color: "#C9A84C" }} />
-            <p className="text-white font-bold">ما كاين حتى كليب دابا</p>
-            <p className="text-xs text-gray-400">كون أول واحد ينشر عملو — منتج، مغني، لاعب... كل واحد عندو شغلة ديالو</p>
+            <p className="text-white font-bold">{finalLabelText(lang, "noClips")}</p>
+            <p className="text-xs text-gray-400">{finalLabelText(lang, "noClipsDescription")}</p>
           </div>
         ) : (
           <div className="space-y-6 snap-y snap-mandatory">
@@ -359,7 +396,7 @@ export default function ClipsPage() {
             {hasMore && (
               <button onClick={() => load(clips[clips.length - 1]?.id)}
                 className="w-full py-3 rounded-xl border font-bold text-sm" style={{ borderColor: "#C9A84C40", color: "#C9A84C" }}>
-                شوف المزيد
+                {finalLabelText(lang, "showMore")}
               </button>
             )}
           </div>

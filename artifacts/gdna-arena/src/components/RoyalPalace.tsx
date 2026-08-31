@@ -3,15 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, Crown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
-
-const TOPICS: { id: string; label: string }[] = [
-  { id: "plan", label: "خطة اليوم" },
-  { id: "motivation", label: "تحفيز" },
-  { id: "progress", label: "تحليل التقدم" },
-  { id: "problem", label: "حل مشكلة" },
-];
-
-const SPEECH_LANG: Record<string, string> = { ar: "ar-MA", fr: "fr-FR", en: "en-US", es: "es-ES", de: "de-DE" };
+import { sharedCopy, sharedLocale } from "@/i18n/shared-components-copy";
 
 type HistoryItem = { topic: string; reply: string; date: string };
 
@@ -27,7 +19,7 @@ function readHistory(): HistoryItem[] {
 function saveToHistory(topic: string, reply: string): HistoryItem[] {
   try {
     const history = readHistory();
-    history.unshift({ topic, reply, date: new Date().toLocaleString() });
+    history.unshift({ topic, reply, date: new Date().toISOString() });
     const trimmed = history.slice(0, 10);
     localStorage.setItem("ameeq_history", JSON.stringify(trimmed));
     return trimmed;
@@ -40,7 +32,7 @@ function speak(text: string, lang: string) {
   try {
     speechSynthesis.cancel();
     const speech = new SpeechSynthesisUtterance(text);
-    speech.lang = SPEECH_LANG[lang] ?? lang;
+    speech.lang = sharedLocale(lang);
     speechSynthesis.speak(speech);
   } catch { /* speech unsupported — ignore */ }
 }
@@ -48,6 +40,8 @@ function speak(text: string, lang: string) {
 export default function RoyalPalace() {
   const { user } = useAuth();
   const { lang } = useLang();
+  const rt = sharedCopy(lang).royal;
+  const topics = (["plan", "motivation", "progress", "problem"] as const).map(id => ({ id, label: rt[id] }));
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [answer, setAnswer] = useState<string>("");
   const [activeTopic, setActiveTopic] = useState<string>("");
@@ -59,7 +53,7 @@ export default function RoyalPalace() {
 
   if (!user) return null;
 
-  const consultGovernor = async (topic: (typeof TOPICS)[number]) => {
+  const consultGovernor = async (topic: { id: string; label: string }) => {
     setLoadingId(topic.id);
     setActiveTopic(topic.label);
     setAnswer("");
@@ -72,12 +66,12 @@ export default function RoyalPalace() {
         body: JSON.stringify({ topic: topic.label, lang }),
       });
       const data = (await res.json()) as { reply?: string; error?: string };
-      if (!res.ok || !data.reply) throw new Error(data.error ?? "فشل الاتصال");
+      if (!res.ok || !data.reply) throw new Error(data.error ?? rt.failed);
       setAnswer(data.reply);
       setHistory(saveToHistory(topic.label, data.reply));
       speak(data.reply, lang);
     } catch {
-      setError("الحاكم مشغول فـ اجتماع. عاود من بعد.");
+      setError(rt.busy);
     } finally {
       setLoadingId(null);
     }
@@ -87,11 +81,11 @@ export default function RoyalPalace() {
   const startVoiceConsult = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      setError("المتصفح ديالك ما كيدعمش التعرف على الصوت. جرب Chrome.");
+      setError(rt.speechUnsupported);
       return;
     }
     const rec = new SR();
-    rec.lang = SPEECH_LANG[lang] ?? "ar-MA";
+    rec.lang = sharedLocale(lang);
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     setListening(true);
@@ -110,32 +104,32 @@ export default function RoyalPalace() {
           body: JSON.stringify({ question: transcript.slice(0, 300), lang }),
         });
         const data = (await res.json()) as { reply?: string; error?: string };
-        if (!res.ok || !data.reply) throw new Error(data.error ?? "فشل الاتصال");
+        if (!res.ok || !data.reply) throw new Error(data.error ?? rt.failed);
         setAnswer(data.reply);
         setHistory(saveToHistory(`🎙️ ${transcript}`, data.reply));
         speak(data.reply, lang);
       } catch {
-        setError("الحاكم مشغول فـ اجتماع. عاود من بعد.");
+        setError(rt.busy);
       } finally {
         setLoadingId(null);
       }
     };
-    rec.onerror = () => { setListening(false); setError("ما سمعتش مزيان — عاود جرب."); };
+    rec.onerror = () => { setListening(false); setError(rt.notHeard); };
     rec.onend = () => setListening(false);
     rec.start();
   };
 
   return (
-    <div dir="rtl" className="palace rounded-[15px] p-5 mt-5 space-y-4"
+    <div dir={lang === "ar" ? "rtl" : "ltr"} className="palace rounded-[15px] p-5 mt-5 space-y-4"
       style={{ background: "hsl(var(--card))", border: "2px solid hsl(var(--primary))" }}>
       <h3 className="flex items-center justify-center gap-2 font-black text-lg md:text-xl text-center"
         style={{ color: "hsl(var(--primary))", fontFamily: "'Orbitron', 'Inter', sans-serif" }}>
         <Crown className="w-5 h-5" />
-        🏛️ قصر استشارة الحاكم Ameeq
+        🏛️ {rt.title}
       </h3>
 
       <div className="flex flex-wrap justify-center">
-        {TOPICS.map((topic) => (
+        {topics.map((topic) => (
           <button
             key={topic.id}
             onClick={() => consultGovernor(topic)}
@@ -166,11 +160,11 @@ export default function RoyalPalace() {
             border: "2px solid hsl(var(--primary))",
             boxShadow: listening ? "0 0 15px hsl(var(--primary))" : "none",
           }}
-          title="تكلم مع الحاكم"
+          title={rt.speak} aria-label={rt.speak}
         >
           {listening ? <span className="animate-pulse">🎙️</span> : "🎙️"}
         </button>
-        {listening && <div className="text-xs mt-2" style={{ color: "hsl(var(--primary))" }}>كنسمع ليك... تكلم دابا</div>}
+        {listening && <div className="text-xs mt-2" style={{ color: "hsl(var(--primary))" }}>{rt.listening}</div>}
       </div>
 
       <AnimatePresence>
@@ -195,14 +189,14 @@ export default function RoyalPalace() {
 
       {/* 📜 سجل الاستشارات السابقة */}
       {history.length > 0 && (
-        <div id="historyBox" dir="rtl" style={{ marginTop: 15, textAlign: "right", fontSize: 12, color: "#aaa" }}>
-          <h4 className="font-bold mb-2" style={{ color: "hsl(var(--primary))" }}>📜 سجل الاستشارات السابقة</h4>
+        <div id="historyBox" dir={lang === "ar" ? "rtl" : "ltr"} style={{ marginTop: 15, textAlign: "start", fontSize: 12, color: "#aaa" }}>
+          <h4 className="font-bold mb-2" style={{ color: "hsl(var(--primary))" }}>📜 {rt.history}</h4>
           <div id="historyList" className="space-y-2">
             {history.map((h, i) => (
               <details key={i} className="rounded-lg p-2" style={{ background: "#1a2332" }}>
                 <summary className="cursor-pointer">
                   <span style={{ color: "hsl(var(--primary))" }}>{h.topic}</span>
-                  <span className="mr-2 opacity-60"> — {h.date}</span>
+                  <span className="ms-2 opacity-60"> — {Number.isNaN(new Date(h.date).getTime()) ? h.date : new Intl.DateTimeFormat(sharedLocale(lang), { dateStyle: "medium", timeStyle: "short" }).format(new Date(h.date))}</span>
                 </summary>
                 <div className="msg-ai mt-2 p-2 rounded-lg whitespace-pre-wrap text-white/80">{h.reply}</div>
               </details>

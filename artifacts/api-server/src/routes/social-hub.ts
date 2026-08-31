@@ -146,12 +146,9 @@ router.post("/social/v2/post", async (req, res): Promise<void> => {
     .set({ xp: sql`${usersTable.xp} + 20` })
     .where(eq(usersTable.id, userId));
 
-  const resolvedMediaType = rawMediaUrl ? detectMediaType(rawMediaUrl) : null;
-
   const [post] = await db.insert(pulsePosts).values({
     userId, username: me.username, content: content.trim(), domain, type,
     imageUrl: rawMediaUrl || null,
-    mediaType: resolvedMediaType,
   }).returning();
 
   res.status(201).json({ post: { ...post, commentCount: 0 } });

@@ -18,6 +18,7 @@ import CitizensTab      from "../components/social/CitizensTab";
 import NotificationsTab from "../components/social/NotificationsTab";
 import SearchDropdown   from "../components/social/SearchDropdown";
 import { SOCIAL_T, GOLD, GOLD_A } from "../components/social/social-i18n";
+import { localeForLang } from "@/i18n/locale-surfaces-a-copy";
 
 type Tab = "overview" | "feed" | "messages" | "stories" | "live" | "citizens" | "notifications";
 
@@ -27,6 +28,7 @@ export default function SocialPage() {
   const [, navigate] = useLocation();
   const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const dir = lang === "ar" ? "rtl" : "ltr";
+  const locale = localeForLang(lang);
 
   const [tab,        setTab]        = useState<Tab>("overview");
   const [searchQ,    setSearchQ]    = useState("");
@@ -54,7 +56,7 @@ export default function SocialPage() {
   }, []);
 
   const TABS: { id: Tab; icon: React.ReactNode; label: string }[] = [
-    { id: "overview",      icon: <LayoutGrid     size={14} />, label: st.overview ?? "Network" },
+    { id: "overview",      icon: <LayoutGrid     size={14} />, label: st.overview },
     { id: "feed",          icon: <Globe          size={14} />, label: st.feed          },
     { id: "messages",      icon: <MessageSquare  size={14} />, label: st.messages      },
     { id: "stories",       icon: <BookOpen       size={14} />, label: st.stories       },
@@ -88,7 +90,7 @@ export default function SocialPage() {
               </h1>
               {user && (
                 <p style={{ margin: 0, fontSize: 11, color: "#ffffff40" }}>
-                  {user.username} · {(user.xp ?? 0).toLocaleString()} XP
+                  {user.username} · {(user.xp ?? 0).toLocaleString(locale)} XP
                 </p>
               )}
             </div>
@@ -99,7 +101,7 @@ export default function SocialPage() {
                 background: "hsl(var(--card))", border: `1px solid ${searchOpen ? GOLD : GOLD_A(0.13)}`,
                 borderRadius: 20, padding: "7px 14px", gap: 8, transition: "border-color 0.2s",
               }}>
-                <button type="submit" aria-label={st.search_results ?? "Search"}
+                <button type="submit" aria-label={st.search_results}
                   style={{ background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 0, display: "flex", flexShrink: 0 }}
                   data-testid="button-search-submit">
                   <Search size={13} />
@@ -115,7 +117,7 @@ export default function SocialPage() {
                 />
                 {searchQ && (
                   <button type="button" onClick={() => { setSearchQ(""); setSearchOpen(false); }}
-                    aria-label={st.back ?? "Clear"}
+                    aria-label={st.clear}
                     style={{ background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 0, display: "flex" }}
                     data-testid="button-search-clear">
                     <X size={13} />
@@ -163,7 +165,7 @@ export default function SocialPage() {
 
       {/* Smart Domain Widget */}
       <div style={{ maxWidth: 880, margin: "12px auto 0", padding: "0 16px" }}>
-        <SmartDomainWidget domainId="social" label="Module Social" />
+        <SmartDomainWidget domainId="social" label={st.module_social} />
       </div>
 
       {/* Tab content */}

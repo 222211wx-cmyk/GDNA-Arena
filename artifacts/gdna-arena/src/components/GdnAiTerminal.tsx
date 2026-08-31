@@ -16,6 +16,8 @@ const SUGGESTED: Record<string, string[]> = {
   en: ["✅ Is my Smart System active?", "Best strategy to earn coins?", "Tell me about Arena Strike", "How does XP work?"],
   ar: ["✅ هل النظام الذكي نشط؟ أعطني تقريري", "أفضل استراتيجية لكسب العملات؟", "أخبرني عن Arena Strike", "كيف يعمل XP؟"],
   fr: ["✅ Système Smart actif? Montre mon rapport", "Meilleure stratégie pour gagner?", "Parle-moi d'Arena Strike", "Comment fonctionne l'XP?"],
+  es: ["✅ ¿Mi sistema Smart está activo?", "¿Cuál es la mejor estrategia para ganar monedas?", "Háblame de Arena Strike", "¿Cómo funciona XP?"],
+  de: ["✅ Ist mein Smart-System aktiv?", "Beste Strategie, um Coins zu verdienen?", "Erzähl mir von Arena Strike", "Wie funktioniert XP?"],
   dz: ["✅ واش النظام الذكي نشط؟ عطيني تقريري", "أفضل طريقة باش نربح كوينز؟", "حدثني على Arena Strike", "كيفاش كيخدم XP؟"],
 };
 
@@ -23,6 +25,8 @@ const WELCOME: Record<string, string> = {
   en: "Neural grid online. ✅ GDN-SMART SYSTEM: ACTIVE — monitoring Gaming, Education, Business, Social, Competitions & XP in real time. Ask me for your personalised report.",
   ar: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، الأعمال، الاجتماعي، المسابقات وXP في الوقت الفعلي. اسألني عن تقريرك الشخصي.",
   fr: "Grille neurale en ligne. ✅ GDN-SMART SYSTEM: ACTIF — surveillance Gaming, Education, Business, Social, Competitions & XP en temps reel. Demandez votre rapport personnalise.",
+  es: "Red neuronal en línea. ✅ SISTEMA GDN-SMART: ACTIVO — supervisa juegos, educación, negocios, redes sociales, competiciones y XP en tiempo real. Pídeme tu informe personalizado.",
+  de: "Neuronales Netz online. ✅ GDN-SMART SYSTEM: AKTIV — überwacht Gaming, Bildung, Business, Soziales, Wettbewerbe und XP in Echtzeit. Frage nach deinem persönlichen Bericht.",
   dz: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، البيزنس، السوشيال وXP. سول على تقريرك الشخصي.",
 };
 
@@ -61,7 +65,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
           ? "الذكاء الاصطناعي يحتاج إلى اتصال بالإنترنت."
           : lang === "fr"
             ? "L’IA nécessite une connexion Internet."
-            : "AI requires an internet connection.",
+            : lang === "es" ? "La IA requiere conexión a internet." : "AI requires an internet connection.",
       );
       return;
     }
@@ -148,13 +152,13 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
           const next = [...prev];
           const last = next[next.length - 1];
           if (last?.streaming) {
-            next[next.length - 1] = { ...last, content: data.reply ?? "Neural error — try again.", streaming: false };
+            next[next.length - 1] = { ...last, content: data.reply ?? ({ ar: "خطأ عصبي — حاول مجدداً.", fr: "Erreur neuronale — réessayez.", es: "Error neuronal; inténtalo de nuevo.", en: "Neural error — try again.", de: "Neural error — try again." }[lang]), streaming: false };
           }
           return next;
         });
         return;
       } catch {
-        setError("Neural grid disruption — try again.");
+        setError(({ ar: "تعطل في الشبكة العصبية — حاول مجدداً.", fr: "Perturbation de la grille neuronale — réessayez.", es: "Interrupción de la red neuronal; inténtalo de nuevo.", en: "Neural grid disruption — try again.", de: "Neural grid disruption — try again." }[lang]));
       }
     } finally {
       // Mark streaming done
@@ -199,7 +203,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
               ? "text-chart-3 bg-chart-3/10 border-chart-3/30"
               : "text-destructive bg-destructive/10 border-destructive/30"
           }`}>
-            <Zap className="w-2.5 h-2.5" /> {isOnline ? "GPT-4o" : "Offline"}
+            <Zap className="w-2.5 h-2.5" /> {isOnline ? "GPT-4o" : ({ ar: "غير متصل", fr: "Hors ligne", es: "Sin conexión", en: "Offline", de: "Offline" }[lang])}
           </span>
         </div>
       </div>
@@ -257,7 +261,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
               </div>
               <div className="bg-black/40 border border-primary/20 px-3 py-2 rounded-xl rounded-bl-sm flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
-                <span className="text-muted-foreground text-xs font-mono">Neural grid processing...</span>
+                <span className="text-muted-foreground text-xs font-mono">{({ ar: "الشبكة العصبية تعالج…", fr: "Traitement de la grille neuronale…", es: "Procesando la red neuronal…", en: "Neural grid processing…", de: "Neural grid processing…" }[lang])}</span>
               </div>
             </motion.div>
           )}

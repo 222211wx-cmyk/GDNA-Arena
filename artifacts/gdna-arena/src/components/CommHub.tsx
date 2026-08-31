@@ -8,10 +8,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { GOLD, api } from "@/components/social/social-i18n";
+import { SOCIAL_T } from "@/components/social/social-i18n";
 import Messenger from "@/components/messenger/Messenger";
+import { useLang } from "@/contexts/LangContext";
 
 export default function CommHub() {
   const { user } = useAuth();
+  const { lang } = useLang();
+  const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [notifOn, setNotifOn] = useState(true);
@@ -69,6 +73,7 @@ export default function CommHub() {
               <MessageSquare size={15} style={{ color: "hsl(var(--primary))" }} />
               <span style={{ fontWeight: 900, color: "hsl(var(--foreground))", fontSize: 13, flex: 1 }}>AMIS 👑</span>
               <button onClick={() => setOpen(false)}
+                aria-label={st.close}
                 style={{ background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", display: "flex" }}>
                 <X size={16} />
               </button>
@@ -82,7 +87,7 @@ export default function CommHub() {
 
       {/* Floating button */}
       <button onClick={() => { setOpen(v => !v); if (!open) loadUnread(); }}
-        title="AMIS"
+        title="AMIS" aria-label={open ? st.close : st.messages}
         style={{
           position: "fixed",
           bottom: "calc(20px + env(safe-area-inset-bottom))",

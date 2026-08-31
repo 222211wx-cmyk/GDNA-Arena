@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLang } from "@/contexts/LangContext";
+import { contentCopy } from "@/i18n/content-discovery-copy";
+import { isArabic, techT, type TechCopyKey } from "@/i18n/tech-surfaces-copy";
+import { formatSurfaceDate, formatSurfaceNumber } from "@/i18n/locale-surfaces-b-copy";
 
 interface EmpireGenome {
   dna_string: string;
@@ -50,6 +54,9 @@ const TYPE_ICON: Record<string, string> = {
 };
 
 export default function GenomePage() {
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof contentCopy>[1]) => contentCopy(lang, key);
+  const tx = (key: TechCopyKey, vars?: Record<string, string | number>) => techT(lang, key, vars);
   const [genome, setGenome] = useState<EmpireGenome | null>(null);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [crossovers, setCrossovers] = useState<Crossover[]>([]);
@@ -79,14 +86,14 @@ export default function GenomePage() {
     ? Array.from({ length: 8 }, (_, i) => genome.dna_string.slice(i * 8, (i + 1) * 8))
     : [];
 
-  const geneLabels = ["ACTION", "VICTORY", "GROWTH", "ABUNDANCE", "SOCIAL", "SPORT", "VISION", "SOVEREIGNTY"];
+  const geneLabels: TechCopyKey[] = ["action", "victory", "growth", "abundance", "social", "sport", "vision", "sovereignty"];
   const geneColors = [
     "text-red-400", "text-yellow-400", "text-green-400", "text-emerald-400",
     "text-blue-400", "text-purple-400", "text-cyan-400", "text-orange-400",
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono pt-16 pb-12">
+    <div dir={isArabic(lang) ? "rtl" : "ltr"} className="min-h-screen bg-background text-foreground font-mono pt-16 pb-12">
 
       {/* Hero */}
       <div className="relative border-b border-yellow-500/20 px-6 py-10 text-center overflow-hidden">
@@ -99,23 +106,23 @@ export default function GenomePage() {
           ⬡ GDNA GENOME ENGINE — GGE v1.0
         </motion.p>
         <h1 className="text-5xl md:text-7xl font-black tracking-tight">
-          <span className="text-yellow-400">G</span>enetic{" "}
-          <span className="text-yellow-400">D</span>igital{" "}
-          <span className="text-yellow-400">N</span>eural{" "}
-          <span className="text-yellow-400">A</span>rchitecture
+           <span className="text-yellow-400">G</span>{tx("genetic")}{" "}
+           <span className="text-yellow-400">D</span>{tx("digital")}{" "}
+           <span className="text-yellow-400">N</span>{tx("neural")}{" "}
+           <span className="text-yellow-400">A</span>{tx("architecture")}
         </h1>
         <p className="mt-3 text-muted-foreground text-sm tracking-widest">
-          SELF-SUFFICIENT · SELF-GENERATING · SELF-EVOLVING · ETERNAL
+          {t("genomeSub")}
         </p>
 
         {/* Genome fitness */}
         {genome && (
           <div className="flex justify-center gap-8 mt-6 text-sm">
             {[
-              { label: "GENERATION", value: `#${genome.generation}` },
-              { label: "FITNESS", value: `${genome.fitness_score}/100` },
-              { label: "DIVERSITY", value: `${genome.genetic_diversity}%` },
-              { label: "CITIZENS", value: genome.total_citizens },
+               { label: t("generation"), value: `#${formatSurfaceNumber(lang, genome.generation)}` },
+               { label: t("fitness"), value: `${formatSurfaceNumber(lang, genome.fitness_score)}/${formatSurfaceNumber(lang, 100)}` },
+               { label: t("diversity"), value: `${formatSurfaceNumber(lang, genome.genetic_diversity)}%` },
+               { label: t("citizens"), value: formatSurfaceNumber(lang, genome.total_citizens) },
             ].map(s => (
               <div key={s.label} className="text-center">
                 <div className="text-yellow-400 font-black text-xl">{s.value}</div>
@@ -129,10 +136,10 @@ export default function GenomePage() {
       {/* Tab bar */}
       <div className="flex border-b border-border px-4 mt-0">
         {([
-          { key: "dna",       label: "🧬 EMPIRE DNA" },
-          { key: "insights",  label: "💡 SELF-GENERATED" },
-          { key: "crossover", label: "🔀 CROSSOVERS" },
-          { key: "citizens",  label: "👤 DNA REGISTRY" },
+          { key: "dna",       label: t("empireDna") },
+          { key: "insights",  label: t("selfGenerated") },
+          { key: "crossover", label: t("crossovers") },
+          { key: "citizens",  label: t("dnaRegistry") },
         ] as const).map(t => (
           <button
             key={t.key}
@@ -158,14 +165,14 @@ export default function GenomePage() {
                 <div className="space-y-6">
                   {/* Full DNA string */}
                   <div className="border border-yellow-500/30 rounded-xl p-6">
-                    <div className="text-xs text-yellow-500/60 tracking-widest mb-4">⬡ COLLECTIVE EMPIRE DNA STRING — 64 CHARS</div>
+                     <div className="text-xs text-yellow-500/60 tracking-widest mb-4">{tx("collectiveDna")}</div>
                     <div className="font-mono text-lg md:text-2xl tracking-[0.15em] break-all text-yellow-400 leading-relaxed">
                       {dnaGenes.map((gene, i) => (
                         <span key={i} className={`${geneColors[i]} mr-2`}>{gene}</span>
                       ))}
                     </div>
                     <div className="mt-4 text-xs text-muted-foreground">
-                      Last encoded: {new Date(genome.evolved_at).toLocaleString()}
+                       {tx("lastEncoded", { date: formatSurfaceDate(lang, genome.evolved_at, { dateStyle: "medium", timeStyle: "short" }) })}
                     </div>
                   </div>
 
@@ -173,7 +180,7 @@ export default function GenomePage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {dnaGenes.map((gene, i) => (
                       <div key={i} className="border border-border rounded-xl p-4">
-                        <div className={`text-xs tracking-widest mb-1 ${geneColors[i]}`}>{geneLabels[i]}</div>
+                         <div className={`text-xs tracking-widest mb-1 ${geneColors[i]}`}>{tx(geneLabels[i])}</div>
                         <div className="font-mono text-foreground font-bold tracking-wider">{gene}</div>
                       </div>
                     ))}
@@ -183,12 +190,12 @@ export default function GenomePage() {
                   <div className="border border-border rounded-xl p-5 flex items-center gap-4">
                     <div className="text-4xl">🏆</div>
                     <div>
-                      <div className="text-xs text-muted-foreground tracking-widest">DOMINANT TRAIT</div>
+                      <div className="text-xs text-muted-foreground tracking-widest">{t("dominantTrait")}</div>
                       <div className={`text-xl font-black capitalize ${DOMAIN_COLOR[genome.dominant_trait] ?? "text-white"}`}>
                         {genome.dominant_trait.toUpperCase()}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        The gene most expressed across all empire memories
+                         {tx("dominantDesc")}
                       </div>
                     </div>
                   </div>
@@ -196,8 +203,8 @@ export default function GenomePage() {
                   {/* Fitness bar */}
                   <div className="border border-border rounded-xl p-5">
                     <div className="flex justify-between text-xs text-muted-foreground mb-2">
-                      <span>EMPIRE FITNESS SCORE</span>
-                      <span className="text-yellow-400">{genome.fitness_score}/100</span>
+                      <span>{t("fitnessScore")}</span>
+                      <span className="text-yellow-400">{formatSurfaceNumber(lang, genome.fitness_score)}/{formatSurfaceNumber(lang, 100)}</span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <motion.div
@@ -208,14 +215,14 @@ export default function GenomePage() {
                       />
                     </div>
                     <div className="text-xs text-muted-foreground mt-2">
-                      Calculated from neural memories × citizen count × average XP
+                       {tx("fitnessDesc")}
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-20 text-muted-foreground">
                   <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity }} className="text-4xl mb-3">🧬</motion.div>
-                  <p>Encoding empire genome...</p>
+                  <p>{t("encodeGenome")}</p>
                 </div>
               )}
             </motion.div>
@@ -225,13 +232,12 @@ export default function GenomePage() {
           {tab === "insights" && (
             <motion.div key="insights" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="mb-4 p-4 border border-green-500/20 bg-green-500/5 rounded-xl text-xs text-green-400 tracking-wide">
-                ⬡ All content below was generated autonomously by the Genome Engine — no human authored any of it.
-                New content is generated every 6 hours, forever.
+                 {tx("generatedNotice")}
               </div>
               {insights.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
                   <div className="text-3xl mb-2">💡</div>
-                  <p>Genome engine generating first content cycle...</p>
+                  <p>{t("generating")}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -249,7 +255,7 @@ export default function GenomePage() {
                           {ins.content_type} — {ins.domain}
                         </span>
                         <span className="ml-auto text-xs text-muted-foreground">
-                          {new Date(ins.created_at).toLocaleDateString()}
+                            {formatSurfaceDate(lang, ins.created_at, { dateStyle: "medium" })}
                         </span>
                       </div>
                       <p className="text-foreground/90 text-sm leading-relaxed">{ins.body}</p>
@@ -264,13 +270,12 @@ export default function GenomePage() {
           {tab === "crossover" && (
             <motion.div key="crossover" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <div className="mb-4 p-4 border border-purple-500/20 bg-purple-500/5 rounded-xl text-xs text-purple-400 tracking-wide">
-                ⬡ Crossover: two memories are combined to breed a new insight — like genetic recombination in biology.
-                This runs automatically every 6 hours.
+                 {tx("crossoverNotice")}
               </div>
               {crossovers.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
                   <div className="text-3xl mb-2">🔀</div>
-                  <p>First crossover cycle running...</p>
+                  <p>{t("crossoverRunning")}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -285,16 +290,16 @@ export default function GenomePage() {
                       <div className="grid grid-cols-2 gap-3 mb-3">
                         {[c.parent_a_content, c.parent_b_content].map((p, j) => (
                           <div key={j} className="bg-card/50 rounded-lg p-3 text-xs text-muted-foreground truncate">
-                            <span className="text-yellow-500/60">Parent {j === 0 ? "A" : "B"}: </span>
+                             <span className="text-yellow-500/60">{tx("parent", { letter: j === 0 ? "A" : "B" })} </span>
                             {p?.slice(0, 80)}...
                           </div>
                         ))}
                       </div>
                       <div className="flex items-start gap-2">
-                        <span className="text-purple-400 text-xs mt-1">⬡ OFFSPRING:</span>
+                         <span className="text-purple-400 text-xs mt-1">{tx("offspring")}</span>
                         <p className="text-foreground text-sm flex-1">{c.offspring}</p>
                         <span className="text-xs text-muted-foreground flex-shrink-0">
-                          fitness: {Math.round(c.fitness * 100)}%
+                            {tx("fitnessValue", { n: formatSurfaceNumber(lang, Math.round(c.fitness * 100)) })}
                         </span>
                       </div>
                     </motion.div>
@@ -310,7 +315,7 @@ export default function GenomePage() {
               {citizens.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
                   <div className="text-3xl mb-2">👤</div>
-                  <p>DNA encoding citizens...</p>
+                  <p>{t("encodeCitizens")}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -334,7 +339,7 @@ export default function GenomePage() {
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-foreground">{c.username}</span>
                           <span className="text-xs text-yellow-400/60">{c.archetype}</span>
-                          <span className="text-xs text-muted-foreground">Gen #{c.generation}</span>
+                           <span className="text-xs text-muted-foreground">{tx("generationShort", { n: formatSurfaceNumber(lang, c.generation) })}</span>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {(Array.isArray(c.traits) ? c.traits : JSON.parse(c.traits as unknown as string ?? "[]")).map((t: string) => (
@@ -342,8 +347,8 @@ export default function GenomePage() {
                           ))}
                         </div>
                       </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className="text-yellow-400 font-bold">{c.xp.toLocaleString()} XP</div>
+                       <div className="text-end flex-shrink-0">
+                          <div className="text-yellow-400 font-bold">{formatSurfaceNumber(lang, c.xp)} XP</div>
                       </div>
                     </motion.div>
                   ))}

@@ -6,6 +6,9 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import GameWarning from "@/components/GameWarning";
+import { useLang } from "@/contexts/LangContext";
+import { gameText } from "@/i18n/game-chrome";
+import { localeForLang } from "@/i18n/game-locale-copy";
 
 type Direction = "left" | "center" | "right";
 type Result = { win: boolean; xpEarned: number; message: string };
@@ -13,6 +16,8 @@ type Result = { win: boolean; xpEarned: number; message: string };
 export default function PenaltyKingGame() {
   const [, navigate] = useLocation();
   const { refreshUser } = useAuth();
+  const { lang } = useLang();
+  const t = (key: Parameters<typeof gameText>[1]) => gameText(lang, key);
   const [result, setResult] = useState<Result | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,21 +32,21 @@ export default function PenaltyKingGame() {
         body: JSON.stringify({ direction }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "تعذر بدء الجولة");
+      if (!response.ok) throw new Error(data.error ?? t("roundError"));
       setResult(data);
       await refreshUser();
     } catch (error) {
-      setResult({ win: false, xpEarned: 0, message: error instanceof Error ? error.message : "تعذر بدء الجولة" });
+      setResult({ win: false, xpEarned: 0, message: error instanceof Error ? error.message : t("roundError") });
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-background px-4 py-6 text-foreground">
+    <main className="min-h-screen bg-background px-4 py-6 text-foreground" dir={lang === "ar" ? "rtl" : "ltr"}>
       <div className="mx-auto max-w-4xl space-y-6">
         <Button variant="ghost" onClick={() => navigate("/games")} className="text-primary">
-          <ArrowLeft className="me-2 size-4" /> الرجوع إلى الألعاب
+          <ArrowLeft className="me-2 size-4" /> {t("penaltyBack")}
         </Button>
         <GameWarning />
 
@@ -50,10 +55,10 @@ export default function PenaltyKingGame() {
             <motion.div animate={{ y: [0, -8, 0] }} transition={{ repeat: Infinity, duration: 2 }}>
               <Crown className="mx-auto size-16 text-primary" />
             </motion.div>
-            <div dir="rtl">
-              <p className="text-xs font-black tracking-[0.3em] text-primary">دوري الملوك</p>
-              <h1 className="mt-2 text-3xl font-black md:text-5xl">ضربات الجزاء الملكية</h1>
-              <p className="mt-3 text-muted-foreground">اختر زاوية التسديدة. الفوز يمنحك من 5 إلى 50 XP ونقاط دوري الملوك.</p>
+            <div dir={lang === "ar" ? "rtl" : "ltr"}>
+              <p className="text-xs font-black tracking-[0.3em] text-primary">{t("kingsLeague")}</p>
+              <h1 className="mt-2 text-3xl font-black md:text-5xl">{t("penaltyTitle")}</h1>
+              <p className="mt-3 text-muted-foreground">{t("penaltyIntro")}</p>
             </div>
 
             <div className="mx-auto grid max-w-xl grid-cols-3 gap-3 rounded-xl border border-primary/30 bg-background p-4">
@@ -64,21 +69,21 @@ export default function PenaltyKingGame() {
                   disabled={submitting}
                   variant="outline"
                   className="h-24 border-primary/40 text-2xl hover:bg-primary hover:text-primary-foreground"
-                  aria-label={["سدد يسار", "سدد وسط", "سدد يمين"][index]}
+                  aria-label={[t("shootLeft"), t("shootCenter"), t("shootRight")][index]}
                 >
                   {["↙", "⚽", "↘"][index]}
                 </Button>
               ))}
             </div>
 
-            {submitting && <p className="animate-pulse font-bold text-primary">الحارس يتحرك...</p>}
+            {submitting && <p className="animate-pulse font-bold text-primary">{t("keeperMoving")}</p>}
             {result && (
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                 className="rounded-xl border border-primary/30 bg-primary/5 p-5">
                 <Trophy className="mx-auto mb-2 size-7 text-primary" />
-                <p className="font-black">{result.win ? "هدف ملكي!" : "تصدى الحارس"}</p>
+                <p className="font-black">{result.win ? t("royalGoal") : t("keeperSaved")}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{result.message}</p>
-                <p className="mt-2 font-black text-primary">+{result.xpEarned} XP</p>
+                <p className="mt-2 font-black text-primary">+{result.xpEarned.toLocaleString(localeForLang[lang])} XP</p>
               </motion.div>
             )}
           </CardContent>

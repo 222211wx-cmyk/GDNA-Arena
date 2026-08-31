@@ -4,6 +4,7 @@ import { useAuth }  from "../contexts/AuthContext";
 import { useLang }  from "../contexts/LangContext";
 import { ShoppingBag, Coins, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
+import { localeForLang } from "@/i18n/locale-surfaces-a-copy";
 
 const GOLD = "hsl(var(--primary))";
 
@@ -19,8 +20,10 @@ interface ShopItem {
 export default function ShopPage() {
   const { user, refreshUser } = useAuth() as any;
   const { lang } = useLang();
+  const t = (en: string, fr: string, ar: string, es: string, de: string) => ({ en, fr, ar, es, de }[lang]);
   const { isOnline } = useConnectivity();
   const dir = lang === "ar" ? "rtl" : "ltr";
+  const locale = localeForLang(lang);
 
   const [items,       setItems]       = useState<ShopItem[]>([]);
   const [purchased,   setPurchased]   = useState<number[]>([]);
@@ -41,8 +44,8 @@ export default function ShopPage() {
   };
 
   const buy = async (item: ShopItem) => {
-    if (!user) return showToast(lang === "ar" ? "يجب تسجيل الدخول أولاً" : "Login required", false);
-    if (!isOnline) return showToast(lang === "ar" ? "أعد الاتصال لإتمام الشراء" : "Reconnect to complete this purchase", false);
+    if (!user) return showToast(t("Login required", "Connexion requise", "يجب تسجيل الدخول أولاً", "Se requiere iniciar sesión", "Anmeldung erforderlich"), false);
+    if (!isOnline) return showToast(t("Reconnect to complete this purchase", "Reconnectez-vous pour finaliser cet achat", "أعد الاتصال لإتمام الشراء", "Vuelve a conectarte para completar esta compra", "Stelle die Verbindung wieder her, um den Kauf abzuschließen"), false);
     setBuying(item.id);
     try {
       const res = await fetch(api(`/api/shop/buy/${item.id}`), {
@@ -51,24 +54,24 @@ export default function ShopPage() {
       });
       const d = await res.json();
       if (!res.ok) {
-        showToast(d.error ?? "فشل الشراء", false);
+        showToast(d.error ?? t("Purchase failed", "Échec de l'achat", "فشل الشراء", "La compra falló", "Kauf fehlgeschlagen"), false);
       } else {
         setPurchased(p => [...p, item.id]);
-        showToast(`✅ ${item.name_ar} — تم الشراء!`, true);
+        showToast(`✅ ${lang === "ar" ? item.name_ar : item.name} — ${t("Purchased!", "Acheté !", "تم الشراء!", "¡Comprado!", "Gekauft!")}`, true);
         if (refreshUser) refreshUser();
       }
     } catch {
-      showToast("خطأ في الاتصال", false);
+      showToast(t("Connection error", "Erreur de connexion", "خطأ في الاتصال", "Error de conexión", "Verbindungsfehler"), false);
     } finally {
       setBuying(null);
     }
   };
 
   const CATEGORIES: Record<string, string> = {
-    clothing: lang === "ar" ? "ملابس" : "Clothing",
-    collectible: lang === "ar" ? "تحف" : "Collectibles",
-    digital: lang === "ar" ? "رقمي" : "Digital",
-    bundle: lang === "ar" ? "حزمة" : "Bundle",
+    clothing: t("Clothing", "Vêtements", "ملابس", "Ropa", "Kleidung"),
+    collectible: t("Collectibles", "Objets de collection", "تحف", "Coleccionables", "Sammlerstücke"),
+    digital: t("Digital", "Numérique", "رقمي", "Digital", "Digital"),
+    bundle: t("Bundle", "Pack", "حزمة", "Paquete", "Paket"),
   };
 
   return (
@@ -89,10 +92,10 @@ export default function ShopPage() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, letterSpacing: 3, textTransform: "uppercase" }}>
-                <span style={{ color: GOLD }}>◈</span> {lang === "ar" ? "تجارة الإمبراطورية" : "Empire Shop"}
+                 <span style={{ color: GOLD }}>◈</span> {t("Empire Shop", "Boutique de l'Empire", "تجارة الإمبراطورية", "Tienda del Imperio", "Imperiums-Shop")}
               </h1>
               <p style={{ margin: "4px 0 0", color: "#ffffff50", fontSize: 13 }}>
-                {lang === "ar" ? "أنفق عملات GDNA على منتجات حصرية" : "Spend your GDNA Coins on exclusive items"}
+                 {t("Spend your GDNA Coins on exclusive items", "Dépensez vos pièces GDNA pour des articles exclusifs", "أنفق عملات GDNA على منتجات حصرية", "Gasta tus monedas GDNA en artículos exclusivos", "Gib deine GDNA-Coins für exklusive Artikel aus")}
               </p>
             </div>
             {user && (
@@ -102,8 +105,8 @@ export default function ShopPage() {
                 borderRadius: 20, padding: "8px 18px",
               }}>
                 <span style={{ fontSize: 18 }}>🪙</span>
-                <span style={{ color: GOLD, fontWeight: 900, fontSize: 18 }}>{(user.balance ?? 0).toLocaleString()}</span>
-                <span style={{ color: "#ffffff60", fontSize: 12 }}>GDNA Coins</span>
+                <span style={{ color: GOLD, fontWeight: 900, fontSize: 18 }}>{(user.balance ?? 0).toLocaleString(locale)}</span>
+                 <span style={{ color: "#ffffff60", fontSize: 12 }}>{t("GDNA Coins", "Pièces GDNA", "عملات GDNA", "Monedas GDNA", "GDNA-Coins")}</span>
               </div>
             )}
           </div>
@@ -166,13 +169,13 @@ export default function ShopPage() {
 
                   {/* Info */}
                   <div style={{ padding: "16px" }}>
-                    <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 800 }}>{item.name_ar}</h3>
-                    <p style={{ margin: "0 0 12px", color: "#ffffff50", fontSize: 12 }}>{item.name}</p>
+                    <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 800 }}>{lang === "ar" ? item.name_ar : item.name}</h3>
+                    {lang === "ar" && <p style={{ margin: "0 0 12px", color: "#ffffff50", fontSize: 12 }}>{item.name}</p>}
 
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ fontSize: 16 }}>🪙</span>
-                        <span style={{ color: GOLD, fontWeight: 900, fontSize: 18 }}>{item.price}</span>
+                         <span style={{ color: GOLD, fontWeight: 900, fontSize: 18 }}>{lang === "de" ? item.price.toLocaleString("de-DE") : item.price}</span>
                       </div>
 
                       <button
@@ -190,16 +193,16 @@ export default function ShopPage() {
                         }}>
                         {isLoading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : null}
                         {isPurchased
-                          ? (lang === "ar" ? "✓ مشتراة" : "✓ Owned")
+                           ? `✓ ${t("Owned", "Possédé", "مشتراة", "En propiedad", "Im Besitz")}`
                           : !canAfford
-                          ? (lang === "ar" ? "رصيد غير كافٍ" : "Not enough")
-                          : (lang === "ar" ? "شراء" : "Buy")}
+                            ? t("Not enough", "Solde insuffisant", "رصيد غير كافٍ", "Saldo insuficiente", "Nicht genug")
+                            : t("Buy", "Acheter", "شراء", "Comprar", "Kaufen")}
                       </button>
                     </div>
 
                     {!canAfford && !isPurchased && user && (
                       <p style={{ margin: "8px 0 0", fontSize: 11, color: "hsl(var(--destructive))", textAlign: "center" }}>
-                        {lang === "ar" ? `تحتاج ${item.price - (user.balance ?? 0)} عملة إضافية` : `Need ${item.price - (user.balance ?? 0)} more coins`}
+                         {t(`Need ${item.price - (user.balance ?? 0)} more coins`, `Il vous faut encore ${item.price - (user.balance ?? 0)} pièces`, `تحتاج ${item.price - (user.balance ?? 0)} عملة إضافية`, `Necesitas ${item.price - (user.balance ?? 0)} monedas más`, `Du benötigst noch ${(item.price - (user.balance ?? 0)).toLocaleString(locale)} Coins`)}
                       </p>
                     )}
                   </div>
@@ -212,7 +215,7 @@ export default function ShopPage() {
         {!user && (
           <div style={{ textAlign: "center", padding: "60px 20px", color: "hsl(var(--muted-foreground))" }}>
             <ShoppingBag size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
-            <p style={{ fontSize: 16 }}>{lang === "ar" ? "سجّل دخولك لتتمكن من الشراء" : "Login to make purchases"}</p>
+             <p style={{ fontSize: 16 }}>{t("Login to make purchases", "Connectez-vous pour acheter", "سجّل دخولك لتتمكن من الشراء", "Inicia sesión para comprar", "Melde dich an, um einzukaufen")}</p>
           </div>
         )}
       </div>

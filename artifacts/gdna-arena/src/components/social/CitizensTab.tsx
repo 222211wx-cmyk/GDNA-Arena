@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Search, UserPlus, UserCheck } from "lucide-react";
 import { useLocation } from "wouter";
 import Avatar from "./Avatar";
-import { GOLD, GOLD_A, api } from "./social-i18n";
+import { GOLD, GOLD_A, api, useSocialI18n } from "./social-i18n";
 import { useCallContext } from "../../contexts/CallContext";
 import type { Citizen } from "./social-types";
 
@@ -24,7 +24,8 @@ interface Props {
   st: Record<string, string>;
 }
 
-export default function CitizensTab({ user, st }: Props) {
+export default function CitizensTab({ user }: Props) {
+  const { st, dir, locale } = useSocialI18n();
   const call = useCallContext();
   const [, navigate] = useLocation();
   const [q,         setQ]         = useState("");
@@ -81,16 +82,16 @@ export default function CitizensTab({ user, st }: Props) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div dir={dir} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Search */}
       <div style={{ position: "relative" }}>
-        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#666" }} />
+        <Search size={14} style={{ position: "absolute", insetInlineStart: 12, top: "50%", transform: "translateY(-50%)", color: "#666" }} />
         <input value={q} onChange={e => handleSearch(e.target.value)}
           placeholder={st.search_placeholder}
-          style={{ width: "100%", background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.13)}`, borderRadius: 10, padding: "10px 12px 10px 36px", color: "hsl(var(--foreground))", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+          style={{ width: "100%", background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.13)}`, borderRadius: 10, paddingBlock: 10, paddingInlineStart: 36, paddingInlineEnd: 12, color: "hsl(var(--foreground))", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
       </div>
 
-      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 24 }}>…</div>}
+      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 24 }}>{st.loading}</div>}
       {!loading && citizens.length === 0 && (
         <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 60, fontSize: 14 }}>{st.no_citizens}</div>
       )}
@@ -107,7 +108,7 @@ export default function CitizensTab({ user, st }: Props) {
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <Avatar name={c.username} size={38} />
                   {isOnline && (
-                    <div style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, background: "#22c55e", borderRadius: "50%", border: "2px solid hsl(var(--card))" }} />
+                     <div style={{ position: "absolute", bottom: 1, insetInlineEnd: 1, width: 10, height: 10, background: "#22c55e", borderRadius: "50%", border: "2px solid hsl(var(--card))" }} />
                   )}
                 </div>
                 <div style={{ flex: 1, overflow: "hidden" }}>
@@ -116,8 +117,8 @@ export default function CitizensTab({ user, st }: Props) {
                 </div>
               </div>
               <div style={{ display: "flex", fontSize: 11, color: "#ffffff50", justifyContent: "space-between" }}>
-                <span>⚡ {c.xp.toLocaleString()} {st.xp}</span>
-                <span>🪙 {c.balance.toLocaleString()}</span>
+                <span>⚡ {c.xp.toLocaleString(locale)} {st.xp}</span>
+                <span>🪙 {c.balance.toLocaleString(locale)}</span>
               </div>
               {!isMe && (
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -127,13 +128,13 @@ export default function CitizensTab({ user, st }: Props) {
                       color: isFollowing ? GOLD : "hsl(var(--primary-foreground))",
                       border: isFollowing ? `1px solid ${GOLD_A(0.25)}` : "none" }}>
                     {isFollowing
-                      ? <><UserCheck size={11} style={{ display: "inline", marginRight: 3 }} />{st.following}</>
-                      : <><UserPlus  size={11} style={{ display: "inline", marginRight: 3 }} />{st.follow}</>
+                      ? <><UserCheck size={11} style={{ display: "inline", marginInlineEnd: 3 }} />{st.following}</>
+                      : <><UserPlus  size={11} style={{ display: "inline", marginInlineEnd: 3 }} />{st.follow}</>
                     }
                   </button>
                   {user && (
                     <>
-                      <CallBtn icon="💬" title="رسالة" onClick={() => openDM(c.username)} color={GOLD} />
+                       <CallBtn icon="💬" title={st.message_citizen} onClick={() => openDM(c.username)} color={GOLD} />
                       <CallBtn icon="📞" title={st.voice_call} onClick={() => call.startCall(c.username, false)} color="#22c55e" />
                       <CallBtn icon="🎥" title={st.video_call} onClick={() => call.startCall(c.username, true)}  color="#3b82f6" />
                     </>
@@ -141,7 +142,7 @@ export default function CitizensTab({ user, st }: Props) {
                 </div>
               )}
               {isMe && (
-                <p style={{ margin: 0, fontSize: 11, color: "#ffffff30", textAlign: "center" }}>{st.my_profile ?? "My Profile"}</p>
+                <p style={{ margin: 0, fontSize: 11, color: "#ffffff30", textAlign: "center" }}>{st.my_profile}</p>
               )}
             </motion.div>
           );

@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { Search, Trophy, Users, FileText, Calendar, Loader2, Star } from "lucide-react";
 import { getLegendImageUrl } from "@/lib/legend-images";
+import { useLang } from "@/contexts/LangContext";
+import { coreCopy } from "@/i18n/core-auth-copy";
+import { localeForLang } from "@/i18n/locale-surfaces-a-copy";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -61,6 +64,9 @@ const DOMAIN_EMOJI: Record<string, string> = {
 if (false) {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 function DiscardSearchPage() {
+  const { lang } = useLang();
+  const copy = coreCopy(lang);
+  const locale = localeForLang(lang);
   const [location] = useLocation();
   const params = new URLSearchParams(window.location.search);
   const initialQuery = params.get("q") || "";
@@ -98,13 +104,13 @@ function DiscardSearchPage() {
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
-          setError("Search failed. Please try again.");
+          setError(copy.searchFailed);
           setLoading(false);
         }
       });
 
     return () => controller.abort();
-  }, [query]);
+  }, [query, copy.searchFailed]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,9 +129,9 @@ function DiscardSearchPage() {
       <div className="border-b border-yellow-500/20 bg-gray-950/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <h1 className="text-2xl font-black uppercase tracking-widest text-yellow-400 mb-1 flex items-center gap-2">
-            <Search size={22} /> Empire Search
+            <Search size={22} /> {copy.searchTitle}
           </h1>
-          <p className="text-gray-500 text-sm mb-5">Search legends, citizens, posts and events across the entire empire</p>
+          <p className="text-gray-500 text-sm mb-5">{copy.searchSubtitle}</p>
 
           <form onSubmit={handleSubmit} className="relative">
             <div className="flex items-center bg-gray-900 border border-gray-700 rounded-2xl px-5 py-3.5 gap-3 focus-within:border-yellow-400/60 transition-all shadow-xl">
@@ -135,7 +141,7 @@ function DiscardSearchPage() {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="CR7, Messi, Empire, FIFA, music..."
+                placeholder={copy.searchPlaceholder}
                 className="bg-transparent outline-none text-white text-base flex-1 placeholder:text-gray-600"
               />
               {loading && <Loader2 size={16} className="text-yellow-400 animate-spin shrink-0" />}
@@ -143,7 +149,7 @@ function DiscardSearchPage() {
                 type="submit"
                 className="px-4 py-1.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/40 rounded-xl text-sm font-bold hover:bg-yellow-400 hover:text-black transition-all"
               >
-                Search
+                {copy.search}
               </button>
             </div>
           </form>
@@ -151,8 +157,8 @@ function DiscardSearchPage() {
           {results && !loading && (
             <p className="text-gray-500 text-xs mt-3">
               {isEmpty
-                ? `No results for "${query}"`
-                : `${totalResults} result${totalResults !== 1 ? "s" : ""} for "${query}"`}
+                ? `${copy.noResultsFor} "${query}"`
+                : `${totalResults} ${copy.result}${totalResults !== 1 && copy.result === "result" ? "s" : ""} ${lang === "ar" ? `لـ "${query}"` : `for "${query}"`}`}
             </p>
           )}
         </div>
@@ -168,16 +174,16 @@ function DiscardSearchPage() {
         {!query && !loading && (
           <div className="text-center py-20 text-gray-600">
             <Search size={48} className="mx-auto mb-4 opacity-20" />
-            <p className="text-lg font-semibold">Start typing to search the empire</p>
-            <p className="text-sm mt-2">Find legends, citizens, posts, and events</p>
+            <p className="text-lg font-semibold">{copy.startSearch}</p>
+            <p className="text-sm mt-2">{copy.findSearch}</p>
           </div>
         )}
 
         {isEmpty && !loading && (
           <div className="text-center py-20 text-gray-600">
             <Search size={48} className="mx-auto mb-4 opacity-20" />
-            <p className="text-lg font-semibold">No results found</p>
-            <p className="text-sm mt-2">Try different keywords or check spelling</p>
+            <p className="text-lg font-semibold">{copy.noResults}</p>
+            <p className="text-sm mt-2">{copy.tryKeywords}</p>
           </div>
         )}
 
@@ -227,7 +233,7 @@ function DiscardSearchPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-bold text-white group-hover:text-cyan-400 transition-colors truncate">@{cit.username}</p>
-                      <p className="text-xs text-gray-500">{(cit.xp ?? 0).toLocaleString()} XP · {(cit.balance ?? 0).toLocaleString()} 🪙</p>
+                      <p className="text-xs text-gray-500">{(cit.xp ?? 0).toLocaleString(locale)} XP · {(cit.balance ?? 0).toLocaleString(locale)} 🪙</p>
                     </div>
                   </div>
                 </Link>
@@ -271,12 +277,12 @@ function DiscardSearchPage() {
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-white group-hover:text-green-400 transition-colors truncate text-sm">{evt.title}</p>
                         {evt.is_live && (
-                          <span className="shrink-0 text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded uppercase animate-pulse">LIVE</span>
+                           <span className="shrink-0 text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded uppercase animate-pulse">{copy.live}</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-500 truncate">
                         {evt.location ? `📍 ${evt.location} · ` : ""}
-                        {evt.event_date ? new Date(evt.event_date).toLocaleDateString() : ""}
+                        {evt.event_date ? new Date(evt.event_date).toLocaleDateString(locale) : ""}
                       </p>
                     </div>
                   </div>
@@ -291,6 +297,9 @@ function DiscardSearchPage() {
 }
 }
 export default function SearchPage() {
+  const { lang } = useLang();
+  const copy = coreCopy(lang);
+  const locale = localeForLang(lang);
   const [location] = useLocation();
   const params = new URLSearchParams(window.location.search);
   const initialQuery = params.get("q") || "";
@@ -328,13 +337,13 @@ export default function SearchPage() {
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
-          setError("Search failed. Please try again.");
+          setError(copy.searchFailed);
           setLoading(false);
         }
       });
 
     return () => controller.abort();
-  }, [query]);
+  }, [query, copy.searchFailed]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -353,9 +362,9 @@ export default function SearchPage() {
       <div className="border-b border-primary/20 bg-card/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <h1 className="text-2xl font-black uppercase tracking-widest text-primary mb-1 flex items-center gap-2">
-            <Search size={22} /> Empire Search
+            <Search size={22} /> {copy.searchTitle}
           </h1>
-          <p className="text-muted-foreground text-sm mb-5">Search legends, citizens, posts and events across the entire empire</p>
+          <p className="text-muted-foreground text-sm mb-5">{copy.searchSubtitle}</p>
 
           <form onSubmit={handleSubmit} className="relative">
             <div className="flex items-center bg-card border border-border rounded-2xl px-5 py-3.5 gap-3 focus-within:border-primary/60 transition-all shadow-xl">
@@ -365,7 +374,7 @@ export default function SearchPage() {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="CR7, Messi, Empire, FIFA, music..."
+                placeholder={copy.searchPlaceholder}
                 className="bg-transparent outline-none text-foreground text-base flex-1 placeholder:text-muted-foreground"
               />
               {loading && <Loader2 size={16} className="text-primary animate-spin shrink-0" />}
@@ -373,7 +382,7 @@ export default function SearchPage() {
                 type="submit"
                 className="px-4 py-1.5 bg-primary/10 text-primary border border-primary/40 rounded-xl text-sm font-bold hover:bg-primary hover:text-primary-foreground transition-all"
               >
-                Search
+                {copy.search}
               </button>
             </div>
           </form>
@@ -381,8 +390,8 @@ export default function SearchPage() {
           {results && !loading && (
             <p className="text-muted-foreground text-xs mt-3">
               {isEmpty
-                ? `No results for "${query}"`
-                : `${totalResults} result${totalResults !== 1 ? "s" : ""} for "${query}"`}
+                ? `${copy.noResultsFor} "${query}"`
+                : `${totalResults} ${copy.result}${totalResults !== 1 && lang !== "ar" ? "s" : ""} ${lang === "ar" ? `لـ "${query}"` : `for "${query}"`}`}
             </p>
           )}
         </div>
@@ -398,23 +407,23 @@ export default function SearchPage() {
         {!query && !loading && (
           <div className="text-center py-20 text-muted-foreground">
             <Search size={48} className="mx-auto mb-4 opacity-20" />
-            <p className="text-lg font-semibold">Start typing to search the empire</p>
-            <p className="text-sm mt-2">Find legends, citizens, posts, and events</p>
+            <p className="text-lg font-semibold">{copy.startSearch}</p>
+            <p className="text-sm mt-2">{copy.findSearch}</p>
           </div>
         )}
 
         {isEmpty && !loading && (
           <div className="text-center py-20 text-muted-foreground">
             <Search size={48} className="mx-auto mb-4 opacity-20" />
-            <p className="text-lg font-semibold">No results found</p>
-            <p className="text-sm mt-2">Try different keywords or check spelling</p>
+            <p className="text-lg font-semibold">{copy.noResults}</p>
+            <p className="text-sm mt-2">{copy.tryKeywords}</p>
           </div>
         )}
 
         {/* ── Legends ── */}
         {results && results.legends.length > 0 && (
           <section>
-            <SectionHeader icon={<Trophy size={16} className="text-primary" />} label="Legends" count={results.legends.length} />
+            <SectionHeader icon={<Trophy size={16} className="text-primary" />} label={copy.legends} count={results.legends.length} resultLabel={copy.result} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               {results.legends.map((leg) => {
                 const imageUrl = getLegendImageUrl(leg.name, leg.image_url);
@@ -433,7 +442,7 @@ export default function SearchPage() {
                         <p className="text-xs text-muted-foreground truncate">
                           {DOMAIN_EMOJI[leg.domain] ?? "🌐"} {leg.domain}
                           {leg.nationality ? ` · ${leg.nationality}` : ""}
-                          {leg.rank ? ` · Rank #${leg.rank}` : ""}
+                          {leg.rank ? ` · ${copy.rank} #${leg.rank}` : ""}
                         </p>
                       </div>
                     </div>
@@ -447,7 +456,7 @@ export default function SearchPage() {
         {/* ── Citizens ── */}
         {results && results.citizens.length > 0 && (
           <section>
-            <SectionHeader icon={<Users size={16} className="text-accent" />} label="Citizens" count={results.citizens.length} />
+            <SectionHeader icon={<Users size={16} className="text-accent" />} label={copy.citizens} count={results.citizens.length} resultLabel={copy.result} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               {results.citizens.map((cit) => (
                 <Link key={cit.id} href={`/citizen/${cit.username}`}>
@@ -457,7 +466,7 @@ export default function SearchPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-bold text-foreground group-hover:text-accent transition-colors truncate">@{cit.username}</p>
-                      <p className="text-xs text-muted-foreground">{(cit.xp ?? 0).toLocaleString()} XP · {(cit.balance ?? 0).toLocaleString()} 🪙</p>
+                      <p className="text-xs text-muted-foreground">{(cit.xp ?? 0).toLocaleString(locale)} XP · {(cit.balance ?? 0).toLocaleString(locale)} 🪙</p>
                     </div>
                   </div>
                 </Link>
@@ -469,13 +478,13 @@ export default function SearchPage() {
         {/* ── Posts ── */}
         {results && results.posts.length > 0 && (
           <section>
-            <SectionHeader icon={<FileText size={16} className="text-purple-400" />} label="Posts" count={results.posts.length} />
+            <SectionHeader icon={<FileText size={16} className="text-purple-400" />} label={copy.posts} count={results.posts.length} resultLabel={copy.result} />
             <div className="space-y-3 mt-4">
               {results.posts.map((post) => (
                 <Link key={post.id} href="/pulse">
                   <div className="p-4 bg-card/60 border border-border rounded-xl hover:border-purple-400/40 hover:bg-card transition-all cursor-pointer group">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-bold text-purple-400">@{post.username || "anonymous"}</span>
+                      <span className="text-xs font-bold text-purple-400">@{post.username || copy.anonymous}</span>
                       <span className="text-xs text-muted-foreground">·</span>
                       <span className="text-xs text-muted-foreground">{DOMAIN_EMOJI[post.domain] ?? "🌐"} {post.domain}</span>
                       <span className="text-xs text-muted-foreground ml-auto">❤️ {post.likes ?? 0}</span>
@@ -491,7 +500,7 @@ export default function SearchPage() {
         {/* ── Events ── */}
         {results && results.events.length > 0 && (
           <section>
-            <SectionHeader icon={<Calendar size={16} className="text-green-400" />} label="Events" count={results.events.length} />
+            <SectionHeader icon={<Calendar size={16} className="text-green-400" />} label={copy.events} count={results.events.length} resultLabel={copy.result} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               {results.events.map((evt) => (
                 <Link key={evt.id} href="/pulse">
@@ -501,12 +510,12 @@ export default function SearchPage() {
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-foreground group-hover:text-green-400 transition-colors truncate text-sm">{evt.title}</p>
                         {evt.is_live && (
-                          <span className="shrink-0 text-[10px] font-black bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded uppercase animate-pulse">LIVE</span>
+                          <span className="shrink-0 text-[10px] font-black bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded uppercase animate-pulse">{copy.live}</span>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
                         {evt.location ? `📍 ${evt.location} · ` : ""}
-                        {evt.event_date ? new Date(evt.event_date).toLocaleDateString() : ""}
+                        {evt.event_date ? new Date(evt.event_date).toLocaleDateString(locale) : ""}
                       </p>
                     </div>
                   </div>
@@ -520,12 +529,12 @@ export default function SearchPage() {
   );
 }
 
-function SectionHeader({ icon, label, count }: { icon: React.ReactNode; label: string; count: number }) {
+function SectionHeader({ icon, label, count, resultLabel = "result" }: { icon: React.ReactNode; label: string; count: number; resultLabel?: string }) {
   return (
     <div className="flex items-center gap-2 pb-2 border-b border-border">
       {icon}
       <h2 className="text-sm font-black uppercase tracking-widest text-foreground/80">{label}</h2>
-      <span className="ml-auto text-xs text-muted-foreground font-medium">{count} result{count !== 1 ? "s" : ""}</span>
+      <span className="ml-auto text-xs text-muted-foreground font-medium">{count} {resultLabel}{count !== 1 && resultLabel === "result" ? "s" : ""}</span>
     </div>
   );
 }
