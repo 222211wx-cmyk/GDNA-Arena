@@ -87,6 +87,10 @@ test("a guest can view only the public fields of an initiated Archon profile", a
   ]);
   assert.equal(body.imperial_decree, undefined);
   assert.equal(body.shadow_mission, undefined);
+  assert.equal(body["30_day_protocol"], undefined);
+  assert.equal(body["90_day_expansion"], undefined);
+  assert.equal(body["1_year_sovereignty"], undefined);
+  assert.equal(body.daily_directive, undefined);
   assert.equal(body.answers, undefined);
 });
 

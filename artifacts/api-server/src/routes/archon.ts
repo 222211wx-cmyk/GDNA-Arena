@@ -235,15 +235,6 @@ router.get("/archon/profile/:username", async (req, res): Promise<void> => {
   const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
   const fullAiProfile = session.aiProfile as Record<string, string> | null ?? {};
 
-  if (!req.session?.userId) {
-    res.json({
-      locked: true,
-      username,
-      archetype: session.archetype,
-    });
-    return;
-  }
-
   // Return only the public-facing fields — no decrees, protocols, missions, or personal content
   res.json({
     archonCode:  session.archonCode,
