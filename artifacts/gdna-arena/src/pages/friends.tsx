@@ -316,7 +316,7 @@ export default function FriendsPage() {
                         label={s.invited ? "مراسلة" : "استضافة"}
                         color={s.invited ? GREEN : "#000"}
                         bg={s.invited ? "#071a07" : GOLD}
-                        border={s.invited ? `1px solid ${GREEN}50` : `1px solid ${GOLD}`}
+                        border={s.invited ? `1px solid ${GREEN}50` : "1px solid hsl(var(--primary))"}
                         onClick={() => void inviteStar(s)}
                         disabled={invitingStar !== null || (!s.invited && starQuota.remaining <= 0)} />
                     </motion.div>

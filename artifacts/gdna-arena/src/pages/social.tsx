@@ -152,7 +152,7 @@ export default function SocialPage() {
                   fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", transition: "all 0.2s",
                   background: tab === t.id ? GOLD_A(0.13) : "transparent",
                   color:      tab === t.id ? GOLD : "#ffffff45",
-                  borderBottom: tab === t.id ? `2px solid ${GOLD}` : "2px solid transparent",
+                  borderBottom: tab === t.id ? "2px solid hsl(var(--primary))" : "2px solid transparent",
                 }}>
                 {t.icon}{t.label}
               </button>

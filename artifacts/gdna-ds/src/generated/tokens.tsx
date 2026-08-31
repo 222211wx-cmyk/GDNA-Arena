@@ -12,7 +12,7 @@ export const tokens = {
       "cardForeground": "#17130d",
       "popover": "#ffffff",
       "popoverForeground": "#17130d",
-      "primary": "#a67c2e",
+      "primary": "#d4af37",
       "primaryForeground": "#ffffff",
       "secondary": "#f3edda",
       "secondaryForeground": "#17130d",
@@ -23,8 +23,8 @@ export const tokens = {
       "destructive": "#dc2626",
       "destructiveForeground": "#ffffff",
       "input": "#e6dcc3",
-      "ring": "#a67c2e",
-      "chart1": "#a67c2e",
+      "ring": "#d4af37",
+      "chart1": "#d4af37",
       "chart2": "#0891b2",
       "chart3": "#16a34a",
       "chart4": "#9333ea",
@@ -32,11 +32,11 @@ export const tokens = {
       "sidebar": "#f6f1e3",
       "sidebarForeground": "#3d3421",
       "sidebarBorder": "#e6dcc3",
-      "sidebarPrimary": "#a67c2e",
+      "sidebarPrimary": "#d4af37",
       "sidebarPrimaryForeground": "#ffffff",
       "sidebarAccent": "#ece2c8",
       "sidebarAccentForeground": "#17130d",
-      "sidebarRing": "#a67c2e"
+      "sidebarRing": "#d4af37"
     },
     "dark": {
       "background": "#000000",
@@ -46,7 +46,7 @@ export const tokens = {
       "cardForeground": "#ffffff",
       "popover": "#0d0d0d",
       "popoverForeground": "#ffffff",
-      "primary": "#c9a84c",
+      "primary": "#d4af37",
       "primaryForeground": "#000000",
       "secondary": "#1a1a1a",
       "secondaryForeground": "#ffffff",
@@ -57,8 +57,8 @@ export const tokens = {
       "destructive": "#ef4444",
       "destructiveForeground": "#ffffff",
       "input": "#3d3421",
-      "ring": "#c9a84c",
-      "chart1": "#c9a84c",
+      "ring": "#d4af37",
+      "chart1": "#d4af37",
       "chart2": "#00d4ff",
       "chart3": "#25d366",
       "chart4": "#a855f7",
@@ -66,11 +66,11 @@ export const tokens = {
       "sidebar": "#0d0d0d",
       "sidebarForeground": "#ffffff",
       "sidebarBorder": "#3d3421",
-      "sidebarPrimary": "#c9a84c",
+      "sidebarPrimary": "#d4af37",
       "sidebarPrimaryForeground": "#000000",
       "sidebarAccent": "#1f1a10",
       "sidebarAccentForeground": "#e7ce8b",
-      "sidebarRing": "#c9a84c"
+      "sidebarRing": "#d4af37"
     }
   },
   "fontFamily": {

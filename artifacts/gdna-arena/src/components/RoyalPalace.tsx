@@ -127,9 +127,9 @@ export default function RoyalPalace() {
 
   return (
     <div dir="rtl" className="palace rounded-[15px] p-5 mt-5 space-y-4"
-      style={{ background: "#0f172a", border: "2px solid #25D366" }}>
+      style={{ background: "hsl(var(--card))", border: "2px solid hsl(var(--primary))" }}>
       <h3 className="flex items-center justify-center gap-2 font-black text-lg md:text-xl text-center"
-        style={{ color: "#25D366", fontFamily: "'Orbitron', 'Inter', sans-serif" }}>
+        style={{ color: "hsl(var(--primary))", fontFamily: "'Orbitron', 'Inter', sans-serif" }}>
         <Crown className="w-5 h-5" />
         🏛️ قصر استشارة الحاكم Ameeq
       </h3>
@@ -141,7 +141,7 @@ export default function RoyalPalace() {
             onClick={() => consultGovernor(topic)}
             disabled={loadingId !== null}
             className="royal-btn text-white font-bold text-sm rounded-[10px] p-3 m-1 w-[48%] disabled:opacity-50"
-            style={{ background: "linear-gradient(90deg, #25D366, #008575)", border: "none" }}
+            style={{ background: "linear-gradient(90deg, hsl(var(--primary)), #ffc107)", border: "none", color: "#000" }}
           >
             {loadingId === topic.id ? (
               <span className="flex items-center justify-center gap-2">
@@ -162,15 +162,15 @@ export default function RoyalPalace() {
           disabled={loadingId !== null || listening}
           className="text-2xl rounded-full w-14 h-14 transition-all duration-300 disabled:opacity-50"
           style={{
-            background: listening ? "#2ecc71" : "#1e293b",
-            border: "2px solid #25D366",
-            boxShadow: listening ? "0 0 15px #25D366" : "none",
+            background: listening ? "hsl(var(--primary))" : "#1e293b",
+            border: "2px solid hsl(var(--primary))",
+            boxShadow: listening ? "0 0 15px hsl(var(--primary))" : "none",
           }}
           title="تكلم مع الحاكم"
         >
           {listening ? <span className="animate-pulse">🎙️</span> : "🎙️"}
         </button>
-        {listening && <div className="text-xs mt-2" style={{ color: "#25D366" }}>كنسمع ليك... تكلم دابا</div>}
+        {listening && <div className="text-xs mt-2" style={{ color: "hsl(var(--primary))" }}>كنسمع ليك... تكلم دابا</div>}
       </div>
 
       <AnimatePresence>
@@ -196,12 +196,12 @@ export default function RoyalPalace() {
       {/* 📜 سجل الاستشارات السابقة */}
       {history.length > 0 && (
         <div id="historyBox" dir="rtl" style={{ marginTop: 15, textAlign: "right", fontSize: 12, color: "#aaa" }}>
-          <h4 className="font-bold mb-2" style={{ color: "#25D366" }}>📜 سجل الاستشارات السابقة</h4>
+          <h4 className="font-bold mb-2" style={{ color: "hsl(var(--primary))" }}>📜 سجل الاستشارات السابقة</h4>
           <div id="historyList" className="space-y-2">
             {history.map((h, i) => (
               <details key={i} className="rounded-lg p-2" style={{ background: "#1a2332" }}>
                 <summary className="cursor-pointer">
-                  <span style={{ color: "#25D366" }}>{h.topic}</span>
+                  <span style={{ color: "hsl(var(--primary))" }}>{h.topic}</span>
                   <span className="mr-2 opacity-60"> — {h.date}</span>
                 </summary>
                 <div className="msg-ai mt-2 p-2 rounded-lg whitespace-pre-wrap text-white/80">{h.reply}</div>

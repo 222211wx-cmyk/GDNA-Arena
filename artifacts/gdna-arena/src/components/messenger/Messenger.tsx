@@ -1,11 +1,11 @@
 /**
- * Messenger — AMIS unified messenger, WhatsApp-style layout (single source of truth)
+ * Messenger — AMIS unified messenger (single source of truth)
  * Variants:
- *  - "full"     → /messages page (WhatsApp-like app: bottom tabs + full-page chat)
+ *  - "full"     → /messages page (bottom tabs + full-page chat)
  *  - "embedded" → Social Hub messages tab
  *  - "widget"   → CommHub floating panel
  * Structure:
- *  - 4 fixed WhatsApp-style destinations: Chats | Calls | Communities | Settings
+ *  - 4 fixed destinations: Chats | Calls | Communities | Settings
  *    (tap a destination, or make one deliberate horizontal swipe, to move to the
  *     adjacent destination). Solidarity Relay lives INSIDE Communities.
  *  - Chat = full page: header (avatar+name+call) / messages with date separators /
@@ -802,7 +802,7 @@ const EMOJI_GROUPS: [string, string[]][] = [
   ["⚽", ["⚽","🏀","🎾","🏐","🎮","🕹️","🎲","♟️","🎵","🎶","🎤","🎧","🎸","🥁","🎬","🎥","📸","🍕","🍔","🌮","🍩","☕","🍵","🥤","🚗","✈️","⏰","📱","💻","📚"]],
 ];
 
-// Four WhatsApp-style destinations, in fixed left-to-right order.
+// Four messenger destinations, in fixed left-to-right order.
 // Swiping horizontally moves between adjacent destinations in this order.
 type BottomTab = "chats" | "calls" | "communities" | "settings";
 

@@ -153,16 +153,14 @@
   100% { transform: translateX(-33.33%); }
 }
 
-/* ── Deliberate brand flourish: WhatsApp identity green ─────────────────────
-   #25D366 and nearby hover shades are retained only for WhatsApp/chat actions. */
 /* [GDNA Arena] - إفكتات القصر الملكي */
-.msg-you:hover { background: #008575; transform: translateX(-3px); }
+.msg-you:hover { background: hsl(var(--primary) / 0.2); transform: translateX(-3px); }
 .msg-ai:hover { background: #2a3a48; transform: translateX(3px); }
-.chat-box img:hover { transform: scale(1.1); border: 2px solid #25D366; }
+.chat-box img:hover { transform: scale(1.1); border: 2px solid hsl(var(--primary)); }
 .chat-box, .msg-you, .msg-ai { transition: all 0.3s ease-in-out; }
-#micBtn:hover { background: #2ecc71; box-shadow: 0 0 10px #25D366; }
+#micBtn:hover { background: hsl(var(--primary)); box-shadow: 0 0 10px hsl(var(--primary)); }
 .royal-btn { transition: all 0.3s ease-in-out; }
-.royal-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 0 15px #25D366; }
+.royal-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 0 15px hsl(var(--primary)); }
 
 /* [Arena Qaisypro] - هيبة الإمبراطورية للموبايل */
 @media (max-width: 768px) {
@@ -179,7 +177,7 @@
   }
   .hero-sub {
     font-size: 14px !important; /* الوصف يصغر باش العنوان يبان هو الملك */
-    color: #25D366 !important; /* أخضر GDNA للهوية */
+    color: hsl(var(--primary)) !important;
     margin-bottom: 25px !important;
   }
   .royal-btn {
@@ -191,7 +189,7 @@
   }
   .palace {
     margin: 30px 10px !important;
-    border: 1px solid #25D366 !important; /* إطار أخضر رقيق أنيق */
+    border: 1px solid hsl(var(--primary)) !important;
   }
 }
 

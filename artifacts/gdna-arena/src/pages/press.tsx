@@ -96,7 +96,7 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
         initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
         onClick={e => e.stopPropagation()}>
         {/* Gold bar */}
-        <div style={{ height: 3, background: `linear-gradient(90deg,${GOLD},#FFA500,${GOLD})` }} />
+        <div style={{ height: 3, background: "linear-gradient(90deg,hsl(var(--primary)),#FFA500,hsl(var(--primary)))" }} />
 
         {/* Header */}
         <div className="flex items-center gap-3 px-6 pt-5 pb-4">
@@ -197,7 +197,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       className="rounded-2xl overflow-hidden" style={goldBox}>
-      <div style={{ height: 2, background: `linear-gradient(90deg,${GOLD},transparent)` }} />
+      <div style={{ height: 2, background: "linear-gradient(90deg,hsl(var(--primary)),transparent)" }} />
 
       {/* Video embed */}
       {ytId && (
@@ -429,7 +429,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
 
   return (
     <div className="rounded-2xl overflow-hidden" style={goldBox}>
-      <div style={{ height: 2, background: `linear-gradient(90deg,#a78bfa,${GOLD})` }} />
+      <div style={{ height: 2, background: "linear-gradient(90deg,#a78bfa,hsl(var(--primary)))" }} />
       <div className="p-5" dir="rtl">
         <div className="flex items-center gap-2 mb-3">
           <Smile className="w-4 h-4" style={{ color: "#a78bfa" }} />

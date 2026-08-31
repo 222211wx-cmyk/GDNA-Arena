@@ -333,10 +333,6 @@ export default function InvitePage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const shareWhatsApp = () => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
-  };
-
   const selectedField = FIELDS.find(f => f.key === field)!;
   const isRTL = lang === "ar";
 
@@ -488,18 +484,13 @@ export default function InvitePage() {
         </AnimatePresence>
 
         {/* ── Action buttons ── */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3">
           <button onClick={copyMessage}
             className="flex items-center justify-center gap-2 py-3.5 text-sm font-black uppercase tracking-wider transition-all active:scale-95"
             style={{ background: "#C9A84C", color: "#000" }}>
             {copied
               ? <><Check className="w-4 h-4" /> تم النسخ!</>
               : <><Copy className="w-4 h-4" /> نسخ الرسالة</>}
-          </button>
-          <button onClick={shareWhatsApp}
-            className="flex items-center justify-center gap-2 py-3.5 text-sm font-black uppercase tracking-wider transition-all active:scale-95"
-            style={{ background: "#25D366", color: "#000" }}>
-            مشاركة عبر واتساب
           </button>
         </div>
 
