@@ -560,7 +560,9 @@ export default function Games() {
                     <div className="flex justify-between text-xs uppercase tracking-wider">
                       <span className="text-muted-foreground flex items-center gap-1"><Coins className="w-3 h-3" /> Reward</span>
                       <span className="font-bold" style={{ color: game.color }}>
-                        {"isKing" in game && game.isKing ? `${game.minReward}–${game.maxReward} XP` : `${game.minReward}–${game.maxReward} coins`}
+                        {"isKing" in game && game.isKing
+                          ? `${game.minReward}–${game.maxReward} XP + نقاط دوري الملوك`
+                          : `${game.minReward}–${game.maxReward} coins`}
                       </span>
                     </div>
                     {game.isTournament ? (
