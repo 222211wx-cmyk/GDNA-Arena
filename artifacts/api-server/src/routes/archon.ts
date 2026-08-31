@@ -289,28 +289,29 @@ Example tone: "Today: earn 100 points in the Arena of Legends to claim the weekl
       response_format: { type: "json_object" },
     });
     const data = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
-    await db.insert(archonDirectivesTable).values({
-      userId: req.session.userId, dimension, directive: data.directive ?? "Execute silence for 10 minutes.",
-    });
-    res.json(data);
-  } catch {
-    res.json({ directive: `CLASSIFIED: Focus ${dimension} protocol — 15 minutes of deliberate practice, no distractions.`, duration: "15 min", intensity: "HIGH" });
-  }
-});
 
-// ── Daily dashboard directive — resets at 00:00 Africa/Casablanca ─────────────
-router.get("/archon/daily-directive", async (req, res): Promise<void> => {
-  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+    const [saved] = await db.insert(archonDirectivesTable).values({
+      userId: req.session.userId, dimension, directive: fallbackDirective,
+    }).returning();
 
+    const [saved] = await db.insert(archonDirectivesTable).values({
+      userId: req.session.userId, dimension, directive: fallbackDirective,
+    }).returning();
   const userId = req.session.userId;
   const dateKey = moroccoDateKey();
   const result = await pool.query(
-    `UPDATE archon_directives
-        SET completed=true
+    `UPDATE archon_directives SET completed=true
       WHERE id=$1 AND user_id=$2
       RETURNING id, completed`,
     [directiveId, req.session.userId],
   );
+
+  const adminResult = await pool.query<{ is_admin: boolean }>(
+    `SELECT is_admin FROM users WHERE id=$1`,
+    [req.session.userId],
+  );
+
+  const acknowledgedCount = result.rows.filter(citizen => citizen.acknowledged).length;
 
   if (!result.rows[0]) {
     result = await pool.query(
@@ -326,18 +327,24 @@ router.get("/archon/daily-directive", async (req, res): Promise<void> => {
 
 router.post("/archon/daily-directive/:id/acknowledge", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
-  const directiveId = Number(req.params.id);
+  const directiveId = Number(rawId);
   if (!Number.isInteger(directiveId) || directiveId <= 0) {
-    res.status(400).json({ error: "Invalid directive" }); return;
+    res.status(400).json({ error: "Invalid directive" });
+    return;
   }
-
   const result = await pool.query(
-    `UPDATE archon_directives
-        SET completed=true
+    `UPDATE archon_directives SET completed=true
       WHERE id=$1 AND user_id=$2
       RETURNING id, completed`,
     [directiveId, req.session.userId],
   );
+
+  const adminResult = await pool.query<{ is_admin: boolean }>(
+    `SELECT is_admin FROM users WHERE id=$1`,
+    [req.session.userId],
+  );
+
+  const acknowledgedCount = result.rows.filter(citizen => citizen.acknowledged).length;
   if (!result.rows[0]) { res.status(404).json({ error: "Directive not found" }); return; }
   res.json({ directive: result.rows[0] });
 });
@@ -421,13 +428,11 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
 
   const pillarIdx = VALID_PILLARS.indexOf(pillar); // 0–3
   const advisoryKey = userId * 4 + pillarIdx; // fits in int32 range for typical user IDs
-  const client = pool ? await pool.connect() : null;
-  if (!client) { res.status(503).json({ error: "Database unavailable" }); return; }
+  const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [advisoryKey]);
-
     const { rows: yRows } = await client.query<{ streak: number }>(
       `SELECT streak FROM pillar_completions WHERE user_id=$1 AND pillar=$2 AND date_key=$3 LIMIT 1`,
       [userId, pillar, yesterdayKey],
@@ -489,3 +494,9 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
 });
 
 export default router;
+
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const fallbackDirective = `CLASSIFIED: Focus ${dimension} protocol — 15 minutes of deliberate practice, no distractions.`;
+
+  const totalCitizens = result.rows.length;

@@ -2,11 +2,11 @@ import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
-import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown, ScrollText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 import { useEffect, useState } from "react";
+import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown, ScrollText, Users, ShieldCheck } from "lucide-react";
 
 type DailyArchonDirective = {
   id: number;
@@ -81,7 +81,11 @@ function DailyArchonDirectiveCard() {
   );
 }
 
-// ── GDN-SMART Widget ───────────────────────────────────────────────────────────
+type DirectiveAcknowledgementCitizen = {
+  id: number;
+  username: string;
+  acknowledged: boolean;
+};
 function SmartWidget() {
   const [, nav] = useLocation();
   const [smartData, setSmartData] = useState<{
@@ -860,6 +864,9 @@ export default function Dashboard() {
       {/* ── Imperial Council Reports (admins only) ───────────────────── */}
       {user.isAdmin && <CouncilReportsWidget />}
 
+      {/* ── Today's Archon directive acknowledgements (admins only) ──── */}
+      {user.isAdmin && <ArchonAcknowledgementsWidget />}
+
       {/* ── Archon Empire Identity ────────────────────────────────────── */}
       <ArchonIdentityWidget />
 
@@ -993,3 +1000,141 @@ function ChangePasswordForm() {
     </form>
   );
 }
+
+function ArchonAcknowledgementsWidget() {
+  const [data, setData] = useState<DirectiveAcknowledgements | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/archon/daily-directive/acknowledgements", {
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then(async response => {
+        if (!response.ok) throw new Error("Acknowledgements unavailable");
+        return response.json() as Promise<DirectiveAcknowledgements>;
+      })
+      .then(setData)
+      .catch(requestError => {
+        if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+        setError(true);
+      })
+      .finally(() => setLoading(false));
+
+    return () => controller.abort();
+  }, []);
+
+  const acknowledged = data?.citizens.filter(citizen => citizen.acknowledged) ?? [];
+  const pending = data?.citizens.filter(citizen => !citizen.acknowledged) ?? [];
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      aria-labelledby="archon-acknowledgements-title"
+      data-testid="archon-acknowledgements"
+    >
+      <Card className="overflow-hidden border-primary/30 bg-card/50">
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
+                <ShieldCheck className="size-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 id="archon-acknowledgements-title" className="font-black text-foreground">
+                    ARCHON DIRECTIVE ACKNOWLEDGEMENTS
+                  </h2>
+                  <span className="rounded border border-primary/30 px-2 py-0.5 text-[10px] font-bold tracking-widest text-primary">
+                    ADMIN ONLY
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Today in Africa/Casablanca · {data?.dateKey ?? "—"}
+                </p>
+              </div>
+            </div>
+
+            {data && (
+              <div className="flex items-center gap-4 rounded-lg border border-primary/20 bg-background/50 px-4 py-3">
+                <Users className="size-5 text-primary" />
+                <div>
+                  <p className="text-2xl font-black leading-none text-primary" data-testid="text-archon-ack-rate">
+                    {data.acknowledgementRate}%
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {data.acknowledgedCount} of {data.totalCitizens} citizens
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="mt-5 space-y-3">
+              <div className="h-2 animate-pulse rounded-full bg-primary/10" />
+              <div className="h-24 animate-pulse rounded-lg bg-primary/5" />
+            </div>
+          ) : error || !data ? (
+            <p className="mt-5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              Acknowledgement data could not be loaded.
+            </p>
+          ) : (
+            <>
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted/40" aria-label={`${data.acknowledgementRate}% acknowledged`}>
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-500"
+                  style={{ width: `${data.acknowledgementRate}%` }}
+                />
+              </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <h3 className="flex items-center gap-2 text-sm font-black text-primary">
+                    <CheckCircle className="size-4" />
+                    Acknowledged ({acknowledged.length})
+                  </h3>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {acknowledged.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No acknowledgements yet.</p>
+                    ) : acknowledged.map(citizen => (
+                      <span key={citizen.id} className="rounded-full border border-primary/30 bg-background/60 px-3 py-1 text-xs font-semibold">
+                        {citizen.username}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background/40 p-4">
+                  <h3 className="flex items-center gap-2 text-sm font-black text-muted-foreground">
+                    <Clock className="size-4" />
+                    Not acknowledged ({pending.length})
+                  </h3>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {pending.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Every citizen has acknowledged today’s directive.</p>
+                    ) : pending.map(citizen => (
+                      <span key={citizen.id} className="rounded-full border border-border bg-muted/20 px-3 py-1 text-xs font-semibold text-muted-foreground">
+                        {citizen.username}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </motion.section>
+  );
+}
+
+type DirectiveAcknowledgements = {
+  dateKey: string;
+  timeZone: string;
+  acknowledgedCount: number;
+  totalCitizens: number;
+  acknowledgementRate: number;
+  citizens: DirectiveAcknowledgementCitizen[];
+};
