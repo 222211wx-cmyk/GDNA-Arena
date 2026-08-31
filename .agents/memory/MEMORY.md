@@ -21,3 +21,4 @@
 - [Finance beta controls](finance-beta-controls.md) — real Stripe stays disabled until a US LLC exists; beta uses persisted 70/30 simulation and manual RedotPay payouts.
 - [Four-door module boundaries](four-door-module-boundaries.md) — AMIS admin, MESSAGERI messaging, SOCIAL contacts, and ARENA exploration must stay independent.
 - [Language policy](language-policy.md) — preserve foundational AR/EN/FR/ES/DE in language switchers; Arabic remains the canonical first-visit default.
+- [Production schema ownership](production-schema-ownership.md) — Publish owns production schema application; never replay Drizzle application migrations during startup.

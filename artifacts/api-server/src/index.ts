@@ -49,9 +49,17 @@ async function initStripe(): Promise<void> {
   }
 }
 async function migrateApplicationDatabase(): Promise<void> {
-  // Finance schema is an application migration and must run even when Stripe is
-  // intentionally disabled in simulation mode. StripeSync migrations remain
-  // owned by initStripe in live mode.
+  // Replit applies the development-to-production schema diff before starting
+  // an artifact deployment. Re-running Drizzle migrations during production
+  // startup can then attempt to add columns that already exist and crash the
+  // service before its health check opens.
+  if (process.env.NODE_ENV === "production") {
+    logger.info("Application database migrations skipped: production schema is managed by Publish");
+    return;
+  }
+
+  // Development still applies application migrations locally. StripeSync
+  // migrations remain owned by initStripe when live money movement is enabled.
   const candidates = [
     path.resolve(process.cwd(), "../../lib/db/drizzle"),
     path.resolve(process.cwd(), "lib/db/drizzle"),
