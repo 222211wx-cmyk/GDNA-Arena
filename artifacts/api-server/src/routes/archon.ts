@@ -78,11 +78,10 @@ router.post("/archon/assess", async (req, res): Promise<void> => {
     return;
   }
 
-  const dims = [session.volontas, session.resilentia, session.intellectus,
-                session.disciplina, session.societas, session.abundantia, session.auctoritas];
+  const dims = computeDimensions(answers);
   const dimArray = [dims.volontas, dims.resilentia, dims.intellectus,
                     dims.disciplina, dims.societas, dims.abundantia, dims.auctoritas];
-  const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
+  const overallScore = Math.round(dimArray.reduce((a, b) => a + b, 0) / 7);
 
   const LANG_INSTRUCTION: Record<string, string> = {
     en: "Respond entirely in English.",
@@ -146,8 +145,11 @@ Return this exact JSON structure:
     if (!process.env.OPENAI_API_KEY) throw new Error("No API key");
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 200,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 800,
       temperature: 0.85,
       response_format: { type: "json_object" },
     });
@@ -204,7 +206,7 @@ Return this exact JSON structure:
 router.get("/archon/profile", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
   const [session] = await db.select().from(archonSessionsTable)
-    .where(eq(archonSessionsTable.userId, user.id))
+    .where(eq(archonSessionsTable.userId, req.session.userId))
     .orderBy(desc(archonSessionsTable.createdAt))
     .limit(1);
   res.json({ session: session ?? null });
@@ -289,29 +291,36 @@ Example tone: "Today: earn 100 points in the Arena of Legends to claim the weekl
       response_format: { type: "json_object" },
     });
     const data = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    await db.insert(archonDirectivesTable).values({
+      userId: req.session.userId,
+      dimension,
+      directive: data.directive ?? "Execute silence for 10 minutes.",
+    });
+    res.json(data);
+  } catch {
+    res.json({
+      directive: `CLASSIFIED: Focus ${dimension} protocol — 15 minutes of deliberate practice, no distractions.`,
+      duration: "15 min",
+      intensity: "HIGH",
+    });
+  }
+});
 
-    const [saved] = await db.insert(archonDirectivesTable).values({
-      userId: req.session.userId, dimension, directive: fallbackDirective,
-    }).returning();
+// ── Daily dashboard directive — resets at 00:00 Africa/Casablanca ─────────────
+router.get("/archon/daily-directive", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
 
-    const [saved] = await db.insert(archonDirectivesTable).values({
-      userId: req.session.userId, dimension, directive: fallbackDirective,
-    }).returning();
   const userId = req.session.userId;
   const dateKey = moroccoDateKey();
-  const result = await pool.query(
-    `UPDATE archon_directives SET completed=true
-      WHERE id=$1 AND user_id=$2
-      RETURNING id, completed`,
-    [directiveId, req.session.userId],
+  let result = await pool.query(
+    `SELECT id, directive, completed, created_at AS "createdAt"
+       FROM archon_directives
+      WHERE user_id=$1
+        AND (created_at AT TIME ZONE 'Africa/Casablanca')::date=$2::date
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId, dateKey],
   );
-
-  const adminResult = await pool.query<{ is_admin: boolean }>(
-    `SELECT is_admin FROM users WHERE id=$1`,
-    [req.session.userId],
-  );
-
-  const acknowledgedCount = result.rows.filter(citizen => citizen.acknowledged).length;
 
   if (!result.rows[0]) {
     result = await pool.query(
@@ -325,26 +334,62 @@ Example tone: "Today: earn 100 points in the Arena of Legends to claim the weekl
   res.json({ directive: result.rows[0], dateKey, timeZone: MOROCCO_TIME_ZONE });
 });
 
-router.post("/archon/daily-directive/:id/acknowledge", async (req, res): Promise<void> => {
+router.get("/archon/daily-directive/acknowledgements", async (req, res): Promise<void> => {
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
-  const directiveId = Number(rawId);
-  if (!Number.isInteger(directiveId) || directiveId <= 0) {
-    res.status(400).json({ error: "Invalid directive" });
-    return;
-  }
-  const result = await pool.query(
-    `UPDATE archon_directives SET completed=true
-      WHERE id=$1 AND user_id=$2
-      RETURNING id, completed`,
-    [directiveId, req.session.userId],
-  );
 
   const adminResult = await pool.query<{ is_admin: boolean }>(
     `SELECT is_admin FROM users WHERE id=$1`,
     [req.session.userId],
   );
+  if (!adminResult.rows[0]?.is_admin) {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
 
+  const dateKey = moroccoDateKey();
+  const result = await pool.query<{ id: number; username: string; acknowledged: boolean }>(
+    `SELECT u.id, u.username, COALESCE(today.completed, false) AS acknowledged
+       FROM users u
+       LEFT JOIN LATERAL (
+         SELECT ad.completed
+           FROM archon_directives ad
+          WHERE ad.user_id=u.id
+            AND (ad.created_at AT TIME ZONE 'Africa/Casablanca')::date=$1::date
+          ORDER BY ad.created_at DESC
+          LIMIT 1
+       ) today ON true
+      ORDER BY u.username ASC`,
+    [dateKey],
+  );
+
+  const totalCitizens = result.rows.length;
   const acknowledgedCount = result.rows.filter(citizen => citizen.acknowledged).length;
+  res.json({
+    dateKey,
+    timeZone: MOROCCO_TIME_ZONE,
+    acknowledgedCount,
+    totalCitizens,
+    acknowledgementRate: totalCitizens === 0 ? 0 : Math.round((acknowledgedCount / totalCitizens) * 100),
+    citizens: result.rows,
+  });
+});
+
+router.post("/archon/daily-directive/:id/acknowledge", async (req, res): Promise<void> => {
+  if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const directiveId = Number(rawId);
+  if (!Number.isInteger(directiveId) || directiveId <= 0) {
+    res.status(400).json({ error: "Invalid directive" });
+    return;
+  }
+
+  const result = await pool.query(
+    `UPDATE archon_directives
+        SET completed=true
+      WHERE id=$1 AND user_id=$2
+      RETURNING id, completed`,
+    [directiveId, req.session.userId],
+  );
   if (!result.rows[0]) { res.status(404).json({ error: "Directive not found" }); return; }
   res.json({ directive: result.rows[0] });
 });
@@ -494,9 +539,3 @@ router.post("/archon/pillar/complete", async (req, res): Promise<void> => {
 });
 
 export default router;
-
-  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-
-    const fallbackDirective = `CLASSIFIED: Focus ${dimension} protocol — 15 minutes of deliberate practice, no distractions.`;
-
-  const totalCitizens = result.rows.length;

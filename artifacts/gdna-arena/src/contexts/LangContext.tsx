@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
-export type Lang = "en" | "ar" | "fr" | "es" | "de";
+// ES/DE remain valid internally for legacy translated copy, while LANGS below
+// intentionally exposes only the product languages AR/EN/FR.
+export type Lang = "ar" | "en" | "fr" | "es" | "de";
 
 export const LANGS: { code: Lang; label: string; flag: string }[] = [
-  { code: "en", label: "English",  flag: "🇬🇧" },
   { code: "ar", label: "العربية", flag: "🇸🇦" },
+  { code: "en", label: "English",  flag: "🇬🇧" },
   { code: "fr", label: "Français", flag: "🇫🇷" },
-  { code: "es", label: "Español",  flag: "🇪🇸" },
-  { code: "de", label: "Deutsch",  flag: "🇩🇪" },
 ];
 
 export const T: Record<string, Record<string, string>> = {
@@ -871,24 +871,16 @@ interface LangContextType {
 }
 
 const LangContext = createContext<LangContextType>({
-  lang: "en",
+  lang: "ar",
   setLang: () => {},
   t: (k) => k,
 });
 
-// ── Auto-detect language from browser on first visit ─────────────────────────
+// Arabic is the canonical first-visit language. A citizen's explicit choice persists.
 function detectInitialLang(): Lang {
   const stored = localStorage.getItem("gdna_lang") as Lang | null;
-  if (stored && (["en", "ar", "fr", "es", "de"] as string[]).includes(stored)) return stored;
-
-  const bl = (navigator.language || "").toLowerCase();
-  // Arabic OR Moroccan / Algerian locale → Arabic
-  if (bl.startsWith("ar") || bl.startsWith("ar-ma") || bl.startsWith("ar-dz")
-    || bl.includes("-ma") || bl.includes("-dz")) return "ar";
-  if (bl.startsWith("fr")) return "fr";
-  if (bl.startsWith("es")) return "es";
-  if (bl.startsWith("de")) return "de";
-  return "en"; // default: English
+  if (stored && (["ar", "en", "fr"] as string[]).includes(stored)) return stored;
+  return "ar";
 }
 
 export function LangProvider({ children }: { children: ReactNode }) {

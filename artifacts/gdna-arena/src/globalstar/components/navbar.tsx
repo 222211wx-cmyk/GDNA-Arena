@@ -23,10 +23,9 @@ export function Navbar() {
   ];
 
   const languages = [
-    { code: 'en', label: 'English' },
     { code: 'ar', label: 'العربية' },
+    { code: 'en', label: 'English' },
     { code: 'fr', label: 'Français' },
-    { code: 'ma', label: 'الدارجة' },
   ];
 
   return (
@@ -70,7 +69,7 @@ export function Navbar() {
               {languages.map((lang) => (
                 <DropdownMenuItem
                   key={lang.code}
-                  onClick={() => setLanguage(lang.code as 'en' | 'ar' | 'fr' | 'ma')}
+                  onClick={() => setLanguage(lang.code as 'en' | 'ar' | 'fr')}
                   data-testid={`language-${lang.code}`}
                 >
                   {lang.label}

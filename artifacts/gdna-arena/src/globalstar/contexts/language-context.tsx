@@ -175,7 +175,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem('globalstar-language');
-    return (saved as Language) || 'en';
+    return saved && ['ar', 'en', 'fr'].includes(saved) ? saved as Language : 'ar';
   });
 
   const isRTL = language === 'ar' || language === 'ma';

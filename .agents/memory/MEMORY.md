@@ -20,3 +20,4 @@
 - [Expo native module boundaries](expo-native-module-boundaries.md) — native-only Expo dependencies need web façades; use architecture-compatible package lines.
 - [Finance beta controls](finance-beta-controls.md) — real Stripe stays disabled until a US LLC exists; beta uses persisted 70/30 simulation and manual RedotPay payouts.
 - [Four-door module boundaries](four-door-module-boundaries.md) — AMIS admin, MESSAGERI messaging, SOCIAL contacts, and ARENA exploration must stay independent.
+- [Language policy](language-policy.md) — customer-facing language switchers expose AR/EN/FR only; Arabic is the canonical first-visit default.
