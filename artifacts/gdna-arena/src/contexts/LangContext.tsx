@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
-// ES/DE remain valid internally for legacy translated copy, while LANGS below
-// intentionally exposes only the product languages AR/EN/FR.
 export type Lang = "ar" | "en" | "fr" | "es" | "de";
 
 export const LANGS: { code: Lang; label: string; flag: string }[] = [
   { code: "ar", label: "العربية", flag: "🇸🇦" },
   { code: "en", label: "English",  flag: "🇬🇧" },
   { code: "fr", label: "Français", flag: "🇫🇷" },
+  { code: "es", label: "Español",  flag: "🇪🇸" },
+  { code: "de", label: "Deutsch",  flag: "🇩🇪" },
 ];
 
 export const T: Record<string, Record<string, string>> = {
@@ -878,8 +878,12 @@ const LangContext = createContext<LangContextType>({
 
 // Arabic is the canonical first-visit language. A citizen's explicit choice persists.
 function detectInitialLang(): Lang {
+  const requested = new URLSearchParams(window.location.search).get("lang");
+  if (requested && (["ar", "en", "fr", "es", "de"] as string[]).includes(requested)) {
+    return requested as Lang;
+  }
   const stored = localStorage.getItem("gdna_lang") as Lang | null;
-  if (stored && (["ar", "en", "fr"] as string[]).includes(stored)) return stored;
+  if (stored && (["ar", "en", "fr", "es", "de"] as string[]).includes(stored)) return stored;
   return "ar";
 }
 

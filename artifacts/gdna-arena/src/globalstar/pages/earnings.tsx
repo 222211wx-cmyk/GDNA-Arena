@@ -144,8 +144,13 @@ export default function EarningsPage() {
         credentials: 'include',
         body: JSON.stringify({ amountCoins: amount }),
       });
-      const d = await r.json();
-      if (!r.ok) { setWithdrawError(d.error ?? 'فشل الطلب'); setWithdrawStatus('error'); return; }
+      const payload: unknown = await r.json();
+      const apiError =
+        typeof payload === 'object' && payload !== null && 'error' in payload &&
+        typeof payload.error === 'string'
+          ? payload.error
+          : undefined;
+      if (!r.ok) { setWithdrawError(apiError ?? 'فشل الطلب'); setWithdrawStatus('error'); return; }
       setWithdrawStatus('success');
       setWithdrawAmount('');
       fetchAll(name, true);

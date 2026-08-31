@@ -29,6 +29,7 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
   const [views, setViews] = useState(upload?.views ?? 0);
   const [playing, setPlaying] = useState(false);
   const [viewRecorded, setViewRecorded] = useState(false);
+  const [mediaError, setMediaError] = useState(false);
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -36,6 +37,7 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
     setViews(upload?.views ?? 0);
     setPlaying(false);
     setViewRecorded(false);
+    setMediaError(false);
   }, [upload?.id]);
 
   if (!upload) return null;
@@ -54,9 +56,21 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
     } catch {}
   };
 
-  const handlePlay = () => {
-    setPlaying(true);
-    recordView();
+  const handlePlay = async () => {
+    setMediaError(false);
+    try {
+      const response = await fetch(streamUrl, { method: 'HEAD', credentials: 'include' });
+      if (!response.ok) {
+        setPlaying(true);
+        setMediaError(true);
+        return;
+      }
+      setPlaying(true);
+      void recordView();
+    } catch {
+      setPlaying(true);
+      setMediaError(true);
+    }
   };
 
   const formatSize = (bytes: number) => {
@@ -147,12 +161,18 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
                   className="w-full rounded-xl overflow-hidden"
                   style={{ border: '1.5px solid rgba(255,215,0,0.3)' }}
                 >
-                  {isVideo ? (
+                  {mediaError ? (
+                    <div className="p-6 text-center" dir="rtl">
+                      <p className="font-bold text-sm text-red-300">ملف الميديا غير متوفر حالياً</p>
+                      <p className="mt-2 text-xs text-white/50">يمكن لصاحب الملف إعادة رفعه من مكتبة الإمبراطورية.</p>
+                    </div>
+                  ) : isVideo ? (
                     <video
                       ref={mediaRef as React.RefObject<HTMLVideoElement>}
                       src={streamUrl}
                       controls
                       autoPlay
+                      onError={() => setMediaError(true)}
                       className="w-full"
                       style={{ maxHeight: 240, background: '#000' }}
                     />
@@ -175,6 +195,7 @@ export function EmpireMediaPopup({ upload, onClose }: EmpireMediaPopupProps) {
                         src={streamUrl}
                         controls
                         autoPlay
+                      onError={() => setMediaError(true)}
                         className="w-full"
                       />
                     </div>
