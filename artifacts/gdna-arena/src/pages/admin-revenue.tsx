@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { GOLD, GOLD_A } from "../components/social/social-i18n";
 
 /* ── الإدارة المالية الملكية الموحدة ─────────────────────────────────────────
  * One admin page, three sections:
@@ -9,7 +10,6 @@ import { useState, useEffect, useCallback } from "react";
  */
 
 const API = (p: string) => `${import.meta.env.BASE_URL.replace(/\/$/, "")}${p}`;
-const GOLD = "#d4af37";
 
 type Beneficiary = { id: number; user_id: number; username: string; role: string; share_rate: string; total_earned: string; status: string };
 type RoomTab = { id: number; name: string | null; type: string; revenue: string };
@@ -100,7 +100,7 @@ export default function AdminRevenuePage() {
         <h1 style={{ color: GOLD, fontSize: 22, marginBottom: 12 }}>👑 الإدارة المالية الملكية</h1>
         <p style={{ color: "#999", fontSize: 14, marginBottom: 16 }}>ادخل المفتاح الإداري أو سجّل الدخول بحساب إداري</p>
         <input type="password" value={input} onChange={e => setInput(e.target.value)} placeholder="المفتاح الإداري"
-          style={{ width: "100%", padding: 12, borderRadius: 10, border: `1px solid ${GOLD}44`, background: "#111", color: "#eee", marginBottom: 10 }} />
+          style={{ width: "100%", padding: 12, borderRadius: 10, border: `1px solid ${GOLD_A(0.267)}`, background: "#111", color: "#eee", marginBottom: 10 }} />
         <button onClick={() => { setSecret(input); void load(input); }}
           style={{ width: "100%", padding: 12, borderRadius: 10, border: "none", background: GOLD, color: "#111", fontWeight: 700, cursor: "pointer" }}>
           دخول
@@ -113,7 +113,7 @@ export default function AdminRevenuePage() {
     );
   }
 
-  const card: React.CSSProperties = { background: "#141414", border: `1px solid ${GOLD}22`, borderRadius: 14, padding: 16, marginBottom: 14 };
+  const card: React.CSSProperties = { background: "#141414", border: `1px solid ${GOLD_A(0.133)}`, borderRadius: 14, padding: 16, marginBottom: 14 };
   const inp: React.CSSProperties = { padding: 8, borderRadius: 8, border: "1px solid #333", background: "#0d0d0d", color: "#eee", fontSize: 14 };
   const btn: React.CSSProperties = { padding: "8px 14px", borderRadius: 8, border: "none", background: GOLD, color: "#111", fontWeight: 700, cursor: "pointer" };
 
@@ -134,7 +134,7 @@ export default function AdminRevenuePage() {
         {([["old", "القديم — المشاهدات والإعجابات"], ["tabs", "التابات"], ["ppo", "التوزيع PPO"]] as const).map(([k, l]) => (
           <button key={k} onClick={() => setSection(k)}
             style={{ flex: 1, padding: 10, borderRadius: 10, cursor: "pointer", fontWeight: 700,
-              border: `1px solid ${section === k ? GOLD : "#333"}`, background: section === k ? `${GOLD}22` : "#111", color: section === k ? GOLD : "#aaa" }}>
+              border: `1px solid ${section === k ? GOLD : "#333"}`, background: section === k ? GOLD_A(0.133) : "#111", color: section === k ? GOLD : "#aaa" }}>
             {l}
           </button>
         ))}

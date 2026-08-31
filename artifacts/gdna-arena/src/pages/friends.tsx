@@ -12,7 +12,8 @@ import { Phone, Video, UserPlus, Users, MessageSquare, Loader2, Bell, UserCheck 
 import { useLocation }    from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 
-const GOLD  = "#FFD700";
+const GOLD  = "hsl(var(--primary))";
+const GOLD_A = (alpha: number) => `hsl(var(--primary) / ${alpha})`;
 const GREEN = "#22c55e";
 
 interface Citizen {
@@ -35,7 +36,7 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     <div style={{
       width: size, height: size, borderRadius: "50%", background: bg, flexShrink: 0,
       display: "flex", alignItems: "center", justifyContent: "center",
-      fontWeight: 900, fontSize: Math.round(size * 0.38), color: "#fff",
+      fontWeight: 900, fontSize: Math.round(size * 0.38), color: "hsl(var(--foreground))",
       boxShadow: `0 0 0 2px #111, 0 0 0 3.5px ${bg}55`,
     }}>
       {name[0]?.toUpperCase() ?? "?"}
@@ -44,12 +45,12 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
 }
 
 function StatusBadge({ lastSeenAt }: { lastSeenAt?: string | null }) {
-  if (!lastSeenAt) return <span style={{ fontSize: 11, color: "#555" }}>○ غير متصل</span>;
+  if (!lastSeenAt) return <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>○ غير متصل</span>;
   const m = Math.floor((Date.now() - new Date(lastSeenAt).getTime()) / 60000);
   if (m < 5)  return <span style={{ fontSize: 11, color: GREEN,  fontWeight: 700 }}>● متصل الآن</span>;
   if (m < 30) return <span style={{ fontSize: 11, color: GOLD,   fontWeight: 700 }}>● مشغول</span>;
   const ago = m < 60 ? `${m} د` : m < 1440 ? `${Math.floor(m/60)} س` : `${Math.floor(m/1440)} ي`;
-  return <span style={{ fontSize: 11, color: "#666" }}>○ آخر ظهور {ago}</span>;
+  return <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>○ آخر ظهور {ago}</span>;
 }
 
 function SectionTitle({ label }: { label: string }) {
@@ -200,7 +201,7 @@ export default function FriendsPage() {
 
   /* ── Auth loading ── */
   if (authLoading) return (
-    <div style={{ minHeight: "100vh", background: "#050505", display: "flex",
+    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", display: "flex",
       alignItems: "center", justifyContent: "center" }}>
       <Loader2 size={36} style={{ color: GOLD, animation: "spin 1s linear infinite" }} />
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
@@ -209,10 +210,10 @@ export default function FriendsPage() {
 
   /* ── Not logged in ── */
   if (!user) return (
-    <div style={{ minHeight: "100vh", background: "#050505", display: "flex",
-      alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14, color: "#fff" }}>
+    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", display: "flex",
+      alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14, color: "hsl(var(--foreground))" }}>
       <Users size={52} style={{ opacity: 0.15 }} />
-      <p style={{ color: "#888", fontSize: 14 }}>سجّل دخولك للوصول لقائمة أصدقائك</p>
+      <p style={{ color: "hsl(var(--muted-foreground))", fontSize: 14 }}>سجّل دخولك للوصول لقائمة أصدقائك</p>
       <button onClick={() => navigate("/login")}
         style={{ background: GOLD, color: "#000", border: "none", borderRadius: 12,
           padding: "10px 32px", fontWeight: 900, cursor: "pointer", fontSize: 14 }}>
@@ -225,7 +226,7 @@ export default function FriendsPage() {
   const discoverList = allUsers.filter(u => !friendIds.has(u.id));
 
   return (
-    <div style={{ minHeight: "100vh", background: "#050505", color: "#fff", paddingBottom: 80 }} dir="rtl">
+    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", color: "hsl(var(--foreground))", paddingBottom: 80 }} dir="rtl">
 
       {/* ── Toast ── */}
       <AnimatePresence>
@@ -266,7 +267,7 @@ export default function FriendsPage() {
       </AnimatePresence>
 
       {/* ── Header ── */}
-      <div style={{ background: "#080808", borderBottom: `1px solid ${GOLD}18`, padding: "22px 24px 18px" }}>
+      <div style={{ background: "hsl(var(--card))", borderBottom: `1px solid ${GOLD_A(0.094)}`, padding: "22px 24px 18px" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <h1 style={{ margin: "0 0 2px", fontSize: 22, fontWeight: 900, letterSpacing: 2 }}>
             <span style={{ color: GOLD }}>◈</span> الأصدقاء
@@ -281,7 +282,7 @@ export default function FriendsPage() {
         {pageLoading ? (
           <div style={{ textAlign: "center", padding: 60 }}>
             <Loader2 size={34} style={{ color: GOLD, animation: "spin 1s linear infinite" }} />
-            <p style={{ color: "#555", marginTop: 10, fontSize: 13 }}>جارٍ التحميل...</p>
+            <p style={{ color: "hsl(var(--muted-foreground))", marginTop: 10, fontSize: 13 }}>جارٍ التحميل...</p>
           </div>
         ) : (
           <>
@@ -294,12 +295,12 @@ export default function FriendsPage() {
                   {stars.map(s => (
                     <motion.div key={s.username} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                       style={{ display: "flex", alignItems: "center", gap: 11,
-                        background: "linear-gradient(135deg, #14100200, #14100260), #0d0b04",
-                        border: `1px solid ${GOLD}${s.invited ? "50" : "22"}`,
+                        background: "hsl(var(--card))",
+                        border: `1px solid ${GOLD_A(s.invited ? 0.314 : 0.133)}`,
                         borderRadius: 14, padding: "11px 13px" }}>
                       <div style={{
                         width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                        background: "#1a1503", border: `2px solid ${GOLD}70`,
+                        background: "hsl(var(--muted))", border: `2px solid ${GOLD_A(0.439)}`,
                         display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
                         {DOMAIN_ICONS[s.domain] ?? "⭐"}
                       </div>
@@ -329,8 +330,8 @@ export default function FriendsPage() {
 
             {friends.length === 0 ? (
               <div style={{ textAlign: "center", padding: "20px 0 32px",
-                background: "#0a0a0a", borderRadius: 14, border: "1px dashed #ffffff12",
-                color: "#555", fontSize: 13, marginBottom: 28 }}>
+                background: "hsl(var(--card))", borderRadius: 14, border: "1px dashed #ffffff12",
+                color: "hsl(var(--muted-foreground))", fontSize: 13, marginBottom: 28 }}>
                 <Users size={32} style={{ opacity: 0.1, marginBottom: 8 }} />
                 <p style={{ margin: 0 }}>لا أصدقاء بعد — أضف من القائمة أدناه 👇</p>
               </div>
@@ -339,7 +340,7 @@ export default function FriendsPage() {
                 {friends.map(f => (
                   <motion.div key={f.id} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                     style={{ display: "flex", alignItems: "center", gap: 13,
-                      background: "#0d0d0d", border: `1px solid ${GOLD}18`,
+                      background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.094)}`,
                       borderRadius: 14, padding: "12px 14px" }}>
                     <Avatar name={f.username} />
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -348,7 +349,7 @@ export default function FriendsPage() {
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <ActBtn icon={<MessageSquare size={14} />} label="رسالة"
-                        color={GOLD} bg={`${GOLD}12`} border={`1px solid ${GOLD}30`}
+                        color={GOLD} bg={GOLD_A(0.071)} border={`1px solid ${GOLD_A(0.188)}`}
                         onClick={() => void openDM(f)} disabled={dmLoadingId === f.id} />
                       <ActBtn icon={<Phone size={14} />} label="صوتي"
                         color={GREEN} bg="#071a07" border={`1px solid ${GREEN}50`}
@@ -369,7 +370,7 @@ export default function FriendsPage() {
             <SectionTitle label={`🌐 جميع المستخدمين (${discoverList.length})`} />
 
             {discoverList.length === 0 && !pageLoading ? (
-              <div style={{ textAlign: "center", padding: 40, color: "#555", fontSize: 13 }}>
+              <div style={{ textAlign: "center", padding: 40, color: "hsl(var(--muted-foreground))", fontSize: 13 }}>
                 <UserCheck size={32} style={{ opacity: 0.12, marginBottom: 8 }} />
                 <p style={{ margin: 0 }}>أضفت جميع المستخدمين المتاحين 🎉</p>
               </div>
@@ -378,7 +379,7 @@ export default function FriendsPage() {
                 {discoverList.map(c => (
                   <motion.div key={c.id} layout initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
                     style={{ display: "flex", alignItems: "center", gap: 13,
-                      background: "#0b0b0b", border: "1px solid #ffffff0c",
+                      background: "hsl(var(--card))", border: "1px solid #ffffff0c",
                       borderRadius: 14, padding: "12px 14px" }}>
                     {/* Photo ronde */}
                     <Avatar name={c.username} />
@@ -400,7 +401,7 @@ export default function FriendsPage() {
                           ? <Loader2 size={13} style={{ animation: "spin 0.8s linear infinite" }} />
                           : <UserPlus size={13} />}
                         label={addingId === c.id ? "" : "إضافة"}
-                        color={GOLD} bg={`${GOLD}15`} border={`1px solid ${GOLD}40`}
+                        color={GOLD} bg={GOLD_A(0.082)} border={`1px solid ${GOLD_A(0.251)}`}
                         onClick={() => void addFriend(c)} disabled={addingId === c.id} />
                     </div>
                   </motion.div>

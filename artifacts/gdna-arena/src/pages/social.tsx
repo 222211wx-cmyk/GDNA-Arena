@@ -17,7 +17,7 @@ import LiveTab          from "../components/social/LiveTab";
 import CitizensTab      from "../components/social/CitizensTab";
 import NotificationsTab from "../components/social/NotificationsTab";
 import SearchDropdown   from "../components/social/SearchDropdown";
-import { SOCIAL_T, GOLD } from "../components/social/social-i18n";
+import { SOCIAL_T, GOLD, GOLD_A } from "../components/social/social-i18n";
 
 type Tab = "overview" | "feed" | "messages" | "stories" | "live" | "citizens" | "notifications";
 
@@ -71,14 +71,14 @@ export default function SocialPage() {
         minWidth: 0,
         minHeight: "100vh",
         overflowX: "hidden",
-        background: "#050505",
-        color: "#fff",
+        background: "hsl(var(--background))",
+        color: "hsl(var(--foreground))",
         paddingBottom: 80,
       }}
       dir={dir}
     >
       {/* Sticky header */}
-      <div style={{ background: "rgba(5,5,5,0.96)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${GOLD}15`, position: "sticky", top: 0, zIndex: 100 }}>
+      <div style={{ background: "hsl(var(--background) / 0.96)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${GOLD_A(0.08)}`, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 880, margin: "0 auto", padding: "12px 16px" }}>
           {/* Title row + Search */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
@@ -96,11 +96,11 @@ export default function SocialPage() {
             <div ref={searchRef} style={{ flex: 1, position: "relative" }}>
               <form onSubmit={submitSearch} role="search" style={{
                 display: "flex", alignItems: "center",
-                background: "#111", border: `1px solid ${searchOpen ? GOLD : `${GOLD}20`}`,
+                background: "hsl(var(--card))", border: `1px solid ${searchOpen ? GOLD : GOLD_A(0.13)}`,
                 borderRadius: 20, padding: "7px 14px", gap: 8, transition: "border-color 0.2s",
               }}>
                 <button type="submit" aria-label={st.search_results ?? "Search"}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#666", padding: 0, display: "flex", flexShrink: 0 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 0, display: "flex", flexShrink: 0 }}
                   data-testid="button-search-submit">
                   <Search size={13} />
                 </button>
@@ -110,13 +110,13 @@ export default function SocialPage() {
                   onFocus={() => setSearchOpen(true)}
                   placeholder={st.search_placeholder}
                   aria-label={st.search_placeholder}
-                  style={{ flex: 1, background: "none", border: "none", color: "#fff", fontSize: 13, outline: "none", minWidth: 0 }}
+                  style={{ flex: 1, background: "none", border: "none", color: "hsl(var(--foreground))", fontSize: 13, outline: "none", minWidth: 0 }}
                   data-testid="input-search"
                 />
                 {searchQ && (
                   <button type="button" onClick={() => { setSearchQ(""); setSearchOpen(false); }}
                     aria-label={st.back ?? "Clear"}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#666", padding: 0, display: "flex" }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 0, display: "flex" }}
                     data-testid="button-search-clear">
                     <X size={13} />
                   </button>
@@ -150,7 +150,7 @@ export default function SocialPage() {
                   display: "flex", alignItems: "center", gap: 5,
                   padding: "7px 13px", borderRadius: 8, border: "none", cursor: "pointer",
                   fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", transition: "all 0.2s",
-                  background: tab === t.id ? `${GOLD}20` : "transparent",
+                  background: tab === t.id ? GOLD_A(0.13) : "transparent",
                   color:      tab === t.id ? GOLD : "#ffffff45",
                   borderBottom: tab === t.id ? `2px solid ${GOLD}` : "2px solid transparent",
                 }}>

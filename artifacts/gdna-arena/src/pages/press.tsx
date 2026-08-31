@@ -26,15 +26,16 @@ interface Sponsor {
 interface Comment { id: number; author: string; content: string; created_at: string; }
 
 // ─── Gold helpers ─────────────────────────────────────────────────────────────
-const GOLD = "#FFD700";
-const GOLD_DIM = "rgba(255,215,0,0.15)";
-const GOLD_BORDER = "rgba(255,215,0,0.35)";
-const BLACK = "#0a0800";
+const GOLD = "hsl(var(--primary))";
+const GOLD_A = (alpha: number) => `hsl(var(--primary) / ${alpha})`;
+const GOLD_DIM = GOLD_A(0.15);
+const GOLD_BORDER = GOLD_A(0.35);
+const BLACK = "hsl(var(--card))";
 
 const goldBox = {
   background: BLACK,
   border: `1.5px solid ${GOLD_BORDER}`,
-  boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+  boxShadow: "0 4px 24px hsl(var(--background) / 0.5)",
 };
 
 function timeAgo(iso: string) {
@@ -104,10 +105,10 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
             <Upload className="w-5 h-5" style={{ color: GOLD }} />
           </div>
           <div className="flex-1" dir="rtl">
-            <p className="font-black text-white text-base">Publish Your Content</p>
-            <p className="text-xs" style={{ color: "rgba(255,215,0,0.55)" }}>For journalists and global correspondents</p>
+            <p className="font-black text-foreground text-base">Publish Your Content</p>
+            <p className="text-xs" style={{ color: GOLD_A(0.55) }}>For journalists and global correspondents</p>
           </div>
-          <button onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1">
+          <button onClick={onClose} className="text-white/40 hover:text-foreground transition-colors p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -127,30 +128,30 @@ function UploadModal({ onClose, onPublished }: { onClose: () => void; onPublishe
 
         {/* Form */}
         <div className="px-6 pb-6 space-y-3" dir="rtl">
-          <input className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none"
+          <input className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
             placeholder="Your name / Media organization"
             value={author} onChange={e => setAuthor(e.target.value)} />
 
-          <input className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none"
+          <input className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
             placeholder={tab === "video" ? "Video title" : tab === "story" ? "Story title" : "Article title"}
             value={title} onChange={e => setTitle(e.target.value)} />
 
           {tab === "video" && (
-            <input className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none"
+            <input className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none"
               style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
               placeholder="YouTube ID or video URL"
               value={videoUrl} onChange={e => setVideoUrl(e.target.value)} />
           )}
 
-          <textarea className="w-full rounded-xl px-4 py-2.5 text-sm text-white outline-none resize-none"
+          <textarea className="w-full rounded-xl px-4 py-2.5 text-sm text-foreground outline-none resize-none"
             style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
             rows={4}
             placeholder={tab === "video" ? "Video description..." : tab === "story" ? "Write your story here..." : "Write your article here..."}
             value={content} onChange={e => setContent(e.target.value)} />
 
-          {error && <p className="text-red-400 text-xs text-right">{error}</p>}
+          {error && <p className="text-destructive text-xs text-right">{error}</p>}
 
           <button onClick={submit} disabled={loading || done}
             className="w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2"
@@ -213,9 +214,9 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
           <span className="text-xs font-black px-2 py-0.5 rounded-lg" style={{ background: GOLD_DIM, color: GOLD }}>
             <Video className="w-3 h-3 inline mr-1" />Video
           </span>
-          <span className="text-xs" style={{ color: "rgba(255,215,0,0.4)" }}>{timeAgo(post.created_at)}</span>
+          <span className="text-xs" style={{ color: GOLD_A(0.4) }}>{timeAgo(post.created_at)}</span>
         </div>
-        {post.title && <h3 className="font-black text-white text-base mb-1 leading-tight">{post.title}</h3>}
+        {post.title && <h3 className="font-black text-foreground text-base mb-1 leading-tight">{post.title}</h3>}
         <p className="text-sm leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.75)" }}>{post.content}</p>
         <div className="flex items-center gap-1 mb-3">
           <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black"
@@ -258,7 +259,7 @@ function VideoCard({ post, onLike }: { post: PressPost; onLike: (id: number) => 
                 ))}
               </div>
               <div className="flex gap-2">
-                <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-white outline-none"
+                <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none"
                   style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
                   placeholder="Add a comment..."
                   value={newComment} onChange={e => setNewComment(e.target.value)}
@@ -321,10 +322,10 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
             style={{ background: `${accentColor}20`, color: accentColor }}>
             <TypeIcon className="w-3 h-3" /> {typeLabel}
           </span>
-          <span className="text-xs" style={{ color: "rgba(255,215,0,0.4)" }}>{timeAgo(post.created_at)}</span>
+          <span className="text-xs" style={{ color: GOLD_A(0.4) }}>{timeAgo(post.created_at)}</span>
         </div>
 
-        {post.title && <h3 className="font-black text-white text-lg mb-2 leading-tight">{post.title}</h3>}
+        {post.title && <h3 className="font-black text-foreground text-lg mb-2 leading-tight">{post.title}</h3>}
 
         <p className="text-sm leading-loose mb-3" style={{ color: "rgba(255,255,255,0.80)" }}>
           {!expanded && isLong ? post.content.slice(0, 250) + "..." : post.content}
@@ -377,7 +378,7 @@ function TextCard({ post, onLike }: { post: PressPost; onLike: (id: number) => v
                 ))}
               </div>
               <div className="flex gap-2">
-                <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-white outline-none"
+                <input className="flex-1 rounded-lg px-3 py-1.5 text-xs text-foreground outline-none"
                   style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }}
                   placeholder="Add a comment..."
                   value={newComment} onChange={e => setNewComment(e.target.value)}
@@ -424,7 +425,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
     if (j.poll) setPoll(j.poll);
   }
 
-  const palette = ["#FFD700", "#38bdf8", "#4ade80", "#a78bfa"];
+  const palette = [GOLD, "#38bdf8", "#4ade80", "#a78bfa"];
 
   return (
     <div className="rounded-2xl overflow-hidden" style={goldBox}>
@@ -434,7 +435,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
           <Smile className="w-4 h-4" style={{ color: "#a78bfa" }} />
           <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#a78bfa" }}>Poll</span>
         </div>
-        <h3 className="font-black text-white text-base leading-tight mb-4">{poll.question}</h3>
+        <h3 className="font-black text-foreground text-base leading-tight mb-4">{poll.question}</h3>
         <div className="space-y-2.5">
           {OPTIONS.map((opt, i) => {
             const p = pct(opt.votes);
@@ -462,7 +463,7 @@ function PollCard({ poll: initial }: { poll: Poll }) {
           })}
         </div>
         {voted && (
-          <p className="text-xs text-center mt-3" style={{ color: "rgba(255,215,0,0.5)" }}>
+          <p className="text-xs text-center mt-3" style={{ color: GOLD_A(0.5) }}>
             {total} total votes · Thank you for participating
           </p>
         )}
@@ -481,7 +482,7 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
         {sponsor.icon}
       </div>
       <div>
-        <p className="font-black text-sm text-white">{sponsor.name}</p>
+        <p className="font-black text-sm text-foreground">{sponsor.name}</p>
         {sponsor.tagline && <p className="text-xs mt-0.5" style={{ color: `${sponsor.color}cc` }}>{sponsor.tagline}</p>}
       </div>
       <div className="text-xs font-bold px-3 py-1 rounded-full"
@@ -531,9 +532,9 @@ export default function PressPage() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: "#06040a" }}>
+    <div className="min-h-screen" style={{ background: "hsl(var(--background))" }}>
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg,#0a0800 0%,#18100a 100%)" }}>
+      <div className="relative overflow-hidden" style={{ background: `linear-gradient(135deg, hsl(var(--card)) 0%, ${GOLD_A(0.1)} 100%)` }}>
         {/* Star particles */}
         {[...Array(20)].map((_, i) => (
           <div key={i} className="absolute rounded-full"
@@ -555,16 +556,16 @@ export default function PressPage() {
               </div>
               <h1 className="text-4xl md:text-6xl font-black leading-none mb-2">
                 <span style={{ color: "white" }}>GLOBAL</span>{" "}
-                <span style={{ color: GOLD, textShadow: `0 0 40px ${GOLD}60` }}>PRESS</span>
+                <span style={{ color: GOLD, textShadow: `0 0 40px ${GOLD_A(0.376)}` }}>PRESS</span>
               </h1>
-              <p className="text-sm md:text-base" style={{ color: "rgba(255,215,0,0.6)" }}>
+              <p className="text-sm md:text-base" style={{ color: GOLD_A(0.6) }}>
                 The Empire's official media platform · Video · Stories · Articles
               </p>
             </div>
 
             <button onClick={() => setShowUpload(true)}
               className="flex items-center gap-3 px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:scale-105 shrink-0"
-              style={{ background: GOLD, color: "#000", boxShadow: `0 8px 32px ${GOLD}40` }}>
+              style={{ background: GOLD, color: "hsl(var(--primary-foreground))", boxShadow: `0 8px 32px ${GOLD_A(0.251)}` }}>
               <Upload className="w-5 h-5" />
               Publish Content
             </button>
@@ -593,7 +594,7 @@ export default function PressPage() {
           <div className="lg:col-span-2 space-y-6">
             <div dir="rtl" className="flex items-center gap-2 mb-2">
               <Newspaper className="w-5 h-5" style={{ color: GOLD }} />
-              <h2 className="font-black text-white text-lg">Correspondent Reports</h2>
+              <h2 className="font-black text-foreground text-lg">Correspondent Reports</h2>
             </div>
 
             {loading ? (
@@ -602,7 +603,7 @@ export default function PressPage() {
                   style={{ background: GOLD_DIM, border: `1px solid ${GOLD_BORDER}` }} />
               ))
             ) : posts.length === 0 ? (
-              <div className="text-center py-16" style={{ color: "rgba(255,215,0,0.4)" }}>
+              <div className="text-center py-16" style={{ color: GOLD_A(0.4) }}>
                 <Newspaper className="w-12 h-12 mx-auto mb-3 opacity-40" />
                 <p className="font-bold">No posts yet</p>
                 <p className="text-sm mt-1">Be the first to publish!</p>
@@ -623,7 +624,7 @@ export default function PressPage() {
             <div>
               <div dir="rtl" className="flex items-center gap-2 mb-4">
                 <Star className="w-5 h-5" style={{ color: GOLD }} />
-                <h2 className="font-black text-white text-base">Sponsorship</h2>
+                <h2 className="font-black text-foreground text-base">Sponsorship</h2>
               </div>
               <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
                 {sponsors.map(s => <SponsorCard key={s.id} sponsor={s} />)}
@@ -634,7 +635,7 @@ export default function PressPage() {
             <div>
               <div dir="rtl" className="flex items-center gap-2 mb-4">
                 <Smile className="w-5 h-5" style={{ color: "#a78bfa" }} />
-                <h2 className="font-black text-white text-base">Fun &amp; Opinions</h2>
+                <h2 className="font-black text-foreground text-base">Fun &amp; Opinions</h2>
               </div>
               <div className="space-y-4">
                 {polls.map(poll => <PollCard key={poll.id} poll={poll} />)}

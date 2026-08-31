@@ -358,9 +358,9 @@ function EmpireIdentitySection({ username }: { username: string }) {
   }, [username]);
 
   if (profile === "loading") return (
-    <div className="mt-6 p-5 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 animate-pulse">
-      <div className="h-4 w-40 bg-yellow-500/20 rounded mb-3" />
-      <div className="h-24 bg-yellow-500/10 rounded" />
+    <div className="mt-6 p-5 rounded-2xl border border-primary/20 bg-primary/5 animate-pulse">
+      <div className="h-4 w-40 bg-primary/20 rounded mb-3" />
+      <div className="h-24 bg-primary/10 rounded" />
     </div>
   );
 

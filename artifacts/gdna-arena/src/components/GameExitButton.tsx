@@ -45,26 +45,26 @@ export default function GameExitButton({
       <button
         onClick={() => setConfirming(true)}
         aria-label="الخروج من اللعبة"
-        className="fixed top-[10px] left-[10px] z-[9999] bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-bold text-sm shadow-lg"
+        className="fixed top-[10px] left-[10px] z-[9999] bg-destructive hover:bg-destructive/90 text-destructive-foreground px-3 py-2 rounded-lg font-bold text-sm shadow-lg"
       >
         ❌ الخروج
       </button>
 
       {confirming && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 p-4" dir="rtl">
-          <div className="bg-[#111] border-2 border-yellow-400/40 rounded-2xl p-6 max-w-sm w-full text-center">
-            <p className="text-white font-bold text-lg mb-5">متأكد بغيتي تخرج من اللعبة؟</p>
+          <div className="bg-card border-2 border-primary/40 rounded-2xl p-6 max-w-sm w-full text-center">
+            <p className="text-foreground font-bold text-lg mb-5">متأكد بغيتي تخرج من اللعبة؟</p>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={doExit}
-                className="px-6 py-2.5 rounded-[10px] font-bold text-white bg-red-600 hover:bg-red-700"
+                className="px-6 py-2.5 rounded-[10px] font-bold text-destructive-foreground bg-destructive hover:bg-destructive/90"
               >
                 خروج
               </button>
               <button
                 onClick={() => setConfirming(false)}
-                className="px-6 py-2.5 rounded-[10px] font-bold text-black"
-                style={{ background: "gold" }}
+                className="px-6 py-2.5 rounded-[10px] font-bold text-primary-foreground"
+                style={{ background: "hsl(var(--primary))" }}
               >
                 كمّل اللعب
               </button>

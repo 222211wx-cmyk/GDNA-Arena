@@ -92,7 +92,8 @@
   text-shadow: 0 0 10px hsl(var(--primary) / 0.7), 0 0 20px hsl(var(--primary) / 0.5);
 }
 
-/* ── Imperial CSS ─────────────────────────────────────────────────────────── */
+/* ── Deliberate brand flourish: animated imperial-gold gradient ─────────────
+   This multi-stop metallic effect intentionally exceeds the flat primary token. */
 .imperial-gold {
   background: linear-gradient(135deg, #C9A84C 0%, #FFE066 40%, #C9A84C 60%, #A67C2E 100%);
   -webkit-background-clip: text;
@@ -152,7 +153,9 @@
   100% { transform: translateX(-33.33%); }
 }
 
-/* [Arena Qaisypro] - إفكتات القصر الملكي */
+/* ── Deliberate brand flourish: WhatsApp identity green ─────────────────────
+   #25D366 and nearby hover shades are retained only for WhatsApp/chat actions. */
+/* [GDNA Arena] - إفكتات القصر الملكي */
 .msg-you:hover { background: #008575; transform: translateX(-3px); }
 .msg-ai:hover { background: #2a3a48; transform: translateX(3px); }
 .chat-box img:hover { transform: scale(1.1); border: 2px solid #25D366; }
@@ -165,14 +168,14 @@
 @media (max-width: 768px) {
   .hero-name {
     font-size: 32px !important; /* Qaisypro2026 كبيرة وتضرب فـ العين */
-    color: gold !important;
-    text-shadow: 0 0 10px gold; /* توهج خفيف باش تبان فخمة */
+    color: hsl(var(--primary)) !important;
+    text-shadow: 0 0 10px hsl(var(--primary)); /* توهج خفيف باش تبان فخمة */
     margin-bottom: 15px !important;
   }
   .hero-name span {
-    color: gold !important;
+    color: hsl(var(--primary)) !important;
     background: none !important;
-    -webkit-text-fill-color: gold !important;
+    -webkit-text-fill-color: hsl(var(--primary)) !important;
   }
   .hero-sub {
     font-size: 14px !important; /* الوصف يصغر باش العنوان يبان هو الملك */
@@ -183,8 +186,8 @@
     width: 90%; /* سهل الضغط بالصبع */
     padding: 16px !important;
     font-size: 18px !important;
-    background: linear-gradient(90deg, gold, #ffc107) !important; /* تدرج ذهبي = فخامة */
-    box-shadow: 0 0 15px gold;
+    background: linear-gradient(90deg, hsl(var(--primary)), #ffc107) !important; /* deliberate metallic-gold flourish */
+    box-shadow: 0 0 15px hsl(var(--primary));
   }
   .palace {
     margin: 30px 10px !important;

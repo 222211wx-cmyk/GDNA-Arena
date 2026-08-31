@@ -1,5 +1,5 @@
 // ── Shared Avatar pill ────────────────────────────────────────────────────────
-const PALETTE = ["#C9A84C", "#3b82f6", "#a78bfa", "#22c55e", "#ef4444", "#f59e0b", "#ec4899"];
+const PALETTE = ["hsl(var(--primary))", "#3b82f6", "#a78bfa", "#22c55e", "#ef4444", "#f59e0b", "#ec4899"];
 
 export default function Avatar({ name, size = 32 }: { name: string; size?: number }) {
   const color = PALETTE[(name?.charCodeAt(0) ?? 0) % PALETTE.length];

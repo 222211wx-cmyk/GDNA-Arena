@@ -149,7 +149,7 @@ export default function NewsPage() {
       <div className="container mx-auto px-4 pt-12">
         {/* Header */}
         <div className="mb-12">
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white neon-text-glow mb-4 uppercase">
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-foreground neon-text-glow mb-4 uppercase">
             GDNA NEWS
           </h1>
           <p className="text-xl text-primary font-mono flex items-center gap-2">
@@ -204,7 +204,7 @@ export default function NewsPage() {
                   </span>
                 </div>
                 
-                <h2 className="text-3xl md:text-5xl font-bold mb-6 leading-tight text-white group-hover:text-primary transition-colors">
+                <h2 className="text-3xl md:text-5xl font-bold mb-6 leading-tight text-foreground group-hover:text-primary transition-colors">
                   {FEATURED_ARTICLE.title}
                 </h2>
                 
@@ -269,7 +269,7 @@ export default function NewsPage() {
           {filteredArticles.length === 0 && (
             <div className="col-span-full py-20 text-center border border-dashed border-border rounded-xl bg-card/30">
               <Newspaper className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-              <h3 className="text-xl font-bold text-white mb-2">No intel found</h3>
+              <h3 className="text-xl font-bold text-foreground mb-2">No intel found</h3>
               <p className="text-muted-foreground">Try selecting a different frequency channel.</p>
             </div>
           )}

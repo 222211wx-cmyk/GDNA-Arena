@@ -225,7 +225,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
               <div
                 className={`max-w-[85%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-primary text-black font-medium rounded-br-sm"
+                    ? "bg-primary text-primary-foreground font-medium rounded-br-sm"
                     : "bg-black/40 border border-primary/20 text-foreground rounded-bl-sm font-mono"
                 }`}
                 dir="auto"
@@ -309,7 +309,7 @@ export default function GdnAiTerminal({ compact = false }: GdnAiTerminalProps) {
           onClick={() => void sendMessage()}
           disabled={!input.trim() || loading || !isOnline}
           size="sm"
-          className="h-10 px-4 bg-primary hover:bg-primary/90 text-black font-bold neon-glow transition-all"
+          className="h-10 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-bold neon-glow transition-all"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </Button>
@@ -353,7 +353,7 @@ export function GdnAiFloating() {
               exit={{ rotate: 90, opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <ChevronDown className="w-6 h-6 text-black" />
+              <ChevronDown className="w-6 h-6 text-primary-foreground" />
             </motion.span>
           ) : (
             <motion.span
@@ -363,7 +363,7 @@ export function GdnAiFloating() {
               exit={{ rotate: -90, opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <Bot className="w-6 h-6 text-black" />
+              <Bot className="w-6 h-6 text-primary-foreground" />
             </motion.span>
           )}
         </AnimatePresence>

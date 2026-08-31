@@ -62,10 +62,10 @@ function StatBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
-        <span className="text-gray-400">{label}</span>
-        <span className="text-yellow-400 font-bold">{value}</span>
+        <span className="text-muted-foreground">{label}</span>
+        <span className="text-primary font-bold">{value}</span>
       </div>
-      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
         <div
           className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 rounded-full transition-all duration-1000"
           style={{ width: `${value}%` }}
@@ -85,7 +85,7 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
 
   return (
     <div
-      className="group relative bg-gray-900/80 border border-gray-800 rounded-2xl overflow-hidden hover:border-yellow-400/40 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(255,215,0,0.12)]"
+      className="group relative bg-card/80 border border-border rounded-2xl overflow-hidden hover:border-primary/40 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(255,215,0,0.12)]"
       style={{ animationDelay: `${index * 120}ms` }}
     >
       {/* Rank badge */}
@@ -97,12 +97,12 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
       </div>
 
       {/* Score badge */}
-      <Badge className="absolute top-3 right-3 z-10 bg-black/70 border border-yellow-400/30 text-yellow-400 text-xs font-bold">
+      <Badge className="absolute top-3 right-3 z-10 bg-background/70 border border-primary/30 text-primary text-xs font-bold">
         {legend.score.toLocaleString()}
       </Badge>
 
       {/* Image */}
-      <div className="relative h-56 overflow-hidden bg-gray-800">
+      <div className="relative h-56 overflow-hidden bg-muted">
         {img ? (
           <img
             src={img}
@@ -111,7 +111,7 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Music size={48} className="text-yellow-400/30" />
+            <Music size={48} className="text-primary/30" />
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/30 to-transparent" />
@@ -120,24 +120,24 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
       {/* Content */}
       <div className="p-4 space-y-3">
         <div>
-          <h3 className="text-white font-black text-lg tracking-tight leading-tight">
+          <h3 className="text-foreground font-black text-lg tracking-tight leading-tight">
             {legend.name}
           </h3>
           <div className="flex items-center gap-2 mt-1">
-            <Globe2 size={11} className="text-gray-500" />
-            <span className="text-gray-400 text-xs">{legend.nationality}</span>
+            <Globe2 size={11} className="text-muted-foreground" />
+            <span className="text-muted-foreground text-xs">{legend.nationality}</span>
             {legend.peakYear && (
               <>
-                <span className="text-gray-700">·</span>
-                <Star size={11} className="text-yellow-500" />
-                <span className="text-yellow-500/80 text-xs">Peak {legend.peakYear}</span>
+                <span className="text-muted-foreground">·</span>
+                <Star size={11} className="text-primary" />
+                <span className="text-primary/80 text-xs">Peak {legend.peakYear}</span>
               </>
             )}
           </div>
         </div>
 
         {quote && (
-          <p className="text-gray-400 text-xs italic leading-relaxed border-l-2 border-yellow-400/30 pl-2">
+          <p className="text-muted-foreground text-xs italic leading-relaxed border-l-2 border-primary/30 pl-2">
             "{quote}"
           </p>
         )}
@@ -154,13 +154,13 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
         {legend.id !== null ? (
           <Link
             href={`/legends/${legend.id}`}
-            className="flex items-center justify-between w-full mt-2 px-3 py-2 bg-yellow-400/5 border border-yellow-400/20 rounded-xl text-yellow-400 text-xs font-bold hover:bg-yellow-400/10 hover:border-yellow-400/40 transition-all group/btn"
+            className="flex items-center justify-between w-full mt-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-xl text-primary text-xs font-bold hover:bg-primary/10 hover:border-primary/40 transition-all group/btn"
           >
             <span>VIEW LEGEND HUB</span>
             <ChevronRight size={14} className="group-hover/btn:translate-x-0.5 transition-transform" />
           </Link>
         ) : (
-          <div className="flex items-center justify-between w-full mt-2 px-3 py-2 bg-gray-800/50 border border-gray-700/40 rounded-xl text-gray-600 text-xs font-bold cursor-default select-none">
+          <div className="flex items-center justify-between w-full mt-2 px-3 py-2 bg-muted/50 border border-border rounded-xl text-muted-foreground text-xs font-bold cursor-default select-none">
             <span>COMING SOON</span>
             <ChevronRight size={14} />
           </div>
@@ -173,7 +173,7 @@ function LegendCard({ legend, index }: { legend: Legend; index: number }) {
 // ── Loading skeleton card ────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
-    <div className="bg-gray-900/80 border border-gray-800 rounded-2xl overflow-hidden">
+    <div className="bg-card/80 border border-border rounded-2xl overflow-hidden">
       <Skeleton className="h-56 w-full rounded-none" />
       <div className="p-4 space-y-3">
         <Skeleton className="h-5 w-2/3" />
@@ -219,63 +219,63 @@ export default function MusicPage() {
     : legends.filter(l => MUSIC_GENRES[activeFilter]?.includes(l.name));
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-background text-foreground">
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[300px]"
             style={{ background: "radial-gradient(ellipse, rgba(255,215,0,0.08) 0%, transparent 70%)" }} />
-          <div className="absolute bottom-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-400/30 to-transparent" />
+          <div className="absolute bottom-0 w-full h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
         </div>
 
         <div className="max-w-7xl mx-auto px-4 pt-14 pb-10 relative">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-xs text-gray-600 mb-6">
-            <Link href="/" className="hover:text-gray-400 transition-colors">EMPIRE ETERNAL</Link>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
+            <Link href="/" className="hover:text-foreground transition-colors">EMPIRE ETERNAL</Link>
             <ChevronRight size={12} />
-            <span className="text-yellow-400">MUSIC</span>
+            <span className="text-primary">MUSIC</span>
           </div>
 
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
             <div>
               {/* Pillar tag */}
-              <div className="inline-flex items-center gap-2 border border-yellow-400/30 bg-yellow-400/5 text-yellow-400 text-xs font-black tracking-widest px-3 py-1.5 rounded-full mb-4">
+              <div className="inline-flex items-center gap-2 border border-primary/30 bg-primary/5 text-primary text-xs font-black tracking-widest px-3 py-1.5 rounded-full mb-4">
                 <Radio size={12} />
                 PILLAR II — RHYTHM DNA
               </div>
 
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-none">
-                <span className="text-white">MUSIC</span>
+                <span className="text-foreground">MUSIC</span>
                 <br />
                 <span className="bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 bg-clip-text text-transparent">
                   LEGENDS
                 </span>
               </h1>
 
-              <p className="mt-4 text-gray-400 max-w-xl leading-relaxed">
+              <p className="mt-4 text-muted-foreground max-w-xl leading-relaxed">
                 The rhythm of the empire — every legend here transcends a genre, carrying a complete{" "}
-                <span className="text-yellow-400">DNA</span> of vision, influence, and timeless legacy.
+                <span className="text-primary">DNA</span> of vision, influence, and timeless legacy.
               </p>
             </div>
 
             {/* Live stats */}
             <div className="flex gap-4 lg:gap-6 shrink-0">
               <div className="text-center">
-                <div className="text-3xl font-black text-yellow-400">
+                <div className="text-3xl font-black text-primary">
                   {loading ? "—" : legends.length}
                 </div>
-                <div className="text-xs text-gray-500 uppercase tracking-wider mt-0.5">Legends</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Legends</div>
               </div>
-              <div className="w-px bg-gray-800" />
+              <div className="w-px bg-border" />
               <div className="text-center">
-                <div className="text-3xl font-black text-yellow-400">4</div>
-                <div className="text-xs text-gray-500 uppercase tracking-wider mt-0.5">Genres</div>
+                <div className="text-3xl font-black text-primary">4</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Genres</div>
               </div>
-              <div className="w-px bg-gray-800" />
+              <div className="w-px bg-border" />
               <div className="text-center">
-                <div className="text-3xl font-black text-yellow-400">∞</div>
-                <div className="text-xs text-gray-500 uppercase tracking-wider mt-0.5">Legacy</div>
+                <div className="text-3xl font-black text-primary">∞</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider mt-0.5">Legacy</div>
               </div>
             </div>
           </div>
@@ -283,15 +283,15 @@ export default function MusicPage() {
       </section>
 
       {/* ── DNA Pillars strip ─────────────────────────────────────────────── */}
-      <section className="border-t border-b border-gray-800/60">
+      <section className="border-t border-b border-border">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-800/60">
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border">
             {DNA_PILLARS.map(p => (
               <div key={p.label} className="flex items-center gap-3 px-5 py-4">
                 <span className="text-2xl">{p.icon}</span>
                 <div>
-                  <div className="text-yellow-400 text-xs font-black tracking-wider">{p.label}</div>
-                  <div className="text-gray-500 text-xs mt-0.5">{p.desc}</div>
+                  <div className="text-primary text-xs font-black tracking-wider">{p.label}</div>
+                  <div className="text-muted-foreground text-xs mt-0.5">{p.desc}</div>
                 </div>
               </div>
             ))}
@@ -310,8 +310,8 @@ export default function MusicPage() {
               onClick={() => setActiveFilter(f)}
               className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase transition-all ${
                 activeFilter === f
-                  ? "bg-yellow-400 text-black"
-                  : "border border-gray-700 text-gray-400 hover:border-yellow-400/30 hover:text-yellow-400"
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
               }`}
             >
               {f === "all" ? "🎵 ALL GENRES" : GENRE_LABELS[f]}
@@ -320,7 +320,7 @@ export default function MusicPage() {
 
           {/* Vote CTA */}
           <Link href="/games/globalstar" className="ml-auto">
-            <Button size="sm" className="flex items-center gap-2 bg-yellow-400 text-black font-black text-xs tracking-wider rounded-full hover:bg-yellow-300">
+            <Button size="sm" className="flex items-center gap-2 bg-primary text-primary-foreground font-black text-xs tracking-wider rounded-full hover:bg-primary/90">
               <Flame size={13} />
               VOTE NOW
               <ArrowRight size={13} />
@@ -334,7 +334,7 @@ export default function MusicPage() {
             {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
           </div>
         ) : displayed.length === 0 ? (
-          <div className="text-center py-20 text-gray-600">
+          <div className="text-center py-20 text-muted-foreground">
             <Music size={48} className="mx-auto mb-3 opacity-20" />
             <p>No legends in this genre yet</p>
           </div>
@@ -349,20 +349,20 @@ export default function MusicPage() {
 
       {/* ── GOAT Showdown Banner ──────────────────────────────────────────── */}
       <section className="max-w-7xl mx-auto px-4 pb-14">
-        <div className="relative rounded-2xl overflow-hidden border border-yellow-400/20 bg-gradient-to-r from-gray-900 via-black to-gray-900 p-8">
+        <div className="relative rounded-2xl overflow-hidden border border-primary/20 bg-gradient-to-r from-gray-900 via-black to-gray-900 p-8">
           <div className="absolute inset-0 pointer-events-none"
             style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(255,215,0,0.05) 0%, transparent 70%)" }} />
 
           <div className="relative flex flex-col md:flex-row items-center justify-between gap-6">
             <div>
-              <div className="flex items-center gap-2 text-yellow-400 text-xs font-black tracking-widest mb-2">
+              <div className="flex items-center gap-2 text-primary text-xs font-black tracking-widest mb-2">
                 <Crown size={14} />
                 RHYTHM SHOWDOWN — The Eternal Battle
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white">
+              <h2 className="text-2xl sm:text-3xl font-black text-foreground">
                 MJ vs Beyoncé — Vote in the Music GOAT Debate
               </h2>
-              <p className="text-gray-400 text-sm mt-2 max-w-md">
+              <p className="text-muted-foreground text-sm mt-2 max-w-md">
                 Two icons, one throne. The greatest music rivalry is still unsettled.
                 Your GlobalStar vote writes history.
               </p>
@@ -373,22 +373,22 @@ export default function MusicPage() {
                 <img
                   src={MUSIC_IMAGES["Michael Jackson"]}
                   alt="MJ"
-                  className="w-16 h-16 rounded-full object-cover object-top border-2 border-yellow-400 mx-auto mb-1"
+                  className="w-16 h-16 rounded-full object-cover object-top border-2 border-primary mx-auto mb-1"
                 />
-                <div className="text-xs text-yellow-400 font-bold">MJ</div>
+                <div className="text-xs text-primary font-bold">MJ</div>
               </div>
-              <div className="text-yellow-400 font-black text-2xl">VS</div>
+              <div className="text-primary font-black text-2xl">VS</div>
               <div className="text-center">
                 <img
                   src={MUSIC_IMAGES["Beyoncé"]}
                   alt="Beyoncé"
-                  className="w-16 h-16 rounded-full object-cover object-top border-2 border-yellow-400 mx-auto mb-1"
+                  className="w-16 h-16 rounded-full object-cover object-top border-2 border-primary mx-auto mb-1"
                 />
-                <div className="text-xs text-yellow-400 font-bold">BEYONCÉ</div>
+                <div className="text-xs text-primary font-bold">BEYONCÉ</div>
               </div>
 
               <Link href="/games/globalstar">
-                <Button className="flex items-center gap-2 bg-yellow-400 text-black font-black text-sm rounded-xl hover:bg-yellow-300 hover:shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+                <Button className="flex items-center gap-2 bg-primary text-primary-foreground font-black text-sm rounded-xl hover:bg-primary/90 hover:shadow-[0_0_20px_rgba(255,215,0,0.3)]">
                   Vote Now
                   <ArrowRight size={16} />
                 </Button>

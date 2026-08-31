@@ -15,7 +15,7 @@ export default function LiveTab({ user, st }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ background: "#111", border: "1px solid #ef444425", borderRadius: 12, padding: 16 }}>
+      <div style={{ background: "hsl(var(--card))", border: "1px solid #ef444425", borderRadius: 12, padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           <Radio size={16} style={{ color: "#ef4444" }} />
           <p style={{ margin: 0, fontWeight: 900, color: "#ef4444", fontSize: 14, textTransform: "uppercase", letterSpacing: 1 }}>

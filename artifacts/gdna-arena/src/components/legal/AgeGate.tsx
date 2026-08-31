@@ -125,7 +125,7 @@ export default function AgeGate({ active }: { active?: boolean }) {
   return (
     <div
       dir={isRTL ? "rtl" : "ltr"}
-      className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center px-4"
+      className="fixed inset-0 z-[200] bg-background/95 backdrop-blur-md flex items-center justify-center px-4"
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}

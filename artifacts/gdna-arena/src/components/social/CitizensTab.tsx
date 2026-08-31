@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Search, UserPlus, UserCheck } from "lucide-react";
 import { useLocation } from "wouter";
 import Avatar from "./Avatar";
-import { GOLD, api } from "./social-i18n";
+import { GOLD, GOLD_A, api } from "./social-i18n";
 import { useCallContext } from "../../contexts/CallContext";
 import type { Citizen } from "./social-types";
 
@@ -87,12 +87,12 @@ export default function CitizensTab({ user, st }: Props) {
         <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#666" }} />
         <input value={q} onChange={e => handleSearch(e.target.value)}
           placeholder={st.search_placeholder}
-          style={{ width: "100%", background: "#111", border: `1px solid ${GOLD}20`, borderRadius: 10, padding: "10px 12px 10px 36px", color: "#fff", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+          style={{ width: "100%", background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.13)}`, borderRadius: 10, padding: "10px 12px 10px 36px", color: "hsl(var(--foreground))", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
       </div>
 
-      {loading && <div style={{ textAlign: "center", color: "#444", padding: 24 }}>…</div>}
+      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 24 }}>…</div>}
       {!loading && citizens.length === 0 && (
-        <div style={{ textAlign: "center", color: "#444", padding: 60, fontSize: 14 }}>{st.no_citizens}</div>
+        <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 60, fontSize: 14 }}>{st.no_citizens}</div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
@@ -102,16 +102,16 @@ export default function CitizensTab({ user, st }: Props) {
           const isMe        = c.id === user?.id;
           return (
             <motion.div key={c.id} whileHover={{ scale: 1.01 }}
-              style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              style={{ background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.08)}`, borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <Avatar name={c.username} size={38} />
                   {isOnline && (
-                    <div style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, background: "#22c55e", borderRadius: "50%", border: "2px solid #0d0d0d" }} />
+                    <div style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, background: "#22c55e", borderRadius: "50%", border: "2px solid hsl(var(--card))" }} />
                   )}
                 </div>
                 <div style={{ flex: 1, overflow: "hidden" }}>
-                  <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.username}</p>
+                  <p style={{ margin: 0, fontWeight: 800, color: "hsl(var(--foreground))", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.username}</p>
                   <p style={{ margin: 0, fontSize: 11, color: c.rank.color }}>{c.rank.icon} {c.rank.label}</p>
                 </div>
               </div>
@@ -123,9 +123,9 @@ export default function CitizensTab({ user, st }: Props) {
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <button onClick={() => toggleFollow(c)} disabled={!user}
                     style={{ flex: 1, padding: "6px 0", borderRadius: 8, cursor: user ? "pointer" : "default", fontWeight: 700, fontSize: 11,
-                      background: isFollowing ? "#1a1a1a" : GOLD,
-                      color: isFollowing ? GOLD : "#000",
-                      border: isFollowing ? `1px solid ${GOLD}40` : "none" }}>
+                      background: isFollowing ? "hsl(var(--secondary))" : GOLD,
+                      color: isFollowing ? GOLD : "hsl(var(--primary-foreground))",
+                      border: isFollowing ? `1px solid ${GOLD_A(0.25)}` : "none" }}>
                     {isFollowing
                       ? <><UserCheck size={11} style={{ display: "inline", marginRight: 3 }} />{st.following}</>
                       : <><UserPlus  size={11} style={{ display: "inline", marginRight: 3 }} />{st.follow}</>

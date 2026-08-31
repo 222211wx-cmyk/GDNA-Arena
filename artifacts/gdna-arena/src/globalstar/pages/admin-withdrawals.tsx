@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
+import { GOLD, GOLD_A } from "../../components/social/social-i18n";
 
 // ── بوابة إدارة طلبات السحب — محمية بـ ADMIN_SECRET ──────────────────────────
-const GOLD = "#FFD700";
 const API = (p: string) => p; // deployed at root; dev proxy handles /api
 
 interface Withdrawal {
@@ -176,14 +176,14 @@ export default function AdminWithdrawals() {
   if (!authed) {
     return (
       <div dir="rtl" style={{ minHeight: "100vh", background: "#050505", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <div style={{ width: "100%", maxWidth: 380, background: "#0d0d0d", border: `1px solid ${GOLD}30`, borderRadius: 16, padding: 28, textAlign: "center" }}>
+        <div style={{ width: "100%", maxWidth: 380, background: "#0d0d0d", border: `1px solid ${GOLD_A(0.188)}`, borderRadius: 16, padding: 28, textAlign: "center" }}>
           <p style={{ fontSize: 40, margin: "0 0 8px" }}>👑</p>
           <h1 style={{ color: GOLD, fontSize: 18, fontWeight: 900, margin: "0 0 6px" }}>بوابة الإدارة — طلبات السحب</h1>
           <p style={{ color: "#888", fontSize: 12, margin: "0 0 18px" }}>أدخل مفتاح الإدارة السري للمتابعة</p>
           <input type="password" value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && input.trim() && (setSecret(input.trim()), load(input.trim()))}
             placeholder="ADMIN_SECRET"
-            style={{ width: "100%", boxSizing: "border-box", background: "#111", border: `1px solid ${GOLD}25`, borderRadius: 10, padding: "10px 14px", color: "#fff", fontSize: 14, outline: "none", marginBottom: 12, textAlign: "center" }} />
+            style={{ width: "100%", boxSizing: "border-box", background: "#111", border: `1px solid ${GOLD_A(0.145)}`, borderRadius: 10, padding: "10px 14px", color: "#fff", fontSize: 14, outline: "none", marginBottom: 12, textAlign: "center" }} />
           <button onClick={() => { if (input.trim()) { setSecret(input.trim()); load(input.trim()); } }}
             style={{ width: "100%", background: GOLD, border: "none", borderRadius: 10, padding: "10px 0", color: "#000", fontWeight: 900, fontSize: 14, cursor: "pointer" }}>
             دخول
@@ -199,10 +199,10 @@ export default function AdminWithdrawals() {
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <h1 style={{ color: GOLD, fontSize: 20, fontWeight: 900, margin: 0, flex: 1 }}>👑 إدارة طلبات السحب</h1>
-          <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}25`, borderRadius: 10, padding: "8px 14px", fontSize: 13, color: "#fff" }}>
+          <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD_A(0.145)}`, borderRadius: 10, padding: "8px 14px", fontSize: 13, color: "#fff" }}>
             المستحق (قيد الانتظار): <b style={{ color: GOLD }}>{pendingTotal.toFixed(2)} MAD</b>
           </div>
-          <button onClick={() => load(secret)} style={{ background: "#1a1a1a", border: `1px solid ${GOLD}20`, borderRadius: 10, padding: "8px 14px", color: GOLD, fontSize: 13, cursor: "pointer" }}>
+          <button onClick={() => load(secret)} style={{ background: "#1a1a1a", border: `1px solid ${GOLD_A(0.125)}`, borderRadius: 10, padding: "8px 14px", color: GOLD, fontSize: 13, cursor: "pointer" }}>
             🔄 تحديث
           </button>
         </div>
@@ -212,7 +212,7 @@ export default function AdminWithdrawals() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {rows.map(w => (
-              <div key={w.id} style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <div key={w.id} style={{ background: "#0d0d0d", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <p style={{ margin: 0, color: "#fff", fontWeight: 800, fontSize: 14 }}>{w.uploader_name}</p>
                   <p style={{ margin: "2px 0 0", color: "#888", fontSize: 11 }}>{new Date(w.requested_at).toLocaleString("ar-MA")}</p>
@@ -250,15 +250,15 @@ export default function AdminWithdrawals() {
         ) : (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 14 }}>
-              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}30`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD_A(0.188)}`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
                 <p style={{ margin: 0, color: "#888", fontSize: 11 }}>💰 إجمالي المداخيل</p>
                 <p style={{ margin: "4px 0 0", color: GOLD, fontWeight: 900, fontSize: 20 }}>{finance.totalRevenue.toFixed(2)} 🪙</p>
               </div>
-              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
                 <p style={{ margin: 0, color: "#888", fontSize: 11 }}>🎬 GlobalStar ({finance.sources.globalstar.views} مشاهدة)</p>
                 <p style={{ margin: "4px 0 0", color: "#fff", fontWeight: 800, fontSize: 16 }}>{finance.sources.globalstar.earnings.toFixed(2)} 🪙</p>
               </div>
-              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
+              <div style={{ background: "#0d0d0d", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "14px 16px", textAlign: "center" }}>
                 <p style={{ margin: 0, color: "#888", fontSize: 11 }}>📢 Pulse ({finance.sources.pulse.likes} إعجاب)</p>
                 <p style={{ margin: "4px 0 0", color: "#fff", fontWeight: 800, fontSize: 16 }}>{finance.sources.pulse.earnings.toFixed(2)} 🪙</p>
               </div>
@@ -269,7 +269,7 @@ export default function AdminWithdrawals() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {finance.divisions.map(d => (
-                <div key={d.division} style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div key={d.division} style={{ background: "#0d0d0d", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                   <p style={{ margin: 0, color: "#fff", fontSize: 14, fontWeight: 800, flex: 1, minWidth: 140 }}>
                     {DIVISION_ICONS[d.division] ?? "🏛️"} {d.division}
                   </p>
@@ -279,7 +279,7 @@ export default function AdminWithdrawals() {
                   <input type="number" step="1" min="0" max="100"
                     value={shareDraft[d.division] ?? String(d.sharePct)}
                     onChange={e => setShareDraft(prev => ({ ...prev, [d.division]: e.target.value }))}
-                    style={{ width: 64, background: "#111", border: `1px solid ${GOLD}25`, borderRadius: 8, padding: "6px 8px", color: GOLD, fontSize: 13, fontWeight: 800, textAlign: "center", outline: "none" }} />
+                    style={{ width: 64, background: "#111", border: `1px solid ${GOLD_A(0.145)}`, borderRadius: 8, padding: "6px 8px", color: GOLD, fontSize: 13, fontWeight: 800, textAlign: "center", outline: "none" }} />
                   <span style={{ color: "#888", fontSize: 12, minWidth: 20 }}>%</span>
                   <b style={{ color: GOLD, fontSize: 14, minWidth: 90, textAlign: "left" }}>{d.amount.toFixed(2)} 🪙</b>
                 </div>
@@ -299,13 +299,13 @@ export default function AdminWithdrawals() {
         <h2 style={{ color: GOLD, fontSize: 17, fontWeight: 900, margin: "34px 0 12px" }}>⚖️ نسب الريع والأرباح</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {rates.map(s => (
-            <div key={s.content_type} style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div key={s.content_type} style={{ background: "#0d0d0d", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <p style={{ margin: 0, color: "#fff", fontSize: 13, fontWeight: 700, flex: 1, minWidth: 200 }}>
                 {RATE_LABELS[s.content_type] ?? s.content_type}
               </p>
               <input type="number" step="0.01" min="0" defaultValue={parseFloat(s.rate)}
                 onBlur={e => void saveRate(s.content_type, e.target.value)}
-                style={{ width: 90, background: "#111", border: `1px solid ${GOLD}25`, borderRadius: 8, padding: "6px 10px", color: GOLD, fontSize: 13, fontWeight: 800, textAlign: "center", outline: "none" }} />
+                style={{ width: 90, background: "#111", border: `1px solid ${GOLD_A(0.145)}`, borderRadius: 8, padding: "6px 10px", color: GOLD, fontSize: 13, fontWeight: 800, textAlign: "center", outline: "none" }} />
               <span style={{ color: "#888", fontSize: 12 }}>🪙 / {s.unit === "view" ? "مشاهدة" : "إعجاب"}</span>
               {rateBusy === s.content_type && <span style={{ color: GOLD, fontSize: 12 }}>...</span>}
             </div>
@@ -319,7 +319,7 @@ export default function AdminWithdrawals() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {reports.map(r => (
-              <div key={r.id} style={{ background: "#0d0d0d", border: `1px solid ${r.status === "pending" ? "#ef444440" : GOLD + "15"}`, borderRadius: 12, padding: "14px 16px" }}>
+              <div key={r.id} style={{ background: "#0d0d0d", border: `1px solid ${r.status === "pending" ? "#ef444440" : GOLD_A(0.082)}`, borderRadius: 12, padding: "14px 16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
                   <span style={{ color: "#fff", fontWeight: 800, fontSize: 13 }}>
                     {r.content_type === "gs_upload" ? "🎬 عمل GlobalStar" : "📢 منشور Pulse"} #{r.content_id}

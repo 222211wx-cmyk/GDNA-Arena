@@ -82,13 +82,13 @@ export default function CallOverlay({
           exit={{ opacity: 0, y: 60 }}
           style={{
             position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)",
-            zIndex: 9999, background: "#1a0505", border: "1px solid #ef444480",
+            zIndex: 9999, background: "hsl(var(--destructive) / 0.1)", border: "1px solid hsl(var(--destructive) / 0.5)",
             borderRadius: 14, padding: "14px 22px", maxWidth: 400, width: "90vw",
             display: "flex", alignItems: "center", gap: 12,
-            boxShadow: "0 8px 32px #ef444430",
+            boxShadow: "0 8px 32px hsl(var(--destructive) / 0.2)",
           }}>
           <span style={{ fontSize: 22 }}>📵</span>
-          <p style={{ margin: 0, color: "#fca5a5", fontWeight: 700, fontSize: 13, lineHeight: 1.4 }}>
+          <p style={{ margin: 0, color: "hsl(var(--destructive))", fontWeight: 700, fontSize: 13, lineHeight: 1.4 }}>
             {callError}
           </p>
         </motion.div>
@@ -101,7 +101,7 @@ export default function CallOverlay({
     <AnimatePresence>
       <motion.div initial={{ opacity: 0, y: 80 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 80 }}
         className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] rounded-2xl overflow-hidden shadow-2xl"
-        style={{ width: 320, background: "#0a0a0a", border: "1px solid #C9A84C40" }}>
+        style={{ width: 320, background: "hsl(var(--card))", border: "1px solid hsl(var(--primary) / 0.4)" }}>
 
         {/* Pulse ring */}
         <div className="absolute inset-0 pointer-events-none">
@@ -124,7 +124,7 @@ export default function CallOverlay({
             {/* Reject */}
             <button onClick={onReject}
               className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
-              style={{ background: "#ef4444" }}>
+              style={{ background: "hsl(var(--destructive))" }}>
               <PhoneOff className="w-6 h-6 text-white" />
             </button>
 
@@ -153,22 +153,22 @@ export default function CallOverlay({
   if (minimized) return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       className="fixed bottom-6 right-6 z-[9999] rounded-2xl cursor-pointer overflow-hidden shadow-2xl"
-      style={{ width: 200, height: 112, background: "#050505", border: "1px solid #C9A84C40" }}
+      style={{ width: 200, height: 112, background: "hsl(var(--background))", border: "1px solid hsl(var(--primary) / 0.4)" }}
       onClick={() => setMinimized(false)}>
       {remoteStream
         ? <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" muted={speakerOff} />
         : <div className="w-full h-full flex items-center justify-center">
             <div className="text-center space-y-1">
               <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center font-black text-sm text-black"
-                style={{ background: "#C9A84C" }}>{peer?.charAt(0).toUpperCase()}</div>
-              <p className="text-[10px] font-mono" style={{ color: "#C9A84C" }}>
+                style={{ background: "hsl(var(--primary))" }}>{peer?.charAt(0).toUpperCase()}</div>
+              <p className="text-[10px] font-mono" style={{ color: "hsl(var(--primary))" }}>
                 {status === "calling" ? "Calling..." : status === "active" ? formatDuration(duration) : "Ended"}
               </p>
             </div>
           </div>}
       <div className="absolute top-2 right-2">
         <button onClick={(e) => { e.stopPropagation(); onEnd(); }}
-          className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#ef4444" }}>
+          className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "hsl(var(--destructive))" }}>
           <PhoneOff className="w-3 h-3 text-white" />
         </button>
       </div>
@@ -178,7 +178,7 @@ export default function CallOverlay({
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
       className="fixed inset-0 z-[9998] flex flex-col"
-      style={{ background: "#050505" }}>
+      style={{ background: "hsl(var(--background))" }}>
 
       {/* Remote video / avatar */}
       <div className="flex-1 min-h-0 relative flex items-center justify-center overflow-hidden">
@@ -192,7 +192,7 @@ export default function CallOverlay({
             </div>
             <div className="space-y-1">
               <p className="text-white font-black text-2xl">{peer}</p>
-              <p className="text-sm font-mono animate-pulse" style={{ color: status === "active" ? "#22c55e" : "#C9A84C" }}>
+              <p className="text-sm font-mono animate-pulse" style={{ color: status === "active" ? "#22c55e" : "hsl(var(--primary))" }}>
                 {status === "calling"  ? "⏳ Calling..."
                 : status === "active"  ? `✅ Connected — ${formatDuration(duration)}`
                 : status === "ended"   ? "📵 Call ended"
@@ -213,7 +213,7 @@ export default function CallOverlay({
         {/* Local video (PiP) */}
         {localStream && hasVideo && !videoOff && (
           <div id="local-player" className="absolute bottom-4 right-4 w-28 h-20 rounded-xl overflow-hidden border-2"
-            style={{ borderColor: "#C9A84C50" }}>
+            style={{ borderColor: "hsl(var(--primary) / 0.5)" }}>
             <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           </div>
         )}
@@ -225,14 +225,14 @@ export default function CallOverlay({
 
         <button onClick={() => setMuted(v => !v)}
           className="w-13 h-13 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
-          style={{ background: muted ? "#ef4444" : "#1a1a1a", border: "1px solid #ffffff20" }}>
+          style={{ background: muted ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
           {muted ? <MicOff className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
         </button>
 
         {hasVideo && (
           <button onClick={() => setVideoOff(v => !v)}
             className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
-            style={{ background: videoOff ? "#ef4444" : "#1a1a1a", border: "1px solid #ffffff20" }}>
+            style={{ background: videoOff ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
             {videoOff ? <VideoOff className="w-5 h-5 text-white" /> : <Video className="w-5 h-5 text-white" />}
           </button>
         )}
@@ -240,13 +240,13 @@ export default function CallOverlay({
         {/* End call — center large */}
         <button onClick={onEnd}
           className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg"
-          style={{ background: "#ef4444" }}>
+          style={{ background: "hsl(var(--destructive))" }}>
           <PhoneOff className="w-7 h-7 text-white" />
         </button>
 
         <button onClick={() => setSpeakerOff(v => !v)}
           className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
-          style={{ background: speakerOff ? "#ef4444" : "#1a1a1a", border: "1px solid #ffffff20" }}>
+          style={{ background: speakerOff ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
           {speakerOff ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
         </button>
 
@@ -255,7 +255,7 @@ export default function CallOverlay({
           <button
             onClick={screenSharing ? onStopScreen : onScreenShare}
             className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
-            style={{ background: screenSharing ? "#f59e0b" : "#1a1a1a", border: "1px solid #ffffff20" }}
+            style={{ background: screenSharing ? "#f59e0b" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}
             title={screenSharing ? "Stop sharing" : "Share screen"}>
             {screenSharing
               ? <MonitorOff className="w-5 h-5 text-black" />
@@ -265,7 +265,7 @@ export default function CallOverlay({
 
         <button onClick={() => setMinimized(true)}
           className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
-          style={{ background: "#1a1a1a", border: "1px solid #ffffff20" }}>
+          style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
           <Minimize2 className="w-5 h-5 text-white" />
         </button>
       </div>

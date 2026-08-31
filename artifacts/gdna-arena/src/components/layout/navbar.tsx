@@ -100,7 +100,7 @@ export function Navbar() {
   };
 
   return (
-    <header className="w-full sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-yellow-500/20">
+    <header className="w-full sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-primary/20">
 
       {/* ── Main bar ── */}
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
@@ -143,7 +143,7 @@ export function Navbar() {
           {/* Wordmark */}
           <div className="hidden sm:flex flex-col leading-none">
             <span className="font-black text-base tracking-[0.12em] uppercase"
-              style={{ color: "#C9A84C", letterSpacing: "0.12em", fontFamily: "inherit" }}>
+              style={{ color: "hsl(var(--primary))", letterSpacing: "0.12em", fontFamily: "inherit" }}>
               ARENA
             </span>
             <span className="text-[9px] font-bold tracking-[0.35em] uppercase"
@@ -165,10 +165,10 @@ export function Navbar() {
                 href={item.path}
                 className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
                   active
-                    ? "text-yellow-400 bg-yellow-400/10 border-b-2 border-yellow-400"
+                    ? "text-primary bg-primary/10 border-b-2 border-primary"
                     : featured
-                      ? "text-yellow-400 border-b-2 border-yellow-400/60 hover:bg-yellow-400/10"
-                      : "text-gray-300 hover:text-white hover:bg-white/5"
+                      ? "text-primary border-b-2 border-primary/60 hover:bg-primary/10"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 {item.emoji && <span className="text-base leading-none">{item.emoji}</span>}
@@ -193,8 +193,8 @@ export function Navbar() {
                 data-testid={`nav-module-${item.path.replace("/", "")}`}
                 className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
                   active
-                    ? "text-yellow-400 bg-yellow-400/10 border-b-2 border-yellow-400"
-                    : "text-gray-300 hover:text-white hover:bg-white/5"
+                    ? "text-primary bg-primary/10 border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 {item.icon}
@@ -213,8 +213,8 @@ export function Navbar() {
             href="/press"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-black tracking-wider transition-all ml-1 ${
               isActive("/press")
-                ? "bg-yellow-400 text-black shadow-[0_0_16px_rgba(255,215,0,0.4)]"
-                : "border border-yellow-400/40 text-yellow-400 hover:bg-yellow-400/10"
+                ? "bg-primary text-primary-foreground shadow-[0_0_16px_hsl(var(--primary)/0.4)]"
+                : "border border-primary/40 text-primary hover:bg-primary/10"
             }`}
           >
             <Mic2 size={14} />
@@ -228,14 +228,14 @@ export function Navbar() {
           {/* Search — desktop */}
           <div ref={searchRef} className="hidden lg:block relative">
             <form onSubmit={handleSearch}>
-              <div className="flex items-center bg-gray-800/80 border border-gray-700/50 rounded-full px-3 py-1.5 gap-2 focus-within:border-yellow-400/50 focus-within:bg-gray-800 transition-all">
-                <Search size={15} className="text-gray-400 shrink-0" />
+              <div className="flex items-center bg-secondary/80 border border-border/50 rounded-full px-3 py-1.5 gap-2 focus-within:border-primary/50 focus-within:bg-secondary transition-all">
+                <Search size={15} className="text-muted-foreground shrink-0" />
                 <input
                   type="text"
                   placeholder="CR7, Messi, Coupe du Monde..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent outline-none text-white text-sm w-44 placeholder:text-gray-500"
+                  className="bg-transparent outline-none text-foreground text-sm w-44 placeholder:text-muted-foreground"
                 />
               </div>
             </form>
@@ -244,7 +244,7 @@ export function Navbar() {
           {/* Search icon — tablet */}
           <button
             onClick={() => setSearchOpen(!searchOpen)}
-            className="lg:hidden text-gray-400 hover:text-yellow-400 transition-colors p-1.5"
+            className="lg:hidden text-muted-foreground hover:text-primary transition-colors p-1.5"
           >
             <Search size={18} />
           </button>
@@ -256,7 +256,7 @@ export function Navbar() {
           <Link
             href="/legal"
             title="Legal Center"
-            className="hidden md:flex items-center gap-1 text-gray-500 hover:text-yellow-400 transition-colors text-xs border border-gray-800 hover:border-yellow-400/30 rounded-lg px-2 py-1"
+            className="hidden md:flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors text-xs border border-border hover:border-primary/30 rounded-lg px-2 py-1"
           >
             <Scale size={12} />
             <span className="hidden lg:block">Legal</span>
@@ -266,19 +266,19 @@ export function Navbar() {
           <div ref={langRef} className="relative hidden md:block">
             <button
               onClick={() => setLangOpen(!langOpen)}
-              className="flex items-center gap-1 text-gray-400 hover:text-yellow-400 transition-colors text-sm border border-gray-700/50 rounded-lg px-2 py-1 hover:border-yellow-400/30"
+              className="flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors text-sm border border-border/50 rounded-lg px-2 py-1 hover:border-primary/30"
             >
               <Globe size={13} />
               <span>{currentFlag}</span>
             </button>
             {langOpen && (
-              <div className="absolute right-0 top-full mt-2 w-36 bg-gray-900 border border-yellow-400/20 rounded-xl overflow-hidden shadow-2xl z-50">
+              <div className="absolute right-0 top-full mt-2 w-36 bg-popover border border-primary/20 rounded-xl overflow-hidden shadow-2xl z-50">
                 {LANGS.map((l) => (
                   <button
                     key={l.code}
                     onClick={() => { setLang(l.code as Lang); setLangOpen(false); }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-yellow-400/10 transition-colors ${
-                      lang === l.code ? "text-yellow-400 font-bold" : "text-gray-400"
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-primary/10 transition-colors ${
+                      lang === l.code ? "text-primary font-bold" : "text-muted-foreground"
                     }`}
                   >
                     <span>{l.flag}</span>
@@ -291,31 +291,31 @@ export function Navbar() {
 
           {/* User controls */}
           {user ? (
-            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-gray-700/50">
+            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-border/50">
               <Link
                 href="/dashboard"
-                className="flex items-center gap-1 text-xs text-yellow-400 font-black uppercase tracking-widest hover:text-yellow-300 transition-colors"
+                className="flex items-center gap-1 text-xs text-primary font-black uppercase tracking-widest hover:text-primary/80 transition-colors"
               >
                 <Trophy size={12} />
                 {user.balance.toLocaleString()}
               </Link>
-              <Link href="/wallet"    title={t("wallet")}    className="text-gray-400 hover:text-yellow-400 transition-colors"><Wallet         size={16} /></Link>
-              <Link href="/dashboard" title={t("dashboard")} className="text-gray-400 hover:text-yellow-400 transition-colors"><LayoutDashboard size={16} /></Link>
+              <Link href="/wallet"    title={t("wallet")}    className="text-muted-foreground hover:text-primary transition-colors"><Wallet         size={16} /></Link>
+              <Link href="/dashboard" title={t("dashboard")} className="text-muted-foreground hover:text-primary transition-colors"><LayoutDashboard size={16} /></Link>
               <button
                 onClick={() => {
                   void logout().catch(error =>
                     window.alert(error instanceof Error ? error.message : "Logout failed"));
                 }}
                 title={t("logout")}
-                className="text-gray-400 hover:text-red-400 transition-colors"
+                className="text-muted-foreground hover:text-destructive transition-colors"
               >
                 <LogOut size={16} />
               </button>
             </div>
           ) : (
-            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-gray-700/50">
-              <Link href="/login"    className="text-sm text-gray-400 hover:text-white transition-colors font-medium">{t("login")}</Link>
-              <Link href="/register" className="text-sm font-bold px-3 py-1.5 rounded-lg bg-yellow-400/10 text-yellow-400 border border-yellow-400/40 hover:bg-yellow-400 hover:text-black transition-all">
+            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-border/50">
+              <Link href="/login"    className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium">{t("login")}</Link>
+              <Link href="/register" className="text-sm font-bold px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground transition-all">
                 {t("register")}
               </Link>
             </div>
@@ -324,7 +324,7 @@ export function Navbar() {
           {/* Mobile toggle */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden text-gray-400 hover:text-yellow-400 transition-colors p-1"
+            className="md:hidden text-muted-foreground hover:text-primary transition-colors p-1"
           >
             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
@@ -333,17 +333,17 @@ export function Navbar() {
 
       {/* ── Tablet search bar (below main bar) ── */}
       {searchOpen && (
-        <div className="lg:hidden border-t border-gray-800/60 px-4 py-2">
+          <div className="lg:hidden border-t border-border/60 px-4 py-2">
           <form onSubmit={handleSearch}>
-            <div className="flex items-center bg-gray-800 rounded-full px-4 py-2 gap-2 border border-gray-700/50 focus-within:border-yellow-400/50 transition-all">
-              <Search size={15} className="text-gray-400 shrink-0" />
+            <div className="flex items-center bg-secondary rounded-full px-4 py-2 gap-2 border border-border/50 focus-within:border-primary/50 transition-all">
+              <Search size={15} className="text-muted-foreground shrink-0" />
               <input
                 autoFocus
                 type="text"
                 placeholder="CR7, Messi, Coupe du Monde..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent outline-none text-white text-sm flex-1 placeholder:text-gray-500"
+                className="bg-transparent outline-none text-foreground text-sm flex-1 placeholder:text-muted-foreground"
               />
             </div>
           </form>
@@ -351,7 +351,7 @@ export function Navbar() {
       )}
 
       {/* ── Mobile horizontal nav strip ── */}
-      <div className="md:hidden flex w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain gap-1 px-3 py-2 border-t border-gray-800/60 scrollbar-hide">
+      <div className="md:hidden flex w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain gap-1 px-3 py-2 border-t border-border/60 scrollbar-hide">
         {NAV_ITEMS.map((item) => {
           const active   = isActive(item.path);
           const featured = item.highlight && !active;
@@ -363,10 +363,10 @@ export function Navbar() {
               onClick={() => setMobileOpen(false)}
               className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 active
-                  ? "text-yellow-400 bg-yellow-400/10"
+                  ? "text-primary bg-primary/10"
                   : featured
-                    ? "text-yellow-400 border-b border-yellow-400/60"
-                    : "text-gray-400 hover:text-white"
+                    ? "text-primary border-b border-primary/60"
+                    : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {item.emoji && <span>{item.emoji}</span>}
@@ -388,7 +388,7 @@ export function Navbar() {
               href={item.path}
               data-testid={`nav-module-mobile-${item.path.replace("/", "")}`}
               className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                active ? "text-yellow-400 bg-yellow-400/10" : "text-gray-400 hover:text-white"
+                active ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {item.icon}
@@ -406,8 +406,8 @@ export function Navbar() {
           onClick={() => setMobileOpen(false)}
           className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
             isActive("/press")
-              ? "bg-yellow-400 text-black border-yellow-400"
-              : "border-yellow-400/40 text-yellow-400"
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-primary/40 text-primary"
           }`}
         >
           <Mic2 size={12} />
@@ -417,7 +417,7 @@ export function Navbar() {
 
       {/* ── Mobile full menu ── */}
       {mobileOpen && (
-        <div className="md:hidden border-t border-gray-800 bg-black/98 px-4 py-4 space-y-1">
+        <div className="md:hidden border-t border-border bg-background/98 px-4 py-4 space-y-1">
 
           {/* Nav links */}
           {[...NAV_ITEMS, { name: "PRESS", emoji: "📡", icon: <Mic2 size={16} />, path: "/press", highlight: false }].map((item) => {
@@ -431,10 +431,10 @@ export function Navbar() {
                 onClick={() => setMobileOpen(false)}
                 className={`relative flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
                   active
-                    ? "text-yellow-400 bg-yellow-400/10"
+                    ? "text-primary bg-primary/10"
                     : featured
-                      ? "text-yellow-400"
-                      : "text-gray-300 hover:text-white hover:bg-white/5"
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
                 <span className="text-xl leading-none">{item.emoji ?? "›"}</span>
@@ -449,7 +449,7 @@ export function Navbar() {
           })}
 
           {/* Four-door modules */}
-          <div className="pt-2 border-t border-gray-800 space-y-1">
+          <div className="pt-2 border-t border-border space-y-1">
             {MODULE_ITEMS.filter((m) => !m.adminOnly || user?.isAdmin).map((item) => {
               const active = isActive(item.path);
               return (
@@ -459,7 +459,7 @@ export function Navbar() {
                   onClick={() => setMobileOpen(false)}
                   data-testid={`nav-module-menu-${item.path.replace("/", "")}`}
                   className={`flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
-                    active ? "text-yellow-400 bg-yellow-400/10" : "text-gray-300 hover:text-white hover:bg-white/5"
+                    active ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   }`}
                 >
                   {item.icon}
@@ -470,9 +470,9 @@ export function Navbar() {
           </div>
 
           {/* Growth / AI */}
-          <div className="pt-2 border-t border-gray-800">
+          <div className="pt-2 border-t border-border">
             <Link href="/growth" onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold text-purple-400 hover:bg-purple-400/10 transition-all">
+              className="flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold text-primary hover:bg-primary/10 transition-all">
               <BrainCircuit size={16} />
               ARCHON SYSTEM
             </Link>
@@ -480,37 +480,37 @@ export function Navbar() {
 
           {/* User */}
           {user ? (
-            <div className="pt-2 border-t border-gray-800 space-y-1">
+            <div className="pt-2 border-t border-border space-y-1">
               <Link href="/dashboard" onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-gray-300 hover:text-white transition-all">
-                <LayoutDashboard size={16} className="text-yellow-400" /> {t("dashboard")}
+                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-muted-foreground hover:text-foreground transition-all">
+                <LayoutDashboard size={16} className="text-primary" /> {t("dashboard")}
               </Link>
               <Link href="/wallet" onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-gray-300 hover:text-white transition-all">
-                <Wallet size={16} className="text-yellow-400" /> {t("wallet")}
+                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-muted-foreground hover:text-foreground transition-all">
+                <Wallet size={16} className="text-primary" /> {t("wallet")}
               </Link>
               <button onClick={() => {
                 setMobileOpen(false);
                 void logout().catch(error =>
                   window.alert(error instanceof Error ? error.message : "Logout failed"));
               }}
-                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-red-400 w-full hover:bg-red-400/10 transition-all">
+                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-destructive w-full hover:bg-destructive/10 transition-all">
                 <LogOut size={16} /> {t("logout")}
               </button>
             </div>
           ) : (
-            <div className="pt-2 border-t border-gray-800 flex gap-2">
-              <Link href="/login"    onClick={() => setMobileOpen(false)} className="flex-1 text-center py-3 rounded-xl border border-yellow-400/30 text-yellow-400 font-bold text-sm">{t("login")}</Link>
-              <Link href="/register" onClick={() => setMobileOpen(false)} className="flex-1 text-center py-3 rounded-xl bg-yellow-400/10 border border-yellow-400/40 text-yellow-400 font-bold text-sm">{t("register")}</Link>
+            <div className="pt-2 border-t border-border flex gap-2">
+              <Link href="/login"    onClick={() => setMobileOpen(false)} className="flex-1 text-center py-3 rounded-xl border border-primary/30 text-primary font-bold text-sm">{t("login")}</Link>
+              <Link href="/register" onClick={() => setMobileOpen(false)} className="flex-1 text-center py-3 rounded-xl bg-primary/10 border border-primary/40 text-primary font-bold text-sm">{t("register")}</Link>
             </div>
           )}
 
           {/* Language */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-800">
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
             {LANGS.map((l) => (
               <button key={l.code} onClick={() => { setLang(l.code as Lang); setMobileOpen(false); }}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                  lang === l.code ? "border-yellow-400 text-yellow-400 bg-yellow-400/10" : "border-gray-700 text-gray-400 hover:border-yellow-400/40"
+                  lang === l.code ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-primary/40"
                 }`}>
                 {l.flag} {l.label}
               </button>

@@ -79,7 +79,7 @@ export default function EmpireEternalPage() {
   const topLegends   = legends.slice(0, 5);
 
   return (
-    <div className="min-h-screen" style={{ background: "#050505" }}>
+    <div className="min-h-screen" style={{ background: "hsl(var(--background))" }}>
 
       {/* ── HERO ── */}
       <div className="relative overflow-hidden" style={{ background: `radial-gradient(ellipse at 50% 0%, ${G_DIM}, transparent 70%)` }}>
@@ -99,7 +99,7 @@ export default function EmpireEternalPage() {
 
           <motion.h1 initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
             className="text-6xl md:text-8xl font-black tracking-tighter mb-4 leading-none">
-            <span className="text-white">EMPIRE </span>
+            <span className="text-foreground">EMPIRE </span>
             <span className="text-transparent bg-clip-text"
               style={{ backgroundImage: `linear-gradient(135deg, ${GREEN}, #86efac, #4ade80)` }}>
               ETERNAL
@@ -211,7 +211,7 @@ export default function EmpireEternalPage() {
               ))}
               <Link href="/pulse">
                 <div className="flex items-center justify-center gap-1 text-xs font-bold py-2 rounded-xl border cursor-pointer hover:bg-white/5 transition-colors"
-                  style={{ borderColor: "rgba(201,168,76,0.3)", color: "#C9A84C" }}>
+                  style={{ borderColor: "hsl(var(--primary) / 0.3)", color: "hsl(var(--primary))" }}>
                   Open Empire Pulse <ArrowRight className="w-3.5 h-3.5" />
                 </div>
               </Link>
@@ -292,7 +292,7 @@ export default function EmpireEternalPage() {
         <p className="text-muted-foreground text-sm mb-6">The empire never sleeps — it evolves, grows, and conquers.</p>
         <div className="flex justify-center gap-4 flex-wrap">
           <Link href="/legends"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: `${GREEN}40`, color: GREEN }}>TOP 10 LEGENDS</button></Link>
-          <Link href="/pulse"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: "rgba(201,168,76,0.4)", color: "#C9A84C" }}>EMPIRE PULSE</button></Link>
+          <Link href="/pulse"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: "hsl(var(--primary) / 0.4)", color: "hsl(var(--primary))" }}>EMPIRE PULSE</button></Link>
           <Link href="/citizens"><button className="px-6 py-2.5 rounded-xl font-bold text-sm border hover:bg-white/5 transition-all" style={{ borderColor: "#a78bfa40", color: "#a78bfa" }}>CITIZENS</button></Link>
         </div>
       </div>

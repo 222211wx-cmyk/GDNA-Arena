@@ -56,8 +56,8 @@ export default function CommHub() {
               insetInlineEnd: 16,
               width: "min(94vw, 400px)",
               height: "min(72dvh, 580px)",
-              background: "#0a0a0a",
-              border: `1px solid ${GOLD}30`,
+              background: "hsl(var(--card))",
+              border: "1px solid hsl(var(--primary) / 0.3)",
               borderRadius: 16,
               boxShadow: "0 12px 48px rgba(0,0,0,0.7)",
               zIndex: 900,
@@ -65,11 +65,11 @@ export default function CommHub() {
               flexDirection: "column",
               overflow: "hidden",
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${GOLD}15`, flexShrink: 0 }}>
-              <MessageSquare size={15} style={{ color: GOLD }} />
-              <span style={{ fontWeight: 900, color: "#fff", fontSize: 13, flex: 1 }}>AMIS 👑</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid hsl(var(--primary) / 0.15)", flexShrink: 0 }}>
+              <MessageSquare size={15} style={{ color: "hsl(var(--primary))" }} />
+              <span style={{ fontWeight: 900, color: "hsl(var(--foreground))", fontSize: 13, flex: 1 }}>AMIS 👑</span>
               <button onClick={() => setOpen(false)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#666", display: "flex" }}>
+                style={{ background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", display: "flex" }}>
                 <X size={16} />
               </button>
             </div>
@@ -88,9 +88,9 @@ export default function CommHub() {
           bottom: "calc(20px + env(safe-area-inset-bottom))",
           insetInlineEnd: 16,
           width: 54, height: 54, borderRadius: "50%",
-          background: open ? "#1a1a1a" : GOLD,
-          border: open ? `1px solid ${GOLD}40` : "none",
-          color: open ? GOLD : "#000",
+          background: open ? "hsl(var(--secondary))" : GOLD,
+          border: open ? "1px solid hsl(var(--primary) / 0.4)" : "none",
+          color: open ? "hsl(var(--primary))" : "#000",
           cursor: "pointer", zIndex: 901,
           display: "flex", alignItems: "center", justifyContent: "center",
           boxShadow: "0 6px 24px rgba(0,0,0,0.5)",
@@ -99,11 +99,11 @@ export default function CommHub() {
         {!open && notifOn && unread > 0 && (
           <span style={{
             position: "absolute", top: -2, insetInlineEnd: -2,
-            background: "#ef4444", color: "#fff", borderRadius: 10,
+            background: "hsl(var(--destructive))", color: "hsl(var(--destructive-foreground))", borderRadius: 10,
             minWidth: 20, height: 20, padding: "0 5px",
             fontSize: 11, fontWeight: 900,
             display: "flex", alignItems: "center", justifyContent: "center",
-            border: "2px solid #000",
+            border: "2px solid hsl(var(--background))",
           }}>
             {unread > 99 ? "99+" : unread}
           </span>

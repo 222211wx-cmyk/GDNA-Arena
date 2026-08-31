@@ -81,7 +81,7 @@ export default function EventsPage() {
             <Globe2 className="w-3.5 h-3.5" />
             LIVE INTERNATIONAL EVENTS — EMPIRE TRACKER
           </div>
-          <h1 className="text-4xl md:text-6xl font-black mb-3" style={{ color: "#fff" }}>
+          <h1 className="text-4xl md:text-6xl font-black mb-3" style={{ color: "hsl(var(--foreground))" }}>
             GLOBAL <span style={{ color: GREEN }}>EVENTS</span>
           </h1>
           <p className="text-muted-foreground text-lg mb-8 max-w-2xl mx-auto">

@@ -75,13 +75,13 @@ export default function GeoBlock() {
   return (
     <div
       dir={isRTL ? "rtl" : "ltr"}
-      className="fixed inset-0 z-[300] bg-black flex items-center justify-center px-4"
+      className="fixed inset-0 z-[300] bg-background flex items-center justify-center px-4"
     >
       {/* Animated red scan line */}
       <motion.div
         animate={{ top: ["0%", "100%"] }}
         transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-        className="absolute left-0 right-0 h-px bg-red-500/30 z-10"
+        className="absolute left-0 right-0 h-px bg-destructive/30 z-10"
         style={{ position: "absolute" }}
       />
 
@@ -95,28 +95,28 @@ export default function GeoBlock() {
         <motion.div
           animate={{ opacity: [0.4, 1, 0.4] }}
           transition={{ duration: 1.5, repeat: Infinity }}
-          className="text-red-500 text-7xl mb-6 font-black"
+          className="text-destructive text-7xl mb-6 font-black"
         >
           ⊗
         </motion.div>
 
         {/* Country flag + code */}
         <div className="text-4xl mb-2">{getFlagEmoji(geoData.countryCode)}</div>
-        <div className="text-gray-600 text-xs tracking-[0.4em] mb-4 font-mono">
+        <div className="text-muted-foreground text-xs tracking-[0.4em] mb-4 font-mono">
           {geoData.country?.toUpperCase()} — {geoData.countryCode}
         </div>
 
-        <h1 className="text-4xl font-black text-white mb-2">{t("title")}</h1>
-        <h2 className="text-red-400 text-base font-semibold mb-6">{t("subtitle")}</h2>
+        <h1 className="text-4xl font-black text-foreground mb-2">{t("title")}</h1>
+        <h2 className="text-destructive text-base font-semibold mb-6">{t("subtitle")}</h2>
 
-        <p className="text-gray-400 text-sm leading-relaxed mb-8 max-w-md mx-auto">
+        <p className="text-muted-foreground text-sm leading-relaxed mb-8 max-w-md mx-auto">
           {t("reason")}
         </p>
 
         {/* Message from geo API */}
         {geoData.message && (
-          <div className="border border-red-900/40 bg-red-950/20 rounded-xl px-5 py-3 mb-6">
-            <p className="text-red-300/70 text-xs leading-relaxed">{geoData.message}</p>
+          <div className="border border-destructive/40 bg-destructive/10 rounded-xl px-5 py-3 mb-6">
+            <p className="text-destructive/70 text-xs leading-relaxed">{geoData.message}</p>
           </div>
         )}
 
@@ -124,7 +124,7 @@ export default function GeoBlock() {
         {geoData.laws?.length > 0 && (
           <div className="flex justify-center gap-2 flex-wrap mb-6">
             {geoData.laws.map((law: string) => (
-              <span key={law} className="bg-gray-900 border border-gray-800 text-gray-500 text-xs px-3 py-1 rounded-full">
+              <span key={law} className="bg-card border border-border text-muted-foreground text-xs px-3 py-1 rounded-full">
                 {law}
               </span>
             ))}
@@ -132,16 +132,16 @@ export default function GeoBlock() {
         )}
 
         {/* Login shortcut — always available */}
-        <p className="text-gray-700 text-xs mb-4">
+        <p className="text-muted-foreground text-xs mb-4">
           {t("loginNote")}{" "}
-          <a href="/login" className="text-gray-500 hover:text-gray-300 underline transition-colors">
+          <a href="/login" className="text-muted-foreground hover:text-foreground underline transition-colors">
             {t("loginLink")}
           </a>
           .
         </p>
 
         {/* Error code */}
-        <p className="text-gray-800 text-xs font-mono tracking-widest">{t("code")}</p>
+        <p className="text-muted-foreground text-xs font-mono tracking-widest">{t("code")}</p>
       </motion.div>
     </div>
   );

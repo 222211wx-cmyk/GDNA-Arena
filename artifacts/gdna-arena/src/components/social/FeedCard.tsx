@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageSquare, Share2, Bookmark, BookmarkCheck } from "lucide-react";
 import Avatar from "./Avatar";
-import { GOLD, DOMAIN_ICONS, timeAgo, api } from "./social-i18n";
+import { GOLD, GOLD_A, DOMAIN_ICONS, timeAgo, api } from "./social-i18n";
 import type { FeedPost, Comment } from "./social-types";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
@@ -100,7 +100,7 @@ function ReactionBtn({ postId, initialLikes }: { postId: number; initialLikes: n
             transition={{ duration: 0.12 }}
             style={{
               position: "absolute", bottom: "calc(100% + 4px)", left: 0,
-              background: "#1a1a1a", border: `1px solid ${GOLD}25`,
+               background: "hsl(var(--secondary))", border: `1px solid ${GOLD_A(0.15)}`,
               borderRadius: 24, padding: "6px 10px",
               display: "flex", gap: 4, zIndex: 200,
               boxShadow: "0 4px 24px rgba(0,0,0,0.85)", whiteSpace: "nowrap",
@@ -145,7 +145,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
   const [shareToast,     setShareToast]     = useState(false);
 
   function handleShare() {
-    navigator.clipboard.writeText(`https://helixly.app/social#post-${post.id}`).catch(() => {});
+    navigator.clipboard.writeText(`${window.location.origin}/social#post-${post.id}`).catch(() => {});
     setShareToast(true);
     setTimeout(() => setShareToast(false), 2000);
   }
@@ -183,12 +183,12 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
     <motion.div
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
       id={`post-${post.id}`}
-      style={{ background: "#0d0d0d", border: `1px solid ${GOLD}15`, borderRadius: 12, overflow: "hidden" }}>
+       style={{ background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.08)}`, borderRadius: 12, overflow: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px 10px" }}>
         <Avatar name={post.username} />
         <div style={{ flex: 1 }}>
-          <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 14 }}>{post.username}</p>
+          <p style={{ margin: 0, fontWeight: 800, color: "hsl(var(--foreground))", fontSize: 14 }}>{post.username}</p>
           <p style={{ margin: 0, fontSize: 11, color: "#ffffff40" }}>
             {DOMAIN_ICONS[post.domain] ?? "🌍"} {post.domain} · {timeAgo(post.createdAt, st)}
           </p>
@@ -196,7 +196,7 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
       </div>
 
       {/* Content */}
-      <div style={{ padding: "0 16px 12px", color: "#e5e7eb", fontSize: 14, lineHeight: 1.6 }} dir={dir}>
+       <div style={{ padding: "0 16px 12px", color: "hsl(var(--foreground))", fontSize: 14, lineHeight: 1.6 }} dir={dir}>
         {post.content}
       </div>
 
@@ -257,9 +257,9 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
               {comments.map(c => (
                 <div key={c.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                   <Avatar name={c.username} size={24} />
-                  <div style={{ background: "#1a1a1a", borderRadius: 8, padding: "6px 10px", flex: 1 }}>
+                  <div style={{ background: "hsl(var(--secondary))", borderRadius: 8, padding: "6px 10px", flex: 1 }}>
                     <span style={{ fontWeight: 700, color: GOLD, fontSize: 12 }}>{c.username}</span>
-                    <span style={{ color: "#ccc", fontSize: 13, marginLeft: 8 }} dir={dir}>{c.content}</span>
+                    <span style={{ color: "hsl(var(--foreground))", fontSize: 13, marginLeft: 8 }} dir={dir}>{c.content}</span>
                     <p style={{ margin: "3px 0 0", fontSize: 10, color: "#ffffff25" }}>{timeAgo(c.createdAt, st)}</p>
                   </div>
                 </div>
@@ -270,9 +270,9 @@ export default function FeedCard({ post, user, st, dir, saved, onSaveToggle }: P
                   <input value={newComment} onChange={e => setNewComment(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && sendComment()}
                     placeholder={st.write_comment} dir={dir}
-                    style={{ flex: 1, background: "#1a1a1a", border: `1px solid ${GOLD}20`, borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 13, outline: "none" }} />
+                    style={{ flex: 1, background: "hsl(var(--secondary))", border: `1px solid ${GOLD_A(0.13)}`, borderRadius: 8, padding: "6px 12px", color: "hsl(var(--foreground))", fontSize: 13, outline: "none" }} />
                   <button onClick={sendComment} disabled={sending || !newComment.trim() || !isOnline}
-                    style={{ padding: "6px 14px", borderRadius: 8, background: GOLD, border: "none", color: "#000", fontWeight: 800, cursor: "pointer", fontSize: 12, opacity: sending ? 0.5 : 1 }}>
+                    style={{ padding: "6px 14px", borderRadius: 8, background: GOLD, border: "none", color: "hsl(var(--primary-foreground))", fontWeight: 800, cursor: "pointer", fontSize: 12, opacity: sending ? 0.5 : 1 }}>
                     {st.send}
                   </button>
                 </div>

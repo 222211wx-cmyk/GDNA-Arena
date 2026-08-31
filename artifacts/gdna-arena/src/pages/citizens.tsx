@@ -261,7 +261,7 @@ export default function CitizensPage() {
                       <button onClick={() => void openDM(c.username, c.id)}
                         disabled={dmId === c.id} title="اكتب رسالة"
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80 disabled:opacity-40"
-                        style={{ background: "#1a1400", border: "1px solid #FFD70030", color: "#FFD700" }}>
+                        style={{ background: "hsl(var(--primary) / 0.08)", border: "1px solid hsl(var(--primary) / 0.19)", color: "hsl(var(--primary))" }}>
                         {dmId === c.id
                           ? <Loader2 className="w-3 h-3 animate-spin" />
                           : <MessageSquare className="w-3 h-3" />}

@@ -36,15 +36,15 @@ export default function LegalPage() {
   };
 
   return (
-    <div dir={isRTL ? "rtl" : "ltr"} className="min-h-screen bg-black text-white pt-16 pb-12">
+    <div dir={isRTL ? "rtl" : "ltr"} className="min-h-screen bg-background text-foreground pt-16 pb-12">
 
       {/* Header */}
       <div className="border-b border-yellow-500/20 px-6 py-8 text-center">
         <div className="text-yellow-500 text-xs tracking-[0.4em] mb-2">⚖️ LEGAL CENTER</div>
-        <h1 className="text-4xl font-black text-white">
+        <h1 className="text-4xl font-black text-foreground">
           {lang === "ar" ? "المركز القانوني" : lang === "fr" ? "Centre Légal" : lang === "es" ? "Centro Legal" : lang === "de" ? "Rechtszentrum" : "Legal Center"}
         </h1>
-        <p className="mt-2 text-gray-400 text-sm">
+        <p className="mt-2 text-muted-foreground text-sm">
           {lang === "ar" ? "قوانين مُكيَّفة حسب دولتك — شفافية كاملة" : "Country-adaptive compliance — full transparency"}
         </p>
 
@@ -52,7 +52,7 @@ export default function LegalPage() {
         <div className="inline-flex items-center gap-2 mt-4 bg-yellow-500/10 border border-yellow-500/30 rounded-full px-4 py-2">
           <span className="text-xl">{country.flag}</span>
           <span className="text-yellow-400 font-semibold text-sm">{country.name}</span>
-          <span className="text-gray-500 text-xs">— {country.laws.slice(0, 2).join(", ")}</span>
+          <span className="text-muted-foreground text-xs">— {country.laws.slice(0, 2).join(", ")}</span>
         </div>
       </div>
 
@@ -66,7 +66,7 @@ export default function LegalPage() {
       {/* Gaming warning banner */}
       {country.gamingWarning && (
         <div className="bg-red-950/30 border-b border-red-500/20 px-6 py-2">
-          <p className="max-w-4xl mx-auto text-red-400 text-xs text-center">
+          <p className="max-w-4xl mx-auto text-destructive text-xs text-center">
             {lang === "ar"
               ? `⚠️ ألعاب الحظ محدودة أو مقيّدة في ${country.name}. Arena Qaisypro ليست منصة قمار — الكوينز افتراضية فقط.`
               : `⚠️ Gaming regulations apply in ${country.name}. Arena Qaisypro is not a gambling platform — all coins are virtual only.`}
@@ -75,11 +75,11 @@ export default function LegalPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex overflow-x-auto border-b border-gray-800 px-4">
+      <div className="flex overflow-x-auto border-b border-border px-4">
         {(Object.keys(tabLabels) as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-3 text-xs tracking-widest whitespace-nowrap transition-all flex-shrink-0 ${
-              tab === t ? "text-yellow-400 border-b-2 border-yellow-400" : "text-gray-500 hover:text-gray-300"
+              tab === t ? "text-yellow-400 border-b-2 border-yellow-400" : "text-muted-foreground hover:text-foreground"
             }`}>
             {tabLabels[t]}
           </button>
@@ -92,13 +92,13 @@ export default function LegalPage() {
           {/* ── COUNTRY SELECTOR ── */}
           {tab === "country" && (
             <motion.div key="country" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <p className="text-gray-400 text-sm mb-4">
+              <p className="text-muted-foreground text-sm mb-4">
                 {lang === "ar" ? "اختر دولتك لتطبيق القوانين المناسبة تلقائياً:" : "Select your country to apply the correct legal framework automatically:"}
               </p>
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
                 placeholder={lang === "ar" ? "ابحث عن دولتك..." : "Search your country..."}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white mb-4 focus:outline-none focus:border-yellow-500"
+                className="w-full bg-card border border-border rounded-xl px-4 py-3 text-foreground mb-4 focus:outline-none focus:border-yellow-500"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {filtered.map((c: CountryProfile) => (
@@ -106,11 +106,11 @@ export default function LegalPage() {
                     className={`text-left p-4 rounded-xl border transition-all ${
                       country.code === c.code
                         ? "border-yellow-500 bg-yellow-500/10"
-                        : "border-gray-800 hover:border-gray-600"
+                        : "border-border hover:border-muted-foreground"
                     }`}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-2xl">{c.flag}</span>
-                      <span className="font-semibold text-white text-sm">{c.name}</span>
+                      <span className="font-semibold text-foreground text-sm">{c.name}</span>
                     </div>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {c.gdpr && <span className="text-xs bg-blue-900/50 text-blue-300 px-1.5 py-0.5 rounded">GDPR</span>}
@@ -119,8 +119,8 @@ export default function LegalPage() {
                       {c.ageGateRequired && <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded">{c.minAge}+</span>}
                       {c.gamingWarning && <span className="text-xs bg-orange-900/50 text-orange-300 px-1.5 py-0.5 rounded">⚠️</span>}
                     </div>
-                    <div className="text-xs text-gray-600 mt-1 truncate">{c.laws.slice(0,2).join(" · ")}</div>
-                    {c.notes && <div className="text-xs text-gray-500 mt-1 line-clamp-2">{c.notes}</div>}
+                    <div className="text-xs text-muted-foreground mt-1 truncate">{c.laws.slice(0,2).join(" · ")}</div>
+                    {c.notes && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.notes}</div>}
                   </button>
                 ))}
               </div>
@@ -140,13 +140,13 @@ export default function LegalPage() {
                     { label: lang==="ar" ? "تنبيه الكوينز" : "Coins Disclaimer", value: country.coinsDisclaimer ? "⚠️ Active" : "None" },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between">
-                      <span className="text-gray-400">{r.label}</span>
-                      <span className="text-white font-semibold">{r.value}</span>
+                      <span className="text-muted-foreground">{r.label}</span>
+                      <span className="text-foreground font-semibold">{r.value}</span>
                     </div>
                   ))}
                 </div>
                 <div className="mt-3 pt-3 border-t border-yellow-500/10">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     {lang==="ar" ? "القوانين المطبّقة:" : "Applicable laws:"}{" "}
                     <span className="text-yellow-400">{country.laws.join(" · ")}</span>
                   </p>
@@ -242,14 +242,14 @@ export default function LegalPage() {
                     { name: "gdna_age_ok",  type: lang==="ar" ? "ضروري" : "Essential", purpose: lang==="ar" ? "التحقق من عمر قسم الألعاب" : "Games age verification", canReject: false },
                     { name: "_analytics",   type: lang==="ar" ? "اختياري" : "Analytics", purpose: lang==="ar" ? "تحسين الأداء" : "Performance improvement", canReject: true },
                   ].map(c => (
-                    <div key={c.name} className="border border-gray-800 rounded-xl p-4 flex items-start justify-between gap-4">
+                    <div key={c.name} className="border border-border rounded-xl p-4 flex items-start justify-between gap-4">
                       <div>
                         <code className="text-yellow-400 text-xs">{c.name}</code>
-                        <p className="text-white text-sm mt-0.5">{c.purpose}</p>
+                        <p className="text-foreground text-sm mt-0.5">{c.purpose}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${c.canReject ? "bg-blue-900/50 text-blue-300" : "bg-green-900/50 text-green-300"}`}>{c.type}</span>
-                        {c.canReject && <span className="text-xs text-gray-600">{lang==="ar" ? "قابل للرفض" : "Can reject"}</span>}
+                        {c.canReject && <span className="text-xs text-muted-foreground">{lang==="ar" ? "قابل للرفض" : "Can reject"}</span>}
                       </div>
                     </div>
                   ))}
@@ -262,15 +262,15 @@ export default function LegalPage() {
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {([["full", lang==="ar" ? "✅ قبول الكل" : "✅ Accept All", "bg-yellow-500 text-black"],
-                       ["essential", lang==="ar" ? "🔒 الضروري فقط" : "🔒 Essential Only", "bg-gray-700 text-white"],
-                       ["none", lang==="ar" ? "❌ رفض الكل" : "❌ Reject All", "border border-gray-600 text-gray-400"]] as const).map(([level, label, cls]) => (
+                       ["essential", lang==="ar" ? "🔒 الضروري فقط" : "🔒 Essential Only", "bg-secondary text-foreground"],
+                       ["none", lang==="ar" ? "❌ رفض الكل" : "❌ Reject All", "border border-border text-muted-foreground"]] as const).map(([level, label, cls]) => (
                       <button key={level} onClick={() => setConsent(level)}
                         className={`text-xs font-bold px-4 py-2 rounded-lg transition-all ${cls} ${consent===level?"ring-2 ring-yellow-400":""}`}>
                         {label}
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-500 mt-3">
+                  <p className="text-xs text-muted-foreground mt-3">
                     {lang==="ar" ? `الحالة الحالية: ${consent === "full" ? "✅ قبول الكل" : consent === "essential" ? "🔒 الضروري فقط" : "❌ لم تختر بعد"}` : `Current status: ${consent === "full" ? "✅ Full consent" : consent === "essential" ? "🔒 Essential only" : "❌ Not set"}`}
                   </p>
                 </div>
@@ -297,15 +297,15 @@ export default function LegalPage() {
                 };
                 const text = RIGHTS_TEXT[right]?.[lang] ?? RIGHTS_TEXT[right]?.["en"] ?? right;
                 return (
-                  <div key={right} className="border border-gray-800 rounded-xl p-4 flex items-start gap-3">
+                  <div key={right} className="border border-border rounded-xl p-4 flex items-start gap-3">
                     <span className="text-yellow-400 font-black text-lg mt-0.5">{i + 1}</span>
-                    <p className="text-gray-200 text-sm leading-relaxed">{text}</p>
+                    <p className="text-foreground/90 text-sm leading-relaxed">{text}</p>
                   </div>
                 );
               })}
               {/* Contact */}
-              <div className="border border-blue-500/20 bg-blue-500/5 rounded-xl p-5 mt-4">
-                <p className="text-blue-300 text-sm">
+              <div className="border border-accent/20 bg-accent/5 rounded-xl p-5 mt-4">
+                <p className="text-accent text-sm">
                   {lang==="ar"
                     ? "لممارسة أي من هذه الحقوق، تواصل معنا عبر: legal@gdna-arena.com — سنستجيب خلال 30 يوماً."
                     : "To exercise any of these rights, contact us at: legal@gdna-arena.com — We will respond within 30 days."}
@@ -323,10 +323,10 @@ export default function LegalPage() {
 // ── Reusable legal section wrapper ───────────────────────────
 function LegalSection({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="border border-gray-800 rounded-2xl overflow-hidden">
-      <div className="bg-gray-900/50 px-6 py-4 border-b border-gray-800">
-        <h2 className="text-white font-black text-xl">{title}</h2>
-        {subtitle && <p className="text-gray-500 text-xs mt-1">{subtitle}</p>}
+    <div className="border border-border rounded-2xl overflow-hidden">
+      <div className="bg-card/50 px-6 py-4 border-b border-border">
+        <h2 className="text-foreground font-black text-xl">{title}</h2>
+        {subtitle && <p className="text-muted-foreground text-xs mt-1">{subtitle}</p>}
       </div>
       <div className="p-6 space-y-4">{children}</div>
     </div>
@@ -337,7 +337,7 @@ function LegalClause({ n, title, children }: { n: number; title: string; childre
   return (
     <div>
       <h3 className="text-yellow-400 font-bold text-sm mb-1">{n}. {title}</h3>
-      <p className="text-gray-300 text-sm leading-relaxed">{children}</p>
+      <p className="text-foreground/80 text-sm leading-relaxed">{children}</p>
     </div>
   );
 }

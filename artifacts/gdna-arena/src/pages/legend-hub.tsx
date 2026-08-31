@@ -413,7 +413,7 @@ function CommsTab({ legend }: { legend: Legend }) {
             {debates.map(d => (
               <div key={d.id} className="flex items-start gap-2">
                 <Link href={`/citizen/${d.username}`}>
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-black bg-primary shrink-0 cursor-pointer hover:scale-110 transition-transform">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-primary-foreground bg-primary shrink-0 cursor-pointer hover:scale-110 transition-transform">
                     {d.username.charAt(0).toUpperCase()}
                   </div>
                 </Link>
@@ -456,7 +456,7 @@ function CommsTab({ legend }: { legend: Legend }) {
           {user && (
             <div className="p-4 rounded-2xl border border-primary/20 bg-primary/5 space-y-3">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-[10px] font-black text-black">
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-[10px] font-black text-primary-foreground">
                   {user.username.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-sm font-bold">{user.username}</span>

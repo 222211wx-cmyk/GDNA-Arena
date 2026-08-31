@@ -138,7 +138,7 @@ export default function CelebrationsPage() {
             style={{ borderColor: "#FFD70050", background: "#FFD70010", color: "#FFD700" }}>
             <Trophy className="w-3.5 h-3.5" /> EMPIRE CELEBRATIONS HUB
           </div>
-          <h1 className="text-4xl md:text-6xl font-black mb-3" style={{ color: "#fff" }}>
+          <h1 className="text-4xl md:text-6xl font-black mb-3" style={{ color: "hsl(var(--foreground))" }}>
             CELEBRATIONS <span style={{ color: "#FFD700" }}>PROTOCOL</span>
           </h1>
           <p className="text-muted-foreground text-lg mb-6 max-w-2xl mx-auto">
@@ -240,7 +240,7 @@ export default function CelebrationsPage() {
                     {(["text", "idea", "art", "video"] as const).map(t => (
                       <button key={t} onClick={() => setEntryType(t)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all capitalize"
-                        style={{ borderColor: entryType === t ? "#FFD70060" : BORDER_G, background: entryType === t ? "#FFD70015" : "transparent", color: entryType === t ? "#FFD700" : "#888" }}>
+                        style={{ borderColor: entryType === t ? "#FFD70060" : BORDER_G, background: entryType === t ? "#FFD70015" : "transparent", color: entryType === t ? "#FFD700" : "hsl(var(--muted-foreground))" }}>
                         {ENTRY_TYPE_ICON[t]} {t}
                       </button>
                     ))}
@@ -329,7 +329,7 @@ export default function CelebrationsPage() {
                             <span className="text-xs" />
                             <button onClick={() => void like(e.id)} disabled={liked.has(e.id)}
                               className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all"
-                              style={{ borderColor: liked.has(e.id) ? "#f4724860" : BORDER_G, color: liked.has(e.id) ? "#f47248" : "#888", background: liked.has(e.id) ? "#f4724810" : "transparent" }}>
+                              style={{ borderColor: liked.has(e.id) ? "#f4724860" : BORDER_G, color: liked.has(e.id) ? "#f47248" : "hsl(var(--muted-foreground))", background: liked.has(e.id) ? "#f4724810" : "transparent" }}>
                               <Heart className={`w-3 h-3 ${liked.has(e.id) ? "fill-current" : ""}`} />
                               {e.likes + (liked.has(e.id) && e.likes === 0 ? 1 : 0)}
                             </button>

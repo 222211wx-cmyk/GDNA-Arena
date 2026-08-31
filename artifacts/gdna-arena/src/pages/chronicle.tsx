@@ -138,7 +138,7 @@ export default function Chronicle() {
             {t("chrono_past")}
           </span>
           <span className="text-muted-foreground mx-3 text-4xl md:text-5xl">·</span>
-          <span className="neon-text-glow text-white">
+          <span className="neon-text-glow text-foreground">
             {t("chrono_present")}
           </span>
           <span className="text-muted-foreground mx-3 text-4xl md:text-5xl">·</span>

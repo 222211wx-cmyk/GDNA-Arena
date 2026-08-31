@@ -27,7 +27,7 @@ import Avatar from "../social/Avatar";
 import { Switch } from "@workspace/gdna-ds/components/ui/switch";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
-import { GOLD, timeAgo, api, SOCIAL_T } from "../social/social-i18n";
+import { GOLD, GOLD_A, timeAgo, api, SOCIAL_T } from "../social/social-i18n";
 import { useCallContext } from "../../contexts/CallContext";
 import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
@@ -220,7 +220,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
       animate={inline ? undefined : { opacity: 1, x: 0 }}
       exit={inline ? undefined : { opacity: 0, x: 20 }}
       style={rootStyle}>
-      <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10 }}>
         <Settings size={17} style={{ color: GOLD }} />
         <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, flex: 1 }}>{activeRoom ? (st.msg_settings ?? "Messenger settings") : (st.settings_general ?? st.msg_settings ?? "Settings")}</p>
         {!inline && (
@@ -361,7 +361,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
   return (
     <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }}
       style={{ position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10 }}>
         <Users size={17} style={{ color: GOLD }} />
         <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15, flex: 1 }}>{title}</p>
         <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: 6 }}><X size={18} /></button>
@@ -370,7 +370,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
         <div style={{ position: "relative" }}>
           <Search size={15} style={{ position: "absolute", top: 12, insetInlineStart: 12, color: "#555" }} />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder={st.search_contacts ?? "Search…"} dir="auto"
-            style={{ width: "100%", boxSizing: "border-box", background: "#161616", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "10px 12px", paddingInlineStart: 36, color: "#fff", fontSize: 15, outline: "none" }} />
+            style={{ width: "100%", boxSizing: "border-box", background: "#161616", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "10px 12px", paddingInlineStart: 36, color: "#fff", fontSize: 15, outline: "none" }} />
         </div>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 12px" }}>
@@ -385,7 +385,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
           <div style={{ textAlign: "center", padding: 24 }}>
             <p style={{ color: "#666", fontSize: 13, margin: "0 0 12px" }}>{st.no_contacts ?? "Could not load citizens"}</p>
             <button onClick={() => fetchContacts(q, 0, true)}
-              style={{ background: `${GOLD}20`, border: `1px solid ${GOLD}30`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+              style={{ background: GOLD_A(0.125), border: `1px solid ${GOLD_A(0.188)}`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
               Retry
             </button>
           </div>
@@ -424,7 +424,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
                 </>
               ) : (
                 <button onClick={() => { if (!isOnline) return onOffline(); onClose(); onDm(c.username); }} disabled={!isOnline} title={st.dm ?? "DM"}
-                  style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: `${GOLD}20`, color: GOLD, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: GOLD_A(0.125), color: GOLD, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <MessageSquare size={17} />
                 </button>
               )}
@@ -434,7 +434,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
         {!loading && hasMore && (
           <div style={{ textAlign: "center", padding: "12px 0" }}>
             <button onClick={loadMore} disabled={loadingMore}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${GOLD}15`, border: `1px solid ${GOLD}25`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: loadingMore ? "default" : "pointer", fontSize: 13, fontWeight: 700, opacity: loadingMore ? 0.7 : 1 }}>
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, background: GOLD_A(0.082), border: `1px solid ${GOLD_A(0.145)}`, color: GOLD, padding: "8px 20px", borderRadius: 8, cursor: loadingMore ? "default" : "pointer", fontSize: 13, fontWeight: 700, opacity: loadingMore ? 0.7 : 1 }}>
               {loadingMore ? <LoaderCircle size={14} className="animate-spin" /> : <ChevronRight size={14} />}
               {loadingMore ? "Loading…" : (st.load_more ?? "Load more")}
             </button>
@@ -499,17 +499,17 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
       <button onClick={() => isOnline ? onCreate() : onOffline()} disabled={!isOnline}
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}10`, border: `1px solid ${GOLD}25`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: GOLD_A(0.063), border: `1px solid ${GOLD_A(0.145)}`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
         <Plus size={18} style={{ color: GOLD }} />
         <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>{st.new_group ?? "New group"}</span>
       </button>
       {/* Empire-wide Solidarity Relay entry (opens inside Communities) */}
       <button onClick={() => onViewRelay(null, null)}
         data-testid="button-empire-relay"
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: `${GOLD}08`, border: `1px solid ${GOLD}20`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: GOLD_A(0.031), border: `1px solid ${GOLD_A(0.125)}`, borderRadius: 12, cursor: "pointer", marginBottom: 10, minHeight: 44 }}>
         <HandHeart size={18} style={{ color: GOLD }} />
         <span style={{ color: GOLD, fontWeight: 800, fontSize: 14 }}>{st.relay_title ?? "Solidarity Relay"}</span>
-        <ChevronRight size={16} style={{ color: `${GOLD}80`, marginInlineStart: "auto" }} />
+        <ChevronRight size={16} style={{ color: GOLD_A(0.502), marginInlineStart: "auto" }} />
       </button>
       {loading && <p style={{ color: "#444", textAlign: "center", padding: 24 }}>…</p>}
       {!loading && loadError && (
@@ -529,7 +529,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
             data-testid={`community-card-${g.id}`}
           >
             {/* Identity node */}
-            <div style={{ width: 48, height: 48, background: "#222", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0, border: `1px solid ${GOLD}15` }}>
+            <div style={{ width: 48, height: 48, background: "#222", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0, border: `1px solid ${GOLD_A(0.082)}` }}>
               {typeof g.icon === "string" && g.icon ? g.icon : <Users size={22} style={{ color: "#666" }} />}
             </div>
             <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
@@ -561,7 +561,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
                   size="sm"
                   variant="outline"
                   className="h-9 px-3 text-xs gap-1"
-                  style={{ color: GOLD, borderColor: `${GOLD}30` }}
+                  style={{ color: GOLD, borderColor: GOLD_A(0.188) }}
                   onClick={() => onViewRelay(g.id, g.name ?? "Assembly")}
                   aria-label={`Solidarity actions for ${g.name ?? "Assembly"}`}
                   data-testid={`relay-btn-${g.id}`}
@@ -1749,12 +1749,12 @@ function IdentityBoundMessenger({ variant, user }: {
   const isRoomBlocked = activeRoom?.blockedByMe || activeRoom?.blocked;
 
   const composerEl = isRoomBlocked ? (
-    <div style={{ padding: "12px 16px", paddingBottom: "calc(12px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+    <div style={{ padding: "12px 16px", paddingBottom: "calc(12px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.063)}`, flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
       <ShieldOff size={15} style={{ color: "#ef4444", flexShrink: 0 }} />
       <p style={{ margin: 0, fontSize: 13, color: "#ef4444", fontWeight: 600 }}>{st.blocked_notice ?? "You have blocked this citizen."}</p>
     </div>
   ) : (
-    <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
+    <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.063)}`, flexShrink: 0 }}>
       <div className="mb-2 flex items-center gap-2 px-1">
         <span className="text-[11px] font-semibold text-muted-foreground">الحذف التلقائي</span>
         <select
@@ -1776,7 +1776,7 @@ function IdentityBoundMessenger({ variant, user }: {
       </div>
       {/* Reply preview bar */}
       {replyTo && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px", borderBottom: `1px solid ${GOLD}15`, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px 8px", borderBottom: `1px solid ${GOLD_A(0.082)}`, marginBottom: 8 }}>
           <CornerUpLeft size={13} style={{ color: GOLD, flexShrink: 0 }} />
           <div style={{ flex: 1, overflow: "hidden" }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: GOLD }}>{st.reply_preview ?? "Replying to"} {replyTo.username}</p>
@@ -1817,7 +1817,7 @@ function IdentityBoundMessenger({ variant, user }: {
                 bottom: "calc(100% + 8px)",
                 insetInlineStart: 0,
                 background: "#181818",
-                border: `1px solid ${GOLD}20`,
+                border: `1px solid ${GOLD_A(0.125)}`,
                 borderRadius: 14,
                 padding: "6px",
                 display: "flex",
@@ -1847,9 +1847,9 @@ function IdentityBoundMessenger({ variant, user }: {
                     width: 44,
                     height: 44,
                     borderRadius: 10,
-                    border: `1px solid ${GOLD}15`,
+                    border: `1px solid ${GOLD_A(0.082)}`,
                     cursor: "pointer",
-                    background: (idx === 3 && recording) ? "#ef444420" : `${GOLD}10`,
+                    background: (idx === 3 && recording) ? "#ef444420" : GOLD_A(0.063),
                     color: (idx === 3 && recording) ? "#ef4444" : GOLD,
                     display: "flex",
                     alignItems: "center",
@@ -1878,8 +1878,8 @@ function IdentityBoundMessenger({ variant, user }: {
               width: 28,
               height: 28,
               borderRadius: "50%",
-              border: `1px solid ${GOLD}30`,
-              background: showAttachTray ? `${GOLD}25` : "#252525",
+              border: `1px solid ${GOLD_A(0.188)}`,
+              background: showAttachTray ? GOLD_A(0.145) : "#252525",
               color: showAttachTray ? GOLD : "#888",
               cursor: recording ? "default" : "pointer",
               display: "flex",
@@ -1906,7 +1906,7 @@ function IdentityBoundMessenger({ variant, user }: {
             style={{
               width: "100%",
               background: "#1c1c1c",
-              border: `1px solid ${GOLD}20`,
+              border: `1px solid ${GOLD_A(0.125)}`,
               borderRadius: 22,
               // Padding-inline-start leaves room for the + button (28px button + 8px gap + 8px padding = 44px)
               paddingTop: 11,
@@ -1954,7 +1954,7 @@ function IdentityBoundMessenger({ variant, user }: {
           <div style={{ display: "flex", gap: 4, padding: "4px 4px 0" }}>
             {EMOJI_GROUPS.map(([icon], i) => (
               <button key={icon} onClick={() => setEmojiGroup(i)}
-                style={{ background: emojiGroup === i ? `${GOLD}25` : "none", border: "none", fontSize: 17, cursor: "pointer", padding: "4px 10px", borderRadius: 6, lineHeight: 1 }}>
+                style={{ background: emojiGroup === i ? GOLD_A(0.145) : "none", border: "none", fontSize: 17, cursor: "pointer", padding: "4px 10px", borderRadius: 6, lineHeight: 1 }}>
                 {icon}
               </button>
             ))}
@@ -2027,7 +2027,7 @@ function IdentityBoundMessenger({ variant, user }: {
           ? (SOLIDARITY_STATUS_COLORS[solStatus] ?? "#6b7280")
           : (call.onlineUsers.includes(getPeerName(activeRoom)) ? "#22c55e" : "#ffffff40");
         return (
-          <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); setShowAttachTray(false); setReplyTo(null); }} title={st.back ?? "Back"}
               style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <BackArrow size={22} />
@@ -2080,7 +2080,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
       {/* ── Blocked notice ── */}
       {activeRoom.blockedByMe && (
-        <div style={{ background: "#1a1a1a", borderBottom: `1px solid ${GOLD}10`, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ background: "#1a1a1a", borderBottom: `1px solid ${GOLD_A(0.063)}`, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
           <ShieldOff size={14} style={{ color: "#ef4444", flexShrink: 0 }} />
           <p style={{ margin: 0, fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{st.blocked_notice ?? "You have blocked this citizen."}</p>
         </div>
@@ -2141,7 +2141,7 @@ function IdentityBoundMessenger({ variant, user }: {
                         {msg.reactions!.support > 0 && (
                           <span
                             onClick={e => { e.stopPropagation(); sendReaction(msg, "support"); }}
-                            style={{ display: "flex", alignItems: "center", gap: 3, background: msg.myReaction === "support" ? `${GOLD}30` : "rgba(255,255,255,0.1)", borderRadius: 10, padding: "2px 7px", cursor: "pointer", fontSize: 11, color: mine ? "#000000aa" : "#fff" }}>
+                            style={{ display: "flex", alignItems: "center", gap: 3, background: msg.myReaction === "support" ? GOLD_A(0.188) : "rgba(255,255,255,0.1)", borderRadius: 10, padding: "2px 7px", cursor: "pointer", fontSize: 11, color: mine ? "#000000aa" : "#fff" }}>
                             <HandHeart size={10} /> {msg.reactions!.support}
                           </span>
                         )}
@@ -2216,11 +2216,11 @@ function IdentityBoundMessenger({ variant, user }: {
 
       {/* ── Attachment preview strip (multi-file, per-file progress + individual cancel) ── */}
       {pending.length > 0 && (
-        <div style={{ padding: "10px 14px", background: BG_BAR, borderTop: `1px solid ${GOLD}10`, flexShrink: 0 }}>
+        <div style={{ padding: "10px 14px", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.063)}`, flexShrink: 0 }}>
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
             {pending.map(p => (
               <div key={p.id} style={{ position: "relative", flexShrink: 0, width: 96 }}>
-                <div style={{ width: 96, height: 96, borderRadius: 8, overflow: "hidden", border: `1px solid ${p.status === "error" ? "#ef4444" : `${GOLD}30`}`, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: 96, height: 96, borderRadius: 8, overflow: "hidden", border: `1px solid ${p.status === "error" ? "#ef4444" : GOLD_A(0.188)}`, background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {p.previewUrl && p.file.type.startsWith("image/") ? (
                     <img src={p.previewUrl} alt={p.file.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : p.previewUrl && p.file.type.startsWith("video/") ? (
@@ -2251,7 +2251,7 @@ function IdentityBoundMessenger({ variant, user }: {
                 <button
                   onClick={() => removePending(p.id)}
                   title={p.status === "uploading" ? "Cancel upload" : "Remove"}
-                  style={{ position: "absolute", top: -6, insetInlineEnd: -6, width: 22, height: 22, borderRadius: "50%", background: "#1a1a1a", border: `1px solid ${p.status === "uploading" ? "#ef4444" : `${GOLD}30`}`, color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  style={{ position: "absolute", top: -6, insetInlineEnd: -6, width: 22, height: 22, borderRadius: "50%", background: "#1a1a1a", border: `1px solid ${p.status === "uploading" ? "#ef4444" : GOLD_A(0.188)}`, color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                   <X size={12} />
                 </button>
                 <div style={{ fontSize: 10, color: "#888", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -2291,14 +2291,14 @@ function IdentityBoundMessenger({ variant, user }: {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <>
-      <div dir={dir} style={{ position: "relative", height: containerHeight, minHeight: isWidget ? 0 : 440, display: "flex", flexDirection: "column", background: BG, borderRadius: isWidget ? 0 : 14, overflow: "hidden", border: isWidget ? "none" : `1px solid ${GOLD}12`, maxWidth: variant === "full" ? 860 : undefined, margin: variant === "full" ? "0 auto" : undefined, width: "100%", overscrollBehavior: "none" }}>
+      <div dir={dir} style={{ position: "relative", height: containerHeight, minHeight: isWidget ? 0 : 440, display: "flex", flexDirection: "column", background: BG, borderRadius: isWidget ? 0 : 14, overflow: "hidden", border: isWidget ? "none" : `1px solid ${GOLD_A(0.071)}`, maxWidth: variant === "full" ? 860 : undefined, margin: variant === "full" ? "0 auto" : undefined, width: "100%", overscrollBehavior: "none" }}>
 
         {/* ── Top bar ── */}
-        <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>MESSAGERI</p>
           <button onClick={() => { setTab("settings"); activeRoomIdRef.current = null; setActiveRoom(null); }} title={st.nav_settings ?? "Settings"}
             data-testid="button-open-settings"
-            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: tab === "settings" ? `${GOLD}18` : "transparent", color: tab === "settings" ? GOLD : "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: tab === "settings" ? GOLD_A(0.094) : "transparent", color: tab === "settings" ? GOLD : "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Settings size={18} />
           </button>
         </div>
@@ -2321,7 +2321,7 @@ function IdentityBoundMessenger({ variant, user }: {
               <div style={{ position: "relative" }}>
                 <Search size={15} style={{ position: "absolute", top: 12, insetInlineStart: 12, color: "#555" }} />
                 <input value={roomQuery} onChange={e => setRoomQuery(e.target.value)} placeholder={st.search_contacts ?? "Search…"} dir="auto"
-                  style={{ width: "100%", boxSizing: "border-box", background: "#161616", border: `1px solid ${GOLD}15`, borderRadius: 12, padding: "10px 12px", paddingInlineStart: 36, color: "#fff", fontSize: 15, outline: "none" }} />
+                  style={{ width: "100%", boxSizing: "border-box", background: "#161616", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "10px 12px", paddingInlineStart: 36, color: "#fff", fontSize: 15, outline: "none" }} />
               </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px 80px" }}>
@@ -2428,7 +2428,7 @@ function IdentityBoundMessenger({ variant, user }: {
                   data-testid="communities-relay-panel"
                   style={{ position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" }}
                 >
-                  <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD}12`, display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ padding: "14px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10 }}>
                     <button onClick={() => { setShowRelay(false); setRelayRoomId(null); setRelayRoomName(null); }}
                       title={st.back ?? "Back"} data-testid="button-relay-back"
                       style={{ background: "none", border: "none", cursor: "pointer", color: GOLD, padding: 4, display: "flex" }}>
@@ -2470,7 +2470,7 @@ function IdentityBoundMessenger({ variant, user }: {
 
         {/* ── Fixed bottom destination bar (accessible tabs) ── */}
         <div role="tablist" aria-label="AMIS destinations" data-testid="amis-tabbar"
-          style={{ display: "flex", background: BG_BAR, borderTop: `1px solid ${GOLD}15`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
+          style={{ display: "flex", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.082)}`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
           {TAB_ORDER.map(k => {
             const active = tab === k;
             const Icon = k === "chats" ? MessageSquare : k === "calls" ? Phone : k === "communities" ? Users : Settings;

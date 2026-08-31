@@ -86,7 +86,7 @@ export default function GenomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white font-mono pt-16 pb-12">
+    <div className="min-h-screen bg-background text-foreground font-mono pt-16 pb-12">
 
       {/* Hero */}
       <div className="relative border-b border-yellow-500/20 px-6 py-10 text-center overflow-hidden">
@@ -104,7 +104,7 @@ export default function GenomePage() {
           <span className="text-yellow-400">N</span>eural{" "}
           <span className="text-yellow-400">A</span>rchitecture
         </h1>
-        <p className="mt-3 text-gray-400 text-sm tracking-widest">
+        <p className="mt-3 text-muted-foreground text-sm tracking-widest">
           SELF-SUFFICIENT · SELF-GENERATING · SELF-EVOLVING · ETERNAL
         </p>
 
@@ -119,7 +119,7 @@ export default function GenomePage() {
             ].map(s => (
               <div key={s.label} className="text-center">
                 <div className="text-yellow-400 font-black text-xl">{s.value}</div>
-                <div className="text-gray-600 text-xs tracking-widest">{s.label}</div>
+                <div className="text-muted-foreground text-xs tracking-widest">{s.label}</div>
               </div>
             ))}
           </div>
@@ -127,7 +127,7 @@ export default function GenomePage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-gray-800 px-4 mt-0">
+      <div className="flex border-b border-border px-4 mt-0">
         {([
           { key: "dna",       label: "🧬 EMPIRE DNA" },
           { key: "insights",  label: "💡 SELF-GENERATED" },
@@ -140,7 +140,7 @@ export default function GenomePage() {
             className={`px-4 py-3 text-xs tracking-widest transition-all ${
               tab === t.key
                 ? "text-yellow-400 border-b-2 border-yellow-400"
-                : "text-gray-500 hover:text-gray-300"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {t.label}
@@ -164,7 +164,7 @@ export default function GenomePage() {
                         <span key={i} className={`${geneColors[i]} mr-2`}>{gene}</span>
                       ))}
                     </div>
-                    <div className="mt-4 text-xs text-gray-600">
+                    <div className="mt-4 text-xs text-muted-foreground">
                       Last encoded: {new Date(genome.evolved_at).toLocaleString()}
                     </div>
                   </div>
@@ -172,34 +172,34 @@ export default function GenomePage() {
                   {/* Gene breakdown */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {dnaGenes.map((gene, i) => (
-                      <div key={i} className="border border-gray-800 rounded-xl p-4">
+                      <div key={i} className="border border-border rounded-xl p-4">
                         <div className={`text-xs tracking-widest mb-1 ${geneColors[i]}`}>{geneLabels[i]}</div>
-                        <div className="font-mono text-white font-bold tracking-wider">{gene}</div>
+                        <div className="font-mono text-foreground font-bold tracking-wider">{gene}</div>
                       </div>
                     ))}
                   </div>
 
                   {/* Dominant trait */}
-                  <div className="border border-gray-800 rounded-xl p-5 flex items-center gap-4">
+                  <div className="border border-border rounded-xl p-5 flex items-center gap-4">
                     <div className="text-4xl">🏆</div>
                     <div>
-                      <div className="text-xs text-gray-500 tracking-widest">DOMINANT TRAIT</div>
+                      <div className="text-xs text-muted-foreground tracking-widest">DOMINANT TRAIT</div>
                       <div className={`text-xl font-black capitalize ${DOMAIN_COLOR[genome.dominant_trait] ?? "text-white"}`}>
                         {genome.dominant_trait.toUpperCase()}
                       </div>
-                      <div className="text-xs text-gray-600 mt-0.5">
+                      <div className="text-xs text-muted-foreground mt-0.5">
                         The gene most expressed across all empire memories
                       </div>
                     </div>
                   </div>
 
                   {/* Fitness bar */}
-                  <div className="border border-gray-800 rounded-xl p-5">
-                    <div className="flex justify-between text-xs text-gray-500 mb-2">
+                  <div className="border border-border rounded-xl p-5">
+                    <div className="flex justify-between text-xs text-muted-foreground mb-2">
                       <span>EMPIRE FITNESS SCORE</span>
                       <span className="text-yellow-400">{genome.fitness_score}/100</span>
                     </div>
-                    <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${genome.fitness_score}%` }}
@@ -207,13 +207,13 @@ export default function GenomePage() {
                         className="h-full bg-gradient-to-r from-yellow-700 to-yellow-400 rounded-full"
                       />
                     </div>
-                    <div className="text-xs text-gray-600 mt-2">
+                    <div className="text-xs text-muted-foreground mt-2">
                       Calculated from neural memories × citizen count × average XP
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-20 text-gray-600">
+                <div className="text-center py-20 text-muted-foreground">
                   <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity }} className="text-4xl mb-3">🧬</motion.div>
                   <p>Encoding empire genome...</p>
                 </div>
@@ -229,7 +229,7 @@ export default function GenomePage() {
                 New content is generated every 6 hours, forever.
               </div>
               {insights.length === 0 ? (
-                <div className="text-center py-20 text-gray-600">
+                <div className="text-center py-20 text-muted-foreground">
                   <div className="text-3xl mb-2">💡</div>
                   <p>Genome engine generating first content cycle...</p>
                 </div>
@@ -241,18 +241,18 @@ export default function GenomePage() {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.04 }}
-                      className="border border-gray-800 rounded-xl p-4"
+                      className="border border-border rounded-xl p-4"
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span>{TYPE_ICON[ins.content_type] ?? "⬡"}</span>
                         <span className={`text-xs tracking-widest uppercase ${DOMAIN_COLOR[ins.domain] ?? "text-white"}`}>
                           {ins.content_type} — {ins.domain}
                         </span>
-                        <span className="ml-auto text-xs text-gray-600">
+                        <span className="ml-auto text-xs text-muted-foreground">
                           {new Date(ins.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <p className="text-gray-200 text-sm leading-relaxed">{ins.body}</p>
+                      <p className="text-foreground/90 text-sm leading-relaxed">{ins.body}</p>
                     </motion.div>
                   ))}
                 </div>
@@ -268,7 +268,7 @@ export default function GenomePage() {
                 This runs automatically every 6 hours.
               </div>
               {crossovers.length === 0 ? (
-                <div className="text-center py-20 text-gray-600">
+                <div className="text-center py-20 text-muted-foreground">
                   <div className="text-3xl mb-2">🔀</div>
                   <p>First crossover cycle running...</p>
                 </div>
@@ -280,11 +280,11 @@ export default function GenomePage() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.06 }}
-                      className="border border-gray-800 rounded-xl p-5"
+                      className="border border-border rounded-xl p-5"
                     >
                       <div className="grid grid-cols-2 gap-3 mb-3">
                         {[c.parent_a_content, c.parent_b_content].map((p, j) => (
-                          <div key={j} className="bg-gray-900/50 rounded-lg p-3 text-xs text-gray-400 truncate">
+                          <div key={j} className="bg-card/50 rounded-lg p-3 text-xs text-muted-foreground truncate">
                             <span className="text-yellow-500/60">Parent {j === 0 ? "A" : "B"}: </span>
                             {p?.slice(0, 80)}...
                           </div>
@@ -292,8 +292,8 @@ export default function GenomePage() {
                       </div>
                       <div className="flex items-start gap-2">
                         <span className="text-purple-400 text-xs mt-1">⬡ OFFSPRING:</span>
-                        <p className="text-white text-sm flex-1">{c.offspring}</p>
-                        <span className="text-xs text-gray-600 flex-shrink-0">
+                        <p className="text-foreground text-sm flex-1">{c.offspring}</p>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
                           fitness: {Math.round(c.fitness * 100)}%
                         </span>
                       </div>
@@ -308,7 +308,7 @@ export default function GenomePage() {
           {tab === "citizens" && (
             <motion.div key="citizens" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               {citizens.length === 0 ? (
-                <div className="text-center py-20 text-gray-600">
+                <div className="text-center py-20 text-muted-foreground">
                   <div className="text-3xl mb-2">👤</div>
                   <p>DNA encoding citizens...</p>
                 </div>
@@ -320,7 +320,7 @@ export default function GenomePage() {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.04 }}
-                      className="border border-gray-800 rounded-xl p-4 flex items-center gap-4"
+                      className="border border-border rounded-xl p-4 flex items-center gap-4"
                     >
                       <div className="text-xl w-8 text-center">{
                         c.archetype === "WARRIOR" ? "⚔️" :
@@ -332,13 +332,13 @@ export default function GenomePage() {
                       }</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">{c.username}</span>
+                          <span className="font-bold text-foreground">{c.username}</span>
                           <span className="text-xs text-yellow-400/60">{c.archetype}</span>
-                          <span className="text-xs text-gray-600">Gen #{c.generation}</span>
+                          <span className="text-xs text-muted-foreground">Gen #{c.generation}</span>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {(Array.isArray(c.traits) ? c.traits : JSON.parse(c.traits as unknown as string ?? "[]")).map((t: string) => (
-                            <span key={t} className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{t}</span>
+                            <span key={t} className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>
                           ))}
                         </div>
                       </div>

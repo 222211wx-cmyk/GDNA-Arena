@@ -128,7 +128,7 @@ export default function StoriesPage() {
             <BookOpen className="w-3.5 h-3.5" />
             EMPIRE STORIES — 24h CHRONICLES
           </div>
-          <h1 className="text-4xl md:text-5xl font-black mb-3" style={{ color: "#fff" }}>
+          <h1 className="text-4xl md:text-5xl font-black mb-3" style={{ color: "hsl(var(--foreground))" }}>
             STORIES &amp; <span style={{ color: GREEN }}>VOICES</span>
           </h1>
           <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
@@ -184,7 +184,7 @@ export default function StoriesPage() {
               {([["text", <Type className="w-3 h-3" />, "Text"], ["audio", <Mic className="w-3 h-3" />, "Audio"], ["video", <Video className="w-3 h-3" />, "Video"]] as const).map(([t, icon, label]) => (
                 <button key={t} onClick={() => setStoryType(t)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all"
-                  style={{ borderColor: storyType === t ? `${GREEN}60` : BORDER_G, background: storyType === t ? `${GREEN}15` : "transparent", color: storyType === t ? GREEN : "#888" }}>
+                  style={{ borderColor: storyType === t ? `${GREEN}60` : BORDER_G, background: storyType === t ? `${GREEN}15` : "transparent", color: storyType === t ? GREEN : "hsl(var(--muted-foreground))" }}>
                   {icon} {label}
                 </button>
               ))}
@@ -207,7 +207,7 @@ export default function StoriesPage() {
             <div className="flex items-center gap-3 flex-wrap">
               <select value={domain} onChange={e => setDomain(e.target.value)}
                 className="px-3 py-1.5 rounded-xl text-xs font-bold border focus:outline-none"
-                style={{ background: CARD_BG, borderColor: BORDER_G, color: "#aaa" }}>
+                style={{ background: CARD_BG, borderColor: BORDER_G, color: "hsl(var(--muted-foreground))" }}>
                 {Object.entries(DOMAIN_META).filter(([k]) => k !== "general").map(([k, v]) => (
                   <option key={k} value={k}>{v.icon} {v.label}</option>
                 ))}
@@ -249,7 +249,7 @@ export default function StoriesPage() {
             return (
               <button key={d} onClick={() => setFilter(d)}
                 className="px-3 py-1.5 rounded-full text-xs font-bold border transition-all"
-                style={{ borderColor: active ? (meta?.color ?? GREEN) : BORDER_G, background: active ? `${meta?.color ?? GREEN}20` : "transparent", color: active ? (meta?.color ?? GREEN) : "#888" }}>
+                style={{ borderColor: active ? (meta?.color ?? GREEN) : BORDER_G, background: active ? `${meta?.color ?? GREEN}20` : "transparent", color: active ? (meta?.color ?? GREEN) : "hsl(var(--muted-foreground))" }}>
                 {d === "all" ? "🌍 ALL" : `${meta?.icon} ${meta?.label}`}
               </button>
             );
@@ -289,7 +289,7 @@ export default function StoriesPage() {
                       <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                         <span>{timeAgo(s.createdAt)}</span>
                         <span>·</span>
-                        <span className="flex items-center gap-1" style={{ color: hl < 3 ? "#f87171" : "#888" }}>
+                        <span className="flex items-center gap-1" style={{ color: hl < 3 ? "#f87171" : "hsl(var(--muted-foreground))" }}>
                           <Clock className="w-2.5 h-2.5" /> {hl}h left
                         </span>
                       </div>
@@ -322,7 +322,7 @@ export default function StoriesPage() {
                     </div>
                     <button onClick={() => void like(s.id)} disabled={isLiked || !isOnline}
                       className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all border"
-                      style={{ borderColor: isLiked ? "#f4724860" : BORDER_G, color: isLiked ? "#f47248" : "#888", background: isLiked ? "#f4724815" : "transparent" }}>
+                      style={{ borderColor: isLiked ? "#f4724860" : BORDER_G, color: isLiked ? "#f47248" : "hsl(var(--muted-foreground))", background: isLiked ? "#f4724815" : "transparent" }}>
                       <Heart className={`w-3 h-3 ${isLiked ? "fill-current" : ""}`} />
                       {s.likes + (isLiked && s.likes === 0 ? 1 : 0)}
                     </button>

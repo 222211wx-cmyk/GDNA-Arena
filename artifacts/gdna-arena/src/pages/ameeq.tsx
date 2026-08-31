@@ -87,15 +87,15 @@ export default function AmeeqPage() {
 
   return (
     <div dir="rtl" lang="ar" style={{
-      background: "#0a0a0a", color: "#fff", fontFamily: "'Tajawal', sans-serif",
+      background: "hsl(var(--background))", color: "hsl(var(--foreground))", fontFamily: "'Tajawal', sans-serif",
       margin: 0, display: "flex", flexDirection: "column", height: "calc(100vh - 115px)", minHeight: 420,
     }}>
-      <header style={{ background: "#111", padding: 15, textAlign: "center", borderBottom: "2px solid gold" }}>
-        <div style={{ fontSize: 11, color: "gold" }}>
+      <header style={{ background: "hsl(var(--card))", padding: 15, textAlign: "center", borderBottom: "2px solid hsl(var(--primary))" }}>
+        <div style={{ fontSize: 11, color: "hsl(var(--primary))" }}>
           🏛️ موظف حكومي رقم {EMPLOYEE_ID} | تابع لـ {OWNER}
         </div>
         <h1 style={{ margin: "6px 0 0" }}>👑 {EMPLOYEE_NAME}</h1>
-        <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", marginTop: 4 }}>
           الحاكم الخارجي السيادي — رئيس مجلس الذكاء الإمبراطوري
         </div>
       </header>
@@ -103,25 +103,25 @@ export default function AmeeqPage() {
       {report && (
         <div style={{ background: "#0f0d05", borderBottom: "1px solid #33280a", padding: "10px 16px" }}>
           <button onClick={() => setShowReport(s => !s)}
-            style={{ background: "none", border: "none", color: "gold", cursor: "pointer",
+            style={{ background: "none", border: "none", color: "hsl(var(--primary))", cursor: "pointer",
               fontWeight: 700, fontSize: 13, width: "100%", textAlign: "right", padding: 0 }}>
             🏛️ تقرير المجلس الإمبراطوري: {report.headline} {showReport ? "▲" : "▼"}
           </button>
           {showReport && (
-            <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: "#ddd" }}>
+            <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8, color: "hsl(var(--muted-foreground))" }}>
               {report.report.state_of_empire && <p style={{ margin: "0 0 8px" }}>{report.report.state_of_empire}</p>}
               {!!report.report.predictions?.length && (
-                <div><b style={{ color: "gold" }}>🔮 التنبؤات:</b>
+                <div><b style={{ color: "hsl(var(--primary))" }}>🔮 التنبؤات:</b>
                   <ul style={{ margin: "4px 0 8px", paddingRight: 18 }}>
                     {report.report.predictions.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
               )}
               {!!report.report.research?.length && (
-                <div><b style={{ color: "gold" }}>🔬 البحوث الجماعية:</b>
+                <div><b style={{ color: "hsl(var(--primary))" }}>🔬 البحوث الجماعية:</b>
                   <ul style={{ margin: "4px 0 8px", paddingRight: 18 }}>
                     {report.report.research.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
               )}
               {!!report.report.directives?.length && (
-                <div><b style={{ color: "gold" }}>⚔️ التوجيهات نحو الريادة:</b>
+                <div><b style={{ color: "hsl(var(--primary))" }}>⚔️ التوجيهات نحو الريادة:</b>
                   <ul style={{ margin: "4px 0 0", paddingRight: 18 }}>
                     {report.report.directives.map((p, i) => <li key={i}>{p}</li>)}</ul></div>
               )}
@@ -136,26 +136,26 @@ export default function AmeeqPage() {
             margin: "10px 0", padding: "12px 18px", borderRadius: 12, maxWidth: "80%",
             whiteSpace: "pre-wrap",
             ...(msg.from === "user"
-              ? { background: "#222", marginLeft: "auto" }
-              : { background: "#1a1a1a", border: "1px solid #333" }),
+              ? { background: "hsl(var(--muted))", marginLeft: "auto" }
+              : { background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }),
           }}>
             {msg.from === "ai" && msg.signature ? (
               <>
                 <b>{EMPLOYEE_NAME}</b>
-                <hr style={{ borderColor: "#333" }} />
+                <hr style={{ borderColor: "hsl(var(--border))" }} />
                 <div>{msg.text}</div>
                 {msg.empireNote && msg.ownerDomain && (
                   <div style={{ marginTop: 10 }}>
                     🏛️ <b>ملاحظة رسمية:</b> هذا الأمر يخص {OWNER}.
                     <br />
                     للوصول:{" "}
-                    <a href={`https://${msg.ownerDomain}`} target="_blank" rel="noreferrer" style={{ color: "gold" }}>
+                    <a href={`https://${msg.ownerDomain}`} target="_blank" rel="noreferrer" style={{ color: "hsl(var(--primary))" }}>
                       {msg.ownerDomain}
                     </a>
                   </div>
                 )}
-                <hr style={{ borderColor: "#333" }} />
-                <i style={{ fontSize: 12, color: "#999" }}>{msg.signature}</i>
+                <hr style={{ borderColor: "hsl(var(--border))" }} />
+                <i style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>{msg.signature}</i>
               </>
             ) : (
               msg.text
@@ -163,25 +163,25 @@ export default function AmeeqPage() {
           </div>
         ))}
         {busy && (
-          <div style={{ margin: "10px 0", padding: "12px 18px", borderRadius: 12, maxWidth: "80%", background: "#1a1a1a", border: "1px solid #333", color: "#999" }}>
+          <div style={{ margin: "10px 0", padding: "12px 18px", borderRadius: 12, maxWidth: "80%", background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
             ⏳ {EMPLOYEE_NAME} كيكتب…
           </div>
         )}
       </div>
 
-      <footer style={{ display: "flex", padding: 15, background: "#111" }}>
+      <footer style={{ display: "flex", padding: 15, background: "hsl(var(--card))" }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") sendCommand(); }}
           placeholder="اكتب أمرك هنا..."
           maxLength={500}
-          style={{ flex: 1, padding: 14, borderRadius: 10, border: "none", background: "#222", color: "#fff", outline: "none" }}
+          style={{ flex: 1, padding: 14, borderRadius: 10, border: "none", background: "hsl(var(--muted))", color: "hsl(var(--foreground))", outline: "none" }}
         />
         <button
           onClick={sendCommand}
           disabled={busy}
-          style={{ padding: "14px 25px", marginRight: 10, borderRadius: 10, border: "none", background: "gold", color: "#000", fontWeight: "bold", cursor: "pointer", opacity: busy ? 0.6 : 1 }}
+          style={{ padding: "14px 25px", marginRight: 10, borderRadius: 10, border: "none", background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", fontWeight: "bold", cursor: "pointer", opacity: busy ? 0.6 : 1 }}
         >
           إرسال
         </button>

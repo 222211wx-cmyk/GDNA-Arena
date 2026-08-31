@@ -99,7 +99,7 @@ export default function LearnPage() {
             <GraduationCap className="w-3.5 h-3.5" />
             EDUCATIONAL HUB — EMPIRE LEARNING SYSTEM
           </div>
-          <h1 className="text-4xl md:text-6xl font-black mb-4" style={{ color: "#fff" }}>
+          <h1 className="text-4xl md:text-6xl font-black mb-4" style={{ color: "hsl(var(--foreground))" }}>
             LEARN &amp; <span style={{ color: GREEN }}>ASCEND</span>
           </h1>
           <p className="text-muted-foreground text-lg mb-8 max-w-2xl mx-auto">

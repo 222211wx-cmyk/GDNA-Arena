@@ -23,7 +23,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@workspace/gdna-ds/components/ui/select";
 import Avatar from "../social/Avatar";
-import { GOLD, timeAgo, api } from "../social/social-i18n";
+import { GOLD, GOLD_A, timeAgo, api } from "../social/social-i18n";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // ── Backend-authoritative domain list ─────────────────────────────────────────
@@ -651,7 +651,7 @@ export default function SolidarityRelay({
       {isScoped && (
         <div
           className="flex items-center gap-2 px-3 py-2 border-b border-border/40"
-          style={{ background: `${GOLD}08` }}
+          style={{ background: GOLD_A(0.031) }}
         >
           <button
             onClick={onClearRoom}
@@ -701,7 +701,7 @@ export default function SolidarityRelay({
           onClick={() => isOnline && setShowCreate(v => !v)}
           disabled={!isOnline}
           className="w-full flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-bold min-h-[44px] transition-colors"
-          style={{ borderColor: `${GOLD}30`, background: `${GOLD}0a`, color: GOLD }}
+          style={{ borderColor: GOLD_A(0.188), background: GOLD_A(0.039), color: GOLD }}
           data-testid="button-show-create"
           aria-expanded={showCreate}
         >

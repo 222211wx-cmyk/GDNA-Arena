@@ -5,7 +5,9 @@ import { useLang }  from "../contexts/LangContext";
 import { ShoppingBag, Coins, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
-const GOLD = "#FFD700";
+const GOLD = "hsl(var(--primary))";
+
+const GOLD_A = (a: number) => `hsl(var(--primary) / ${a})`;
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 const api = (path: string) => `${BASE()}${path}`;
 
@@ -70,7 +72,7 @@ export default function ShopPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#050505", color: "#fff", paddingBottom: 80 }} dir={dir}>
+    <div style={{ minHeight: "100vh", background: "hsl(var(--background))", color: "hsl(var(--foreground))", paddingBottom: 80 }} dir={dir}>
       {/* Toast */}
       {toast && (
         <div style={{
@@ -82,7 +84,7 @@ export default function ShopPage() {
       )}
 
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, #0a0a0a 0%, #111 100%)`, borderBottom: `1px solid ${GOLD}20`, padding: "32px 24px 20px" }}>
+      <div style={{ background: `linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--card)) 100%)`, borderBottom: `1px solid ${GOLD_A(0.2)}`, padding: "32px 24px 20px" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
@@ -96,7 +98,7 @@ export default function ShopPage() {
             {user && (
               <div style={{
                 display: "flex", alignItems: "center", gap: 8,
-                background: `${GOLD}15`, border: `1px solid ${GOLD}40`,
+                background: GOLD_A(0.15), border: `1px solid ${GOLD_A(0.4)}`,
                 borderRadius: 20, padding: "8px 18px",
               }}>
                 <span style={{ fontSize: 18 }}>🪙</span>
@@ -116,7 +118,7 @@ export default function ShopPage() {
       {/* Grid */}
       <div style={{ maxWidth: 1100, margin: "32px auto", padding: "0 24px" }}>
         {loading ? (
-          <div style={{ textAlign: "center", padding: 60, color: "#666" }}>
+          <div style={{ textAlign: "center", padding: 60, color: "hsl(var(--muted-foreground))" }}>
             <Loader2 size={32} style={{ animation: "spin 1s linear infinite" }} />
           </div>
         ) : (
@@ -132,15 +134,15 @@ export default function ShopPage() {
 
               return (
                 <div key={item.id} style={{
-                  background: "#0d0d0d",
-                  border: `1px solid ${isPurchased ? "#0a0" : `${GOLD}20`}`,
+                  background: "hsl(var(--card))",
+                  border: `1px solid ${isPurchased ? "#0a0" : GOLD_A(0.2)}`,
                   borderRadius: 16, overflow: "hidden",
                   transition: "transform 0.2s, border-color 0.2s",
                   cursor: "default",
                 }}>
                   {/* Image */}
                   <div style={{
-                    height: 160, background: `#111`,
+                    height: 160, background: `hsl(var(--card))`,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 64, position: "relative",
                   }}>
@@ -155,7 +157,7 @@ export default function ShopPage() {
                     )}
                     <div style={{
                       position: "absolute", top: 10, left: 10,
-                      background: `${GOLD}20`, border: `1px solid ${GOLD}40`,
+                      background: GOLD_A(0.2), border: `1px solid ${GOLD_A(0.4)}`,
                       borderRadius: 8, padding: "3px 8px", fontSize: 11, color: GOLD, fontWeight: 700,
                     }}>
                       {CATEGORIES[item.category] ?? item.category}
@@ -196,7 +198,7 @@ export default function ShopPage() {
                     </div>
 
                     {!canAfford && !isPurchased && user && (
-                      <p style={{ margin: "8px 0 0", fontSize: 11, color: "#c44", textAlign: "center" }}>
+                      <p style={{ margin: "8px 0 0", fontSize: 11, color: "hsl(var(--destructive))", textAlign: "center" }}>
                         {lang === "ar" ? `تحتاج ${item.price - (user.balance ?? 0)} عملة إضافية` : `Need ${item.price - (user.balance ?? 0)} more coins`}
                       </p>
                     )}
@@ -208,7 +210,7 @@ export default function ShopPage() {
         )}
 
         {!user && (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#666" }}>
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "hsl(var(--muted-foreground))" }}>
             <ShoppingBag size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
             <p style={{ fontSize: 16 }}>{lang === "ar" ? "سجّل دخولك لتتمكن من الشراء" : "Login to make purchases"}</p>
           </div>

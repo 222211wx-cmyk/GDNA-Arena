@@ -128,7 +128,7 @@ export default function ChatPage() {
               <div
                 className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-primary text-black font-medium rounded-br-sm"
+                    ? "bg-primary text-primary-foreground font-medium rounded-br-sm"
                     : "bg-card border border-primary/20 text-foreground rounded-bl-sm"
                 }`}
                 dir="auto"
@@ -195,7 +195,7 @@ export default function ChatPage() {
         <Button
           onClick={() => sendMessage()}
           disabled={!input.trim() || loading}
-          className="h-12 px-5 bg-primary hover:bg-primary/90 text-black font-bold neon-glow transition-all"
+          className="h-12 px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold neon-glow transition-all"
           data-testid="button-send"
         >
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}

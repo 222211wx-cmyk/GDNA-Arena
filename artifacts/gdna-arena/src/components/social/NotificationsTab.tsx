@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Bell } from "lucide-react";
-import { GOLD, timeAgo, api } from "./social-i18n";
+import { GOLD, GOLD_A, timeAgo, api } from "./social-i18n";
 import type { NotifItem } from "./social-types";
 
 function notifIcon(type: string) {
@@ -16,7 +16,7 @@ function notifIcon(type: string) {
 }
 
 function notifBg(type: string) {
-  if (type === "comment")      return "#C9A84C20";
+  if (type === "comment")      return GOLD_A(0.13);
   if (type === "reaction")     return "#ef444420";
   if (type === "follow")       return "#3b82f620";
   if (type === "call_missed")  return "#ef444420";
@@ -55,7 +55,7 @@ export default function NotificationsTab({ user, st, dir }: Props) {
   useEffect(() => { load(); }, [load]);
 
   if (!user) return (
-    <div style={{ textAlign: "center", padding: 60, color: "#444" }}>
+    <div style={{ textAlign: "center", padding: 60, color: "hsl(var(--muted-foreground))" }}>
       <Bell size={36} style={{ opacity: 0.2, display: "block", margin: "0 auto 12px" }} />
       <p style={{ margin: 0, fontSize: 14 }}>{st.login_required}</p>
     </div>
@@ -67,15 +67,15 @@ export default function NotificationsTab({ user, st, dir }: Props) {
       {notifs.length > 0 && !allRead && (
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button onClick={() => setAllRead(true)}
-            style={{ background: "none", border: `1px solid ${GOLD}30`, borderRadius: 8, padding: "5px 12px", color: GOLD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+            style={{ background: "none", border: `1px solid ${GOLD_A(0.19)}`, borderRadius: 8, padding: "5px 12px", color: GOLD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
             {st.mark_read ?? "Mark all read"}
           </button>
         </div>
       )}
 
-      {loading && <div style={{ textAlign: "center", color: "#444", padding: 40 }}>…</div>}
+      {loading && <div style={{ textAlign: "center", color: "hsl(var(--muted-foreground))", padding: 40 }}>…</div>}
       {!loading && notifs.length === 0 && (
-        <div style={{ textAlign: "center", padding: 60, color: "#444" }}>
+        <div style={{ textAlign: "center", padding: 60, color: "hsl(var(--muted-foreground))" }}>
           <Bell size={36} style={{ opacity: 0.2, display: "block", margin: "0 auto 12px" }} />
           <p style={{ margin: 0, fontSize: 14 }}>{st.no_notifications}</p>
         </div>
@@ -86,7 +86,7 @@ export default function NotificationsTab({ user, st, dir }: Props) {
           initial={{ opacity: 0, x: dir === "rtl" ? 10 : -10 }}
           animate={{ opacity: allRead ? 0.45 : 1, x: 0 }}
           style={{
-            background: "#0d0d0d", border: `1px solid ${GOLD}10`, borderRadius: 10,
+            background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.06)}`, borderRadius: 10,
             padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10,
           }}>
           <div style={{
@@ -98,7 +98,7 @@ export default function NotificationsTab({ user, st, dir }: Props) {
             {notifIcon(n.type)}
           </div>
           <div style={{ flex: 1, overflow: "hidden" }}>
-            <p style={{ margin: 0, fontSize: 13, color: "#e5e7eb" }}>
+            <p style={{ margin: 0, fontSize: 13, color: "hsl(var(--foreground))" }}>
               <strong style={{ color: GOLD }}>{n.username}</strong>
               {" "}
               {notifLabel(n, st)}

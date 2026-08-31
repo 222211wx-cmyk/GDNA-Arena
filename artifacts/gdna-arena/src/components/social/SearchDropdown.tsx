@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Avatar from "./Avatar";
-import { GOLD, api } from "./social-i18n";
+import { GOLD, GOLD_A, api } from "./social-i18n";
 import type { SearchHit } from "./social-types";
 
 interface Props {
@@ -40,7 +40,7 @@ export default function SearchDropdown({ q, st, dir, onClose }: Props) {
       initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
       style={{
         position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-        background: "#111", border: `1px solid ${GOLD}20`, borderRadius: 10,
+        background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.13)}`, borderRadius: 10,
         zIndex: 1000, maxHeight: 420, overflowY: "auto",
         boxShadow: "0 8px 40px rgba(0,0,0,0.85)",
       }}>
@@ -48,7 +48,7 @@ export default function SearchDropdown({ q, st, dir, onClose }: Props) {
         <p style={{ padding: "14px 16px", color: "#ffffff40", margin: 0, fontSize: 13 }}>Searching…</p>
       )}
       {!loading && total === 0 && results !== null && (
-        <p style={{ padding: "14px 16px", color: "#444", margin: 0, fontSize: 13 }}>
+        <p style={{ padding: "14px 16px", color: "hsl(var(--muted-foreground))", margin: 0, fontSize: 13 }}>
           No results for "{q}"
         </p>
       )}
@@ -65,7 +65,7 @@ export default function SearchDropdown({ q, st, dir, onClose }: Props) {
                   onClick={onClose}>
                   <Avatar name={c.username} size={28} />
                   <div>
-                    <p style={{ margin: 0, fontWeight: 700, color: "#fff", fontSize: 13 }}>{c.username}</p>
+                    <p style={{ margin: 0, fontWeight: 700, color: "hsl(var(--foreground))", fontSize: 13 }}>{c.username}</p>
                     <p style={{ margin: 0, fontSize: 11, color: c.rank.color }}>{c.rank.icon} {c.rank.label}</p>
                   </div>
                 </div>
@@ -81,8 +81,8 @@ export default function SearchDropdown({ q, st, dir, onClose }: Props) {
                 <div key={p.id}
                   style={{ padding: "7px 12px", cursor: "pointer" }}
                   onClick={onClose}>
-                  <p style={{ margin: 0, fontWeight: 700, color: "#fff", fontSize: 12 }}>{p.username}</p>
-                  <p style={{ margin: "2px 0 0", color: "#999", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} dir={dir}>
+                  <p style={{ margin: 0, fontWeight: 700, color: "hsl(var(--foreground))", fontSize: 12 }}>{p.username}</p>
+                  <p style={{ margin: "2px 0 0", color: "hsl(var(--muted-foreground))", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} dir={dir}>
                     {p.content.slice(0, 80)}{p.content.length > 80 ? "…" : ""}
                   </p>
                 </div>
@@ -98,8 +98,8 @@ export default function SearchDropdown({ q, st, dir, onClose }: Props) {
                 <div key={s.id}
                   style={{ padding: "7px 12px", cursor: "pointer" }}
                   onClick={onClose}>
-                  <p style={{ margin: 0, fontWeight: 700, color: "#fff", fontSize: 12 }}>{s.username}</p>
-                  <p style={{ margin: "2px 0 0", color: "#999", fontSize: 12 }} dir={dir}>
+                  <p style={{ margin: 0, fontWeight: 700, color: "hsl(var(--foreground))", fontSize: 12 }}>{s.username}</p>
+                  <p style={{ margin: "2px 0 0", color: "hsl(var(--muted-foreground))", fontSize: 12 }} dir={dir}>
                     {s.content.slice(0, 80)}{s.content.length > 80 ? "…" : ""}
                   </p>
                 </div>

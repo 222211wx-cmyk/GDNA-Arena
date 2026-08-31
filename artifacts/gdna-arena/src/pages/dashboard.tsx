@@ -740,7 +740,7 @@ export default function Dashboard() {
               Wallet
             </Button>
           </Link>
-          <Button variant="outline" onClick={handleLogout} className="border-red-500/50 text-red-400 hover:bg-red-500/10" data-testid="button-logout">
+          <Button variant="outline" onClick={handleLogout} className="border-destructive/50 text-destructive hover:bg-destructive/10" data-testid="button-logout">
             <LogOut className="w-4 h-4 mr-2" />
             Logout
           </Button>
@@ -799,7 +799,7 @@ export default function Dashboard() {
             <CardContent className="p-8 flex flex-col justify-center items-center text-center h-full relative z-10">
               <Coins className="w-16 h-16 text-primary mb-6 drop-shadow-[0_0_15px_rgba(0,212,255,0.8)]" />
               <p className="text-sm uppercase tracking-widest text-muted-foreground mb-2">Available Balance</p>
-              <h2 className="text-5xl md:text-7xl font-black text-white neon-text-glow mb-8 tracking-tighter" data-testid="text-balance">
+              <h2 className="text-5xl md:text-7xl font-black text-foreground neon-text-glow mb-8 tracking-tighter" data-testid="text-balance">
                 {user.balance.toLocaleString()} <span className="text-2xl text-primary font-bold">COINS</span>
               </h2>
               <Link href="/games">
@@ -903,7 +903,7 @@ export default function Dashboard() {
                       m.win ? "border-primary/20 bg-primary/5" : "border-white/5 bg-white/2"
                     }`}>
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${m.win ? "bg-primary" : "bg-red-500/60"}`} />
+                        <div className={`w-2 h-2 rounded-full ${m.win ? "bg-primary" : "bg-destructive/60"}`} />
                         <div>
                           <p className="text-sm font-semibold">{m.game}</p>
                           <p className="text-xs text-muted-foreground">{ago}</p>
@@ -914,7 +914,7 @@ export default function Dashboard() {
                           <p className="text-xs text-primary font-bold">+{m.coins} <span className="text-muted-foreground font-normal">coins</span></p>
                           <p className="text-xs text-purple-400">+{m.xp} XP</p>
                         </div>
-                        <span className={`text-xs font-bold uppercase tracking-wider ${m.win ? "text-primary" : "text-red-400/70"}`}>
+                        <span className={`text-xs font-bold uppercase tracking-wider ${m.win ? "text-primary" : "text-destructive/70"}`}>
                           {m.win ? "WIN" : "LOSS"}
                         </span>
                       </div>

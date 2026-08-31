@@ -28,12 +28,12 @@ export default function CookieBanner() {
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           dir={isRTL ? "rtl" : "ltr"}
-          className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950 border-t border-yellow-500/30 px-6 py-4 shadow-2xl"
+          className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-yellow-500/30 px-6 py-4 shadow-2xl"
         >
           <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-start md:items-center gap-4">
             <div className="flex-1">
-              <p className="text-white font-semibold text-sm">{t("title")}</p>
-              <p className="text-gray-400 text-xs mt-1 leading-relaxed">{t("body")}{" "}
+              <p className="text-foreground font-semibold text-sm">{t("title")}</p>
+              <p className="text-muted-foreground text-xs mt-1 leading-relaxed">{t("body")}{" "}
                 <Link href="/legal" className="text-yellow-400 underline">{t("policy")}</Link>
               </p>
             </div>
@@ -46,13 +46,13 @@ export default function CookieBanner() {
               </button>
               <button
                 onClick={() => setConsent("essential")}
-                className="bg-gray-700 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-gray-600 transition-all"
+                className="bg-secondary text-foreground text-xs font-bold px-4 py-2 rounded-lg hover:bg-muted transition-all"
               >
                 {t("essential")}
               </button>
               <button
                 onClick={() => setConsent("essential")}
-                className="border border-gray-600 text-gray-400 text-xs font-bold px-4 py-2 rounded-lg hover:border-gray-400 transition-all"
+                className="border border-border text-muted-foreground text-xs font-bold px-4 py-2 rounded-lg hover:border-muted-foreground transition-all"
               >
                 {t("reject")}
               </button>

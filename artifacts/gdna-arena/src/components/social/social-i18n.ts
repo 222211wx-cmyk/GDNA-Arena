@@ -262,8 +262,10 @@ export const DOMAIN_ICONS: Record<string, string> = {
   sport: "⚽", music: "🎵", cinema: "🎬", tech: "💡", art: "🎨", general: "🌍",
 };
 
-export const GOLD = "#C9A84C";
+/** Shared social palette values use the active GDNA design-system theme. */
+export const GOLD = "hsl(var(--primary))";
 
+export const GOLD_A = (alpha: number) => `hsl(var(--primary) / ${alpha})`;
 export const DOMAINS = ["general", "sport", "music", "cinema", "tech", "art"] as const;
 
 export function timeAgo(dateStr: string, st: Record<string, string>): string {

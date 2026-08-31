@@ -410,24 +410,24 @@ export default function Growth() {
   // NOT LOGGED IN
   // ──────────────────────────────────────────────────────────────────────────
   if (!user) return (
-    <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0">
         {Array.from({ length: 30 }).map((_, i) => (
-          <div key={i} className="absolute w-px bg-yellow-400/10 animate-pulse"
+          <div key={i} className="absolute w-px bg-primary/10 animate-pulse"
             style={{ left: `${Math.random() * 100}%`, top: 0, bottom: 0, animationDelay: `${Math.random() * 3}s` }} />
         ))}
       </div>
       <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-        className="relative z-10 text-center space-y-8 p-12 border border-yellow-400/30 bg-black/90">
-        <div className="text-yellow-400 font-mono text-xs tracking-[0.4em] uppercase">ARCHON SYSTEM v4.2</div>
-        <div className="text-6xl font-black text-red-500 font-mono">ACCESS DENIED</div>
-        <div className="text-yellow-400/60 font-mono text-sm tracking-widest">
+        className="relative z-10 text-center space-y-8 p-12 border border-primary/30 bg-background/90">
+        <div className="text-primary font-mono text-xs tracking-[0.4em] uppercase">ARCHON SYSTEM v4.2</div>
+        <div className="text-6xl font-black text-destructive font-mono">ACCESS DENIED</div>
+        <div className="text-primary/60 font-mono text-sm tracking-widest">
           CITIZEN AUTHENTICATION REQUIRED<br/>TO ACCESS IMPERIAL MIND FORGE
         </div>
-        <div className="border-t border-yellow-400/20 pt-6 space-y-3">
-          <p className="text-yellow-400/40 font-mono text-xs">CLEARANCE LEVEL: OMEGA — INITIATES ONLY</p>
+        <div className="border-t border-primary/20 pt-6 space-y-3">
+          <p className="text-primary/40 font-mono text-xs">CLEARANCE LEVEL: OMEGA — INITIATES ONLY</p>
           <Link href="/login">
-            <button className="px-8 py-3 border border-yellow-400 text-yellow-400 font-mono font-black text-sm tracking-[0.3em] uppercase hover:bg-yellow-400 hover:text-black transition-all">
+            <button className="px-8 py-3 border border-primary text-primary font-mono font-black text-sm tracking-[0.3em] uppercase hover:bg-primary hover:text-primary-foreground transition-all">
               ⚡ AUTHENTICATE IDENTITY
             </button>
           </Link>
@@ -440,10 +440,10 @@ export default function Growth() {
   // BOOT SEQUENCE
   // ──────────────────────────────────────────────────────────────────────────
   if (phase === "boot") return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-8">
       <div className="w-full max-w-2xl font-mono">
-        <div className="border border-yellow-400/40 p-8 space-y-2">
-          <div className="text-yellow-400/60 text-xs tracking-widest mb-6">
+        <div className="border border-primary/40 p-8 space-y-2">
+          <div className="text-primary/60 text-xs tracking-widest mb-6">
             ╔══════════════════════════════════════════╗<br/>
             ║         ARCHON INTELLIGENCE CORE         ║<br/>
             ║       GDNA EMPIRE — CLASSIFIED           ║<br/>
@@ -451,7 +451,7 @@ export default function Growth() {
           </div>
           {bootLines.filter(Boolean).map((line, i) => (
             <motion.div key={i} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-              className={`text-sm tracking-wider ${line.startsWith(">>>") ? "text-yellow-400 font-black text-base" : "text-green-400/80"}`}>
+              className={`text-sm tracking-wider ${line.startsWith(">>>") ? "text-primary font-black text-base" : "text-green-400/80"}`}>
               {line.startsWith(">>>") ? line : `> ${line}`}
             </motion.div>
           ))}
@@ -461,23 +461,23 @@ export default function Growth() {
           )}
           {bootDone && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="pt-6 space-y-4">
-              <div className="border-t border-yellow-400/30 pt-4">
-                <p className="text-yellow-400/60 text-xs tracking-widest mb-4">SELECT OPERATION:</p>
+              <div className="border-t border-primary/30 pt-4">
+                <p className="text-primary/60 text-xs tracking-widest mb-4">SELECT OPERATION:</p>
                 <div className="space-y-2">
                   <button
                     onClick={() => { setPhase("initiation"); setQIndex(0); setAnswers({}); setFreeText(""); }}
-                    className="w-full text-left px-4 py-3 border border-yellow-400/40 text-yellow-400 font-mono text-sm tracking-wider hover:bg-yellow-400/10 hover:border-yellow-400 transition-all"
+                    className="w-full text-left px-4 py-3 border border-primary/40 text-primary font-mono text-sm tracking-wider hover:bg-primary/10 hover:border-primary transition-all"
                   >
                     ⚡ [1] INITIATE NEW ARCHON ASSESSMENT
-                    <span className="text-yellow-400/40 ml-2 text-xs">— Unlock your psychological DNA</span>
+                    <span className="text-primary/40 ml-2 text-xs">— Unlock your psychological DNA</span>
                   </button>
                   {existingProfile && (
                     <button
                       onClick={() => setPhase("profile")}
-                      className="w-full text-left px-4 py-3 border border-yellow-400/20 text-yellow-400/60 font-mono text-sm tracking-wider hover:bg-yellow-400/5 hover:border-yellow-400/40 transition-all"
+                      className="w-full text-left px-4 py-3 border border-primary/20 text-primary/60 font-mono text-sm tracking-wider hover:bg-primary/5 hover:border-primary/40 transition-all"
                     >
                       ♔ [2] ACCESS EXISTING ARCHON PROFILE
-                      <span className="text-yellow-400/40 ml-2 text-xs">— {existingProfile.archetype} · {existingProfile.archonCode}</span>
+                      <span className="text-primary/40 ml-2 text-xs">— {existingProfile.archetype} · {existingProfile.archonCode}</span>
                     </button>
                   )}
                 </div>
@@ -499,20 +499,20 @@ export default function Growth() {
     const progress = ((qIndex) / QUESTIONS.length) * 100;
 
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         {/* Header */}
         <div className="w-full max-w-2xl mb-6">
-          <div className="flex items-center justify-between font-mono text-xs text-yellow-400/40 tracking-widest mb-2">
+          <div className="flex items-center justify-between font-mono text-xs text-primary/40 tracking-widest mb-2">
             <span>ARCHON INITIATION PROTOCOL</span>
             <span>QUESTION {qIndex + 1} / {QUESTIONS.length}</span>
           </div>
-          <div className="h-px bg-yellow-400/10 w-full relative">
-            <motion.div className="h-px bg-yellow-400 absolute left-0 top-0"
+          <div className="h-px bg-primary/10 w-full relative">
+            <motion.div className="h-px bg-primary absolute left-0 top-0"
               animate={{ width: `${progress}%` }} transition={{ duration: 0.5 }} />
           </div>
           <div className="mt-2 flex gap-1">
             {QUESTIONS.map((_, i) => (
-              <div key={i} className={`flex-1 h-0.5 transition-colors ${i < qIndex ? "bg-yellow-400" : i === qIndex ? "bg-yellow-400/60" : "bg-yellow-400/15"}`} />
+              <div key={i} className={`flex-1 h-0.5 transition-colors ${i < qIndex ? "bg-primary" : i === qIndex ? "bg-primary/60" : "bg-primary/15"}`} />
             ))}
           </div>
         </div>
@@ -524,23 +524,23 @@ export default function Growth() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -30, scale: 0.97 }}
             transition={{ duration: 0.35 }}
-            className="w-full max-w-2xl border border-yellow-400/30 bg-black p-8 space-y-6"
+            className="w-full max-w-2xl border border-primary/30 bg-background p-8 space-y-6"
           >
             {/* Dimension badge */}
             <div className="flex items-center gap-3">
               <span className="text-2xl">{q.glyph}</span>
               <div>
-                <div className="font-mono text-yellow-400 text-xs tracking-[0.4em] uppercase">{q.dim}</div>
-                <div className="text-yellow-400/50 font-mono text-xs" dir="rtl">{q.ar}</div>
+                <div className="font-mono text-primary text-xs tracking-[0.4em] uppercase">{q.dim}</div>
+                <div className="text-primary/50 font-mono text-xs" dir="rtl">{q.ar}</div>
               </div>
-              <div className="ml-auto font-mono text-yellow-400/30 text-xs">
+              <div className="ml-auto font-mono text-primary/30 text-xs">
                 DIMENSION {qIndex + 1}
               </div>
             </div>
 
             {/* Question text */}
-            <div className="border-l-2 border-yellow-400/40 pl-4">
-              <p className={`text-white font-bold text-lg leading-relaxed ${isRTL ? "text-right" : ""}`} dir={isRTL ? "rtl" : "ltr"}>
+            <div className="border-l-2 border-primary/40 pl-4">
+              <p className={`text-foreground font-bold text-lg leading-relaxed ${isRTL ? "text-right" : ""}`} dir={isRTL ? "rtl" : "ltr"}>
                 {qText}
               </p>
             </div>
@@ -563,12 +563,12 @@ export default function Growth() {
                       }}
                       className={`w-full text-left px-5 py-3 border font-mono text-sm tracking-wide transition-all flex items-center gap-4 ${
                         selected
-                          ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
-                          : "border-yellow-400/20 text-yellow-400/60 hover:border-yellow-400/50 hover:text-yellow-400/90 hover:bg-yellow-400/5"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-primary/20 text-primary/60 hover:border-primary/50 hover:text-primary/90 hover:bg-primary/5"
                       }`}
                       dir={isRTL ? "rtl" : "ltr"}
                     >
-                      <span className={`font-black text-lg shrink-0 ${selected ? "text-yellow-400" : "text-yellow-400/30"}`}>{letter}</span>
+                      <span className={`font-black text-lg shrink-0 ${selected ? "text-primary" : "text-primary/30"}`}>{letter}</span>
                       <span>{txt}</span>
                     </motion.button>
                   );
@@ -584,14 +584,14 @@ export default function Growth() {
                   dir={isRTL ? "rtl" : "ltr"}
                   maxLength={200}
                   rows={3}
-                  className="w-full bg-transparent border border-yellow-400/30 text-yellow-400 font-mono text-sm p-4 placeholder:text-yellow-400/20 focus:outline-none focus:border-yellow-400/60 resize-none"
+                  className="w-full bg-transparent border border-primary/30 text-primary font-mono text-sm p-4 placeholder:text-primary/20 focus:outline-none focus:border-primary/60 resize-none"
                 />
                 <div className="flex items-center justify-between">
-                  <span className="text-yellow-400/30 font-mono text-xs">{freeText.length}/200</span>
+                  <span className="text-primary/30 font-mono text-xs">{freeText.length}/200</span>
                   <button
                     onClick={() => submitInitiation()}
                     disabled={!freeText.trim()}
-                    className="px-6 py-2 border border-yellow-400 text-yellow-400 font-mono font-black text-sm tracking-widest uppercase hover:bg-yellow-400 hover:text-black transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="px-6 py-2 border border-primary text-primary font-mono font-black text-sm tracking-widest uppercase hover:bg-primary hover:text-primary-foreground transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     TRANSMIT ▶
                   </button>
@@ -604,7 +604,7 @@ export default function Growth() {
         {/* Back */}
         {qIndex > 0 && (
           <button onClick={() => setQIndex(i => i - 1)}
-            className="mt-4 text-yellow-400/30 font-mono text-xs hover:text-yellow-400/60 transition-colors">
+            className="mt-4 text-primary/30 font-mono text-xs hover:text-primary/60 transition-colors">
             ← PREVIOUS DIMENSION
           </button>
         )}
@@ -617,17 +617,17 @@ export default function Growth() {
   // ──────────────────────────────────────────────────────────────────────────
   if (phase === "encoding") {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-8">
+      <div className="min-h-screen bg-background flex items-center justify-center p-8">
         <div className="w-full max-w-2xl font-mono space-y-0">
-          <div className="border border-yellow-400/30 p-8">
-            <div className="text-yellow-400/50 text-xs tracking-widest mb-6">
+          <div className="border border-primary/30 p-8">
+            <div className="text-primary/50 text-xs tracking-widest mb-6">
               ║ ARCHON ENCODING SEQUENCE — CLASSIFIED OPERATION ║
             </div>
             {encodingLines.map((line, i) => (
               <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.2 }}
                 className="text-green-400/80 text-sm tracking-wider py-0.5">
-                <span className="text-yellow-400/40 mr-2">[{String(i + 1).padStart(2, "0")}]</span>
+                <span className="text-primary/40 mr-2">[{String(i + 1).padStart(2, "0")}]</span>
                 {line}
                 {i === encodingLines.length - 1 && !encodingDone && (
                   <motion.span animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.5 }} className="ml-1">▋</motion.span>
@@ -639,32 +639,32 @@ export default function Growth() {
             ))}
 
             {apiError && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 text-red-400 border border-red-400/30 p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 text-destructive border border-destructive/30 p-4">
                 ERROR: {apiError}
                 <button onClick={() => { setPhase("boot"); setEncodingLines([]); setEncodingDone(false); }}
-                  className="block mt-2 text-yellow-400 text-xs hover:underline">← RESTART PROTOCOL</button>
+                  className="block mt-2 text-primary text-xs hover:underline">← RESTART PROTOCOL</button>
               </motion.div>
             )}
 
             {encodingDone && !apiLoading && !apiError && archonProfile && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
-                className="mt-6 border-t border-yellow-400/30 pt-6 space-y-3">
-                <div className="text-yellow-400 font-black text-lg tracking-widest">ARCHON CODE GENERATED</div>
-                <div className="text-3xl font-black text-yellow-400 tracking-[0.2em] font-mono"
+                className="mt-6 border-t border-primary/30 pt-6 space-y-3">
+                <div className="text-primary font-black text-lg tracking-widest">ARCHON CODE GENERATED</div>
+                <div className="text-3xl font-black text-primary tracking-[0.2em] font-mono"
                   style={{ textShadow: "0 0 20px #C9A84C80" }}>
                   {archonProfile.archonCode}
                 </div>
                 <div className="text-green-400/60 text-xs tracking-wider">
                   ARCHETYPE CLASSIFIED: <span className="text-green-400 font-black">{archonProfile.archetype}</span>
                 </div>
-                <div className="text-yellow-400/40 text-xs">LOADING ARCHON PROFILE INTERFACE...</div>
+                <div className="text-primary/40 text-xs">LOADING ARCHON PROFILE INTERFACE...</div>
               </motion.div>
             )}
 
             {(apiLoading || (!encodingDone && !apiError)) && (
               <div className="mt-4 flex gap-1">
                 {[0, 1, 2].map(i => (
-                  <motion.div key={i} className="w-1.5 h-1.5 bg-yellow-400 rounded-full"
+                  <motion.div key={i} className="w-1.5 h-1.5 bg-primary rounded-full"
                     animate={{ opacity: [0.3, 1, 0.3] }}
                     transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} />
                 ))}
@@ -686,25 +686,25 @@ export default function Growth() {
     const dimEntries = DIMENSIONS.map(d => ({ ...d, score: (dimVals as unknown as Record<string, number>)[d.key] ?? 0 }));
 
     return (
-      <div className="min-h-screen bg-black text-white">
+      <div className="min-h-screen bg-background text-foreground">
         {/* ── Imperial Header ─────────────────────────────────────────── */}
-        <div className="border-b border-yellow-400/20 bg-black sticky top-0 z-30">
+        <div className="border-b border-primary/20 bg-background sticky top-0 z-30">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
             {/* Smart Domain Widget — compact pill */}
             <SmartDomainWidget domainId="xp" compact />
-            <div className="font-mono text-yellow-400 text-xs tracking-[0.3em]">ARCHON SYSTEM</div>
-            <div className="h-4 w-px bg-yellow-400/20" />
-            <div className="font-mono text-yellow-400/60 text-xs tracking-widest">{activeProfile.archonCode}</div>
+            <div className="font-mono text-primary text-xs tracking-[0.3em]">ARCHON SYSTEM</div>
+            <div className="h-4 w-px bg-primary/20" />
+            <div className="font-mono text-primary/60 text-xs tracking-widest">{activeProfile.archonCode}</div>
             <div className="ml-auto flex items-center gap-2">
               <span className="text-2xl">{archInfo2.symbol}</span>
               <span className="font-mono font-black text-xs tracking-widest" style={{ color: archInfo2.color }}>
                 {activeProfile.archetype}
               </span>
-              <span className="text-yellow-400/30 font-mono text-xs">· {activeProfile.overallScore}/100</span>
+              <span className="text-primary/30 font-mono text-xs">· {activeProfile.overallScore}/100</span>
             </div>
           </div>
           {/* Tabs */}
-          <div className="max-w-6xl mx-auto px-4 flex gap-0 border-t border-yellow-400/10">
+          <div className="max-w-6xl mx-auto px-4 flex gap-0 border-t border-primary/10">
             {([
               { id: "profile", label: "DIMENSIONAL PROFILE", symbol: "◈" },
               { id: "pillars", label: "FOUR PILLARS", symbol: "▓" },
@@ -716,8 +716,8 @@ export default function Growth() {
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`px-5 py-2.5 font-mono text-xs tracking-widest border-b-2 transition-all ${
                   activeTab === tab.id
-                    ? "border-yellow-400 text-yellow-400"
-                    : "border-transparent text-yellow-400/30 hover:text-yellow-400/60"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-primary/30 hover:text-primary/60"
                 }`}>
                 {tab.symbol} {tab.label}
               </button>
@@ -728,12 +728,12 @@ export default function Growth() {
         <div className="max-w-6xl mx-auto px-4 py-8">
           {/* ── Re-assess CTA ───────────────────────────────────────────── */}
           <div className="flex items-center justify-between mb-6">
-            <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+            <div className="font-mono text-primary/40 text-xs tracking-widest">
               CITIZEN: {user?.username?.toUpperCase()} · CLEARANCE: OMEGA
             </div>
             <button
               onClick={() => { setPhase("boot"); setArchonProfile(null); setQIndex(0); setAnswers({}); setFreeText(""); setBootLines([]); setBootDone(false); setEncodingLines([]); setEncodingDone(false); }}
-              className="px-4 py-1.5 border border-yellow-400/30 text-yellow-400/50 font-mono text-xs tracking-widest hover:border-yellow-400/60 hover:text-yellow-400/80 transition-all"
+              className="px-4 py-1.5 border border-primary/30 text-primary/50 font-mono text-xs tracking-widest hover:border-primary/60 hover:text-primary/80 transition-all"
             >
               ↺ RE-INITIATE PROTOCOL
             </button>
@@ -751,15 +751,15 @@ export default function Growth() {
                 <div className="absolute inset-0 opacity-5"
                   style={{ background: `radial-gradient(circle at 50% 50%, ${archInfo2.color}, transparent 70%)` }} />
                 <div className="text-5xl mb-2">{archInfo2.symbol}</div>
-                <div className="font-mono text-xs tracking-[0.5em] text-yellow-400/40">ARCHON CLASSIFICATION</div>
+                <div className="font-mono text-xs tracking-[0.5em] text-primary/40">ARCHON CLASSIFICATION</div>
                 <div className="text-5xl font-black font-mono tracking-widest" style={{ color: archInfo2.color, textShadow: `0 0 40px ${archInfo2.color}60` }}>
                   {activeProfile.archetype}
                 </div>
                 {archInfo2.ar && (
-                  <div className="font-mono text-lg text-yellow-400/60" dir="rtl">{archInfo2.ar}</div>
+                  <div className="font-mono text-lg text-primary/60" dir="rtl">{archInfo2.ar}</div>
                 )}
                 {ai.archetype_declaration && (
-                  <p className="text-sm text-white/60 max-w-2xl mx-auto leading-relaxed font-mono border-t border-yellow-400/10 pt-4 mt-4">
+                  <p className="text-sm text-white/60 max-w-2xl mx-auto leading-relaxed font-mono border-t border-primary/10 pt-4 mt-4">
                     "{ai.archetype_declaration}"
                   </p>
                 )}
@@ -768,18 +768,18 @@ export default function Growth() {
                   {activeProfile.archonCode}
                 </div>
                 {ai.cipher_phrase && (
-                  <div className="font-mono text-xs text-yellow-400/30 tracking-[0.4em] uppercase">{ai.cipher_phrase}</div>
+                  <div className="font-mono text-xs text-primary/30 tracking-[0.4em] uppercase">{ai.cipher_phrase}</div>
                 )}
               </motion.div>
 
               {/* 7 Dimensions grid */}
               <div>
-                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em] mb-4">◈ 7-DIMENSION NEURAL MAP</div>
+                <div className="font-mono text-primary/50 text-xs tracking-[0.4em] mb-4">◈ 7-DIMENSION NEURAL MAP</div>
                 <div className="grid gap-3">
                   {dimEntries.map((dim, i) => (
                     <motion.div key={dim.key}
                       initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
-                      className="border border-yellow-400/10 p-4 hover:border-yellow-400/30 transition-all group relative overflow-hidden"
+                      className="border border-primary/10 p-4 hover:border-primary/30 transition-all group relative overflow-hidden"
                     >
                       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
                         style={{ background: `linear-gradient(90deg, ${dim.color}08 0%, transparent 100%)` }} />
@@ -843,8 +843,8 @@ export default function Growth() {
                     </div>
                   )}
                   {ai.shadow_mission && (
-                    <div className="border border-red-400/20 p-5 space-y-2">
-                      <div className="font-mono text-red-400 text-xs tracking-[0.4em]">▼ SHADOW MISSION</div>
+                    <div className="border border-destructive/20 p-5 space-y-2">
+                      <div className="font-mono text-destructive text-xs tracking-[0.4em]">▼ SHADOW MISSION</div>
                       <p className="text-sm text-white/70 leading-relaxed font-mono">{ai.shadow_mission}</p>
                     </div>
                   )}
@@ -853,19 +853,19 @@ export default function Growth() {
 
               {/* Imperial decree */}
               {ai.imperial_decree && (
-                <div className="border border-yellow-400/30 p-6 text-center space-y-3">
-                  <div className="font-mono text-yellow-400/50 text-xs tracking-[0.5em]">♔ IMPERIAL DECREE</div>
-                  <p className="text-base text-yellow-400/80 font-mono leading-relaxed italic">"{ai.imperial_decree}"</p>
+                <div className="border border-primary/30 p-6 text-center space-y-3">
+                  <div className="font-mono text-primary/50 text-xs tracking-[0.5em]">♔ IMPERIAL DECREE</div>
+                  <p className="text-base text-primary/80 font-mono leading-relaxed italic">"{ai.imperial_decree}"</p>
                 </div>
               )}
 
               {/* Daily directive */}
               {ai.daily_directive && (
-                <div className="border border-yellow-400 p-5 flex items-start gap-4"
+                <div className="border border-primary p-5 flex items-start gap-4"
                   style={{ boxShadow: "0 0 20px #C9A84C15" }}>
                   <span className="text-2xl shrink-0">⚡</span>
                   <div>
-                    <div className="font-mono text-yellow-400 text-xs tracking-[0.4em] mb-2">TODAY'S CLASSIFIED DIRECTIVE</div>
+                    <div className="font-mono text-primary text-xs tracking-[0.4em] mb-2">TODAY'S CLASSIFIED DIRECTIVE</div>
                     <p className="text-sm text-white/80 font-mono leading-relaxed">{ai.daily_directive}</p>
                   </div>
                 </div>
@@ -957,7 +957,7 @@ export default function Growth() {
 
             return (
               <div className="space-y-8">
-                <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em]">
+                <div className="font-mono text-primary/40 text-xs tracking-[0.4em]">
                   ▓ THE FOUR PILLARS — PERPETUAL EMPIRE GROWTH ENGINE
                 </div>
 
@@ -998,7 +998,7 @@ export default function Growth() {
                         <span style={{ color: strongestPillar.color }}>{strongestPillar.latin} ({strongestPillar.score})</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-red-400/70">▼ FRONTIER:</span>
+                        <span className="text-destructive/70">▼ FRONTIER:</span>
                         <span style={{ color: weakestPillar.color }}>{weakestPillar.latin} ({weakestPillar.score})</span>
                       </div>
                     </div>
@@ -1007,7 +1007,7 @@ export default function Growth() {
 
                 {/* The Four Pillars — visual column display */}
                 <div>
-                  <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em] mb-4">
+                  <div className="font-mono text-primary/40 text-xs tracking-[0.4em] mb-4">
                     ◈ THE FOUR PILLARS — STRUCTURAL ANALYSIS
                   </div>
 
@@ -1127,7 +1127,7 @@ export default function Growth() {
                                   initial={{ opacity: 0, x: 6 }}
                                   animate={{ opacity: 1, x: 0 }}
                                   exit={{ opacity: 0 }}
-                                  className="ml-auto text-yellow-400 font-black"
+                                  className="ml-auto text-primary font-black"
                                 >
                                   +15 XP ⚡
                                 </motion.span>
@@ -1165,10 +1165,10 @@ export default function Growth() {
                 </div>
 
                 {/* Four Pillars growth law */}
-                <div className="border border-yellow-400/30 p-6 space-y-3 text-center"
+                <div className="border border-primary/30 p-6 space-y-3 text-center"
                   style={{ background: "rgba(201,168,76,0.03)" }}>
-                  <div className="font-mono text-yellow-400/40 text-xs tracking-[0.5em]">♔ IMPERIAL GROWTH LAW</div>
-                  <p className="font-mono text-sm text-yellow-400/70 leading-relaxed" dir="rtl">
+                  <div className="font-mono text-primary/40 text-xs tracking-[0.5em]">♔ IMPERIAL GROWTH LAW</div>
+                  <p className="font-mono text-sm text-primary/70 leading-relaxed" dir="rtl">
                     "الإمبراطورية التي تنمو بلا أعمدة تسقط. الإمبراطورية التي تبني أعمدتها الأربع تحكم إلى الأبد."
                   </p>
                   <div className="flex items-center justify-center gap-6 pt-2">
@@ -1208,24 +1208,24 @@ export default function Growth() {
           {activeTab === "missions" && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em]">
+                <div className="font-mono text-primary/40 text-xs tracking-[0.4em]">
                   ♔ GDN-AI SOVEREIGN MISSION ENGINE — مهامك الإمبراطورية اليوم
                 </div>
-                <div className="font-mono text-yellow-400/30 text-xs">
+                <div className="font-mono text-primary/30 text-xs">
                   {new Date().toLocaleDateString("en-GB")}
                 </div>
               </div>
 
               {/* Missions header card */}
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="border border-yellow-400/30 p-6 relative overflow-hidden"
+                className="border border-primary/30 p-6 relative overflow-hidden"
                 style={{ boxShadow: "0 0 40px #C9A84C08" }}>
                 <div className="absolute inset-0 opacity-5"
                   style={{ background: "radial-gradient(circle at 10% 50%, #C9A84C, transparent 60%)" }} />
                 <div className="relative flex items-start gap-4">
                   <div className="text-4xl shrink-0">♔</div>
                   <div className="space-y-1">
-                    <div className="font-mono font-black text-yellow-400 tracking-[0.3em] text-sm">
+                    <div className="font-mono font-black text-primary tracking-[0.3em] text-sm">
                       CLASSIFIED DAILY DIRECTIVES
                     </div>
                     <p className="text-xs text-white/40 font-mono leading-relaxed">
@@ -1241,12 +1241,12 @@ export default function Growth() {
                 <div className="flex flex-col items-center justify-center py-16 space-y-4">
                   <div className="flex gap-2">
                     {[0,1,2].map(i => (
-                      <motion.div key={i} className="w-2 h-2 bg-yellow-400 rounded-full"
+                      <motion.div key={i} className="w-2 h-2 bg-primary rounded-full"
                         animate={{ opacity: [0.2, 1, 0.2], y: [0, -6, 0] }}
                         transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }} />
                     ))}
                   </div>
-                  <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+                  <div className="font-mono text-primary/40 text-xs tracking-widest">
                     LOADING CLASSIFIED DIRECTIVES...
                   </div>
                 </div>
@@ -1255,9 +1255,9 @@ export default function Growth() {
               {/* No missions yet */}
               {!missionsLoading && missions.length === 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="border border-yellow-400/10 p-10 text-center space-y-4">
+                  className="border border-primary/10 p-10 text-center space-y-4">
                   <div className="text-4xl opacity-30">⚙</div>
-                  <div className="font-mono text-yellow-400/40 text-sm tracking-widest">
+                  <div className="font-mono text-primary/40 text-sm tracking-widest">
                     MISSIONS GENERATING...
                   </div>
                   <p className="text-xs text-white/30 font-mono max-w-sm mx-auto">
@@ -1286,8 +1286,8 @@ export default function Growth() {
                         transition={{ delay: i * 0.1 }}
                         className={`border p-6 space-y-4 relative overflow-hidden transition-all ${
                           mission.completed
-                            ? "border-yellow-400/10 opacity-60"
-                            : "border-yellow-400/20 hover:border-yellow-400/40"
+                            ? "border-primary/10 opacity-60"
+                            : "border-primary/20 hover:border-primary/40"
                         }`}
                       >
                         {/* Completed overlay */}
@@ -1308,20 +1308,20 @@ export default function Growth() {
                                 <div className="flex items-center gap-2 mb-0.5">
                                   <span className="font-mono text-xs tracking-[0.3em]"
                                     style={{ color: cat.color }}>{cat.label}</span>
-                                  <span className="font-mono text-yellow-400/20 text-xs">·</span>
-                                  <span className="font-mono text-yellow-400/40 text-xs">+{mission.xp_reward} XP</span>
+                                  <span className="font-mono text-primary/20 text-xs">·</span>
+                                  <span className="font-mono text-primary/40 text-xs">+{mission.xp_reward} XP</span>
                                 </div>
-                                <div className="font-mono font-black text-white text-sm tracking-wide">
+                                <div className="font-mono font-black text-foreground text-sm tracking-wide">
                                   {mission.title}
                                 </div>
-                                <div className="font-mono text-yellow-400/50 text-xs mt-0.5" dir="rtl">
+                                <div className="font-mono text-primary/50 text-xs mt-0.5" dir="rtl">
                                   {mission.title_ar}
                                 </div>
                               </div>
                             </div>
 
                             {/* Mission index */}
-                            <div className="shrink-0 font-mono text-yellow-400/15 font-black text-4xl">
+                            <div className="shrink-0 font-mono text-primary/15 font-black text-4xl">
                               {String(i + 1).padStart(2, "0")}
                             </div>
                           </div>
@@ -1332,7 +1332,7 @@ export default function Growth() {
                             <p className="text-sm text-white/60 font-mono leading-relaxed">
                               {mission.description}
                             </p>
-                            <p className="text-xs text-yellow-400/40 font-mono leading-relaxed" dir="rtl">
+                            <p className="text-xs text-primary/40 font-mono leading-relaxed" dir="rtl">
                               {mission.description_ar}
                             </p>
                           </div>
@@ -1381,16 +1381,16 @@ export default function Growth() {
 
                   {/* Summary strip */}
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
-                    className="border border-yellow-400/10 p-4 flex items-center justify-between">
-                    <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+                    className="border border-primary/10 p-4 flex items-center justify-between">
+                    <div className="font-mono text-primary/40 text-xs tracking-widest">
                       MISSIONS COMPLETED:
-                      <span className="text-yellow-400 ml-2 font-black">
+                      <span className="text-primary ml-2 font-black">
                         {missions.filter(m => m.completed).length} / {missions.length}
                       </span>
                     </div>
-                    <div className="font-mono text-yellow-400/40 text-xs tracking-widest">
+                    <div className="font-mono text-primary/40 text-xs tracking-widest">
                       TOTAL XP AVAILABLE:
-                      <span className="text-yellow-400 ml-2 font-black">
+                      <span className="text-primary ml-2 font-black">
                         +{missions.filter(m => !m.completed).reduce((s, m) => s + m.xp_reward, 0)} XP
                       </span>
                     </div>
@@ -1405,7 +1405,7 @@ export default function Growth() {
           {/* ════════════════════════════════════════════════════════════ */}
           {activeTab === "oracle" && (
             <div className="space-y-6">
-              <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em] mb-2">
+              <div className="font-mono text-primary/40 text-xs tracking-[0.4em] mb-2">
                 👁 ARCHON TEMPORAL INTELLIGENCE — CLASSIFIED PROJECTIONS
               </div>
 
@@ -1429,8 +1429,8 @@ export default function Growth() {
               </div>
 
               {/* Archetype deep dive */}
-              <div className="border border-yellow-400/20 p-6 space-y-4">
-                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em]">◈ DOMINANT + SHADOW DIMENSIONS</div>
+              <div className="border border-primary/20 p-6 space-y-4">
+                <div className="font-mono text-primary/50 text-xs tracking-[0.4em]">◈ DOMINANT + SHADOW DIMENSIONS</div>
                 <div className="grid md:grid-cols-2 gap-4">
                   {ai.dominant_dimension && (
                     <div className="space-y-1">
@@ -1441,8 +1441,8 @@ export default function Growth() {
                   )}
                   {ai.shadow_dimension && (
                     <div className="space-y-1">
-                      <div className="font-mono text-red-400/80 text-xs tracking-widest">SHADOW FRONTIER</div>
-                      <div className="font-mono font-black text-xl text-red-400/80">{ai.shadow_dimension}</div>
+                      <div className="font-mono text-destructive/80 text-xs tracking-widest">SHADOW FRONTIER</div>
+                      <div className="font-mono font-black text-xl text-destructive/80">{ai.shadow_dimension}</div>
                       <div className="text-xs text-white/40 font-mono">Your next conquest. Face it.</div>
                     </div>
                   )}
@@ -1450,8 +1450,8 @@ export default function Growth() {
               </div>
 
               {/* Historical score bars in oracle */}
-              <div className="border border-yellow-400/10 p-6">
-                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em] mb-4">◉ DIMENSIONAL RADAR</div>
+              <div className="border border-primary/10 p-6">
+                <div className="font-mono text-primary/50 text-xs tracking-[0.4em] mb-4">◉ DIMENSIONAL RADAR</div>
                 <div className="space-y-3">
                   {dimEntries.sort((a, b) => b.score - a.score).map((dim, i) => (
                     <div key={dim.key} className="flex items-center gap-3 font-mono text-xs">
@@ -1483,11 +1483,11 @@ export default function Growth() {
 
           {activeTab === "calibration" && (
             <div className="space-y-6">
-              <div className="font-mono text-yellow-400/40 text-xs tracking-[0.4em] mb-2">
+              <div className="font-mono text-primary/40 text-xs tracking-[0.4em] mb-2">
                 ∿ ARCHON BREATH CALIBRATION PROTOCOL
               </div>
 
-              <div className="border border-yellow-400/20 p-8 flex flex-col md:flex-row items-center gap-10">
+              <div className="border border-primary/20 p-8 flex flex-col md:flex-row items-center gap-10">
                 {/* The orb */}
                 <div className="relative flex items-center justify-center shrink-0">
                   <motion.div
@@ -1506,17 +1506,17 @@ export default function Growth() {
                     }}
                   />
                   <div className="absolute text-center">
-                    <p className={`text-xs font-mono font-black uppercase tracking-widest ${breathing ? "text-yellow-400" : "text-yellow-400/30"}`}>
+                    <p className={`text-xs font-mono font-black uppercase tracking-widest ${breathing ? "text-primary" : "text-primary/30"}`}>
                       {breathing ? breathPhase.toUpperCase() : "STANDBY"}
                     </p>
                     {breathing && breathCount > 0 && (
-                      <p className="text-yellow-400/40 font-mono text-xs mt-1">CYCLE {breathCount}</p>
+                      <p className="text-primary/40 font-mono text-xs mt-1">CYCLE {breathCount}</p>
                     )}
                   </div>
                 </div>
 
                 <div className="flex-1 space-y-5">
-                  <div className="font-mono text-sm text-white/60 leading-relaxed border-l border-yellow-400/30 pl-4">
+                  <div className="font-mono text-sm text-white/60 leading-relaxed border-l border-primary/30 pl-4">
                     The Archon Breath Protocol synchronizes your neural oscillations with the 4-4-6-2 imperial rhythm.
                     <br />Used by elite commanders before critical decisions.
                   </div>
@@ -1524,8 +1524,8 @@ export default function Growth() {
                     {(["inhale","hold","exhale","rest"] as const).map(p => (
                       <div key={p} className={`px-2 py-2 border font-mono text-xs transition-all ${
                         breathPhase === p && breathing
-                          ? "border-yellow-400 bg-yellow-400/10 text-yellow-400 font-black"
-                          : "border-yellow-400/10 text-yellow-400/30"
+                          ? "border-primary bg-primary/10 text-primary font-black"
+                          : "border-primary/10 text-primary/30"
                       }`}>
                         <p className="uppercase tracking-wider">{p}</p>
                         <p className="text-xs mt-0.5 font-black">{BREATH_TIMING[p]}s</p>
@@ -1539,8 +1539,8 @@ export default function Growth() {
                     }}
                     className={`px-8 py-3 border font-mono font-black text-sm tracking-[0.3em] uppercase transition-all ${
                       breathing
-                        ? "border-red-400/40 text-red-400 hover:bg-red-400/10"
-                        : "border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                        ? "border-destructive/40 text-destructive hover:bg-destructive/10"
+                        : "border-primary text-primary hover:bg-primary hover:text-primary-foreground"
                     }`}
                   >
                     {breathing ? "⏹ DISENGAGE" : "⚡ ENGAGE PROTOCOL"}
@@ -1549,8 +1549,8 @@ export default function Growth() {
               </div>
 
               {/* NLP programs */}
-              <div className="border border-yellow-400/10 p-6 space-y-4">
-                <div className="font-mono text-yellow-400/50 text-xs tracking-[0.4em]">◈ IMPERIAL MIND PROTOCOLS</div>
+              <div className="border border-primary/10 p-6 space-y-4">
+                <div className="font-mono text-primary/50 text-xs tracking-[0.4em]">◈ IMPERIAL MIND PROTOCOLS</div>
                 <div className="grid md:grid-cols-2 gap-3">
                   {[
                     { name: "ANCHOR PROTOCOL", desc: "Link peak states to a physical trigger. Fire it under pressure.", dur: "5 min", color: "#C9A84C" },
@@ -1558,7 +1558,7 @@ export default function Growth() {
                     { name: "REFRAME SEQUENCE",desc: "Decode a limiting belief and install its opposite as a command.", dur: "3 min", color: "#98FB98" },
                     { name: "PEAK IGNITION",   desc: "Physiological + mental activation sequence. Full power in 10 min.", dur: "10 min", color: "#DDA0DD" },
                   ].map((prog, i) => (
-                    <div key={i} className="border border-white/5 p-4 space-y-2 hover:border-yellow-400/20 transition-all cursor-pointer">
+                    <div key={i} className="border border-white/5 p-4 space-y-2 hover:border-primary/20 transition-all cursor-pointer">
                       <div className="flex items-center justify-between">
                         <span className="font-mono font-black text-xs tracking-wider" style={{ color: prog.color }}>{prog.name}</span>
                         <span className="font-mono text-xs text-white/30">{prog.dur}</span>
@@ -1572,12 +1572,12 @@ export default function Growth() {
           )}
 
           {/* Footer */}
-          <div className="mt-12 pt-6 border-t border-yellow-400/10 flex items-center justify-between font-mono text-xs text-yellow-400/20">
+          <div className="mt-12 pt-6 border-t border-primary/10 flex items-center justify-between font-mono text-xs text-primary/20">
             <span>ARCHON SYSTEM v4.2 · GDNA EMPIRE · CLASSIFIED</span>
             <div className="flex gap-4">
-              <Link href="/games"><span className="hover:text-yellow-400/50 cursor-pointer transition-colors">BATTLE ARENA</span></Link>
-              <Link href="/games/globalstar"><span className="hover:text-yellow-400/50 cursor-pointer transition-colors">GLOBALSTAR</span></Link>
-              <Link href="/chronicle"><span className="hover:text-yellow-400/50 cursor-pointer transition-colors">CHRONICLES</span></Link>
+              <Link href="/games"><span className="hover:text-primary/50 cursor-pointer transition-colors">BATTLE ARENA</span></Link>
+              <Link href="/games/globalstar"><span className="hover:text-primary/50 cursor-pointer transition-colors">GLOBALSTAR</span></Link>
+              <Link href="/chronicle"><span className="hover:text-primary/50 cursor-pointer transition-colors">CHRONICLES</span></Link>
             </div>
           </div>
         </div>
@@ -1587,8 +1587,8 @@ export default function Growth() {
 
   // Fallback for encoding phase without profile yet
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="font-mono text-yellow-400 animate-pulse tracking-widest">ARCHON PROCESSING...</div>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="font-mono text-primary animate-pulse tracking-widest">ARCHON PROCESSING...</div>
     </div>
   );
 }

@@ -317,7 +317,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-background text-foreground">
 
       {/* ── LIVE EVENTS TICKER ─────────────────────────────────────── */}
       <LiveTicker />
@@ -328,16 +328,16 @@ export default function Home() {
 
         {/* Scan-line overlay */}
         <div className="absolute inset-0 pointer-events-none"
-          style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,197,94,0.015) 2px, rgba(34,197,94,0.015) 4px)" }} />
+          style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, hsl(var(--primary) / 0.015) 2px, hsl(var(--primary) / 0.015) 4px)" }} />
 
         <div className="relative z-10 text-center px-4 max-w-4xl mx-auto space-y-8">
 
           {/* Version badge */}
           <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <div className="inline-flex items-center gap-2 px-4 py-1.5"
-              style={{ border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.05)" }}>
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-xs font-mono font-black tracking-[0.3em] uppercase text-green-400">
+              style={{ border: "1px solid hsl(var(--primary) / 0.3)", background: "hsl(var(--primary) / 0.05)" }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              <span className="text-xs font-mono font-black tracking-[0.3em] uppercase text-primary">
                 EMPIRE ETERNAL v2.0 — SYSTEM ONLINE
               </span>
             </div>
@@ -350,15 +350,15 @@ export default function Home() {
           >
             <div className="flex items-center justify-center gap-6 mb-4">
               <div className="h-px flex-1 max-w-[80px]"
-                style={{ background: "linear-gradient(90deg, transparent, #22C55E40)" }} />
+                style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary) / 0.25))" }} />
               <span className="text-2xl">♔</span>
               <div className="h-px flex-1 max-w-[80px]"
-                style={{ background: "linear-gradient(90deg, #22C55E40, transparent)" }} />
+                style={{ background: "linear-gradient(90deg, hsl(var(--primary) / 0.25), transparent)" }} />
             </div>
 
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-black uppercase tracking-tight leading-none">
               <span className="block" style={{
-                background: "linear-gradient(135deg, #22C55E 0%, #4ADE80 40%, #22C55E 100%)",
+                backgroundImage: "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.72) 40%, hsl(var(--primary)) 100%)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
@@ -367,9 +367,9 @@ export default function Home() {
             </h1>
 
             <div className="flex items-center justify-center gap-3 pt-2">
-              <div className="h-px w-12" style={{ background: "#22C55E30" }} />
-              <span className="text-xs font-mono tracking-[0.5em] uppercase text-green-400/50">AWAKE</span>
-              <div className="h-px w-12" style={{ background: "#22C55E30" }} />
+              <div className="h-px w-12" style={{ background: "hsl(var(--primary) / 0.19)" }} />
+              <span className="text-xs font-mono tracking-[0.5em] uppercase text-primary/50">AWAKE</span>
+              <div className="h-px w-12" style={{ background: "hsl(var(--primary) / 0.19)" }} />
             </div>
           </motion.div>
 
@@ -397,15 +397,13 @@ export default function Home() {
             {!user ? (
               <>
                 <Link href="/hub">
-                  <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
-                    style={{ background: "#22C55E", color: "#000" }}>
+                  <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105 bg-primary text-primary-foreground">
                     EXPLORE ARENA
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </Link>
                 <Link href="/login">
-                  <button className="px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
-                    style={{ border: "1px solid #22C55E40", color: "#22C55E80", background: "rgba(34,197,94,0.04)" }}>
+                  <button className="px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105 border border-primary/25 text-primary/50 bg-primary/5">
                     CITIZEN LOGIN
                   </button>
                 </Link>
@@ -415,8 +413,7 @@ export default function Home() {
               </>
             ) : (
               <Link href="/hub">
-                <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
-                  style={{ background: "#22C55E", color: "#000" }}>
+                <button className="flex items-center gap-2 px-8 py-3.5 font-black uppercase tracking-widest text-sm transition-all hover:scale-105 bg-primary text-primary-foreground">
                   ادخل إلى المركز
                   <ArrowRight className="w-4 h-4" />
                 </button>
@@ -458,7 +455,7 @@ export default function Home() {
 
         {/* Bottom fade */}
         <div className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
-          style={{ background: "linear-gradient(to bottom, transparent, #000)" }} />
+          style={{ background: "linear-gradient(to bottom, transparent, hsl(var(--background)))" }} />
       </section>
 
       {/* ── EMPIRE STATS BAR ───────────────────────────────────────── */}
@@ -566,13 +563,13 @@ export default function Home() {
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="max-w-2xl mx-auto text-center py-16 px-8 relative overflow-hidden"
-            style={{ border: "1px solid #22C55E20", background: "rgba(34,197,94,0.03)" }}
+            style={{ border: "1px solid hsl(var(--primary) / 0.13)", background: "hsl(var(--primary) / 0.03)" }}
           >
             <div className="absolute inset-0 opacity-[0.03]">
               <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <pattern id="ctaGrid" width="30" height="30" patternUnits="userSpaceOnUse">
-                    <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#22C55E" strokeWidth="0.5" />
+                    <path d="M 30 0 L 0 0 0 30" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.5" />
                   </pattern>
                 </defs>
                 <rect width="100%" height="100%" fill="url(#ctaGrid)" />
@@ -581,15 +578,14 @@ export default function Home() {
             <div className="relative z-10 space-y-6">
               <div className="text-4xl">♔</div>
               <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight">
-                <span style={{ color: "#22C55E" }}>Join</span> the Empire
+                  <span className="text-primary">Join</span> the Empire
               </h2>
               <p className="text-sm font-mono text-white/40 leading-relaxed">
                 Become a citizen of EMPIRE ETERNAL. Vote on legends, compete in the arena,
                 earn XP and coins, and shape the empire's destiny.
               </p>
               <Link href="/register">
-                <button className="inline-flex items-center gap-3 px-10 py-4 font-black uppercase tracking-widest text-sm transition-all hover:scale-105"
-                  style={{ background: "#22C55E", color: "#000" }}>
+                <button className="inline-flex items-center gap-3 px-10 py-4 font-black uppercase tracking-widest text-sm transition-all hover:scale-105 bg-primary text-primary-foreground">
                   BECOME A CITIZEN
                   <ArrowRight className="w-4 h-4" />
                 </button>

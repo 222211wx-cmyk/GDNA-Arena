@@ -18,7 +18,7 @@ import {
   Activity, RefreshCw, Bell, Globe, ArrowRight, Wifi, WifiOff,
 } from "lucide-react";
 import Avatar from "./Avatar";
-import { GOLD, api, timeAgo } from "./social-i18n";
+import { GOLD, GOLD_A, api, timeAgo } from "./social-i18n";
 import type { FeedPost, Citizen, NotifItem } from "./social-types";
 
 interface LiveEvent {
@@ -42,8 +42,8 @@ interface Props {
 
 type ConnState = "live" | "syncing" | "offline";
 
-const CARD_BG = "#0d0d0d";
-const BORDER = `${GOLD}18`;
+const CARD_BG = "hsl(var(--card))";
+const BORDER = GOLD_A(0.094);
 
 export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearchSubmit }: Props) {
   const [, wouterNavigate] = useLocation();
@@ -175,14 +175,14 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
         .cm-dot { animation: cm-pulse 1.6s ease-in-out infinite; }
         .spin-slow { animation: cm-spin 1s linear infinite; }
         @keyframes cm-spin { to { transform: rotate(360deg); } }
-        .cm-tile:hover { border-color: ${GOLD}55 !important; transform: translateY(-2px); }
-        .cm-stat:hover { border-color: ${GOLD}40 !important; }
+        .cm-tile:hover { border-color: ${GOLD_A(0.333)} !important; transform: translateY(-2px); }
+        .cm-stat:hover { border-color: ${GOLD_A(0.251)} !important; }
         .cm-act:hover { background: #141414 !important; }
       `}</style>
 
       {/* Header: title, subtitle, live indicator + refresh */}
       <div style={{
-        background: `linear-gradient(135deg, ${GOLD}0d, transparent 60%)`,
+        background: `linear-gradient(135deg, ${GOLD_A(0.051)}, transparent 60%)`,
         border: `1px solid ${BORDER}`, borderRadius: 14, padding: 16,
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -223,7 +223,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
               className="empire-btn"
               style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5,
-                background: "#111", border: `1px solid ${GOLD}25`, borderRadius: 10,
+                background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.145)}`, borderRadius: 10,
                 padding: "7px 10px", color: GOLD, fontSize: 11, fontWeight: 800,
                 cursor: refreshing ? "default" : "pointer",
               }}
@@ -240,7 +240,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
           </p>
         )}
         {!user && (
-          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: `${GOLD}b0` }} data-testid="text-login-hint">
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: GOLD_A(0.69) }} data-testid="text-login-hint">
             {st.matrix_login_hint ?? "Sign in to see your personal network activity."}
           </p>
         )}
@@ -289,7 +289,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
             >
               <span style={{
                 width: 40, height: 40, minWidth: 40, borderRadius: 10,
-                background: `${GOLD}12`, color: GOLD,
+                background: GOLD_A(0.071), color: GOLD,
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}>
                 {t.icon}
@@ -308,7 +308,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
                 </span>
                 <span style={{ display: "block", fontSize: 11, color: "#ffffff55", marginTop: 2 }}>{t.sub}</span>
               </span>
-              <ArrowRight size={15} style={{ color: `${GOLD}70`, flexShrink: 0, transform: dir === "rtl" ? "scaleX(-1)" : undefined }} />
+              <ArrowRight size={15} style={{ color: GOLD_A(0.439), flexShrink: 0, transform: dir === "rtl" ? "scaleX(-1)" : undefined }} />
             </button>
           ))}
         </div>
@@ -338,7 +338,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 11,
                   padding: "11px 14px", background: "transparent", border: "none",
-                  borderBottom: i < activity.length - 1 ? `1px solid ${GOLD}0a` : "none",
+                  borderBottom: i < activity.length - 1 ? `1px solid ${GOLD_A(0.039)}` : "none",
                   cursor: "pointer", textAlign: dir === "rtl" ? "right" : "left", transition: "background 0.15s",
                 }}
                 data-testid={`activity-${a.kind}-${i}`}
@@ -400,7 +400,7 @@ export default function CommunicationMatrix({ user, st, dir, onNavigate, onSearc
         aria-label={st.matrix_search_cta ?? "Search the empire"}
         style={{
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          background: `${GOLD}12`, border: `1px solid ${GOLD}35`, borderRadius: 12,
+          background: GOLD_A(0.071), border: `1px solid ${GOLD_A(0.208)}`, borderRadius: 12,
           padding: "12px 16px", color: GOLD, fontSize: 13, fontWeight: 800, cursor: "pointer",
         }}
         data-testid="button-search-empire"

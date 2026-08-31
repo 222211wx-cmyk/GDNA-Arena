@@ -333,7 +333,7 @@ export default function Empire() {
           </Button>
         </Link>
         <Link href="/hub">
-          <Button className="bg-primary/20 text-primary border border-primary hover:bg-primary hover:text-black gap-2 font-bold uppercase tracking-wider">
+          <Button className="bg-primary/20 text-primary border border-primary hover:bg-primary hover:text-primary-foreground gap-2 font-bold uppercase tracking-wider">
             {t("empire_btn_hub")} <ArrowRight className="w-4 h-4" />
           </Button>
         </Link>

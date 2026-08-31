@@ -67,7 +67,7 @@ export default function LiveStoryRecorder({
 
   // ── Active live view ───────────────────────────────────────────────────────
   if (liveStatus === "live" && localStream) return (
-    <div className="relative rounded-xl overflow-hidden" style={{ height: 360, background: "#000" }}>
+    <div className="relative rounded-xl overflow-hidden" style={{ height: 360, background: "hsl(var(--background))" }}>
       <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
 
       {/* LIVE badge */}
@@ -77,7 +77,7 @@ export default function LiveStoryRecorder({
           <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
           LIVE
         </div>
-        <div className="px-2 py-1 rounded-full text-xs font-mono" style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}>
+        <div className="px-2 py-1 rounded-full text-xs font-mono" style={{ background: "rgba(0,0,0,0.6)", color: "hsl(var(--foreground))" }}>
           {fmt(duration)}
         </div>
       </div>
@@ -109,7 +109,7 @@ export default function LiveStoryRecorder({
   if (watchingId && remoteStream) {
     const liveInfo = activeLives.find(l => l.liveId === watchingId);
     return (
-      <div className="relative rounded-xl overflow-hidden" style={{ height: 300, background: "#000" }}>
+      <div className="relative rounded-xl overflow-hidden" style={{ height: 300, background: "hsl(var(--background))" }}>
         <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
         <div className="absolute top-3 left-3 flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-black text-white" style={{ background: "#ef4444" }}>
@@ -149,7 +149,7 @@ export default function LiveStoryRecorder({
             <input value={title} onChange={e => setTitle(e.target.value)}
               placeholder="Stream title..."
               className="w-full px-3 py-2 text-sm focus:outline-none"
-              style={{ background: "#0a0a0a", border: "1px solid #ffffff15", color: "#fff" }}
+              style={{ background: "hsl(var(--card))", border: "1px solid #ffffff15", color: "hsl(var(--foreground))" }}
               dir="rtl" />
 
             <div className="flex flex-wrap gap-1.5">

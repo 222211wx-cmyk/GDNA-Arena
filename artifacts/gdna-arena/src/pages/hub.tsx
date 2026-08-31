@@ -86,12 +86,12 @@ function TheOracle() {
       <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-52">
         {messages.map((m, i) => (
           <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            {m.role === "ai" && <span className="text-sm mt-0.5 shrink-0" style={{ color: "#C9A84C" }}>◈</span>}
+            {m.role === "ai" && <span className="text-sm mt-0.5 shrink-0" style={{ color: "hsl(var(--primary))" }}>◈</span>}
             <div
               className="text-xs rounded-none px-3 py-2 max-w-[85%] leading-relaxed"
               dir="auto"
               style={m.role === "ai"
-                ? { background: "rgba(201,168,76,0.06)", color: "#ffffff90", border: "1px solid #C9A84C20" }
+                ? { background: "hsl(var(--primary) / 0.06)", color: "#ffffff90", border: "1px solid hsl(var(--primary) / 0.13)" }
                 : { background: "rgba(255,255,255,0.05)", color: "#ffffff70" }
               }
             >{m.text}</div>
@@ -99,26 +99,26 @@ function TheOracle() {
         ))}
         {loading && (
           <div className="flex gap-2 items-center">
-            <span className="text-sm" style={{ color: "#C9A84C" }}>◈</span>
-            <span className="text-xs font-mono animate-pulse" style={{ color: "#C9A84C60" }}>Oracle is consulting the void…</span>
+            <span className="text-sm" style={{ color: "hsl(var(--primary))" }}>◈</span>
+            <span className="text-xs font-mono animate-pulse" style={{ color: "hsl(var(--primary) / 0.38)" }}>Oracle is consulting the void…</span>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
-      <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: "1px solid #C9A84C20" }}>
+      <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: "1px solid hsl(var(--primary) / 0.13)" }}>
         <Input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && send()}
           placeholder={t("chat_placeholder")}
           className="h-8 text-xs bg-transparent border-0 border-b rounded-none focus-visible:ring-0 text-white/70 placeholder:text-white/25"
-          style={{ borderBottom: "1px solid #C9A84C30" }}
+          style={{ borderBottom: "1px solid hsl(var(--primary) / 0.19)" }}
           disabled={loading}
           dir="auto"
         />
         <button onClick={send} disabled={!input.trim() || loading}
           className="h-8 px-3 text-xs font-black uppercase tracking-wider shrink-0"
-          style={{ background: loading ? "#C9A84C30" : "#C9A84C", color: "#000" }}>
+          style={{ background: loading ? "hsl(var(--primary) / 0.19)" : "hsl(var(--primary))", color: "hsl(var(--primary-foreground))" }}>
           {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
         </button>
       </div>
@@ -187,22 +187,22 @@ export default function Hub() {
 
   return (
     <div className="min-h-screen px-4 py-8 max-w-7xl mx-auto space-y-8 relative"
-      style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(201,168,76,0.04) 0%, transparent 60%)" }}>
+      style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(var(--primary) / 0.04) 0%, transparent 60%)" }}>
 
       {/* ── IMPERIAL INTELLIGENCE FEED ─────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden px-5 py-3 flex items-center gap-4"
-        style={{ background: "rgba(201,168,76,0.04)", border: "1px solid #C9A84C25",
-          boxShadow: "0 0 30px rgba(201,168,76,0.06)" }}
+        style={{ background: "hsl(var(--primary) / 0.04)", border: "1px solid hsl(var(--primary) / 0.15)",
+          boxShadow: "0 0 30px hsl(var(--primary) / 0.06)" }}
       >
         <div className="flex items-center gap-2 shrink-0">
-          <ShieldCheck className="w-4 h-4 animate-pulse" style={{ color: "#C9A84C" }} />
-          <span className="text-xs font-mono font-black uppercase tracking-[0.3em]" style={{ color: "#C9A84C" }}>
+          <ShieldCheck className="w-4 h-4 animate-pulse" style={{ color: "hsl(var(--primary))" }} />
+          <span className="text-xs font-mono font-black uppercase tracking-[0.3em]" style={{ color: "hsl(var(--primary))" }}>
             Imperial Intelligence
           </span>
         </div>
-        <div className="w-px h-4 shrink-0" style={{ background: "#C9A84C30" }} />
+        <div className="w-px h-4 shrink-0" style={{ background: "hsl(var(--primary) / 0.19)" }} />
         <AnimatePresence mode="wait">
           <motion.div key={decreeIdx}
             initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
@@ -215,7 +215,7 @@ export default function Hub() {
         </AnimatePresence>
         <Link href="/chat" className="ml-auto shrink-0">
           <button className="h-6 px-3 text-xs font-mono uppercase tracking-wider"
-            style={{ border: "1px solid #C9A84C30", color: "#C9A84C60" }}>
+            style={{ border: "1px solid hsl(var(--primary) / 0.19)", color: "hsl(var(--primary) / 0.38)" }}>
             Oracle →
           </button>
         </Link>
@@ -224,14 +224,14 @@ export default function Hub() {
       {/* ── THRONE ROOM TITLE ──────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center space-y-3">
         <div className="flex items-center justify-center gap-4">
-          <div className="h-px w-16" style={{ background: "linear-gradient(90deg, transparent, #C9A84C)" }} />
+          <div className="h-px w-16" style={{ background: "linear-gradient(90deg, transparent, hsl(var(--primary)))" }} />
           <span className="text-2xl">♔</span>
-          <div className="h-px w-16" style={{ background: "linear-gradient(90deg, #C9A84C, transparent)" }} />
+          <div className="h-px w-16" style={{ background: "linear-gradient(90deg, hsl(var(--primary)), transparent)" }} />
         </div>
         <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight imperial-gold leading-none">
           {t("hub_title")}
         </h1>
-        <p className="text-xs font-mono tracking-[0.4em] uppercase" style={{ color: "#C9A84C50" }}>
+        <p className="text-xs font-mono tracking-[0.4em] uppercase" style={{ color: "hsl(var(--primary) / 0.31)" }}>
           Imperial Command Center · Throne Room · Salle du Trône
         </p>
       </motion.div>
@@ -255,7 +255,7 @@ export default function Hub() {
 
       {/* ── EMPIRE CENSUS STRIP ────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px"
-        style={{ background: "#C9A84C15", border: "1px solid #C9A84C20" }}>
+        style={{ background: "hsl(var(--primary) / 0.08)", border: "1px solid hsl(var(--primary) / 0.13)" }}>
         {[
           { val: totalVotes > 0 ? (totalVotes / 1000000).toFixed(1) + "M+" : "2.4M+", label: t("hub_stat_votes"), labelAr: "Votes Cast",      glyph: "◈" },
           { val: "847K+",                                                               label: t("hub_stat_games"), labelAr: "Battles Fought",  glyph: "⚔" },
@@ -264,13 +264,13 @@ export default function Hub() {
         ].map((s, i) => (
           <motion.div key={s.label}
             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.07 }}
-            className="bg-black py-5 px-3 text-center"
-            style={{ borderRight: i < 3 ? "1px solid #C9A84C10" : undefined }}
+            className="bg-background py-5 px-3 text-center"
+            style={{ borderRight: i < 3 ? "1px solid hsl(var(--primary) / 0.06)" : undefined }}
           >
-            <div className="text-xl mb-1" style={{ color: "#C9A84C30" }}>{s.glyph}</div>
+            <div className="text-xl mb-1" style={{ color: "hsl(var(--primary) / 0.19)" }}>{s.glyph}</div>
             <p className="text-2xl md:text-3xl font-black font-mono imperial-gold">{s.val}</p>
             <p className="text-xs uppercase tracking-wider mt-0.5" style={{ color: "#ffffff40" }}>{s.label}</p>
-            <p className="text-xs mt-0.5" style={{ color: "#C9A84C35" }}>{s.labelAr}</p>
+            <p className="text-xs mt-0.5" style={{ color: "hsl(var(--primary) / 0.21)" }}>{s.labelAr}</p>
           </motion.div>
         ))}
       </div>
@@ -281,43 +281,43 @@ export default function Hub() {
         {/* Tribute Hall (GlobalStar) */}
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
           <div className="h-full flex flex-col p-5 space-y-3"
-            style={{ border: "1px solid #C9A84C25", background: "rgba(201,168,76,0.02)" }}>
+            style={{ border: "1px solid hsl(var(--primary) / 0.15)", background: "hsl(var(--primary) / 0.02)" }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚖️</span>
                 <div>
-                  <p className="text-xs font-mono tracking-widest uppercase" style={{ color: "#C9A84C60" }}>Tribute Hall</p>
+                  <p className="text-xs font-mono tracking-widest uppercase" style={{ color: "hsl(var(--primary) / 0.38)" }}>Tribute Hall</p>
                   <h2 className="font-black text-sm uppercase tracking-wider">{t("hub_gs_title")}</h2>
                 </div>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid #C9A84C40", color: "#C9A84C" }}>LIVE</span>
+              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid hsl(var(--primary) / 0.25)", color: "hsl(var(--primary))" }}>LIVE</span>
             </div>
 
             {topDomains.map((d: any, i: number) => (
               <div key={d.id} className="flex items-center justify-between p-2 transition-colors group"
-                style={{ background: "rgba(201,168,76,0.02)", border: "1px solid #C9A84C12" }}>
+                style={{ background: "hsl(var(--primary) / 0.02)", border: "1px solid hsl(var(--primary) / 0.07)" }}>
                 <div className="flex items-center gap-2">
                   <span className="text-xl">{d.icon}</span>
                   <div>
                     <p className="text-xs font-bold">{d.label}</p>
-                    <p className="text-xs font-mono" style={{ color: "#C9A84C60" }}>{d.totalVotes?.toLocaleString()} tribute</p>
+                    <p className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.38)" }}>{d.totalVotes?.toLocaleString()} tribute</p>
                   </div>
                 </div>
-                <TrendingUp className="w-3.5 h-3.5" style={{ color: "#C9A84C60" }} />
+                <TrendingUp className="w-3.5 h-3.5" style={{ color: "hsl(var(--primary) / 0.38)" }} />
               </div>
             ))}
 
             {topFigures.length > 0 && (
               <div className="space-y-1.5 pt-1">
-                <p className="text-xs font-mono uppercase tracking-widest" style={{ color: "#C9A84C50" }}>{t("hub_top_figures")}</p>
+                <p className="text-xs font-mono uppercase tracking-widest" style={{ color: "hsl(var(--primary) / 0.31)" }}>{t("hub_top_figures")}</p>
                 {topFigures.map((f: any, i: number) => (
                   <div key={f.id} className="flex items-center gap-2 p-1.5"
-                    style={{ background: "rgba(201,168,76,0.02)" }}>
-                    <span className="text-xs font-black font-mono w-4" style={{ color: i === 0 ? "#C9A84C" : "#ffffff40" }}>
+                    style={{ background: "hsl(var(--primary) / 0.02)" }}>
+                    <span className="text-xs font-black font-mono w-4" style={{ color: i === 0 ? "hsl(var(--primary))" : "#ffffff40" }}>
                       {i === 0 ? "♔" : "#" + (i + 1)}
                     </span>
                     <p className="text-xs font-medium truncate flex-1">{f.name}</p>
-                    <span className="text-xs font-mono" style={{ color: "#C9A84C80" }}>{f.votes?.toLocaleString()}</span>
+                    <span className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.5)" }}>{f.votes?.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -326,8 +326,8 @@ export default function Hub() {
             <div className="mt-auto pt-2">
               <Link href="/games/globalstar">
                 <button className="w-full h-8 text-xs font-black uppercase tracking-wider"
-                  style={{ border: "1px solid #C9A84C40", color: "#C9A84C",
-                    background: "rgba(201,168,76,0.05)" }}>
+                  style={{ border: "1px solid hsl(var(--primary) / 0.25)", color: "hsl(var(--primary))",
+                    background: "hsl(var(--primary) / 0.05)" }}>
                   {t("hub_enter_gs")} →
                 </button>
               </Link>
@@ -338,11 +338,11 @@ export default function Hub() {
         {/* The Oracle */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <div className="h-full flex flex-col p-5"
-            style={{ border: "1px solid #C9A84C40", background: "rgba(201,168,76,0.03)",
-              boxShadow: "0 0 40px rgba(201,168,76,0.06)" }}>
+            style={{ border: "1px solid hsl(var(--primary) / 0.25)", background: "hsl(var(--primary) / 0.03)",
+              boxShadow: "0 0 40px hsl(var(--primary) / 0.06)" }}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#C9A84C60" }}>Imperial Oracle</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.38)" }}>Imperial Oracle</p>
                 <h2 className="font-black text-sm uppercase tracking-wider imperial-gold">GDN-AI</h2>
               </div>
               <div className="flex items-center gap-1.5">
@@ -355,7 +355,7 @@ export default function Hub() {
             </div>
             <Link href="/chat" className="mt-3">
               <button className="w-full h-7 text-xs font-mono uppercase tracking-wider"
-                style={{ color: "#C9A84C60" }}>
+                style={{ color: "hsl(var(--primary) / 0.38)" }}>
                 {t("hub_full_chat")} →
               </button>
             </Link>
@@ -365,24 +365,24 @@ export default function Hub() {
         {/* Order of Champions (Leaderboard) */}
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
           <div className="h-full flex flex-col p-5 space-y-3"
-            style={{ border: "1px solid #C9A84C20", background: "rgba(201,168,76,0.01)" }}>
+            style={{ border: "1px solid hsl(var(--primary) / 0.13)", background: "hsl(var(--primary) / 0.01)" }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#C9A84C50" }}>Order of Champions</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>Order of Champions</p>
                 <h2 className="font-black text-sm uppercase tracking-wider">{t("leaderboard")}</h2>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid #C9A84C25", color: "#C9A84C60" }}>TOP 5</span>
+              <span className="text-xs font-mono px-2 py-0.5" style={{ border: "1px solid hsl(var(--primary) / 0.15)", color: "hsl(var(--primary) / 0.38)" }}>TOP 5</span>
             </div>
 
             {leaders.length === 0 ? (
               <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#C9A84C40" }} />
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: "hsl(var(--primary) / 0.25)" }} />
               </div>
             ) : leaders.map((p, i) => {
               const r = getRank(p.xp);
               return (
                 <div key={p.id} className="flex items-center gap-2.5 p-2"
-                  style={{ background: "rgba(201,168,76,0.02)", border: "1px solid #C9A84C10" }}>
+                  style={{ background: "hsl(var(--primary) / 0.02)", border: "1px solid hsl(var(--primary) / 0.06)" }}>
                   <div className="w-6 text-center">
                     {i === 0 ? <span className="text-sm">♔</span>
                      : i === 1 ? <span className="text-xs font-black" style={{ color: "#aaa9ad" }}>♕</span>
@@ -394,7 +394,7 @@ export default function Hub() {
                     <p className="text-xs font-mono" style={{ color: r.color }}>{r.label}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-xs font-black font-mono" style={{ color: "#C9A84C" }}>{p.balance.toLocaleString()}</p>
+                    <p className="text-xs font-black font-mono" style={{ color: "hsl(var(--primary))" }}>{p.balance.toLocaleString()}</p>
                     <p className="text-xs text-white/30 font-mono">{p.xp} XP</p>
                   </div>
                 </div>
@@ -404,7 +404,7 @@ export default function Hub() {
             <div className="mt-auto pt-2">
               <Link href="/leaderboard">
                 <button className="w-full h-8 text-xs font-black uppercase tracking-wider"
-                  style={{ border: "1px solid #C9A84C25", color: "#C9A84C60" }}>
+                  style={{ border: "1px solid hsl(var(--primary) / 0.15)", color: "hsl(var(--primary) / 0.38)" }}>
                   {t("hub_see_all")} →
                 </button>
               </Link>
@@ -471,7 +471,7 @@ export default function Hub() {
                   <p className="text-xs" style={{ color: `${g.accent}60` }}>{g.genre}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs font-mono" style={{ color: "#C9A84C80" }}>Reward: {g.reward} coins</span>
+                  <span className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.5)" }}>Reward: {g.reward} coins</span>
                 </div>
                 <button
                   onClick={() => handlePlay(g.id, g.external)}
@@ -559,14 +559,14 @@ export default function Hub() {
         {/* The Archives (Chronicle) */}
         <motion.div initial={{ opacity: 0, x: 16 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}>
           <div className="p-5 space-y-4 h-full"
-            style={{ border: "1px solid #C9A84C25", background: "rgba(201,168,76,0.02)" }}>
+            style={{ border: "1px solid hsl(var(--primary) / 0.15)", background: "hsl(var(--primary) / 0.02)" }}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#C9A84C50" }}>The Archives</p>
-                <h2 className="font-black text-sm uppercase tracking-wider" style={{ color: "#C9A84C" }}>{t("nav_chronicle")}</h2>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>The Archives</p>
+                <h2 className="font-black text-sm uppercase tracking-wider" style={{ color: "hsl(var(--primary))" }}>{t("nav_chronicle")}</h2>
               </div>
               <Link href="/chronicle">
-                <button className="text-xs font-mono" style={{ color: "#C9A84C50" }}>Archives →</button>
+                <button className="text-xs font-mono" style={{ color: "hsl(var(--primary) / 0.31)" }}>Archives →</button>
               </Link>
             </div>
 
@@ -589,8 +589,8 @@ export default function Hub() {
 
             <Link href="/chronicle">
               <button className="w-full h-7 text-xs font-black uppercase tracking-wider"
-                style={{ border: "1px solid #C9A84C30", color: "#C9A84C70",
-                  background: "rgba(201,168,76,0.05)" }}>
+                style={{ border: "1px solid hsl(var(--primary) / 0.19)", color: "hsl(var(--primary) / 0.44)",
+                  background: "hsl(var(--primary) / 0.05)" }}>
                 📜 {t("hub_chronicle_cta")}
               </button>
             </Link>
@@ -643,14 +643,14 @@ export default function Hub() {
         <Link href="/empire">
           <motion.div whileHover={{ scale: 1.01 }}
             className="p-5 flex items-center gap-4 cursor-pointer transition-all"
-            style={{ border: "1px solid #C9A84C30", background: "rgba(201,168,76,0.04)" }}>
+            style={{ border: "1px solid hsl(var(--primary) / 0.19)", background: "hsl(var(--primary) / 0.04)" }}>
             <span className="text-3xl">♔</span>
             <div className="flex-1">
-              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#C9A84C60" }}>The Constitution</p>
-              <p className="font-black uppercase tracking-wider" style={{ color: "#C9A84C" }}>{t("empire_title")}</p>
+              <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.38)" }}>The Constitution</p>
+              <p className="font-black uppercase tracking-wider" style={{ color: "hsl(var(--primary))" }}>{t("empire_title")}</p>
               <p className="text-xs mt-0.5" style={{ color: "#ffffff30" }}>{t("hub_empire_desc")}</p>
             </div>
-            <span style={{ color: "#C9A84C40" }}>→</span>
+            <span style={{ color: "hsl(var(--primary) / 0.25)" }}>→</span>
           </motion.div>
         </Link>
         <Link href="/legal">
@@ -672,8 +672,8 @@ export default function Hub() {
       {user && rank && (
         <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
           <div className="p-5 flex flex-col md:flex-row items-center justify-between gap-4"
-            style={{ border: "1px solid #C9A84C30", background: "rgba(201,168,76,0.03)",
-              boxShadow: "0 0 40px rgba(201,168,76,0.06)" }}>
+            style={{ border: "1px solid hsl(var(--primary) / 0.19)", background: "hsl(var(--primary) / 0.03)",
+              boxShadow: "0 0 40px hsl(var(--primary) / 0.06)" }}>
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 flex items-center justify-center font-black text-sm"
                 style={{ border: `2px solid ${rank.color}`, color: rank.color,
@@ -681,8 +681,8 @@ export default function Hub() {
                 {user.username.slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "#C9A84C50" }}>Citizen of the Empire</p>
-                <p className="font-black text-lg uppercase tracking-wider" style={{ color: "#C9A84C" }}>{user.username}</p>
+                <p className="text-xs font-mono tracking-widest uppercase mb-0.5" style={{ color: "hsl(var(--primary) / 0.31)" }}>Citizen of the Empire</p>
+                <p className="font-black text-lg uppercase tracking-wider" style={{ color: "hsl(var(--primary))" }}>{user.username}</p>
                 <p className="text-xs font-bold font-mono" style={{ color: rank.color }}>{rank.label}</p>
                 <div className="flex items-center gap-3 text-xs font-mono mt-1" style={{ color: "#ffffff40" }}>
                   <span>⚡ {user.xp} XP</span>
@@ -702,8 +702,8 @@ export default function Hub() {
               </Link>
               <Link href="/dashboard">
                 <button className="h-9 px-4 text-xs font-black uppercase tracking-wider"
-                  style={{ border: "1px solid #C9A84C", color: "#000",
-                    background: "linear-gradient(135deg, #C9A84C, #A67C2E)" }}>
+                  style={{ border: "1px solid hsl(var(--primary))", color: "hsl(var(--primary-foreground))",
+                    background: "linear-gradient(135deg, hsl(var(--primary)), #A67C2E)" }}>
                   {t("dashboard")} →
                 </button>
               </Link>
@@ -723,10 +723,10 @@ export default function Hub() {
         <div className="flex flex-wrap justify-center gap-2">
           {["Arabic", "English", "Français", "Darija", "Español", "中文", "Русский", "Português"].map(l => (
             <span key={l} className="text-xs px-2 py-0.5 font-mono"
-              style={{ border: "1px solid #C9A84C15", color: "#ffffff20" }}>{l}</span>
+              style={{ border: "1px solid hsl(var(--primary) / 0.08)", color: "#ffffff20" }}>{l}</span>
           ))}
         </div>
-        <p className="text-xs font-mono tracking-[0.4em] uppercase" style={{ color: "#C9A84C25" }}>
+        <p className="text-xs font-mono tracking-[0.4em] uppercase" style={{ color: "hsl(var(--primary) / 0.15)" }}>
           ◈ · SOVEREIGNTY · LEGACY · IMMORTALITY · ◈
         </p>
       </motion.div>

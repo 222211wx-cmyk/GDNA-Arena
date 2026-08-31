@@ -3,12 +3,12 @@ import { useLang } from "@/contexts/LangContext";
 import { Crown, Shield, Globe, FileCheck, Lock, Cpu, ExternalLink } from "lucide-react";
 
 const CERT_BADGES = [
-  { code: "ISO 27001", color: "text-blue-400" },
-  { code: "GDPR",      color: "text-green-400" },
+  { code: "ISO 27001", color: "text-primary" },
+  { code: "GDPR",      color: "text-primary" },
   { code: "SSL TLS",   color: "text-primary" },
-  { code: "CCPA",      color: "text-yellow-400" },
-  { code: "OpenAI",    color: "text-purple-400" },
-  { code: "W3C",       color: "text-orange-400" },
+  { code: "CCPA",      color: "text-primary" },
+  { code: "OpenAI",    color: "text-primary" },
+  { code: "W3C",       color: "text-primary" },
 ];
 
 export function Footer() {
@@ -38,8 +38,8 @@ export function Footer() {
           {/* Brand */}
           <div className="col-span-2 md:col-span-1 space-y-3">
             <div className="flex items-center gap-2">
-              <Crown className="w-5 h-5 text-yellow-400" />
-              <span className="font-black text-lg uppercase tracking-tighter neon-text-glow">Arena Qaisypro</span>
+              <Crown className="w-5 h-5 text-primary" />
+              <span className="font-black text-lg uppercase tracking-tighter neon-text-glow">GDNA Arena</span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">{t("footer_tagline")}</p>
             <div className="flex flex-wrap gap-1">
@@ -71,7 +71,7 @@ export function Footer() {
 
           {/* Empire */}
           <div className="space-y-3">
-            <h4 className="text-xs font-black uppercase tracking-widest text-yellow-400">{t("footer_empire")}</h4>
+            <h4 className="text-xs font-black uppercase tracking-widest text-primary">{t("footer_empire")}</h4>
             <ul className="space-y-2">
               {[
                 { label: t("empire_title"), path: "/empire" },
@@ -81,7 +81,7 @@ export function Footer() {
                 { label: t("ai"),                path: "/chat" },
               ].map((l, i) => (
                 <li key={i}>
-                  <Link href={l.path} className="text-xs text-muted-foreground hover:text-yellow-400 transition-colors">
+                  <Link href={l.path} className="text-xs text-muted-foreground hover:text-primary transition-colors">
                     {l.label}
                   </Link>
                 </li>
@@ -91,22 +91,22 @@ export function Footer() {
 
           {/* Legal */}
           <div className="space-y-3">
-            <h4 className="text-xs font-black uppercase tracking-widest text-blue-400">{t("footer_legal")}</h4>
+            <h4 className="text-xs font-black uppercase tracking-widest text-primary">{t("footer_legal")}</h4>
             <ul className="space-y-2">
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Shield className="w-3 h-3 text-green-400" /> GDPR Compliant
+                <Shield className="w-3 h-3 text-primary" /> GDPR Compliant
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Lock className="w-3 h-3 text-primary" /> SSL/TLS 1.3
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Cpu className="w-3 h-3 text-purple-400" /> AI Moderated
+                <Cpu className="w-3 h-3 text-primary" /> AI Moderated
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Globe className="w-3 h-3 text-yellow-400" /> 180+ Countries
+                <Globe className="w-3 h-3 text-primary" /> 180+ Countries
               </li>
               <li className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <FileCheck className="w-3 h-3 text-blue-400" /> ISO 27001
+                <FileCheck className="w-3 h-3 text-primary" /> ISO 27001
               </li>
             </ul>
           </div>
@@ -115,7 +115,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-6 border-t border-border/30 flex flex-col md:flex-row items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground font-mono">
-            © {year} <span className="text-primary font-bold">Arena Qaisypro</span> — {t("footer_rights")}
+            © {year} <span className="text-primary font-bold">GDNA Arena</span> — {t("footer_rights")}
           </p>
           <div className="flex items-center gap-4">
             <Link href="/legal" className="text-xs text-muted-foreground hover:text-primary transition-colors">
@@ -124,7 +124,7 @@ export function Footer() {
             <Link href="/legal" className="text-xs text-muted-foreground hover:text-primary transition-colors">
               {t("legal_tab_privacy")}
             </Link>
-            <Link href="/empire" className="text-xs text-yellow-400 hover:text-yellow-300 font-bold uppercase tracking-wider transition-colors flex items-center gap-1">
+            <Link href="/empire" className="text-xs text-primary hover:text-primary/80 font-bold uppercase tracking-wider transition-colors flex items-center gap-1">
               <Crown className="w-3 h-3" /> {t("empire_title")}
             </Link>
           </div>

@@ -58,7 +58,9 @@ const DOMAIN_EMOJI: Record<string, string> = {
   general: "🌐",
 };
 
-export default function SearchPage() {
+if (false) {
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+function DiscardSearchPage() {
   const [location] = useLocation();
   const params = new URLSearchParams(window.location.search);
   const initialQuery = params.get("q") || "";
@@ -287,13 +289,243 @@ export default function SearchPage() {
     </div>
   );
 }
+}
+export default function SearchPage() {
+  const [location] = useLocation();
+  const params = new URLSearchParams(window.location.search);
+  const initialQuery = params.get("q") || "";
+
+  const [query, setQuery] = useState(initialQuery);
+  const [inputValue, setInputValue] = useState(initialQuery);
+  const [results, setResults] = useState<SearchResults | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const totalResults = results
+    ? results.legends.length + results.citizens.length + results.posts.length + results.events.length
+    : 0;
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!query || query.length < 2) {
+      setResults(null);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    const controller = new AbortController();
+    fetch(`${BASE()}/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data) => {
+        setResults(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          setError("Search failed. Please try again.");
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [query]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = inputValue.trim();
+    if (trimmed) {
+      setQuery(trimmed);
+      window.history.replaceState(null, "", `${BASE()}/search?q=${encodeURIComponent(trimmed)}`);
+    }
+  };
+
+  const isEmpty = results && totalResults === 0;
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <div className="border-b border-primary/20 bg-card/80 backdrop-blur-sm">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <h1 className="text-2xl font-black uppercase tracking-widest text-primary mb-1 flex items-center gap-2">
+            <Search size={22} /> Empire Search
+          </h1>
+          <p className="text-muted-foreground text-sm mb-5">Search legends, citizens, posts and events across the entire empire</p>
+
+          <form onSubmit={handleSubmit} className="relative">
+            <div className="flex items-center bg-card border border-border rounded-2xl px-5 py-3.5 gap-3 focus-within:border-primary/60 transition-all shadow-xl">
+              <Search size={18} className="text-muted-foreground shrink-0" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="CR7, Messi, Empire, FIFA, music..."
+                className="bg-transparent outline-none text-foreground text-base flex-1 placeholder:text-muted-foreground"
+              />
+              {loading && <Loader2 size={16} className="text-primary animate-spin shrink-0" />}
+              <button
+                type="submit"
+                className="px-4 py-1.5 bg-primary/10 text-primary border border-primary/40 rounded-xl text-sm font-bold hover:bg-primary hover:text-primary-foreground transition-all"
+              >
+                Search
+              </button>
+            </div>
+          </form>
+
+          {results && !loading && (
+            <p className="text-muted-foreground text-xs mt-3">
+              {isEmpty
+                ? `No results for "${query}"`
+                : `${totalResults} result${totalResults !== 1 ? "s" : ""} for "${query}"`}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Results */}
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+
+        {error && (
+          <div className="text-center text-destructive py-12">{error}</div>
+        )}
+
+        {!query && !loading && (
+          <div className="text-center py-20 text-muted-foreground">
+            <Search size={48} className="mx-auto mb-4 opacity-20" />
+            <p className="text-lg font-semibold">Start typing to search the empire</p>
+            <p className="text-sm mt-2">Find legends, citizens, posts, and events</p>
+          </div>
+        )}
+
+        {isEmpty && !loading && (
+          <div className="text-center py-20 text-muted-foreground">
+            <Search size={48} className="mx-auto mb-4 opacity-20" />
+            <p className="text-lg font-semibold">No results found</p>
+            <p className="text-sm mt-2">Try different keywords or check spelling</p>
+          </div>
+        )}
+
+        {/* ── Legends ── */}
+        {results && results.legends.length > 0 && (
+          <section>
+            <SectionHeader icon={<Trophy size={16} className="text-primary" />} label="Legends" count={results.legends.length} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              {results.legends.map((leg) => {
+                const imageUrl = getLegendImageUrl(leg.name, leg.image_url);
+                return (
+                  <Link key={leg.id} href={`/legends/${leg.id}`}>
+                    <div className="flex items-center gap-3 p-4 bg-card/60 border border-border rounded-xl hover:border-primary/40 hover:bg-card transition-all cursor-pointer group">
+                      {imageUrl ? (
+                        <img src={imageUrl} alt={leg.name} className="w-12 h-12 rounded-full object-cover border border-primary/30 shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Star size={20} className="text-primary" />
+                      </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-bold text-foreground group-hover:text-primary transition-colors truncate">{leg.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {DOMAIN_EMOJI[leg.domain] ?? "🌐"} {leg.domain}
+                          {leg.nationality ? ` · ${leg.nationality}` : ""}
+                          {leg.rank ? ` · Rank #${leg.rank}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ── Citizens ── */}
+        {results && results.citizens.length > 0 && (
+          <section>
+            <SectionHeader icon={<Users size={16} className="text-accent" />} label="Citizens" count={results.citizens.length} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              {results.citizens.map((cit) => (
+                <Link key={cit.id} href={`/citizen/${cit.username}`}>
+                  <div className="flex items-center gap-3 p-4 bg-card/60 border border-border rounded-xl hover:border-accent/40 hover:bg-card transition-all cursor-pointer group">
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-lg shrink-0 border border-accent/20">
+                      {cit.username[0]?.toUpperCase() ?? "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-foreground group-hover:text-accent transition-colors truncate">@{cit.username}</p>
+                      <p className="text-xs text-muted-foreground">{(cit.xp ?? 0).toLocaleString()} XP · {(cit.balance ?? 0).toLocaleString()} 🪙</p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Posts ── */}
+        {results && results.posts.length > 0 && (
+          <section>
+            <SectionHeader icon={<FileText size={16} className="text-purple-400" />} label="Posts" count={results.posts.length} />
+            <div className="space-y-3 mt-4">
+              {results.posts.map((post) => (
+                <Link key={post.id} href="/pulse">
+                  <div className="p-4 bg-card/60 border border-border rounded-xl hover:border-purple-400/40 hover:bg-card transition-all cursor-pointer group">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-bold text-purple-400">@{post.username || "anonymous"}</span>
+                      <span className="text-xs text-muted-foreground">·</span>
+                      <span className="text-xs text-muted-foreground">{DOMAIN_EMOJI[post.domain] ?? "🌐"} {post.domain}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">❤️ {post.likes ?? 0}</span>
+                    </div>
+                    <p className="text-sm text-foreground/80 line-clamp-2 group-hover:text-foreground transition-colors">{post.content}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Events ── */}
+        {results && results.events.length > 0 && (
+          <section>
+            <SectionHeader icon={<Calendar size={16} className="text-green-400" />} label="Events" count={results.events.length} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              {results.events.map((evt) => (
+                <Link key={evt.id} href="/pulse">
+                  <div className="flex items-center gap-3 p-4 bg-card/60 border border-border rounded-xl hover:border-green-400/40 hover:bg-card transition-all cursor-pointer group">
+                    <span className="text-2xl shrink-0">{evt.icon ?? "📅"}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-foreground group-hover:text-green-400 transition-colors truncate text-sm">{evt.title}</p>
+                        {evt.is_live && (
+                          <span className="shrink-0 text-[10px] font-black bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded uppercase animate-pulse">LIVE</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {evt.location ? `📍 ${evt.location} · ` : ""}
+                        {evt.event_date ? new Date(evt.event_date).toLocaleDateString() : ""}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SectionHeader({ icon, label, count }: { icon: React.ReactNode; label: string; count: number }) {
   return (
-    <div className="flex items-center gap-2 pb-2 border-b border-gray-800">
+    <div className="flex items-center gap-2 pb-2 border-b border-border">
       {icon}
-      <h2 className="text-sm font-black uppercase tracking-widest text-gray-300">{label}</h2>
-      <span className="ml-auto text-xs text-gray-600 font-medium">{count} result{count !== 1 ? "s" : ""}</span>
+      <h2 className="text-sm font-black uppercase tracking-widest text-foreground/80">{label}</h2>
+      <span className="ml-auto text-xs text-muted-foreground font-medium">{count} result{count !== 1 ? "s" : ""}</span>
     </div>
   );
 }
