@@ -409,7 +409,12 @@ export function useCall(user: { id: number; username: string } | null) {
   }, []);
 
   // ── Join an Agora channel & publish local media ────────────────────────────
-  const joinAgora = useCallback(async (channel: string, withVideo: boolean, encryptionSecret: string) => {
+  const joinAgora = useCallback(async (
+    channel: string,
+    withVideo: boolean,
+    encryptionSecret: string,
+    preparedAudioTrack?: IMicrophoneAudioTrack,
+  ) => {
     // Resolve and validate runtime server configuration before Agora creates or
     // joins any channel. This prevents a half-started client during secret boot.
     const { appId, token, uid } = await fetchAgoraToken(channel);
@@ -445,7 +450,9 @@ export function useCall(user: { id: number; username: string } | null) {
 
     await client.join(appId, channel, token, uid);
 
-    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+    // Reuse the track that triggered the citizen's single permission prompt.
+    // Opening, closing, then reopening the microphone is unreliable on mobile.
+    const audioTrack = preparedAudioTrack ?? await AgoraRTC.createMicrophoneAudioTrack();
     localAudioRef.current = audioTrack;
     let videoTrack: ICameraVideoTrack | null = null;
     let cameraWarning: string | null = null;
@@ -907,7 +914,8 @@ export function useCall(user: { id: number; username: string } | null) {
       // the microphone. This event keeps the shared call engine independent
       // from individual Messenger variants.
       window.dispatchEvent(new Event("gdna:voice-note-stop"));
-      await validateMicrophone();
+      const preparedAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      localAudioRef.current = preparedAudioTrack;
 
        let recipients: E2ERecipientKey[] | null = null;
        for (let attempt = 0; attempt < 3 && !recipients; attempt++) {
@@ -954,7 +962,7 @@ export function useCall(user: { id: number; username: string } | null) {
       historyRef.current = { peer: targetUsername, video: withVideo, start: Date.now(), outgoing: true, answered: false };
       setCallStatus("calling");
 
-      await joinAgora(callId, withVideo, callSecret);
+      await joinAgora(callId, withVideo, callSecret, preparedAudioTrack);
 
       // Give up automatically if the callee never answers.
       clearRingTimer();
@@ -991,7 +999,8 @@ export function useCall(user: { id: number; username: string } | null) {
       // A failed local microphone check is rejected immediately so the caller
       // is never left ringing while we attempt to join Agora.
       window.dispatchEvent(new Event("gdna:voice-note-stop"));
-      await validateMicrophone();
+      const preparedAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      localAudioRef.current = preparedAudioTrack;
       if (!user || !incomingCall.e2e) {
         throw new Error("Secure call handshake is unavailable");
       }
@@ -999,7 +1008,7 @@ export function useCall(user: { id: number; username: string } | null) {
       const envelope = incomingCall.e2e.devices?.[identity.deviceId];
       if (!envelope) throw new Error("Secure call was not addressed to this device");
       const callSecret = await decryptCallSecret(user.id, envelope);
-      await joinAgora(incomingCall.callId, withVideo && incomingCall.video, callSecret);
+      await joinAgora(incomingCall.callId, withVideo && incomingCall.video, callSecret, preparedAudioTrack);
 
       setActivePeer(incomingCall.from);
       setActiveCallId(incomingCall.callId);
@@ -1216,16 +1225,6 @@ export function useCall(user: { id: number; username: string } | null) {
     refreshCallDevices, switchMicrophone, switchCamera, selectSpeaker,
     reportSpeakerFailure, reportSpeakerSuccess, reportDeviceRecoveryAttempt,
   };
-}
-
-async function validateMicrophone(): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    const error = new Error("Microphone capture is unavailable");
-    error.name = "NotSupportedError";
-    throw error;
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  stream.getTracks().forEach(track => track.stop());
 }
 
 function randomSecret(): string {
