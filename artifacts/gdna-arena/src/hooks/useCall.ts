@@ -179,6 +179,10 @@ function isRecoverableMediaError(err: unknown): boolean {
 
 export function useCall(user: { id: number; username: string } | null) {
   const { isOnline, setRealtimeConnecting, setRealtimeConnected } = useConnectivity();
+  const screenShareSupported =
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    typeof navigator.mediaDevices?.getDisplayMedia === "function";
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1099,6 +1103,10 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("مشاركة الشاشة متاحة أثناء المكالمة النشطة فقط");
       return;
     }
+    if (!screenShareSupported) {
+      showCallError("مشاركة الشاشة غير مدعومة على هذا الجهاز — المكالمة ستستمر بشكل طبيعي");
+      return;
+    }
     let cameraUnpublished = false;
     let screen: ILocalVideoTrack | null = null;
     try {
@@ -1142,12 +1150,16 @@ export function useCall(user: { id: number; username: string } | null) {
         15_000,
       );
     }
-  }, [callStatus, stopScreenShare]);
+  }, [callStatus, screenShareSupported, stopScreenShare]);
 
   // ── Start live story (WebRTC path, unchanged) ─────────────────────────────
   const startLive = useCallback(async (title: string, domain: string) => {
     if (!isOnline) {
       showCallError("أنت غير متصل بالشبكة — لا يمكن بدء بث مباشر الآن");
+      return;
+    }
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      showCallError("الكاميرا والميكروفون غير متاحين في هذا المتصفح — افتح الموقع عبر اتصال آمن");
       return;
     }
     try {
@@ -1158,6 +1170,7 @@ export function useCall(user: { id: number; username: string } | null) {
       sendWS({ type: "live-start", title, domain });
     } catch (err) {
       console.error("[LIVE] Failed:", err);
+      showCallError(mediaFailureMessage(err, "camera"), 12_000);
     }
   }, [isOnline, sendWS]);
 
@@ -1217,7 +1230,7 @@ export function useCall(user: { id: number; username: string } | null) {
     callError,
     connectionTest,
     callDevices, selectedMicrophoneId, selectedCameraId, selectedSpeakerId,
-    speakerSelectionSupported, deviceIssue, switchingDevice,
+    speakerSelectionSupported, screenShareSupported, deviceIssue, switchingDevice,
     startCall, answerCall, rejectCall, endCall,
     testConnection,
     startLive, endLive, joinLive,

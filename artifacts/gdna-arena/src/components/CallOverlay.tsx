@@ -294,7 +294,7 @@ export default function CallOverlay({
             }}
             className="absolute bottom-28 left-1/2 -translate-x-1/2 rounded-full border border-primary/40 bg-card px-4 py-2 text-sm font-bold text-primary"
           >
-            اضغط لتشغيل صوت المكالمة
+            {st.enable_speaker}
           </button>
         )}
 

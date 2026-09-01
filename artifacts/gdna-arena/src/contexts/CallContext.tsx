@@ -23,8 +23,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         onReject={call.rejectCall}
         onEnd={call.endCall}
         screenSharing={call.screenSharing}
-        onScreenShare={call.startScreenShare}
-        onStopScreen={call.stopScreenShare}
+        onScreenShare={call.screenShareSupported ? call.startScreenShare : undefined}
+        onStopScreen={call.screenShareSupported ? call.stopScreenShare : undefined}
         callError={call.callError}
         devices={call.callDevices}
         selectedMicrophoneId={call.selectedMicrophoneId}

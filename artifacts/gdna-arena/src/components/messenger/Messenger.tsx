@@ -1754,7 +1754,9 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       const preferredMime = [
         "audio/webm;codecs=opus",
         "audio/webm",
+        "audio/mp4;codecs=mp4a.40.2",
         "audio/mp4",
+        "audio/aac",
         "audio/ogg;codecs=opus",
       ].find(type => MediaRecorder.isTypeSupported(type));
       const rec = preferredMime
@@ -1769,10 +1771,17 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         recorderRef.current = null;
         setRecording(false);
         if (recCancelledRef.current || !mountedRef.current) return; // unmounted: drop, never upload
-        const mime = rec.mimeType || chunksRef.current[0]?.type || preferredMime || "audio/webm";
+        const mime = rec.mimeType || chunksRef.current[0]?.type || preferredMime || "application/octet-stream";
         const blob = new Blob(chunksRef.current, { type: mime });
         if (blob.size > 0) {
-          const extension = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
+          const extension =
+            mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac")
+              ? "m4a"
+              : mime.includes("ogg")
+                ? "ogg"
+                : mime.includes("webm")
+                  ? "webm"
+                  : "audio";
           stageFiles([new File([blob], `voice-note-${Date.now()}.${extension}`, { type: mime })]);
         }
       };

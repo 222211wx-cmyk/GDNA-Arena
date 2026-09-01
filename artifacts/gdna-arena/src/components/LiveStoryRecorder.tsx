@@ -41,13 +41,19 @@ export default function LiveStoryRecorder({
   const [videoOff,     setVideoOff]     = useState(false);
   const [duration,     setDuration]     = useState(0);
   const [watchingId,   setWatchingId]   = useState<string | null>(null);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) localVideoRef.current.srcObject = localStream;
   }, [localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) remoteVideoRef.current.srcObject = remoteStream;
+    const player = remoteVideoRef.current;
+    if (!player || !remoteStream) return;
+    player.srcObject = remoteStream;
+    void player.play()
+      .then(() => setPlaybackBlocked(false))
+      .catch(() => setPlaybackBlocked(true));
   }, [remoteStream]);
 
   useEffect(() => {
@@ -88,13 +94,13 @@ export default function LiveStoryRecorder({
         <div className="flex gap-2">
           <button onClick={() => setMicMuted(v => !v)}
             aria-label={micMuted ? st.unmute : st.mute}
-            className="w-10 h-10 rounded-full flex items-center justify-center"
+            className="w-11 h-11 rounded-full flex items-center justify-center"
             style={{ background: micMuted ? "#ef4444" : "rgba(0,0,0,0.6)" }}>
             {micMuted ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-white" />}
           </button>
           <button onClick={() => setVideoOff(v => !v)}
             aria-label={videoOff ? st.enable_video : st.disable_video}
-            className="w-10 h-10 rounded-full flex items-center justify-center"
+            className="w-11 h-11 rounded-full flex items-center justify-center"
             style={{ background: videoOff ? "#ef4444" : "rgba(0,0,0,0.6)" }}>
             {videoOff ? <VideoOff className="w-4 h-4 text-white" /> : <Video className="w-4 h-4 text-white" />}
           </button>
@@ -114,6 +120,19 @@ export default function LiveStoryRecorder({
     return (
       <div dir={isRTL ? "rtl" : "ltr"} className="relative rounded-xl overflow-hidden" style={{ height: 300, background: "hsl(var(--background))" }}>
         <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+        {playbackBlocked && (
+          <button
+            type="button"
+            onClick={() => {
+              void remoteVideoRef.current?.play()
+                .then(() => setPlaybackBlocked(false))
+                .catch(() => setPlaybackBlocked(true));
+            }}
+            className="absolute inset-0 m-auto h-12 w-fit rounded-full border border-primary/40 bg-card/95 px-5 text-sm font-bold text-primary"
+          >
+            {st.enable_speaker}
+          </button>
+        )}
         <div className="absolute top-3 start-3 flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-black text-white" style={{ background: "#ef4444" }}>
             <div className="w-2 h-2 rounded-full bg-white animate-pulse" /> {st.live}

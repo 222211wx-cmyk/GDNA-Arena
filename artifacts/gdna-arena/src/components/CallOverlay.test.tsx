@@ -126,7 +126,7 @@ describe("CallOverlay media recovery", () => {
       />,
     );
 
-    const retry = await screen.findByRole("button", { name: "اضغط لتشغيل صوت المكالمة" });
+    const retry = await screen.findByRole("button", { name: "Turn speaker on" });
     fireEvent.click(retry);
 
     await waitFor(() => {
