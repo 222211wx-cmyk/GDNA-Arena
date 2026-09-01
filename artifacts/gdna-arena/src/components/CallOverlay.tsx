@@ -245,6 +245,21 @@ export default function CallOverlay({
           </button>
         )}
 
+        {callError && (
+          <div
+            role="alert"
+            className="absolute top-16 left-1/2 -translate-x-1/2 rounded-xl border px-4 py-3 text-center text-sm font-bold"
+            style={{
+              width: "min(90vw, 520px)",
+              background: "hsl(var(--card) / 0.96)",
+              borderColor: "hsl(var(--destructive) / 0.55)",
+              color: "hsl(var(--destructive))",
+            }}
+          >
+            {callError}
+          </div>
+        )}
+
         {/* Local video (PiP) */}
         {localStream && hasVideo && !videoOff && (
           <div id="local-player" className="absolute bottom-4 right-4 w-28 h-20 rounded-xl overflow-hidden border-2"
@@ -290,7 +305,7 @@ export default function CallOverlay({
         </button>
 
         {/* Screen share */}
-        {onScreenShare && (
+        {status === "active" && onScreenShare && (
           <button
             onClick={screenSharing ? onStopScreen : onScreenShare}
             className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"

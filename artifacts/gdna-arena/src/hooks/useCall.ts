@@ -129,22 +129,24 @@ const LIVE_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
-function mediaFailureMessage(err: unknown): string {
+function mediaFailureMessage(err: unknown, device: "microphone" | "camera" = "microphone"): string {
   const name = (err as { name?: string })?.name ?? "";
   const code = (err as { code?: string })?.code ?? "";
+  const icon = device === "camera" ? "📹" : "🎤";
+  const label = device === "camera" ? "الكاميرا" : "الميكروفون";
   if (name === "NotAllowedError" || name === "PermissionDeniedError" || code === "PERMISSION_DENIED") {
-    return "🎤 تم رفض إذن الميكروفون — افتح إعدادات المتصفح وأعطِ الإذن للموقع";
+    return `${icon} تم رفض إذن ${label} — افتح إعدادات الموقع في المتصفح، اسمح بالوصول، ثم أعد المحاولة`;
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError" || code === "DEVICE_NOT_FOUND") {
-    return "🎤 لا يوجد ميكروفون متصل بالجهاز";
+    return `${icon} لا توجد ${label} متصلة بالجهاز`;
   }
   if (name === "NotReadableError" || name === "AbortError" || code === "DEVICE_BUSY" || code === "DEVICE_IN_USE") {
-    return "🎤 الميكروفون مستخدم من تطبيق أو تسجيل آخر — أغلقه وأعد المحاولة";
+    return `${icon} ${label} مستخدمة من تطبيق آخر — أغلقه ثم أعد المحاولة`;
   }
   if (name === "NotSupportedError") {
-    return "🎤 هذا المتصفح لا يدعم الوصول إلى الميكروفون";
+    return `${icon} هذا المتصفح لا يدعم الوصول إلى ${label}`;
   }
-  return "🎤 تعذّر الوصول إلى الميكروفون — تأكد من الإذن والجهاز ثم أعد المحاولة";
+  return `${icon} تعذّر الوصول إلى ${label} — تأكد من الإذن والجهاز ثم أعد المحاولة`;
 }
 export function useCall(user: { id: number; username: string } | null) {
   const { isOnline, setRealtimeConnecting, setRealtimeConnected } = useConnectivity();
@@ -192,10 +194,10 @@ export function useCall(user: { id: number; username: string } | null) {
   const [connectionTest, setConnectionTest] = useState<ConnectionTestStatus>("idle");
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showCallError = (msg: string) => {
+  const showCallError = (msg: string, durationMs = 5_000) => {
     setCallError(msg);
     if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-    errorTimerRef.current = setTimeout(() => setCallError(null), 5000);
+    errorTimerRef.current = setTimeout(() => setCallError(null), durationMs);
   };
 
   // ── Ring timeout: give up on unanswered outgoing calls after ~45s ─────────
@@ -362,11 +364,16 @@ export function useCall(user: { id: number; username: string } | null) {
     const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
     localAudioRef.current = audioTrack;
     let videoTrack: ICameraVideoTrack | null = null;
+    let cameraWarning: string | null = null;
     if (withVideo) {
       try {
         videoTrack = await AgoraRTC.createCameraVideoTrack();
         localVideoRef.current = videoTrack;
-      } catch { /* no camera — degrade to audio-only */ }
+      } catch (error) {
+        // Keep the call usable as audio-only, but never hide a denied, missing,
+        // or busy camera from the citizen.
+        cameraWarning = `${mediaFailureMessage(error, "camera")} — ستستمر المكالمة صوتياً`;
+      }
     }
 
     await client.publish(videoTrack ? [audioTrack, videoTrack] : [audioTrack]);
@@ -377,6 +384,8 @@ export function useCall(user: { id: number; username: string } | null) {
     ]);
     localStreamRef.current = ms;
     setLocalStream(ms);
+    // Slow device setup must not consume the warning before the overlay renders.
+    if (cameraWarning) showCallError(cameraWarning, 15_000);
   }, [rebuildRemoteStream]);
 
   // ── Leave Agora & release all media ────────────────────────────────────────
@@ -856,13 +865,24 @@ export function useCall(user: { id: number; username: string } | null) {
   const stopScreenShare = useCallback(async () => {
     const client = agoraRef.current;
     const screen = screenTrackRef.current;
+    // close() can emit track-ended synchronously; make manual and browser-driven
+    // stops converge without publishing the camera twice.
+    if (!screen) {
+      setScreenSharing(false);
+      return;
+    }
     screenTrackRef.current = null;
     if (client && screen) {
       try { await client.unpublish(screen); } catch { /* already gone */ }
     }
     screen?.close();
     if (client && localVideoRef.current) {
-      try { await client.publish(localVideoRef.current); } catch { /* channel closed */ }
+      try {
+        await client.publish(localVideoRef.current);
+      } catch (error) {
+        console.error("[CALL] Failed to restore camera after screen sharing:", error);
+        showCallError("تعذّرت استعادة الكاميرا — أنهِ المكالمة ثم أعد الاتصال لاستعادة الفيديو", 15_000);
+      }
     }
     const audioTrack = localAudioRef.current?.getMediaStreamTrack();
     const videoTrack = localVideoRef.current?.getMediaStreamTrack();
@@ -879,10 +899,15 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("مشاركة الشاشة متاحة أثناء المكالمة النشطة فقط");
       return;
     }
+    let cameraUnpublished = false;
+    let screen: ILocalVideoTrack | null = null;
     try {
-      const screen = await AgoraRTC.createScreenVideoTrack({}, "disable");
+      screen = await AgoraRTC.createScreenVideoTrack({}, "disable");
       screenTrackRef.current = screen;
-      if (localVideoRef.current) await client.unpublish(localVideoRef.current);
+      if (localVideoRef.current) {
+        await client.unpublish(localVideoRef.current);
+        cameraUnpublished = true;
+      }
       await client.publish(screen);
       const audioTrack = localAudioRef.current?.getMediaStreamTrack();
       const screenMediaTrack = screen.getMediaStreamTrack();
@@ -895,10 +920,27 @@ export function useCall(user: { id: number; username: string } | null) {
       setScreenSharing(true);
       screen.on("track-ended", () => { void stopScreenShare(); });
     } catch (error) {
-      const name = (error as { name?: string })?.name;
-      if (name !== "NotAllowedError") {
-        showCallError("تعذرت مشاركة الشاشة على هذا الجهاز أو المتصفح");
+      screenTrackRef.current = null;
+      try { screen?.close(); } catch { /* creation/publish did not complete */ }
+      if (cameraUnpublished && localVideoRef.current) {
+        try { await client.publish(localVideoRef.current); } catch { /* surfaced below */ }
       }
+      const name = (error as { name?: string })?.name;
+      const code = (error as { code?: string })?.code;
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      const permissionDenied =
+        name === "NotAllowedError" ||
+        name === "PermissionDeniedError" ||
+        code === "PERMISSION_DENIED" ||
+        message.includes("permission") ||
+        message.includes("denied") ||
+        message.includes("cancel");
+      showCallError(
+        permissionDenied
+          ? "تم رفض مشاركة الشاشة — اضغط مشاركة الشاشة مجدداً، اختر نافذة أو شاشة، ثم اسمح بالمشاركة"
+          : "تعذرت مشاركة الشاشة على هذا الجهاز أو المتصفح — جرّب متصفحاً حديثاً أو أعد المحاولة",
+        15_000,
+      );
     }
   }, [callStatus, stopScreenShare]);
 
