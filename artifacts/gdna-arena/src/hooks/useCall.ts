@@ -160,6 +160,21 @@ function mediaFailureMessage(err: unknown, device: "microphone" | "camera" = "mi
   }
   return `${icon} تعذّر الوصول إلى ${label} — تأكد من الإذن والجهاز ثم أعد المحاولة`;
 }
+
+function isRecoverableMediaError(err: unknown): boolean {
+  const name = (err as { name?: string })?.name ?? "";
+  const code = (err as { code?: string })?.code ?? "";
+  return [
+    "NotAllowedError",
+    "PermissionDeniedError",
+    "NotFoundError",
+    "DevicesNotFoundError",
+    "NotReadableError",
+    "AbortError",
+    "NotSupportedError",
+  ].includes(name) || ["PERMISSION_DENIED", "DEVICE_NOT_FOUND", "DEVICE_BUSY", "DEVICE_IN_USE"].includes(code);
+}
+
 export function useCall(user: { id: number; username: string } | null) {
   const { isOnline, setRealtimeConnecting, setRealtimeConnected } = useConnectivity();
   const wsRef   = useRef<WebSocket | null>(null);
@@ -954,10 +969,18 @@ export function useCall(user: { id: number; username: string } | null) {
       sendWS({ type: "call-answer", to: incomingCall.from, answer: null, callId: incomingCall.callId });
     } catch (err: unknown) {
       console.error("[CALL] Failed to answer:", err);
+      void leaveAgora();
+      if (isRecoverableMediaError(err)) {
+        // Keep the incoming call visible. The citizen can allow the microphone
+        // or camera in site settings and press Answer again without logging in
+        // again or asking the caller to redial.
+        showCallError(mediaFailureMessage(err), 12_000);
+        setCallStatus("ringing");
+        return;
+      }
       // Tell the caller the answer failed so they don't ring forever.
       sendWS({ type: "call-reject", to: incomingCall.from, callId: incomingCall.callId });
       currentCallIdRef.current = null;
-      void leaveAgora();
       setIncomingCall(null);
       setCallStatus("idle");
       const message = err instanceof Error ? err.message : "";

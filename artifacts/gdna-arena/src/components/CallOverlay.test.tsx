@@ -29,6 +29,23 @@ const baseProps = {
 };
 
 describe("CallOverlay media recovery", () => {
+  it("keeps an incoming call answerable while showing microphone permission recovery", () => {
+    const onAnswer = vi.fn();
+    render(
+      <CallOverlay
+        {...baseProps}
+        status="ringing"
+        incomingCall={{ from: "caller", video: true }}
+        callError="افتح إعدادات الموقع، اسمح بالميكروفون، ثم أعد المحاولة"
+        onAnswer={onAnswer}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("اسمح بالميكروفون");
+    fireEvent.click(screen.getByRole("button", { name: /answer with video/i }));
+    expect(onAnswer).toHaveBeenCalledWith(true);
+  });
+
   it("shows active-call recovery messages and only offers screen sharing when active", () => {
     const onScreenShare = vi.fn();
     const { rerender } = render(

@@ -168,6 +168,14 @@ export default function CallOverlay({
             <p className="text-xs font-mono animate-pulse" style={{ color: "#22c55e" }}>
                {incomingCall.video ? `📹 ${st.incoming_video_call}` : `📞 ${st.incoming_voice_call}`}
             </p>
+            {callError && (
+              <div
+                role="alert"
+                className="mt-3 rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-start text-xs font-semibold leading-relaxed text-destructive"
+              >
+                {callError}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-center gap-6">
