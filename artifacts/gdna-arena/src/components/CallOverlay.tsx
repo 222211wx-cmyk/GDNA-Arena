@@ -40,6 +40,8 @@ interface Props {
   onSwitchCamera?: (deviceId: string) => Promise<void>;
   onSelectSpeaker?: (deviceId: string) => void;
   onSpeakerFailure?: () => void;
+  onSpeakerSuccess?: () => void;
+  onDeviceRecoveryAttempt?: (kind: CallDeviceKind) => void;
 }
 
 export default function CallOverlay({
@@ -49,7 +51,8 @@ export default function CallOverlay({
   speakerSelectionSupported = false, deviceIssue = null, switchingDevice = null,
   onRefreshDevices = async () => undefined, onSwitchMicrophone = async () => undefined,
   onSwitchCamera = async () => undefined, onSelectSpeaker = () => undefined,
-  onSpeakerFailure = () => undefined,
+  onSpeakerFailure = () => undefined, onSpeakerSuccess = () => undefined,
+  onDeviceRecoveryAttempt = () => undefined,
 }: Props) {
   const { lang } = useLang();
   const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
@@ -62,6 +65,7 @@ export default function CallOverlay({
   const [duration,    setDuration]    = useState(0);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
+  const lastTrackedSpeakerIdRef = useRef("");
 
   // Attach streams to video elements
   useEffect(() => {
@@ -77,8 +81,14 @@ export default function CallOverlay({
     const player = remoteVideoRef.current;
     if (!player || !selectedSpeakerId || !speakerSelectionSupported) return;
     const sinkPlayer = player as HTMLVideoElement & { setSinkId: (deviceId: string) => Promise<void> };
-    void sinkPlayer.setSinkId(selectedSpeakerId).catch(onSpeakerFailure);
-  }, [remoteStream, selectedSpeakerId, speakerSelectionSupported, minimized, onSpeakerFailure]);
+    void sinkPlayer.setSinkId(selectedSpeakerId)
+      .then(() => {
+        if (lastTrackedSpeakerIdRef.current === selectedSpeakerId) return;
+        lastTrackedSpeakerIdRef.current = selectedSpeakerId;
+        onSpeakerSuccess();
+      })
+      .catch(onSpeakerFailure);
+  }, [remoteStream, selectedSpeakerId, speakerSelectionSupported, minimized, onSpeakerFailure, onSpeakerSuccess]);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -120,6 +130,9 @@ export default function CallOverlay({
   const microphones = devices.filter(device => device.kind === "audioinput");
   const cameras = devices.filter(device => device.kind === "videoinput");
   const speakers = devices.filter(device => device.kind === "audiooutput");
+  const recoveringMicrophone = deviceIssue?.disconnected && deviceIssue.kind === "audioinput";
+  const recoveringCamera = deviceIssue?.disconnected && deviceIssue.kind === "videoinput";
+  const recoveringSpeaker = deviceIssue?.disconnected && deviceIssue.kind === "audiooutput";
 
   // ── Call error toast (shown even when idle) ────────────────────────────────
   if (status === "idle") {
@@ -313,7 +326,11 @@ export default function CallOverlay({
               variant="outline"
               size="sm"
               className="mt-3"
-              onClick={() => { setDevicePickerOpen(true); void onRefreshDevices(); }}
+              onClick={() => {
+                if (deviceIssue.disconnected) onDeviceRecoveryAttempt(deviceIssue.kind);
+                setDevicePickerOpen(true);
+                void onRefreshDevices();
+              }}
             >
               اختر جهازاً آخر
             </Button>
@@ -344,14 +361,15 @@ export default function CallOverlay({
                 تحديث
               </Button>
             </div>
-            {microphones.length > 1 && (
+            {(microphones.length > 1 || (recoveringMicrophone && microphones.length > 0)) && (
               <DeviceSelect label="الميكروفون" devices={microphones} value={selectedMicrophoneId} disabled={switchingDevice === "audioinput"} onChange={id => void onSwitchMicrophone(id)} />
             )}
-            {cameras.length > 1 && hasVideo && (
+            {(cameras.length > 1 || (recoveringCamera && cameras.length > 0)) && hasVideo && (
               <DeviceSelect label="الكاميرا" devices={cameras} value={selectedCameraId} disabled={switchingDevice === "videoinput"} onChange={id => void onSwitchCamera(id)} />
             )}
             {speakerSelectionSupported ? (
-              speakers.length > 1 && <DeviceSelect label="مكبر الصوت" devices={speakers} value={selectedSpeakerId} onChange={onSelectSpeaker} />
+              (speakers.length > 1 || (recoveringSpeaker && speakers.length > 0))
+                && <DeviceSelect label="مكبر الصوت" devices={speakers} value={selectedSpeakerId} onChange={onSelectSpeaker} />
             ) : (
               <p data-testid="text-speaker-selection-unsupported" className="text-xs text-muted-foreground">
                 اختيار مكبر الصوت غير مدعوم في هذا المتصفح المحمول. يمكنك تغيير المخرج من إعدادات الهاتف، بينما تبقى خيارات الميكروفون والكاميرا متاحة هنا.

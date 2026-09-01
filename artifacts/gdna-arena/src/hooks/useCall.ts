@@ -22,6 +22,7 @@ import {
   type E2ERecipientKey,
 } from "@/lib/amis-e2ee";
 import { apiPath, websocketUrl } from "@/lib/network";
+import { trackCallDeviceOutcome } from "@/lib/analytics";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // Fetch a channel-scoped RTC token from the authenticated backend.
@@ -114,6 +115,7 @@ export interface CallDevice {
 export interface CallDeviceIssue {
   kind: CallDeviceKind;
   message: string;
+  disconnected?: boolean;
 }
 
 interface IncomingCall {
@@ -221,6 +223,7 @@ export function useCall(user: { id: number; username: string } | null) {
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
   const [deviceIssue, setDeviceIssue] = useState<CallDeviceIssue | null>(null);
   const [switchingDevice, setSwitchingDevice] = useState<CallDeviceKind | null>(null);
+  const disconnectedDeviceKindRef = useRef<CallDeviceKind | null>(null);
   const speakerSelectionSupported =
     typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
 
@@ -268,9 +271,11 @@ export function useCall(user: { id: number; username: string } | null) {
           { kind: "audiooutput" as const, id: selectedSpeakerId, label: "مكبر الصوت" },
         ].find((item) => item.id && !devices.some((device) => device.kind === item.kind && device.deviceId === item.id));
         if (selected) {
+          disconnectedDeviceKindRef.current = selected.kind;
           setDeviceIssue({
             kind: selected.kind,
             message: `تم فصل ${selected.label}. اختر جهازاً متاحاً للمتابعة دون إنهاء المكالمة.`,
+            disconnected: true,
           });
         }
       }).catch(() => {});
@@ -466,6 +471,7 @@ export function useCall(user: { id: number; username: string } | null) {
     setSelectedMicrophoneId(audioTrack.getMediaStreamTrack().getSettings().deviceId ?? "");
     setSelectedCameraId(videoTrack?.getMediaStreamTrack().getSettings().deviceId ?? "");
     setDeviceIssue(null);
+    disconnectedDeviceKindRef.current = null;
     void refreshCallDevices();
     // Slow device setup must not consume the warning before the overlay renders.
     if (cameraWarning) showCallError(cameraWarning, 15_000);
@@ -514,6 +520,11 @@ export function useCall(user: { id: number; username: string } | null) {
       setSelectedMicrophoneId(deviceId);
       setDeviceIssue(null);
       rebuildLocalCallStream();
+      trackCallDeviceOutcome("audioinput", "switch_succeeded");
+      if (disconnectedDeviceKindRef.current === "audioinput") {
+        trackCallDeviceOutcome("audioinput", "recovery_succeeded");
+        disconnectedDeviceKindRef.current = null;
+      }
     } catch (error) {
       setDeviceIssue({ kind: "audioinput", message: `${mediaFailureMessage(error, "microphone")} — اختر ميكروفوناً آخر` });
     } finally {
@@ -530,6 +541,11 @@ export function useCall(user: { id: number; username: string } | null) {
       setSelectedCameraId(deviceId);
       setDeviceIssue(null);
       rebuildLocalCallStream();
+      trackCallDeviceOutcome("videoinput", "switch_succeeded");
+      if (disconnectedDeviceKindRef.current === "videoinput") {
+        trackCallDeviceOutcome("videoinput", "recovery_succeeded");
+        disconnectedDeviceKindRef.current = null;
+      }
     } catch (error) {
       setDeviceIssue({ kind: "videoinput", message: `${mediaFailureMessage(error, "camera")} — اختر كاميرا أخرى` });
     } finally {
@@ -547,6 +563,20 @@ export function useCall(user: { id: number; username: string } | null) {
       kind: "audiooutput",
       message: "تعذّر استخدام مكبر الصوت المحدد. اختر مخرجاً آخر أو غيّره من إعدادات الجهاز.",
     });
+  }, []);
+
+  const reportSpeakerSuccess = useCallback(() => {
+    setDeviceIssue(null);
+    trackCallDeviceOutcome("audiooutput", "switch_succeeded");
+    if (disconnectedDeviceKindRef.current === "audiooutput") {
+      trackCallDeviceOutcome("audiooutput", "recovery_succeeded");
+      disconnectedDeviceKindRef.current = null;
+    }
+  }, []);
+
+  const reportDeviceRecoveryAttempt = useCallback((kind: CallDeviceKind) => {
+    if (disconnectedDeviceKindRef.current !== kind) return;
+    trackCallDeviceOutcome(kind, "recovery_attempted");
   }, []);
 
   // ── Connect WebSocket ──────────────────────────────────────────────────────
@@ -1178,7 +1208,8 @@ export function useCall(user: { id: number; username: string } | null) {
     testConnection,
     startLive, endLive, joinLive,
     startScreenShare, stopScreenShare,
-    refreshCallDevices, switchMicrophone, switchCamera, selectSpeaker, reportSpeakerFailure,
+    refreshCallDevices, switchMicrophone, switchCamera, selectSpeaker,
+    reportSpeakerFailure, reportSpeakerSuccess, reportDeviceRecoveryAttempt,
   };
 }
 

@@ -4,9 +4,48 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 import CallOverlay from "./CallOverlay";
 
+Object.defineProperties(HTMLElement.prototype, {
+  hasPointerCapture: { configurable: true, value: () => false },
+  setPointerCapture: { configurable: true, value: () => undefined },
+  releasePointerCapture: { configurable: true, value: () => undefined },
+  scrollIntoView: { configurable: true, value: () => undefined },
+});
+
 vi.mock("@/contexts/LangContext", () => ({
   useLang: () => ({ lang: "en" }),
 }));
+
+vi.mock("@workspace/gdna-ds/components/ui/select", async () => {
+  const React = await import("react");
+  const SelectContext = React.createContext<(value: string) => void>(() => undefined);
+
+  return {
+    Select: ({
+      children,
+      onValueChange,
+    }: {
+      children: ReactNode;
+      onValueChange: (value: string) => void;
+    }) => (
+      <SelectContext.Provider value={onValueChange}>
+        {children}
+      </SelectContext.Provider>
+    ),
+    SelectTrigger: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) => (
+      <button {...props}>{children}</button>
+    ),
+    SelectValue: () => <span />,
+    SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    SelectItem: ({ children, value }: { children: ReactNode; value: string }) => {
+      const onValueChange = React.useContext(SelectContext);
+      return (
+        <button role="option" onClick={() => onValueChange(value)}>
+          {children}
+        </button>
+      );
+    },
+  };
+});
 
 vi.mock("framer-motion", () => ({
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -117,6 +156,7 @@ describe("CallOverlay media recovery", () => {
   });
 
   it("offers a clear recovery choice when a selected device disconnects", () => {
+    const onDeviceRecoveryAttempt = vi.fn();
     render(
       <CallOverlay
         {...baseProps}
@@ -124,7 +164,9 @@ describe("CallOverlay media recovery", () => {
         deviceIssue={{
           kind: "audioinput",
           message: "تم فصل الميكروفون. اختر جهازاً متاحاً للمتابعة دون إنهاء المكالمة.",
+          disconnected: true,
         }}
+        onDeviceRecoveryAttempt={onDeviceRecoveryAttempt}
         devices={[
           { deviceId: "mic-1", kind: "audioinput", label: "Built-in microphone" },
           { deviceId: "mic-2", kind: "audioinput", label: "USB microphone" },
@@ -134,6 +176,74 @@ describe("CallOverlay media recovery", () => {
 
     expect(screen.getByTestId("status-device-disconnected")).toHaveTextContent("دون إنهاء المكالمة");
     fireEvent.click(screen.getByTestId("button-recover-device"));
+    expect(onDeviceRecoveryAttempt).toHaveBeenCalledOnce();
+    expect(onDeviceRecoveryAttempt).toHaveBeenCalledWith("audioinput");
     expect(screen.getByTestId("panel-call-devices")).toBeVisible();
+  });
+
+  it.each([
+    {
+      kind: "audioinput" as const,
+      selectedProp: "selectedMicrophoneId" as const,
+      callbackProp: "onSwitchMicrophone" as const,
+      availableId: "remaining-microphone",
+      localStream: null,
+      speakerSelectionSupported: false,
+    },
+    {
+      kind: "videoinput" as const,
+      selectedProp: "selectedCameraId" as const,
+      callbackProp: "onSwitchCamera" as const,
+      availableId: "remaining-camera",
+      localStream: {
+        getAudioTracks: () => [],
+        getVideoTracks: () => [{ enabled: true }],
+      } as unknown as MediaStream,
+      speakerSelectionSupported: false,
+    },
+    {
+      kind: "audiooutput" as const,
+      selectedProp: "selectedSpeakerId" as const,
+      callbackProp: "onSelectSpeaker" as const,
+      availableId: "remaining-speaker",
+      localStream: null,
+      speakerSelectionSupported: true,
+    },
+  ])("offers the one remaining $kind device as a recovery option", async ({
+    kind,
+    selectedProp,
+    callbackProp,
+    availableId,
+    localStream,
+    speakerSelectionSupported,
+  }) => {
+    const onDeviceRecoveryAttempt = vi.fn();
+    const onSwitch = vi.fn();
+    const props = {
+      ...baseProps,
+      status: "active" as const,
+      localStream,
+      speakerSelectionSupported,
+      deviceIssue: {
+        kind,
+        message: "Device disconnected",
+        disconnected: true,
+      },
+      devices: [{ deviceId: availableId, kind, label: "Remaining device" }],
+      [selectedProp]: "disconnected-device",
+      [callbackProp]: onSwitch,
+      onDeviceRecoveryAttempt,
+    };
+
+    render(<CallOverlay {...props} />);
+    fireEvent.click(screen.getByTestId("button-recover-device"));
+
+    const trigger = screen.getByTestId(`select-${kind}`);
+    expect(trigger).toBeVisible();
+    const option = await screen.findByRole("option", { name: "Remaining device" });
+    fireEvent.click(option);
+
+    expect(onDeviceRecoveryAttempt).toHaveBeenCalledWith(kind);
+    expect(onSwitch).toHaveBeenCalledWith(availableId);
   });
 });

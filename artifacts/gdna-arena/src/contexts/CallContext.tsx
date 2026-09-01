@@ -38,6 +38,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         onSwitchCamera={call.switchCamera}
         onSelectSpeaker={call.selectSpeaker}
         onSpeakerFailure={call.reportSpeakerFailure}
+        onSpeakerSuccess={call.reportSpeakerSuccess}
+        onDeviceRecoveryAttempt={call.reportDeviceRecoveryAttempt}
       />
     </CallContext.Provider>
   );
