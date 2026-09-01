@@ -118,11 +118,13 @@ export interface CallRecord {
 }
 
 export interface NotifItem {
+  id: number;
   type: string;       // comment | reaction | follow | call_missed
   username: string;
   content: string;
   postSnippet?: string;
   createdAt: string;
+  isRead: boolean;
 }
 
 export interface SearchHit {

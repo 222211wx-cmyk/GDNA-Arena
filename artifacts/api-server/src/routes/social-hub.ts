@@ -6,7 +6,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, or, ilike, ne, inArray } from "drizzle-orm";
 import {
   db, pulsePosts, pulsePostLikes, usersTable, postComments, userFollows,
-  platformStories, postReactions, savedPosts, callHistory,
+  platformStories, postReactions, savedPosts, callHistory, notifications,
 } from "@workspace/db";
 import { pool as _pool } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
@@ -400,31 +400,38 @@ router.get("/social/v2/trending", async (req, res): Promise<void> => {
 // GET /api/social/v2/notifications
 router.get("/social/v2/notifications", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
-  if (!userId) { res.json({ notifications: [] }); return; }
+  if (!userId) { res.json({ notifications: [], unreadCount: 0 }); return; }
 
   const myPosts = await db.select({ id: pulsePosts.id, content: pulsePosts.content })
     .from(pulsePosts).where(eq(pulsePosts.userId, userId)).limit(50);
   const myPostIds = myPosts.map(p => p.id);
 
-  const notifs: { type: string; username: string; content: string; postSnippet?: string; createdAt: string }[] = [];
+  const notifs: {
+    sourceRef: string;
+    type: string;
+    username: string;
+    content: string;
+    postSnippet?: string;
+    createdAt: string;
+  }[] = [];
 
   if (myPostIds.length > 0) {
     const comments = await pool.query(
-      `SELECT username, content, post_id, created_at FROM post_comments WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
+      `SELECT id, username, content, post_id, created_at FROM post_comments WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
       [myPostIds]
     );
     comments.rows.forEach((c: any) => {
       const post = myPosts.find(p => p.id === c.post_id);
-      notifs.push({ type: "comment", username: c.username, content: c.content, postSnippet: post?.content?.slice(0, 50), createdAt: c.created_at });
+      notifs.push({ sourceRef: `social-comment:${c.id}`, type: "comment", username: c.username, content: c.content, postSnippet: post?.content?.slice(0, 50), createdAt: c.created_at });
     });
 
     const reactions = await pool.query(
-      `SELECT username, reaction, post_id, created_at FROM post_reactions WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
+      `SELECT id, username, reaction, post_id, created_at FROM post_reactions WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
       [myPostIds]
     );
     reactions.rows.forEach((r: any) => {
       const post = myPosts.find(p => p.id === r.post_id);
-      notifs.push({ type: "reaction", username: r.username, content: r.reaction, postSnippet: post?.content?.slice(0, 50), createdAt: r.created_at });
+      notifs.push({ sourceRef: `social-reaction:${r.id}`, type: "reaction", username: r.username, content: r.reaction, postSnippet: post?.content?.slice(0, 50), createdAt: r.created_at });
     });
   }
 
@@ -435,11 +442,86 @@ router.get("/social/v2/notifications", async (req, res): Promise<void> => {
     [userId]
   );
   follows.rows.forEach((f: any) => {
-    notifs.push({ type: "follow", username: f.username, content: "started following you", createdAt: f.created_at });
+    notifs.push({ sourceRef: `social-follow:${f.follower_id}`, type: "follow", username: f.username, content: "started following you", createdAt: f.created_at });
   });
 
   notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  res.json({ notifications: notifs.slice(0, 30) });
+  const visible = notifs.slice(0, 30);
+
+  if (visible.length > 0) {
+    await Promise.all(visible.map((notification) => pool.query(
+      `INSERT INTO notifications (user_id, type, title, body, icon, source_ref, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (user_id, source_ref) WHERE source_ref IS NOT NULL DO NOTHING`,
+      [
+        userId,
+        notification.type,
+        notification.username,
+        notification.content,
+        notification.type === "comment" ? "💬" : notification.type === "reaction" ? "😊" : "👤",
+        notification.sourceRef,
+        notification.createdAt,
+      ],
+    )));
+  }
+
+  const sourceRefs = visible.map(notification => notification.sourceRef);
+  const persisted = sourceRefs.length > 0
+    ? await db.select({
+        id: notifications.id,
+        sourceRef: notifications.sourceRef,
+        isRead: notifications.isRead,
+      }).from(notifications).where(and(
+        eq(notifications.userId, userId),
+        inArray(notifications.sourceRef, sourceRefs),
+      ))
+    : [];
+  const stateBySource = new Map(persisted.map(row => [row.sourceRef, row]));
+  const result = visible.map(notification => ({
+    ...notification,
+    id: stateBySource.get(notification.sourceRef)?.id,
+    isRead: stateBySource.get(notification.sourceRef)?.isRead ?? false,
+  }));
+
+  res.json({
+    notifications: result,
+    unreadCount: result.filter(notification => !notification.isRead).length,
+  });
+});
+
+// POST /api/social/v2/notifications/read-all
+router.post("/social/v2/notifications/read-all", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  await db.update(notifications).set({ isRead: true }).where(and(
+    eq(notifications.userId, userId),
+    sql`${notifications.sourceRef} LIKE 'social-%'`,
+  ));
+  res.json({ ok: true, unreadCount: 0 });
+});
+
+// POST /api/social/v2/notifications/:id/read
+router.post("/social/v2/notifications/:id/read", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = Number.parseInt(rawId, 10);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Invalid notification ID" });
+    return;
+  }
+
+  const [updated] = await db.update(notifications).set({ isRead: true }).where(and(
+    eq(notifications.id, id),
+    eq(notifications.userId, userId),
+    sql`${notifications.sourceRef} LIKE 'social-%'`,
+  )).returning({ id: notifications.id });
+  if (!updated) {
+    res.status(404).json({ error: "Notification not found" });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 // ────────────────────────────────────────────────────────────────────────────

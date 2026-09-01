@@ -41,19 +41,69 @@ export default function NotificationsTab({ user }: Props) {
   const { st, dir, locale } = useSocialI18n();
   const [notifs,  setNotifs]  = useState<NotifItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [allRead, setAllRead] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
       const r = await fetch(api("/api/social/v2/notifications"), { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load notifications");
       const j = await r.json();
       setNotifs(j.notifications ?? []);
     } finally { setLoading(false); }
   }, [user]);
 
   useEffect(() => { load(); }, [load]);
+
+  const publishUnreadCount = useCallback((next: NotifItem[]) => {
+    window.dispatchEvent(new CustomEvent("social-notifications-updated", {
+      detail: { unreadCount: next.filter(notification => !notification.isRead).length },
+    }));
+  }, []);
+
+  const markOneRead = useCallback(async (id: number) => {
+    const current = notifs.find(notification => notification.id === id);
+    if (!current || current.isRead) return;
+    const next = notifs.map(notification => notification.id === id
+      ? { ...notification, isRead: true }
+      : notification);
+    setNotifs(next);
+    publishUnreadCount(next);
+    try {
+      const response = await fetch(api(`/api/social/v2/notifications/${id}/read`), {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to mark notification read");
+    } catch {
+      setNotifs(notifs);
+      publishUnreadCount(notifs);
+    }
+  }, [notifs, publishUnreadCount]);
+
+  const markAllRead = useCallback(async () => {
+    if (markingAll) return;
+    const previous = notifs;
+    const next = notifs.map(notification => ({ ...notification, isRead: true }));
+    setNotifs(next);
+    publishUnreadCount(next);
+    setMarkingAll(true);
+    try {
+      const response = await fetch(api("/api/social/v2/notifications/read-all"), {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to mark notifications read");
+    } catch {
+      setNotifs(previous);
+      publishUnreadCount(previous);
+    } finally {
+      setMarkingAll(false);
+    }
+  }, [markingAll, notifs, publishUnreadCount]);
+
+  const unreadCount = notifs.filter(notification => !notification.isRead).length;
 
   if (!user) return (
     <div style={{ textAlign: "center", padding: 60, color: "hsl(var(--muted-foreground))" }}>
@@ -65,9 +115,9 @@ export default function NotificationsTab({ user }: Props) {
   return (
     <div dir={dir} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {/* Header */}
-      {notifs.length > 0 && !allRead && (
+      {unreadCount > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button onClick={() => setAllRead(true)}
+          <button onClick={markAllRead} disabled={markingAll}
             style={{ background: "none", border: `1px solid ${GOLD_A(0.19)}`, borderRadius: 8, padding: "5px 12px", color: GOLD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
             {st.mark_read}
           </button>
@@ -83,12 +133,22 @@ export default function NotificationsTab({ user }: Props) {
       )}
 
       {notifs.map((n, i) => (
-        <motion.div key={i}
+        <motion.div key={n.id}
+          role="button"
+          tabIndex={n.isRead ? -1 : 0}
+          onClick={() => void markOneRead(n.id)}
+          onKeyDown={(event) => {
+            if (!n.isRead && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault();
+              void markOneRead(n.id);
+            }
+          }}
           initial={{ opacity: 0, x: dir === "rtl" ? 10 : -10 }}
-          animate={{ opacity: allRead ? 0.45 : 1, x: 0 }}
+          animate={{ opacity: n.isRead ? 0.45 : 1, x: 0 }}
           style={{
             background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.06)}`, borderRadius: 10,
             padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10,
+            cursor: n.isRead ? "default" : "pointer",
           }}>
           <div style={{
             width: 36, height: 36, borderRadius: "50%",

@@ -127,6 +127,19 @@ export default function CommunicationMatrix({ user, onNavigate, onSearchSubmit }
     };
   }, [loadOverview, user?.id]);
 
+  useEffect(() => {
+    const handleNotificationsUpdated = (event: Event) => {
+      const unreadCount = (event as CustomEvent<{ unreadCount?: number }>).detail?.unreadCount;
+      if (typeof unreadCount === "number") {
+        setNotifs(current => unreadCount === 0
+          ? current.map(notification => ({ ...notification, isRead: true }))
+          : current);
+      }
+    };
+    window.addEventListener("social-notifications-updated", handleNotificationsUpdated);
+    return () => window.removeEventListener("social-notifications-updated", handleNotificationsUpdated);
+  }, []);
+
   const manualRefresh = useCallback(() => {
     controllerRef.current?.abort();
     const ctrl = new AbortController();
@@ -156,7 +169,7 @@ export default function CommunicationMatrix({ user, onNavigate, onSearchSubmit }
   const stats = [
     { key: "unread", label: st.stat_unread, value: unread, color: "#3b82f6", path: "/messages" },
     { key: "live", label: st.stat_live_events, value: liveEventCount, color: "#ef4444", path: "/events" },
-    { key: "notif", label: st.stat_notifications, value: notifs.length, color: GOLD, path: "/messages" },
+    { key: "notif", label: st.stat_notifications, value: notifs.filter(notification => !notification.isRead).length, color: GOLD, path: "/messages" },
     { key: "posts", label: st.stat_posts, value: posts.length, color: "#22c55e", path: "/pulse" },
   ];
 
