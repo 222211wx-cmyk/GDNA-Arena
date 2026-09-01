@@ -183,7 +183,9 @@ export default function FriendsPage() {
         body: JSON.stringify({ targetUsername: c.username, type: "direct" }),
       });
       if (!res.ok) throw new Error();
-      navigate("/messages");
+      const data = await res.json() as { room?: { id?: number } };
+      if (typeof data.room?.id !== "number") throw new Error();
+      navigate(`/messages?room=${data.room.id}`);
     } catch { showToast(t("dmError"), false); }
     finally  { setDmLoadingId(null); }
   };
@@ -197,10 +199,11 @@ export default function FriendsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ starUsername: s.username }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({})) as { error?: string; roomId?: number };
       if (res.ok) {
+        if (typeof data.roomId !== "number") throw new Error();
         showToast(t(s.invited ? "starAlreadyHostedToast" : "starHostedToast", { name: s.fullName }));
-        navigate("/messages");
+        navigate(`/messages?room=${data.roomId}`);
       } else {
         showToast(typeof data.error === "string" ? data.error : t("starError"), false);
       }

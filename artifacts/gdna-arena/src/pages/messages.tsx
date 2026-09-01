@@ -4,7 +4,8 @@
  * non-private citizens. This is NOT AMIS; it does not embed Social or games.
  */
 import { MessageSquare, ShieldCheck } from "lucide-react";
-import { Link } from "wouter";
+import { useCallback, useEffect } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { SOCIAL_T, GOLD } from "@/components/social/social-i18n";
@@ -14,8 +15,21 @@ import { techT } from "@/i18n/tech-surfaces-copy";
 export default function MessagesPage() {
   const { user } = useAuth();
   const { lang } = useLang();
+  const [, navigate] = useLocation();
+  const search = useSearch();
   const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const dir = lang === "ar" ? "rtl" : "ltr";
+  const requestedRoom = new URLSearchParams(search).get("room");
+  const parsedRoomId = requestedRoom === null ? Number.NaN : Number(requestedRoom);
+  const initialRoomId = Number.isSafeInteger(parsedRoomId) && parsedRoomId > 0 ? parsedRoomId : null;
+  const hasInvalidRoomParam = requestedRoom !== null && initialRoomId === null;
+  const setSelectedRoom = useCallback((roomId: number | null) => {
+    navigate(roomId === null ? "/messages" : `/messages?room=${roomId}`, { replace: true });
+  }, [navigate]);
+
+  useEffect(() => {
+    if (hasInvalidRoomParam) setSelectedRoom(null);
+  }, [hasInvalidRoomParam, setSelectedRoom]);
 
   if (!user) {
     return (
@@ -39,7 +53,11 @@ export default function MessagesPage() {
           <ShieldCheck size={12} style={{ color: GOLD }} /> {st.server_encrypted}
         </span>
       </div>
-      <Messenger variant="full" />
+      <Messenger
+        variant="full"
+        initialRoomId={initialRoomId}
+        onActiveRoomChange={setSelectedRoom}
+      />
     </div>
   );
 }

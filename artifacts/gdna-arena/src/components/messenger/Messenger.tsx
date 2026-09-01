@@ -835,7 +835,17 @@ const TAB_LABELS: Record<BottomTab, string> = {
 // ── Main Messenger ────────────────────────────────────────────────────────────
 export type MessengerVariant = "full" | "embedded" | "widget";
 
-export default function Messenger({ variant = "embedded" }: { variant?: MessengerVariant }) {
+interface MessengerProps {
+  variant?: MessengerVariant;
+  initialRoomId?: number | null;
+  onActiveRoomChange?: (roomId: number | null) => void;
+}
+
+export default function Messenger({
+  variant = "embedded",
+  initialRoomId = null,
+  onActiveRoomChange,
+}: MessengerProps) {
   const { user } = useAuth();
   // A citizen identity is a hard state boundary. Remounting the complete AMIS
   // surface on login/logout/account switch guarantees that no room, message,
@@ -846,13 +856,17 @@ export default function Messenger({ variant = "embedded" }: { variant?: Messenge
       key={user ? `citizen:${user.id}` : "anonymous"}
       user={user}
       variant={variant}
+      initialRoomId={initialRoomId}
+      onActiveRoomChange={onActiveRoomChange}
     />
   );
 }
 
-function IdentityBoundMessenger({ variant, user }: {
+function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChange }: {
   variant: MessengerVariant;
   user: AuthUser | null;
+  initialRoomId: number | null;
+  onActiveRoomChange?: (roomId: number | null) => void;
 }) {
   const { lang } = useLang();
   const st = { ...(SOCIAL_T[lang] ?? SOCIAL_T.en), ...getMessengerCopy(lang) };
@@ -1152,7 +1166,16 @@ function IdentityBoundMessenger({ variant, user }: {
     }
   }, [isOnline, user?.id]);
 
-  useEffect(() => { loadRooms(); }, [loadRooms]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadRooms().then(list => {
+      if (cancelled || initialRoomId === null || !isOnline) return;
+      const requestedRoom = list.find(room => room.id === initialRoomId);
+      if (requestedRoom) void openRoom(requestedRoom);
+      else onActiveRoomChange?.(null);
+    });
+    return () => { cancelled = true; };
+  }, [initialRoomId, isOnline, loadRooms, onActiveRoomChange]);
 
   // Keep every mounted Messenger surface in sync when one removes a room.
   useEffect(() => {
@@ -1163,6 +1186,7 @@ function IdentityBoundMessenger({ variant, user }: {
       if (activeRoomIdRef.current === roomId) {
         activeRoomIdRef.current = null;
         setActiveRoom(null);
+        onActiveRoomChange?.(null);
         setMessages([]);
         setShowSettings(false);
         setShowEmoji(false);
@@ -1172,7 +1196,7 @@ function IdentityBoundMessenger({ variant, user }: {
     };
     window.addEventListener("amis:room-deleted", onRoomDeleted);
     return () => window.removeEventListener("amis:room-deleted", onRoomDeleted);
-  }, []);
+  }, [onActiveRoomChange]);
 
   const removeRoomFromAllSurfaces = useCallback((roomId: number) => {
     window.dispatchEvent(new CustomEvent("amis:room-deleted", { detail: { roomId } }));
@@ -1259,6 +1283,7 @@ function IdentityBoundMessenger({ variant, user }: {
     activeRoomIdRef.current = room.id;
     setMessages([]);
     setActiveRoom(room);
+    onActiveRoomChange?.(room.id);
     await loadMessages(room.id);
   }
 
@@ -2030,7 +2055,7 @@ function IdentityBoundMessenger({ variant, user }: {
           : (call.onlineUsers.includes(getPeerName(activeRoom)) ? "#22c55e" : "#ffffff40");
         return (
           <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); setShowEmoji(false); setShowAttachTray(false); setReplyTo(null); }} title={st.back ?? "Back"}
+            <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); onActiveRoomChange?.(null); setShowEmoji(false); setShowAttachTray(false); setReplyTo(null); }} title={st.back ?? "Back"}
               style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <BackArrow size={22} />
             </button>
@@ -2490,7 +2515,7 @@ function IdentityBoundMessenger({ variant, user }: {
                 tabIndex={active ? 0 : -1}
                 data-testid={`amis-tab-${k}`}
                 onKeyDown={event => onTabKeyDown(event, k)}
-                onClick={() => { setTab(k); activeRoomIdRef.current = null; setActiveRoom(null); }}
+                onClick={() => { setTab(k); activeRoomIdRef.current = null; setActiveRoom(null); onActiveRoomChange?.(null); }}
                 style={{ flex: 1, padding: "9px 0 7px", border: "none", cursor: "pointer", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" }}>
                 <div style={{ position: "relative" }}>
                   <Icon size={21} style={{ color: active ? GOLD : "#777" }} />

@@ -36,14 +36,17 @@ export default function CitizensTab({ user }: Props) {
 
   async function openDM(targetUsername: string) {
     try {
-      await fetch(api("/api/messages/rooms"), {
+      const response = await fetch(api("/api/messages/rooms"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ targetUsername, type: "direct" }),
       });
+      if (!response.ok) return;
+      const data = await response.json() as { room?: { id?: number } };
+      if (typeof data.room?.id !== "number") return;
+      navigate(`/messages?room=${data.room.id}`);
     } catch { /* ignore */ }
-    navigate("/messages");
   }
 
   useEffect(() => { loadCitizens(""); }, []);
