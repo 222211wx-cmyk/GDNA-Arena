@@ -377,6 +377,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
         <div style={{ position: "relative" }}>
           <Search size={15} style={{ position: "absolute", top: 12, insetInlineStart: 12, color: "#555" }} />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder={st.search_contacts ?? "Search…"} dir="auto"
+            data-testid="input-search-contacts"
             style={{ width: "100%", boxSizing: "border-box", background: "#161616", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "10px 12px", paddingInlineStart: 36, color: "#fff", fontSize: 15, outline: "none" }} />
         </div>
       </div>
@@ -405,7 +406,21 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
           const solStatus = c.solidarityStatusVisible !== false ? c.solidarityStatus : null;
           const statusColor = solStatus ? (SOLIDARITY_STATUS_COLORS[solStatus] ?? "#6b7280") : (online ? "#22c55e" : "#ffffff35");
           return (
-            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderBottom: "1px solid #ffffff08" }}>
+            <div
+              key={c.id}
+              role={!callMode ? "button" : undefined}
+              tabIndex={!callMode ? 0 : undefined}
+              data-testid={`contact-option-${c.id}`}
+              onClick={!callMode ? () => { if (!isOnline) return onOffline(); onClose(); onDm(c.username); } : undefined}
+              onKeyDown={!callMode ? event => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                if (!isOnline) return onOffline();
+                onClose();
+                onDm(c.username);
+              } : undefined}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderBottom: "1px solid #ffffff08", cursor: !callMode && isOnline ? "pointer" : "default" }}
+            >
               <div style={{ position: "relative", flexShrink: 0 }}>
                 <Avatar name={c.username} size={44} />
                 {(online || solStatus) && (
@@ -430,7 +445,7 @@ function ContactsPanel({ st, user, title, onClose, onDm, onCall, callMode, isOnl
                   </button>
                 </>
               ) : (
-                <button onClick={() => { if (!isOnline) return onOffline(); onClose(); onDm(c.username); }} disabled={!isOnline} title={st.dm ?? "DM"}
+                <button onClick={event => { event.stopPropagation(); if (!isOnline) return onOffline(); onClose(); onDm(c.username); }} disabled={!isOnline} title={st.dm ?? "DM"}
                   style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: GOLD_A(0.125), color: GOLD, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <MessageSquare size={17} />
                 </button>

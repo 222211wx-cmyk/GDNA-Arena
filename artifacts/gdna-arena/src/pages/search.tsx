@@ -1,13 +1,10 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Trophy, Users, FileText, Calendar, Loader2, Star, UserPlus, UserCheck } from "lucide-react";
+import { Search, Trophy, Users, FileText, Calendar, Loader2, Star } from "lucide-react";
 import { getLegendImageUrl } from "@/lib/legend-images";
 import { useLang } from "@/contexts/LangContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { coreCopy } from "@/i18n/core-auth-copy";
 import { localeForLang } from "@/i18n/locale-surfaces-a-copy";
-import { SOCIAL_T } from "@/components/social/social-i18n";
-import { Button } from "@workspace/gdna-ds/components/ui/button";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -301,9 +298,7 @@ function DiscardSearchPage() {
 }
 export default function SearchPage() {
   const { lang } = useLang();
-  const { user } = useAuth();
   const copy = coreCopy(lang);
-  const socialCopy = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const locale = localeForLang(lang);
   const [location] = useLocation();
   const params = new URLSearchParams(window.location.search);
@@ -314,8 +309,6 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [contactIds, setContactIds] = useState<Set<number>>(new Set());
-  const [contactLoadingId, setContactLoadingId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const totalResults = results
@@ -325,39 +318,6 @@ export default function SearchPage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    if (!user) {
-      setContactIds(new Set());
-      return;
-    }
-    void fetch(`${BASE()}/api/social/v2/following`, { credentials: "include" })
-      .then(response => response.ok ? response.json() : Promise.reject())
-      .then((data: { following?: { id: number }[] }) =>
-        setContactIds(new Set((data.following ?? []).map(contact => contact.id))))
-      .catch(() => setContactIds(new Set()));
-  }, [user?.id]);
-
-  const toggleContact = async (citizen: CitizenResult) => {
-    if (!user || citizen.id === user.id || contactLoadingId !== null) return;
-    const alreadyAdded = contactIds.has(citizen.id);
-    setContactLoadingId(citizen.id);
-    try {
-      const response = await fetch(
-        `${BASE()}/api/social/v2/follow/${encodeURIComponent(citizen.username)}`,
-        { method: alreadyAdded ? "DELETE" : "POST", credentials: "include" },
-      );
-      if (!response.ok) return;
-      setContactIds(previous => {
-        const next = new Set(previous);
-        if (alreadyAdded) next.delete(citizen.id);
-        else next.add(citizen.id);
-        return next;
-      });
-    } finally {
-      setContactLoadingId(null);
-    }
-  };
 
   useEffect(() => {
     if (!query || query.length < 2) {
@@ -499,8 +459,8 @@ export default function SearchPage() {
             <SectionHeader icon={<Users size={16} className="text-accent" />} label={copy.citizens} count={results.citizens.length} resultLabel={copy.result} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               {results.citizens.map((cit) => (
-                <div key={cit.id} className="flex items-center gap-3 p-4 bg-card/60 border border-border rounded-xl hover:border-accent/40 hover:bg-card transition-all group">
-                  <Link href={`/citizen/${cit.username}`} className="flex min-w-0 flex-1 items-center gap-3">
+                <Link key={cit.id} href={`/citizen/${cit.username}`}>
+                  <div className="flex items-center gap-3 p-4 bg-card/60 border border-border rounded-xl hover:border-accent/40 hover:bg-card transition-all cursor-pointer group">
                     <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-lg shrink-0 border border-accent/20">
                       {cit.username[0]?.toUpperCase() ?? "?"}
                     </div>
@@ -508,27 +468,8 @@ export default function SearchPage() {
                       <p className="font-bold text-foreground group-hover:text-accent transition-colors truncate">@{cit.username}</p>
                       <p className="text-xs text-muted-foreground">{(cit.xp ?? 0).toLocaleString(locale)} XP · {(cit.balance ?? 0).toLocaleString(locale)} 🪙</p>
                     </div>
-                  </Link>
-                  {user && cit.id !== user.id && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={contactIds.has(cit.id) ? "secondary" : "outline"}
-                      disabled={contactLoadingId === cit.id}
-                      onClick={() => void toggleContact(cit)}
-                      aria-label={`${socialCopy.contacts}: @${cit.username}`}
-                      title={socialCopy.contacts}
-                      className="shrink-0 gap-1.5"
-                    >
-                      {contactLoadingId === cit.id
-                        ? <Loader2 className="size-4 animate-spin" />
-                        : contactIds.has(cit.id)
-                          ? <UserCheck className="size-4" />
-                          : <UserPlus className="size-4" />}
-                      <span className="hidden sm:inline">{socialCopy.contacts}</span>
-                    </Button>
-                  )}
-                </div>
+                  </div>
+                </Link>
               ))}
             </div>
           </section>

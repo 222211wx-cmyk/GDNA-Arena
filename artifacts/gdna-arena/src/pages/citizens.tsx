@@ -193,23 +193,6 @@ export default function CitizensPage() {
                         <div className="text-[10px] mt-0.5" style={{ color: c.honorInfo.color }}>
                           {c.honorInfo.badge} {c.honorInfo.title}
                         </div>
-                        {user && c.id !== user.id && (
-                          <button
-                            type="button"
-                            onClick={() => void toggleFollow(c.username, c.id)}
-                            disabled={addingId === c.id}
-                            title={st.contacts}
-                            aria-label={`${st.contacts}: @${c.username}`}
-                            className="mt-2 flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-[11px] font-bold text-primary transition-all hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
-                          >
-                            {addingId === c.id
-                              ? <Loader2 className="w-3 h-3 animate-spin" />
-                              : followIds.has(c.id)
-                                ? <UserCheck className="w-3 h-3" />
-                                : <UserPlus className="w-3 h-3" />}
-                            {st.contacts}
-                          </button>
-                        )}
                         <div className={`w-full ${heights[podiumPos]} mt-3 rounded-t-xl flex flex-col items-center justify-end pb-3 border-t border-l border-r`}
                           style={{ background: `${c.rank.color}15`, borderColor: `${c.rank.color}30` }}>
                           <div className="text-xs font-black" style={{ color: c.rank.color }}>
@@ -302,7 +285,7 @@ export default function CitizensPage() {
                       </button>
                       {/* متابعة / إزالة */}
                       <button onClick={() => void toggleFollow(c.username, c.id)}
-                        disabled={addingId === c.id} title={st.contacts} aria-label={`${st.contacts}: @${c.username}`}
+                        disabled={addingId === c.id} title={followIds.has(c.id) ? st.following : st.follow} aria-label={followIds.has(c.id) ? st.following : st.follow}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:opacity-80 disabled:opacity-40"
                         style={{
                           background: followIds.has(c.id) ? "#130303" : "#0d1a0d",
@@ -312,7 +295,6 @@ export default function CitizensPage() {
                         {addingId === c.id
                           ? <Loader2 className="w-3 h-3 animate-spin" />
                           : followIds.has(c.id) ? <UserCheck className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
-                        <span className="hidden lg:inline">{st.contacts}</span>
                       </button>
                     </div>
                   )}
