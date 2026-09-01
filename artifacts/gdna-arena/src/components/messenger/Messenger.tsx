@@ -19,7 +19,7 @@ import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
   Camera, Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
-  ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ClipboardPaste, ShieldOff,
+  ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ClipboardPaste, ShieldOff, ContactRound,
 } from "lucide-react";
 import SolidarityRelay from "./SolidarityRelay";
 import type { GroupRoom } from "../social/social-types";
@@ -2348,10 +2348,23 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         {tab === "chats" && (
           <>
             <div style={{ padding: "10px 14px 4px" }}>
-              <div style={{ position: "relative" }}>
-                <Search size={15} style={{ position: "absolute", top: 12, insetInlineStart: 12, color: "#555" }} />
-                <input value={roomQuery} onChange={e => setRoomQuery(e.target.value)} placeholder={st.search_contacts ?? "Search…"} dir="auto"
-                  style={{ width: "100%", boxSizing: "border-box", background: "#161616", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "10px 12px", paddingInlineStart: 36, color: "#fff", fontSize: 15, outline: "none" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+                  <Search size={15} style={{ position: "absolute", top: 12, insetInlineStart: 12, color: "#555" }} />
+                  <input value={roomQuery} onChange={e => setRoomQuery(e.target.value)} placeholder={st.search_contacts ?? "Search…"} dir="auto"
+                    style={{ width: "100%", boxSizing: "border-box", background: "#161616", border: `1px solid ${GOLD_A(0.082)}`, borderRadius: 12, padding: "10px 12px", paddingInlineStart: 36, color: "#fff", fontSize: 15, outline: "none" }} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => isOnline ? setShowContacts("dm") : blockOffline()}
+                  disabled={!isOnline}
+                  title={st.choose_contact ?? "Choose contact"}
+                  aria-label={st.choose_contact ?? "Choose contact"}
+                  data-testid="button-choose-contact"
+                  style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 12, border: `1px solid ${GOLD_A(0.188)}`, background: GOLD_A(0.094), color: GOLD, cursor: isOnline ? "pointer" : "not-allowed", opacity: isOnline ? 1 : 0.45, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  <ContactRound size={21} />
+                </button>
               </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px 80px" }}>
@@ -2404,8 +2417,10 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             </div>
             {/* FAB: new chat */}
             <button onClick={() => isOnline ? setShowContacts("dm") : blockOffline()} disabled={!isOnline}
+              title={st.choose_contact ?? st.new_chat}
+              aria-label={st.choose_contact ?? st.new_chat}
               style={{ position: "absolute", bottom: 18, insetInlineEnd: 18, width: 54, height: 54, borderRadius: 16, background: GOLD, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(0,0,0,0.5)", zIndex: 20 }}>
-              <MessageSquare size={23} />
+              <ContactRound size={23} />
             </button>
           </>
         )}
