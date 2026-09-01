@@ -10,6 +10,7 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
+import { sharedCopy } from "@/i18n/shared-components-copy";
 
 type AgeGateCopyKey =
   | "title"
@@ -113,6 +114,7 @@ export default function AgeGate({ active }: { active?: boolean }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const isRTL = lang === "ar";
+  const coinsNotice = sharedCopy(lang).coins.text;
 
   const isXpOnlyGame = location === "/games/penalty-king";
   const isActiveGame = active ?? (location.startsWith("/games/") && !isXpOnlyGame);
@@ -166,6 +168,9 @@ export default function AgeGate({ active }: { active?: boolean }) {
             <p className="text-primary font-bold">{t("body")}</p>
           </CardHeader>
           <CardContent className="space-y-5">
+            <p className="rounded-lg border border-orange-500/30 bg-orange-950/40 px-3 py-2 text-xs leading-relaxed text-orange-300">
+              {coinsNotice}
+            </p>
             {loading ? (
               <p className="text-muted-foreground text-sm">...</p>
             ) : isDenied ? (
