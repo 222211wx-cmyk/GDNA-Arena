@@ -225,6 +225,7 @@ export function useCall(user: { id: number; username: string } | null) {
   const [selectedMicrophoneId, setSelectedMicrophoneId] = useState("");
   const [selectedCameraId, setSelectedCameraId] = useState("");
   const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+  const [cameraZoom, setCameraZoom] = useState<{ min: number; max: number; step: number; value: number } | null>(null);
   const [deviceIssue, setDeviceIssue] = useState<CallDeviceIssue | null>(null);
   const [switchingDevice, setSwitchingDevice] = useState<CallDeviceKind | null>(null);
   const disconnectedDeviceKindRef = useRef<CallDeviceKind | null>(null);
@@ -262,6 +263,28 @@ export function useCall(user: { id: number; username: string } | null) {
       });
       return [];
     }
+  }, []);
+
+  const refreshCameraZoom = useCallback((track?: MediaStreamTrack | null) => {
+    if (!track || typeof track.getCapabilities !== "function") {
+      setCameraZoom(null);
+      return;
+    }
+    const capabilities = track.getCapabilities() as MediaTrackCapabilities & {
+      zoom?: { min?: number; max?: number; step?: number };
+    };
+    const zoom = capabilities.zoom;
+    if (!zoom || typeof zoom.min !== "number" || typeof zoom.max !== "number" || zoom.max <= zoom.min) {
+      setCameraZoom(null);
+      return;
+    }
+    const settings = track.getSettings() as MediaTrackSettings & { zoom?: number };
+    setCameraZoom({
+      min: zoom.min,
+      max: zoom.max,
+      step: zoom.step && zoom.step > 0 ? zoom.step : 0.1,
+      value: typeof settings.zoom === "number" ? settings.zoom : zoom.min,
+    });
   }, []);
 
   useEffect(() => {
@@ -481,12 +504,13 @@ export function useCall(user: { id: number; username: string } | null) {
     setLocalStream(ms);
     setSelectedMicrophoneId(audioTrack.getMediaStreamTrack().getSettings().deviceId ?? "");
     setSelectedCameraId(videoTrack?.getMediaStreamTrack().getSettings().deviceId ?? "");
+    refreshCameraZoom(videoTrack?.getMediaStreamTrack());
     setDeviceIssue(null);
     disconnectedDeviceKindRef.current = null;
     void refreshCallDevices();
     // Slow device setup must not consume the warning before the overlay renders.
     if (cameraWarning) showCallError(cameraWarning, 15_000);
-  }, [rebuildRemoteStream, refreshCallDevices]);
+  }, [rebuildRemoteStream, refreshCallDevices, refreshCameraZoom]);
 
   // ── Leave Agora & release all media ────────────────────────────────────────
   const leaveAgora = useCallback(async () => {
@@ -508,6 +532,7 @@ export function useCall(user: { id: number; username: string } | null) {
     setSelectedMicrophoneId("");
     setSelectedCameraId("");
     setSelectedSpeakerId("");
+    setCameraZoom(null);
     setDeviceIssue(null);
     setSwitchingDevice(null);
     if (client) { try { await client.leave(); } catch { /* already left */ } }
@@ -552,6 +577,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setSelectedCameraId(deviceId);
       setDeviceIssue(null);
       rebuildLocalCallStream();
+      refreshCameraZoom(track.getMediaStreamTrack());
       trackCallDeviceOutcome("videoinput", "switch_succeeded");
       if (disconnectedDeviceKindRef.current === "videoinput") {
         trackCallDeviceOutcome("videoinput", "recovery_succeeded");
@@ -562,7 +588,65 @@ export function useCall(user: { id: number; username: string } | null) {
     } finally {
       setSwitchingDevice(null);
     }
-  }, [callStatus, rebuildLocalCallStream]);
+  }, [callStatus, rebuildLocalCallStream, refreshCameraZoom]);
+
+  const flipCamera = useCallback(async () => {
+    const availableDevices = callDevices.length ? callDevices : await refreshCallDevices() ?? [];
+    const cameras = availableDevices.filter(device => device.kind === "videoinput" && device.deviceId);
+    if (cameras.length < 2) return;
+
+    const activeTrack = localVideoRef.current?.getMediaStreamTrack()
+      ?? localStreamRef.current?.getVideoTracks()[0];
+    const currentId = activeTrack?.getSettings().deviceId ?? selectedCameraId;
+    const currentIndex = cameras.findIndex(device => device.deviceId === currentId);
+    const next = cameras[(currentIndex + 1 + cameras.length) % cameras.length];
+
+    if (callStatus === "active" && localVideoRef.current) {
+      await switchCamera(next.deviceId);
+      return;
+    }
+    if (liveStatus !== "live") return;
+
+    try {
+      const replacementStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: next.deviceId } },
+        audio: false,
+      });
+      const replacement = replacementStream.getVideoTracks()[0];
+      if (!replacement) return;
+      const sender = pcRef.current?.getSenders().find(item => item.track?.kind === "video");
+      if (sender) await sender.replaceTrack(replacement);
+      const stream = localStreamRef.current;
+      stream?.getVideoTracks().forEach(track => {
+        stream.removeTrack(track);
+        track.stop();
+      });
+      stream?.addTrack(replacement);
+      if (stream) setLocalStream(new MediaStream(stream.getTracks()));
+      setSelectedCameraId(next.deviceId);
+      refreshCameraZoom(replacement);
+    } catch (error) {
+      showCallError(mediaFailureMessage(error, "camera"));
+    }
+  }, [callDevices, callStatus, liveStatus, refreshCallDevices, refreshCameraZoom, selectedCameraId, switchCamera]);
+
+  const adjustCameraZoom = useCallback(async (direction: "in" | "out") => {
+    const track = localVideoRef.current?.getMediaStreamTrack()
+      ?? localStreamRef.current?.getVideoTracks()[0];
+    if (!track || !cameraZoom) return;
+    const next = Math.min(
+      cameraZoom.max,
+      Math.max(cameraZoom.min, cameraZoom.value + (direction === "in" ? cameraZoom.step : -cameraZoom.step)),
+    );
+    try {
+      await track.applyConstraints({
+        advanced: [{ zoom: next } as MediaTrackConstraintSet],
+      });
+      setCameraZoom(current => current ? { ...current, value: next } : null);
+    } catch {
+      setCameraZoom(null);
+    }
+  }, [cameraZoom]);
 
   const selectSpeaker = useCallback((deviceId: string) => {
     setSelectedSpeakerId(deviceId);
@@ -1166,13 +1250,16 @@ export function useCall(user: { id: number; username: string } | null) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
       localStreamRef.current = stream;
       setLocalStream(stream);
+      setSelectedCameraId(stream.getVideoTracks()[0]?.getSettings().deviceId ?? "");
+      refreshCameraZoom(stream.getVideoTracks()[0]);
+      void refreshCallDevices();
       setLiveStatus("live");
       sendWS({ type: "live-start", title, domain });
     } catch (err) {
       console.error("[LIVE] Failed:", err);
       showCallError(mediaFailureMessage(err, "camera"), 12_000);
     }
-  }, [isOnline, sendWS]);
+  }, [isOnline, refreshCallDevices, refreshCameraZoom, sendWS]);
 
   const endLive = useCallback(() => {
     sendWS({ type: "live-end" });
@@ -1230,12 +1317,14 @@ export function useCall(user: { id: number; username: string } | null) {
     callError,
     connectionTest,
     callDevices, selectedMicrophoneId, selectedCameraId, selectedSpeakerId,
+    cameraZoom, canFlipCamera: callDevices.filter(device => device.kind === "videoinput").length > 1,
     speakerSelectionSupported, screenShareSupported, deviceIssue, switchingDevice,
     startCall, answerCall, rejectCall, endCall,
     testConnection,
     startLive, endLive, joinLive,
     startScreenShare, stopScreenShare,
     refreshCallDevices, switchMicrophone, switchCamera, selectSpeaker,
+    flipCamera, adjustCameraZoom,
     reportSpeakerFailure, reportSpeakerSuccess, reportDeviceRecoveryAttempt,
   };
 }

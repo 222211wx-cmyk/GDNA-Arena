@@ -4,9 +4,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Radio, StopCircle, Mic, MicOff, Video, VideoOff, Users, X } from "lucide-react";
+import { Radio, StopCircle, Mic, MicOff, Video, VideoOff, Users, X, SwitchCamera, ZoomIn, ZoomOut } from "lucide-react";
 import { SOCIAL_T } from "@/components/social/social-i18n";
 import { useLang } from "@/contexts/LangContext";
+import { MEDIA_CONTROL_LABELS } from "./media-control-labels";
 
 interface LiveStream { liveId: string; host: string; title: string; domain: string; }
 
@@ -19,6 +20,10 @@ interface Props {
   onEndLive:    () => void;
   onJoinLive:   (liveId: string) => void;
   remoteStream: MediaStream | null;
+  canFlipCamera?: boolean;
+  cameraZoom?: { min: number; max: number; step: number; value: number } | null;
+  onFlipCamera?: () => void;
+  onAdjustCameraZoom?: (direction: "in" | "out") => void;
 }
 
 const DOMAINS = [
@@ -27,11 +32,14 @@ const DOMAINS = [
 ];
 
 export default function LiveStoryRecorder({
-  liveStatus, localStream, currentLiveId, activeLives, onStartLive, onEndLive, onJoinLive, remoteStream
+  liveStatus, localStream, currentLiveId, activeLives, onStartLive, onEndLive, onJoinLive, remoteStream,
+  canFlipCamera = false, cameraZoom = null, onFlipCamera = () => undefined,
+  onAdjustCameraZoom = () => undefined,
 }: Props) {
   const { lang } = useLang();
   const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const isRTL = lang === "ar";
+  const mediaLabels = MEDIA_CONTROL_LABELS[lang] ?? MEDIA_CONTROL_LABELS.en;
   const localVideoRef  = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const [showCompose,  setShowCompose]  = useState(false);
@@ -90,8 +98,8 @@ export default function LiveStoryRecorder({
       </div>
 
       {/* Controls */}
-      <div className="absolute bottom-3 inset-x-3 flex items-center justify-between">
-        <div className="flex gap-2">
+      <div className="absolute bottom-3 inset-x-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => setMicMuted(v => !v)}
             aria-label={micMuted ? st.unmute : st.mute}
             className="w-11 h-11 rounded-full flex items-center justify-center"
@@ -104,6 +112,29 @@ export default function LiveStoryRecorder({
             style={{ background: videoOff ? "#ef4444" : "rgba(0,0,0,0.6)" }}>
             {videoOff ? <VideoOff className="w-4 h-4 text-white" /> : <Video className="w-4 h-4 text-white" />}
           </button>
+          {canFlipCamera && (
+            <button type="button" onClick={onFlipCamera} aria-label={mediaLabels.flipCamera}
+              className="w-11 h-11 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(0,0,0,0.6)" }}>
+              <SwitchCamera className="w-4 h-4 text-white" />
+            </button>
+          )}
+          {cameraZoom && (
+            <>
+              <button type="button" onClick={() => onAdjustCameraZoom("out")} aria-label={mediaLabels.zoomOut}
+                disabled={cameraZoom.value <= cameraZoom.min}
+                className="w-11 h-11 rounded-full flex items-center justify-center disabled:opacity-35"
+                style={{ background: "rgba(0,0,0,0.6)" }}>
+                <ZoomOut className="w-4 h-4 text-white" />
+              </button>
+              <button type="button" onClick={() => onAdjustCameraZoom("in")} aria-label={mediaLabels.zoomIn}
+                disabled={cameraZoom.value >= cameraZoom.max}
+                className="w-11 h-11 rounded-full flex items-center justify-center disabled:opacity-35"
+                style={{ background: "rgba(0,0,0,0.6)" }}>
+                <ZoomIn className="w-4 h-4 text-white" />
+              </button>
+            </>
+          )}
         </div>
         <button onClick={onEndLive}
           className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black text-white"

@@ -246,4 +246,33 @@ describe("CallOverlay media recovery", () => {
     expect(onDeviceRecoveryAttempt).toHaveBeenCalledWith(kind);
     expect(onSwitch).toHaveBeenCalledWith(availableId);
   });
+
+  it("exposes simple camera flip and zoom controls only when supported", () => {
+    const onFlipCamera = vi.fn();
+    const onAdjustCameraZoom = vi.fn();
+    const localStream = {
+      getAudioTracks: () => [],
+      getVideoTracks: () => [{ enabled: true }],
+    } as unknown as MediaStream;
+
+    render(
+      <CallOverlay
+        {...baseProps}
+        status="active"
+        localStream={localStream}
+        canFlipCamera
+        cameraZoom={{ min: 1, max: 3, step: 0.5, value: 2 }}
+        onFlipCamera={onFlipCamera}
+        onAdjustCameraZoom={onAdjustCameraZoom}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch camera" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+
+    expect(onFlipCamera).toHaveBeenCalledOnce();
+    expect(onAdjustCameraZoom).toHaveBeenNthCalledWith(1, "in");
+    expect(onAdjustCameraZoom).toHaveBeenNthCalledWith(2, "out");
+  });
 });

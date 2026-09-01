@@ -40,6 +40,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
         onSpeakerFailure={call.reportSpeakerFailure}
         onSpeakerSuccess={call.reportSpeakerSuccess}
         onDeviceRecoveryAttempt={call.reportDeviceRecoveryAttempt}
+        canFlipCamera={call.canFlipCamera}
+        cameraZoom={call.cameraZoom}
+        onFlipCamera={call.flipCamera}
+        onAdjustCameraZoom={call.adjustCameraZoom}
       />
     </CallContext.Provider>
   );

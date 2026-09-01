@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Phone, PhoneOff, Video, VideoOff, Mic, MicOff,
-  Volume2, VolumeX, Minimize2, Monitor, MonitorOff, Settings2
+  Volume2, VolumeX, Minimize2, Monitor, MonitorOff, Settings2, SwitchCamera, ZoomIn, ZoomOut
 } from "lucide-react";
 import type { CallDevice, CallDeviceIssue, CallDeviceKind, CallStatus } from "@/hooks/useCall";
 import { SOCIAL_T } from "@/components/social/social-i18n";
@@ -14,6 +14,7 @@ import { useLang } from "@/contexts/LangContext";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/gdna-ds/components/ui/select";
+import { MEDIA_CONTROL_LABELS } from "./media-control-labels";
 
 interface Props {
   status:         CallStatus;
@@ -42,6 +43,10 @@ interface Props {
   onSpeakerFailure?: () => void;
   onSpeakerSuccess?: () => void;
   onDeviceRecoveryAttempt?: (kind: CallDeviceKind) => void;
+  canFlipCamera?: boolean;
+  cameraZoom?: { min: number; max: number; step: number; value: number } | null;
+  onFlipCamera?: () => void;
+  onAdjustCameraZoom?: (direction: "in" | "out") => void;
 }
 
 export default function CallOverlay({
@@ -53,9 +58,12 @@ export default function CallOverlay({
   onSwitchCamera = async () => undefined, onSelectSpeaker = () => undefined,
   onSpeakerFailure = () => undefined, onSpeakerSuccess = () => undefined,
   onDeviceRecoveryAttempt = () => undefined,
+  canFlipCamera = false, cameraZoom = null,
+  onFlipCamera = () => undefined, onAdjustCameraZoom = () => undefined,
 }: Props) {
   const { lang } = useLang();
   const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
+  const mediaLabels = MEDIA_CONTROL_LABELS[lang] ?? MEDIA_CONTROL_LABELS.en;
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef  = useRef<HTMLVideoElement>(null);
   const [muted,       setMuted]       = useState(false);
@@ -347,7 +355,7 @@ export default function CallOverlay({
       </div>
 
       {/* Controls bar */}
-      <div className="shrink-0 relative flex items-center justify-center gap-4 py-8"
+      <div className="shrink-0 relative flex flex-wrap items-center justify-center gap-3 px-3 py-5 sm:gap-4 sm:py-8"
         style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(12px)" }}>
 
         {devicePickerOpen && status === "active" && (
@@ -433,6 +441,31 @@ export default function CallOverlay({
               ? <MonitorOff className="w-5 h-5 text-black" />
               : <Monitor className="w-5 h-5 text-white" />}
           </button>
+        )}
+
+        {status === "active" && hasVideo && canFlipCamera && (
+          <button type="button" onClick={onFlipCamera} aria-label={mediaLabels.flipCamera}
+            className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
+            style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
+            <SwitchCamera className="w-5 h-5 text-white" />
+          </button>
+        )}
+
+        {status === "active" && hasVideo && cameraZoom && (
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => onAdjustCameraZoom("out")} aria-label={mediaLabels.zoomOut}
+              disabled={cameraZoom.value <= cameraZoom.min}
+              className="w-11 h-11 rounded-full flex items-center justify-center disabled:opacity-35"
+              style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
+              <ZoomOut className="w-5 h-5 text-white" />
+            </button>
+            <button type="button" onClick={() => onAdjustCameraZoom("in")} aria-label={mediaLabels.zoomIn}
+              disabled={cameraZoom.value >= cameraZoom.max}
+              className="w-11 h-11 rounded-full flex items-center justify-center disabled:opacity-35"
+              style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
+              <ZoomIn className="w-5 h-5 text-white" />
+            </button>
+          </div>
         )}
 
         <button onClick={() => setMinimized(true)}

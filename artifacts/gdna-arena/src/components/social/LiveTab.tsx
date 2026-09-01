@@ -39,6 +39,10 @@ export default function LiveTab({ user, st }: Props) {
           onStartLive={(title, domain) => call.startLive(title, domain)}
           onEndLive={() => call.endLive()}
           onJoinLive={(id) => call.joinLive(id)}
+          canFlipCamera={call.canFlipCamera}
+          cameraZoom={call.cameraZoom}
+          onFlipCamera={call.flipCamera}
+          onAdjustCameraZoom={call.adjustCameraZoom}
         />
       </div>
     </div>
