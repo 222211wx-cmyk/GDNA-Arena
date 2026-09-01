@@ -346,7 +346,71 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       // ── CALL OFFER ────────────────────────────────────────────────────────
       if (msg.type === "call-offer") {
         const target = findByUsername(msg.to);
-        if (!target) { send(ws, { type: "call-unavailable", to: msg.to }); return; }
+        if (!target) {
+          try {
+            const offlineTarget = await pool!.query<{
+              id: number;
+              username: string;
+              notifications: boolean;
+            }>(
+              `SELECT u.id, u.username, COALESCE(s.notifications, true) AS notifications
+               FROM users u
+               LEFT JOIN dm_user_settings s ON s.user_id = u.id
+               WHERE LOWER(u.username) = LOWER($1)
+               LIMIT 1`,
+              [msg.to],
+            );
+            const callee = offlineTarget.rows[0];
+            if (!callee) {
+              send(ws, { type: "call-unavailable", to: msg.to });
+              return;
+            }
+
+            const blocked = await pool!.query(
+              `SELECT 1 FROM citizen_blocks
+               WHERE (blocker_id=$1 AND blocked_id=$2)
+                  OR (blocker_id=$2 AND blocked_id=$1)
+               LIMIT 1`,
+              [self.userId, callee.id],
+            );
+            if (blocked.rows.length > 0) {
+              send(ws, { type: "call-blocked", callId: msg.callId });
+              return;
+            }
+
+            const callType = msg.video ? "video" : "audio";
+            await pool!.query(
+              `INSERT INTO call_history
+                 (caller_id, caller_username, callee_id, callee_username, call_type, status, duration_sec)
+               VALUES ($1, $2, $3, $4, $5, 'missed', 0)`,
+              [self.userId, self.username, callee.id, callee.username, callType],
+            );
+
+            if (callee.notifications) {
+              await pool!.query(
+                `INSERT INTO notifications
+                   (user_id, type, title, body, icon, link_path, source_ref)
+                 VALUES ($1, 'missed_call', $2, $3, '📞', '/messages', $4)
+                 ON CONFLICT (user_id, source_ref) WHERE source_ref IS NOT NULL DO NOTHING`,
+                [
+                  callee.id,
+                  "مكالمة فائتة · Missed call",
+                  `@${self.username} حاول الاتصال بك عبر ${msg.video ? "الفيديو" : "الصوت"}`,
+                  `missed_call:${msg.callId}`,
+                ],
+              );
+            }
+
+            send(ws, {
+              type: "call-unavailable",
+              to: callee.username,
+              missedLogged: true,
+            });
+          } catch {
+            send(ws, { type: "call-unavailable", to: msg.to });
+          }
+          return;
+        }
         // Blocking is enforced before busy checks and, critically, before any
         // call state is created. Both directions are equivalent for contact
         // safety; identity comes exclusively from authenticated sockets.

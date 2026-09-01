@@ -720,6 +720,11 @@ export function useCall(user: { id: number; username: string } | null) {
         if (msg.type === "call-busy" || msg.type === "call-unavailable" || msg.type === "call-blocked") {
           clearRingTimer();
           currentCallIdRef.current = null;
+          // The server persists offline missed calls so the callee receives them
+          // after reconnecting. Do not create a second client-side history row.
+          if (msg.type === "call-unavailable" && msg.missedLogged === true) {
+            historyRef.current = null;
+          }
           // Callee side safety: if a block denial races an incoming banner, clear it.
           setIncomingCall(null);
           showCallError(
