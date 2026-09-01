@@ -6,11 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Phone, PhoneOff, Video, VideoOff, Mic, MicOff,
-  Volume2, VolumeX, Minimize2, Monitor, MonitorOff
+  Volume2, VolumeX, Minimize2, Monitor, MonitorOff, Settings2
 } from "lucide-react";
-import type { CallStatus } from "@/hooks/useCall";
+import type { CallDevice, CallDeviceIssue, CallDeviceKind, CallStatus } from "@/hooks/useCall";
 import { SOCIAL_T } from "@/components/social/social-i18n";
 import { useLang } from "@/contexts/LangContext";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Label } from "@workspace/gdna-ds/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/gdna-ds/components/ui/select";
 
 interface Props {
   status:         CallStatus;
@@ -25,11 +28,28 @@ interface Props {
   onScreenShare?: () => void;
   onStopScreen?:  () => void;
   callError?:     string | null;
+  devices?: CallDevice[];
+  selectedMicrophoneId?: string;
+  selectedCameraId?: string;
+  selectedSpeakerId?: string;
+  speakerSelectionSupported?: boolean;
+  deviceIssue?: CallDeviceIssue | null;
+  switchingDevice?: CallDeviceKind | null;
+  onRefreshDevices?: () => Promise<CallDevice[] | undefined>;
+  onSwitchMicrophone?: (deviceId: string) => Promise<void>;
+  onSwitchCamera?: (deviceId: string) => Promise<void>;
+  onSelectSpeaker?: (deviceId: string) => void;
+  onSpeakerFailure?: () => void;
 }
 
 export default function CallOverlay({
   status, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd,
   screenSharing = false, onScreenShare, onStopScreen, callError,
+  devices = [], selectedMicrophoneId = "", selectedCameraId = "", selectedSpeakerId = "",
+  speakerSelectionSupported = false, deviceIssue = null, switchingDevice = null,
+  onRefreshDevices = async () => undefined, onSwitchMicrophone = async () => undefined,
+  onSwitchCamera = async () => undefined, onSelectSpeaker = () => undefined,
+  onSpeakerFailure = () => undefined,
 }: Props) {
   const { lang } = useLang();
   const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
@@ -41,6 +61,7 @@ export default function CallOverlay({
   const [minimized,   setMinimized]   = useState(false);
   const [duration,    setDuration]    = useState(0);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const [devicePickerOpen, setDevicePickerOpen] = useState(false);
 
   // Attach streams to video elements
   useEffect(() => {
@@ -51,6 +72,13 @@ export default function CallOverlay({
         .catch(() => setPlaybackBlocked(true));
     }
   }, [remoteStream]);
+
+  useEffect(() => {
+    const player = remoteVideoRef.current;
+    if (!player || !selectedSpeakerId || !speakerSelectionSupported) return;
+    const sinkPlayer = player as HTMLVideoElement & { setSinkId: (deviceId: string) => Promise<void> };
+    void sinkPlayer.setSinkId(selectedSpeakerId).catch(onSpeakerFailure);
+  }, [remoteStream, selectedSpeakerId, speakerSelectionSupported, minimized, onSpeakerFailure]);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -82,12 +110,16 @@ export default function CallOverlay({
       setSpeakerOff(false);
       setMinimized(false);
       setPlaybackBlocked(false);
+      setDevicePickerOpen(false);
     }
   }, [status, peer, incomingCall?.from]);
 
   const formatDuration = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   const hasVideo = !!(localStream?.getVideoTracks().length);
+  const microphones = devices.filter(device => device.kind === "audioinput");
+  const cameras = devices.filter(device => device.kind === "videoinput");
+  const speakers = devices.filter(device => device.kind === "audiooutput");
 
   // ── Call error toast (shown even when idle) ────────────────────────────────
   if (status === "idle") {
@@ -260,6 +292,26 @@ export default function CallOverlay({
           </div>
         )}
 
+        {deviceIssue && (
+          <div
+            role="alert"
+            data-testid="status-device-disconnected"
+            className="absolute top-28 left-1/2 -translate-x-1/2 rounded-xl border border-destructive/50 bg-card/95 p-4 text-center text-sm font-bold text-destructive"
+            style={{ width: "min(90vw, 520px)" }}
+          >
+            <p>{deviceIssue.message}</p>
+            <Button
+              data-testid="button-recover-device"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => { setDevicePickerOpen(true); void onRefreshDevices(); }}
+            >
+              اختر جهازاً آخر
+            </Button>
+          </div>
+        )}
+
         {/* Local video (PiP) */}
         {localStream && hasVideo && !videoOff && (
           <div id="local-player" className="absolute bottom-4 right-4 w-28 h-20 rounded-xl overflow-hidden border-2"
@@ -270,8 +322,35 @@ export default function CallOverlay({
       </div>
 
       {/* Controls bar */}
-      <div className="shrink-0 flex items-center justify-center gap-4 py-8"
+      <div className="shrink-0 relative flex items-center justify-center gap-4 py-8"
         style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(12px)" }}>
+
+        {devicePickerOpen && status === "active" && (
+          <div
+            data-testid="panel-call-devices"
+            className="absolute bottom-full mb-3 w-[min(92vw,420px)] space-y-4 rounded-xl border border-border bg-card p-4 text-card-foreground shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <p className="font-bold">أجهزة المكالمة</p>
+              <Button data-testid="button-refresh-devices" variant="ghost" size="sm" onClick={() => void onRefreshDevices()}>
+                تحديث
+              </Button>
+            </div>
+            {microphones.length > 1 && (
+              <DeviceSelect label="الميكروفون" devices={microphones} value={selectedMicrophoneId} disabled={switchingDevice === "audioinput"} onChange={id => void onSwitchMicrophone(id)} />
+            )}
+            {cameras.length > 1 && hasVideo && (
+              <DeviceSelect label="الكاميرا" devices={cameras} value={selectedCameraId} disabled={switchingDevice === "videoinput"} onChange={id => void onSwitchCamera(id)} />
+            )}
+            {speakerSelectionSupported ? (
+              speakers.length > 1 && <DeviceSelect label="مكبر الصوت" devices={speakers} value={selectedSpeakerId} onChange={onSelectSpeaker} />
+            ) : (
+              <p data-testid="text-speaker-selection-unsupported" className="text-xs text-muted-foreground">
+                اختيار مكبر الصوت غير مدعوم في هذا المتصفح المحمول. يمكنك تغيير المخرج من إعدادات الهاتف، بينما تبقى خيارات الميكروفون والكاميرا متاحة هنا.
+              </p>
+            )}
+          </div>
+        )}
 
         <button onClick={() => setMuted(v => !v)}
           aria-label={muted ? st.unmute : st.mute}
@@ -304,6 +383,18 @@ export default function CallOverlay({
           {speakerOff ? <VolumeX className="w-5 h-5 text-white" /> : <Volume2 className="w-5 h-5 text-white" />}
         </button>
 
+        {status === "active" && (microphones.length > 1 || cameras.length > 1 || speakers.length > 1 || !speakerSelectionSupported) && (
+          <button
+            data-testid="button-call-devices"
+            onClick={() => { setDevicePickerOpen(value => !value); void onRefreshDevices(); }}
+            aria-label="اختيار أجهزة المكالمة"
+            className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
+            style={{ background: devicePickerOpen ? "hsl(var(--primary))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}
+          >
+            <Settings2 className="w-5 h-5 text-white" />
+          </button>
+        )}
+
         {/* Screen share */}
         {status === "active" && onScreenShare && (
           <button
@@ -326,5 +417,35 @@ export default function CallOverlay({
         </button>
       </div>
     </motion.div>
+  );
+}
+
+function DeviceSelect({
+  label, devices, value, disabled = false, onChange,
+}: {
+  label: string;
+  devices: CallDevice[];
+  value: string;
+  disabled?: boolean;
+  onChange: (deviceId: string) => void;
+}) {
+  const fallbackValue = value || devices[0]?.deviceId;
+  if (!fallbackValue) return null;
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Select value={fallbackValue} disabled={disabled} onValueChange={onChange}>
+        <SelectTrigger data-testid={`select-${devices[0].kind}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {devices.map(device => (
+            <SelectItem key={device.deviceId} value={device.deviceId}>
+              {device.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

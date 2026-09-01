@@ -26,6 +26,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
         onScreenShare={call.startScreenShare}
         onStopScreen={call.stopScreenShare}
         callError={call.callError}
+        devices={call.callDevices}
+        selectedMicrophoneId={call.selectedMicrophoneId}
+        selectedCameraId={call.selectedCameraId}
+        selectedSpeakerId={call.selectedSpeakerId}
+        speakerSelectionSupported={call.speakerSelectionSupported}
+        deviceIssue={call.deviceIssue}
+        switchingDevice={call.switchingDevice}
+        onRefreshDevices={call.refreshCallDevices}
+        onSwitchMicrophone={call.switchMicrophone}
+        onSwitchCamera={call.switchCamera}
+        onSelectSpeaker={call.selectSpeaker}
+        onSpeakerFailure={call.reportSpeakerFailure}
       />
     </CallContext.Provider>
   );

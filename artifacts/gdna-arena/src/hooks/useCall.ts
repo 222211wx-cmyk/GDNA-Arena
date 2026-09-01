@@ -103,6 +103,18 @@ async function fetchAgoraPreflight(): Promise<{ appId: string; token: string; ui
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
 export type LiveStatus  = "idle" | "live" | "ended";
 export type ConnectionTestStatus = "idle" | "testing" | "ready" | "unstable" | "failed";
+export type CallDeviceKind = "audioinput" | "videoinput" | "audiooutput";
+
+export interface CallDevice {
+  deviceId: string;
+  kind: CallDeviceKind;
+  label: string;
+}
+
+export interface CallDeviceIssue {
+  kind: CallDeviceKind;
+  message: string;
+}
 
 interface IncomingCall {
   from:   string;
@@ -188,6 +200,14 @@ export function useCall(user: { id: number; username: string } | null) {
   const [localStream,   setLocalStream]   = useState<MediaStream | null>(null);
   const [remoteStream,  setRemoteStream]  = useState<MediaStream | null>(null);
   const [screenSharing, setScreenSharing] = useState(false);
+  const [callDevices, setCallDevices] = useState<CallDevice[]>([]);
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState("");
+  const [selectedCameraId, setSelectedCameraId] = useState("");
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState("");
+  const [deviceIssue, setDeviceIssue] = useState<CallDeviceIssue | null>(null);
+  const [switchingDevice, setSwitchingDevice] = useState<CallDeviceKind | null>(null);
+  const speakerSelectionSupported =
+    typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
 
   // ── Error feedback ─────────────────────────────────────────────────────────
   const [callError,    setCallError]    = useState<string | null>(null);
@@ -199,6 +219,50 @@ export function useCall(user: { id: number; username: string } | null) {
     if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
     errorTimerRef.current = setTimeout(() => setCallError(null), durationMs);
   };
+
+  const refreshCallDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = (await navigator.mediaDevices.enumerateDevices())
+        .filter((device): device is MediaDeviceInfo & { kind: CallDeviceKind } =>
+          device.kind === "audioinput" || device.kind === "videoinput" || device.kind === "audiooutput")
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          kind: device.kind,
+          label: device.label || `${device.kind === "audioinput" ? "Microphone" : device.kind === "videoinput" ? "Camera" : "Speaker"} ${index + 1}`,
+        }));
+      setCallDevices(devices);
+      return devices;
+    } catch {
+      setDeviceIssue({
+        kind: "audioinput",
+        message: "تعذّر قراءة أجهزة المكالمة. تحقق من أذونات المتصفح ثم حاول التحديث.",
+      });
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.addEventListener) return;
+    const handleDeviceChange = () => {
+      void refreshCallDevices().then((devices) => {
+        if (!devices || callStatus === "idle") return;
+        const selected = [
+          { kind: "audioinput" as const, id: selectedMicrophoneId, label: "الميكروفون" },
+          { kind: "videoinput" as const, id: selectedCameraId, label: "الكاميرا" },
+          { kind: "audiooutput" as const, id: selectedSpeakerId, label: "مكبر الصوت" },
+        ].find((item) => item.id && !devices.some((device) => device.kind === item.kind && device.deviceId === item.id));
+        if (selected) {
+          setDeviceIssue({
+            kind: selected.kind,
+            message: `تم فصل ${selected.label}. اختر جهازاً متاحاً للمتابعة دون إنهاء المكالمة.`,
+          });
+        }
+      }).catch(() => {});
+    };
+    navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+  }, [callStatus, refreshCallDevices, selectedCameraId, selectedMicrophoneId, selectedSpeakerId]);
 
   // ── Ring timeout: give up on unanswered outgoing calls after ~45s ─────────
   const RING_TIMEOUT_MS = 45_000;
@@ -384,9 +448,13 @@ export function useCall(user: { id: number; username: string } | null) {
     ]);
     localStreamRef.current = ms;
     setLocalStream(ms);
+    setSelectedMicrophoneId(audioTrack.getMediaStreamTrack().getSettings().deviceId ?? "");
+    setSelectedCameraId(videoTrack?.getMediaStreamTrack().getSettings().deviceId ?? "");
+    setDeviceIssue(null);
+    void refreshCallDevices();
     // Slow device setup must not consume the warning before the overlay renders.
     if (cameraWarning) showCallError(cameraWarning, 15_000);
-  }, [rebuildRemoteStream]);
+  }, [rebuildRemoteStream, refreshCallDevices]);
 
   // ── Leave Agora & release all media ────────────────────────────────────────
   const leaveAgora = useCallback(async () => {
@@ -404,7 +472,66 @@ export function useCall(user: { id: number; username: string } | null) {
     setLocalStream(null);
     setRemoteStream(null);
     setScreenSharing(false);
+    setCallDevices([]);
+    setSelectedMicrophoneId("");
+    setSelectedCameraId("");
+    setSelectedSpeakerId("");
+    setDeviceIssue(null);
+    setSwitchingDevice(null);
     if (client) { try { await client.leave(); } catch { /* already left */ } }
+  }, []);
+
+  const rebuildLocalCallStream = useCallback(() => {
+    const audioTrack = localAudioRef.current?.getMediaStreamTrack();
+    const videoTrack = screenTrackRef.current?.getMediaStreamTrack() ?? localVideoRef.current?.getMediaStreamTrack();
+    const tracks = [audioTrack, videoTrack].filter((track): track is MediaStreamTrack => Boolean(track));
+    const stream = tracks.length ? new MediaStream(tracks) : null;
+    localStreamRef.current = stream;
+    setLocalStream(stream);
+  }, []);
+
+  const switchMicrophone = useCallback(async (deviceId: string) => {
+    const track = localAudioRef.current;
+    if (!track || callStatus !== "active") return;
+    setSwitchingDevice("audioinput");
+    try {
+      await track.setDevice(deviceId);
+      setSelectedMicrophoneId(deviceId);
+      setDeviceIssue(null);
+      rebuildLocalCallStream();
+    } catch (error) {
+      setDeviceIssue({ kind: "audioinput", message: `${mediaFailureMessage(error, "microphone")} — اختر ميكروفوناً آخر` });
+    } finally {
+      setSwitchingDevice(null);
+    }
+  }, [callStatus, rebuildLocalCallStream]);
+
+  const switchCamera = useCallback(async (deviceId: string) => {
+    const track = localVideoRef.current;
+    if (!track || callStatus !== "active") return;
+    setSwitchingDevice("videoinput");
+    try {
+      await track.setDevice(deviceId);
+      setSelectedCameraId(deviceId);
+      setDeviceIssue(null);
+      rebuildLocalCallStream();
+    } catch (error) {
+      setDeviceIssue({ kind: "videoinput", message: `${mediaFailureMessage(error, "camera")} — اختر كاميرا أخرى` });
+    } finally {
+      setSwitchingDevice(null);
+    }
+  }, [callStatus, rebuildLocalCallStream]);
+
+  const selectSpeaker = useCallback((deviceId: string) => {
+    setSelectedSpeakerId(deviceId);
+    setDeviceIssue(null);
+  }, []);
+
+  const reportSpeakerFailure = useCallback(() => {
+    setDeviceIssue({
+      kind: "audiooutput",
+      message: "تعذّر استخدام مكبر الصوت المحدد. اختر مخرجاً آخر أو غيّره من إعدادات الجهاز.",
+    });
   }, []);
 
   // ── Connect WebSocket ──────────────────────────────────────────────────────
@@ -1016,10 +1143,13 @@ export function useCall(user: { id: number; username: string } | null) {
     localStream, remoteStream, screenSharing,
     callError,
     connectionTest,
+    callDevices, selectedMicrophoneId, selectedCameraId, selectedSpeakerId,
+    speakerSelectionSupported, deviceIssue, switchingDevice,
     startCall, answerCall, rejectCall, endCall,
     testConnection,
     startLive, endLive, joinLive,
     startScreenShare, stopScreenShare,
+    refreshCallDevices, switchMicrophone, switchCamera, selectSpeaker, reportSpeakerFailure,
   };
 }
 

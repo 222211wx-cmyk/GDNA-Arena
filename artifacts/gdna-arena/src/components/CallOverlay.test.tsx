@@ -78,4 +78,45 @@ describe("CallOverlay media recovery", () => {
     });
     expect(play).toHaveBeenCalledTimes(2);
   });
+
+  it("keeps input pickers available while explaining unsupported mobile speaker selection", () => {
+    render(
+      <CallOverlay
+        {...baseProps}
+        status="active"
+        speakerSelectionSupported={false}
+        devices={[
+          { deviceId: "mic-1", kind: "audioinput", label: "Built-in microphone" },
+          { deviceId: "mic-2", kind: "audioinput", label: "Bluetooth headset" },
+        ]}
+        selectedMicrophoneId="mic-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("button-call-devices"));
+
+    expect(screen.getByTestId("select-audioinput")).toBeVisible();
+    expect(screen.getByTestId("text-speaker-selection-unsupported")).toHaveTextContent("إعدادات الهاتف");
+  });
+
+  it("offers a clear recovery choice when a selected device disconnects", () => {
+    render(
+      <CallOverlay
+        {...baseProps}
+        status="active"
+        deviceIssue={{
+          kind: "audioinput",
+          message: "تم فصل الميكروفون. اختر جهازاً متاحاً للمتابعة دون إنهاء المكالمة.",
+        }}
+        devices={[
+          { deviceId: "mic-1", kind: "audioinput", label: "Built-in microphone" },
+          { deviceId: "mic-2", kind: "audioinput", label: "USB microphone" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("status-device-disconnected")).toHaveTextContent("دون إنهاء المكالمة");
+    fireEvent.click(screen.getByTestId("button-recover-device"));
+    expect(screen.getByTestId("panel-call-devices")).toBeVisible();
+  });
 });
