@@ -219,20 +219,32 @@ export function disconnectUserSockets(userId: number) {
 // Chat delivery is always resolved from persisted room membership. The client
 // never supplies recipients, which keeps a crafted WebSocket payload from
 // leaking a private room's message to an unrelated citizen.
-export async function broadcastMessageToRoom(roomId: number, message: object): Promise<void> {
+export async function broadcastRoomEvent(
+  roomId: number,
+  event: object,
+  recipientUserIds?: number[],
+): Promise<void> {
   if (!pool) return;
   const { rows } = await pool.query<{ user_id: number }>(
     `SELECT user_id FROM dm_room_members WHERE room_id = $1`,
     [roomId],
   );
+  const allowedRecipients = recipientUserIds ? new Set(recipientUserIds) : null;
   for (const { user_id: userId } of rows) {
+    if (allowedRecipients && !allowedRecipients.has(userId)) continue;
     broadcastToUser(userId, {
-      type: "chat-message",
+      ...event,
       recipientUserId: userId,
       roomId,
-      message,
     });
   }
+}
+
+export async function broadcastMessageToRoom(roomId: number, message: object): Promise<void> {
+  return broadcastRoomEvent(roomId, {
+    type: "chat-message",
+    message,
+  });
 }
 
 export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {

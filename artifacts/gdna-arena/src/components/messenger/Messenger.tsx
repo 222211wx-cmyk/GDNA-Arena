@@ -789,7 +789,7 @@ function SecureAttachment({ url, metadata, mine }: {
     return <div className="flex min-h-9 items-center gap-2 text-xs opacity-70"><LoaderCircle size={14} className="animate-spin" />{st.decrypting}</div>;
   }
   if (metadata.kind === "audio") {
-    return <audio controls src={objectUrl} style={{ maxWidth: 220, height: 38 }} />;
+    return <audio controls preload="metadata" src={objectUrl} style={{ width: "min(220px, 100%)", height: 38 }} />;
   }
   if (metadata.kind === "video") {
     return <video controls src={objectUrl} style={{ maxWidth: 240, maxHeight: 240, borderRadius: 8, display: "block" }} />;
@@ -1235,10 +1235,49 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       void loadRooms();
       if (activeRoomIdRef.current !== null) void loadMessages(activeRoomIdRef.current);
     };
+    const onRead = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        roomId?: number;
+        readerUserId?: number;
+        readAt?: string;
+        recipientUserId?: number;
+      }>).detail;
+      if (!detail?.roomId || !detail.readerUserId || !detail.readAt) return;
+      if (typeof detail.recipientUserId === "number" && detail.recipientUserId !== user?.id) return;
+      if (detail.roomId !== activeRoomIdRef.current) return;
+      setActiveRoom(prev => {
+        if (!prev || prev.id !== detail.roomId) return prev;
+        return {
+          ...prev,
+          members: prev.members.map(member =>
+            member.userId === detail.readerUserId
+              ? { ...member, lastReadAt: detail.readAt }
+              : member),
+        };
+      });
+      void loadRooms();
+    };
+    const onMessageDeleted = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        roomId?: number;
+        messageId?: number;
+        recipientUserId?: number;
+      }>).detail;
+      if (!detail?.roomId || !detail.messageId) return;
+      if (typeof detail.recipientUserId === "number" && detail.recipientUserId !== user?.id) return;
+      if (detail.roomId === activeRoomIdRef.current) {
+        setMessages(prev => prev.filter(message => message.id !== detail.messageId));
+      }
+      void loadRooms();
+    };
     window.addEventListener("gdna:chat-message", onMessage);
+    window.addEventListener("gdna:chat-read", onRead);
+    window.addEventListener("gdna:chat-message-deleted", onMessageDeleted);
     window.addEventListener("gdna:realtime-connected", onReconnect);
     return () => {
       window.removeEventListener("gdna:chat-message", onMessage);
+      window.removeEventListener("gdna:chat-read", onRead);
+      window.removeEventListener("gdna:chat-message-deleted", onMessageDeleted);
       window.removeEventListener("gdna:realtime-connected", onReconnect);
     };
   }, [appendMessage, loadRooms, user?.id]);
@@ -1697,7 +1736,15 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      const preferredMime = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ].find(type => MediaRecorder.isTypeSupported(type));
+      const rec = preferredMime
+        ? new MediaRecorder(stream, { mimeType: preferredMime })
+        : new MediaRecorder(stream);
       recorderRef.current = rec;
       chunksRef.current   = [];
       rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -1707,9 +1754,11 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         recorderRef.current = null;
         setRecording(false);
         if (recCancelledRef.current || !mountedRef.current) return; // unmounted: drop, never upload
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const mime = rec.mimeType || chunksRef.current[0]?.type || preferredMime || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: mime });
         if (blob.size > 0) {
-          stageFiles([new File([blob], `voice-note-${Date.now()}.webm`, { type: "audio/webm" })]);
+          const extension = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
+          stageFiles([new File([blob], `voice-note-${Date.now()}.${extension}`, { type: mime })]);
         }
       };
       recStreamRef.current = stream;
@@ -2153,7 +2202,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                     {msg.secureAttachment && msg.fileUrl ? (
                       <SecureAttachment url={msg.fileUrl} metadata={msg.secureAttachment} mine={mine} />
                     ) : msg.type === "audio" && msg.audioUrl ? (
-                      <audio controls src={resolveUrl(msg.audioUrl)} style={{ maxWidth: 220, height: 38 }} />
+                      <audio controls preload="metadata" src={resolveUrl(msg.audioUrl)} style={{ width: "min(220px, 100%)", height: 38 }} />
                     ) : msg.type === "video" && msg.videoUrl ? (
                       <video controls src={resolveUrl(msg.videoUrl)} style={{ maxWidth: 240, maxHeight: 240, borderRadius: 8, display: "block" }} />
                     ) : msg.type === "file" && msg.fileUrl && msg.content?.startsWith("📁") ? (

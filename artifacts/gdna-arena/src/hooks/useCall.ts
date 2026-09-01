@@ -649,6 +649,12 @@ export function useCall(user: { id: number; username: string } | null) {
         if (msg.type === "chat-message") {
           window.dispatchEvent(new CustomEvent("gdna:chat-message", { detail: msg }));
         }
+        if (msg.type === "chat-read") {
+          window.dispatchEvent(new CustomEvent("gdna:chat-read", { detail: msg }));
+        }
+        if (msg.type === "chat-message-deleted") {
+          window.dispatchEvent(new CustomEvent("gdna:chat-message-deleted", { detail: msg }));
+        }
 
         // ── Incoming call ──────────────────────────────────────────────────
         if (msg.type === "call-incoming") {

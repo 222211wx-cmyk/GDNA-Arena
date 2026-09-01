@@ -14,7 +14,7 @@ import {
 } from "../lib/chatStorage";
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
-import { broadcastMessageToRoom } from "../lib/signaling";
+import { broadcastMessageToRoom, broadcastRoomEvent } from "../lib/signaling";
 import {
   SendArenaWithdrawRequestBody,
   SendArenaWithdrawRequestResponse,
@@ -886,13 +886,35 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
   // cannot move it backward and cause already-read messages to reappear as unread.
   const latestTs = msgs.length > 0 ? msgs[0]!.createdAt : null;
   if (latestTs) {
-    await db.update(dmRoomMembers)
+    const advanced = await db.update(dmRoomMembers)
       .set({ lastReadAt: latestTs })
       .where(and(
         eq(dmRoomMembers.roomId, roomId),
         eq(dmRoomMembers.userId, userId),
         sql`(${dmRoomMembers.lastReadAt} IS NULL OR ${dmRoomMembers.lastReadAt} < ${latestTs})`,
-      ));
+      ))
+      .returning({ lastReadAt: dmRoomMembers.lastReadAt });
+    if (advanced.length > 0) {
+      const receiptSettings = await pool.query<{ user_id: number; read_receipts: boolean }>(
+        `SELECT rm.user_id, COALESCE(s.read_receipts, true) AS read_receipts
+         FROM dm_room_members rm
+         LEFT JOIN dm_user_settings s ON s.user_id = rm.user_id
+         WHERE rm.room_id = $1`,
+        [roomId],
+      );
+      const readerShares = receiptSettings.rows.find(row => row.user_id === userId)?.read_receipts ?? true;
+      const allowedRecipients = readerShares
+        ? receiptSettings.rows.filter(row => row.read_receipts).map(row => row.user_id)
+        : [];
+      if (allowedRecipients.length > 0) {
+        void broadcastRoomEvent(roomId, {
+          type: "chat-read",
+          readerUserId: userId,
+          readAt: latestTs,
+        }, allowedRecipients).catch(error =>
+          req.log.error({ error, roomId, userId }, "Chat read receipt realtime broadcast failed"));
+      }
+    }
   }
 
   const ordered = msgs.reverse();
@@ -1234,6 +1256,12 @@ router.delete("/messages/rooms/:roomId/messages/:msgId", async (req, res): Promi
       console.error("Deleted message attachment cleanup failed:", error);
     }
   }
+  void broadcastRoomEvent(roomId, {
+    type: "chat-message-deleted",
+    messageId: msgId,
+    deletedByUserId: userId,
+  }).catch(error =>
+    req.log.error({ error, roomId, msgId }, "Chat message deletion realtime broadcast failed"));
   res.json({ deleted: true });
 });
 
