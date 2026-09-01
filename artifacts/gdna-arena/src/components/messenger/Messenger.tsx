@@ -1691,6 +1691,10 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   async function startVoiceNote() {
     if (!isOnline) { blockOffline(); return; }
     setShowAttachTray(false);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setToast(st.microphone_denied);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
@@ -1712,7 +1716,10 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       recCancelledRef.current = false;
       rec.start();
       setRecording(true);
-    } catch { setToast(st.microphone_denied); }
+    } catch (error) {
+      console.warn("[MESSAGERI] Microphone access unavailable:", (error as { name?: string })?.name ?? "unknown");
+      setToast(st.microphone_denied);
+    }
   }
 
   function stopVoiceNote(discard = false) {
