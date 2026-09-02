@@ -18,7 +18,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
-  Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
+  Camera, Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
   ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ClipboardPaste, ShieldOff, ContactRound,
   MapPin, Link2, Share2,
 } from "lucide-react";
@@ -929,6 +929,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 
   const pendingRef = useRef<PendingFile[]>([]);
   useEffect(() => { pendingRef.current = pending; }, [pending]);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -2056,6 +2057,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                 boxShadow: "0 8px 28px rgba(0,0,0,0.6)",
               }}>
               {([
+                [<ImageIcon key="gallery" size={19} />, st.attach_gallery ?? "Gallery", () => galleryRef.current?.click()],
+                [<Camera key="camera" size={19} />, st.attach_camera ?? "Camera", () => cameraRef.current?.click()],
                 [<ContactRound key="contact" size={19} />, st.share_contact ?? "Contact", shareDeviceContacts],
                 [<MapPin key="location" size={19} />, st.share_location ?? "Location", shareLocation],
                 [<Paperclip key="fil" size={19} />, st.attach_file ?? "Files", () => fileRef.current?.click()],
@@ -2074,7 +2077,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                   onClick={fn}
                   title={label}
                   aria-label={label}
-                   data-testid={`share-option-${["contact", "location", "files", "links", "other-apps", "voice", "emoji", "paste"][idx]}`}
+                   data-testid={`share-option-${["gallery", "camera", "contact", "location", "files", "links", "other-apps", "voice", "emoji", "paste"][idx]}`}
                    disabled={uploading || !isOnline}
                   style={{
                     width: 44,
@@ -2082,8 +2085,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                     borderRadius: 10,
                     border: `1px solid ${GOLD_A(0.082)}`,
                     cursor: "pointer",
-                    background: (idx === 5 && recording) ? "#ef444420" : GOLD_A(0.063),
-                    color: (idx === 5 && recording) ? "#ef4444" : GOLD,
+                    background: (idx === 7 && recording) ? "#ef444420" : GOLD_A(0.063),
+                    color: (idx === 7 && recording) ? "#ef4444" : GOLD,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -2159,17 +2162,6 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             }}
           />
         </div>
-
-        <button
-          type="button"
-          onClick={() => galleryRef.current?.click()}
-          disabled={recording || uploading || !isOnline}
-          title={st.attach_gallery ?? "Photos and videos"}
-          aria-label={st.attach_gallery ?? "Photos and videos"}
-          data-testid="button-gallery"
-          style={{ width: 44, height: 44, borderRadius: "50%", background: "#1c1c1c", border: `1px solid ${GOLD_A(0.125)}`, color: GOLD, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <ImageIcon size={20} />
-        </button>
 
         {/* Send button (always visible) or Stop-recording */}
         {recording ? (
@@ -2527,6 +2519,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       )}
 
       {/* Hidden pickers */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={galleryRef} type="file" multiple accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={fileRef}    type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
 
