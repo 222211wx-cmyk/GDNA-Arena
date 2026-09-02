@@ -362,7 +362,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             );
             const callee = offlineTarget.rows[0];
             if (!callee) {
-              send(ws, { type: "call-unavailable", to: msg.to });
+              send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
               return;
             }
 
@@ -404,10 +404,11 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             send(ws, {
               type: "call-unavailable",
               to: callee.username,
+              callId: msg.callId,
               missedLogged: true,
             });
           } catch {
-            send(ws, { type: "call-unavailable", to: msg.to });
+            send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
           }
           return;
         }
@@ -415,7 +416,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         // call state is created. Both directions are equivalent for contact
         // safety; identity comes exclusively from authenticated sockets.
         if (self.userId === null || target.userId === null) {
-          send(ws, { type: "call-unavailable", to: msg.to }); return;
+          send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId }); return;
         }
         try {
           const block = await pool!.query(
@@ -431,11 +432,11 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           }
         } catch {
           // Fail closed: a database outage must not bypass a persisted block.
-          send(ws, { type: "call-unavailable", to: msg.to });
+          send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
           return;
         }
         if (userIsInCall(self.username) || userIsInCall(target.username)) {
-          send(ws, { type: "call-busy", to: msg.to });
+          send(ws, { type: "call-busy", to: msg.to, callId: msg.callId });
           return;
         }
          const lockClient = await pool!.connect();
@@ -450,7 +451,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
            );
            if (!callEnvelopeMatchesDevices(keyRows.rows, msg.e2e)) {
              await lockClient.query("ROLLBACK");
-            send(ws, { type: "call-unavailable", to: msg.to, reason: "secure-device-keys-changed" });
+             send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId, reason: "secure-device-keys-changed" });
             return;
           }
            // Recording the call while holding the same lock used by key
@@ -466,11 +467,15 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             setUserInCall(target.username, true);
          } catch {
            await lockClient.query("ROLLBACK").catch(() => {});
-          send(ws, { type: "call-unavailable", to: msg.to });
+           send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
           return;
          } finally {
            lockClient.release();
         }
+        // The caller must wait for this acknowledgement before requesting its
+        // channel token. It proves activeCalls already contains both authorized
+        // participants and removes the HTTP-vs-WebSocket registration race.
+        send(ws, { type: "call-ready", callId: msg.callId });
         sendToUsername(target.username, {
           type: "call-incoming",
           from: self.username,

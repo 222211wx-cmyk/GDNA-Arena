@@ -209,6 +209,11 @@ export function useCall(user: { id: number; username: string } | null) {
   // Mirror of the call the user is currently in or being offered — WS handlers
   // use this ref to IGNORE call events whose callId does not belong to us.
   const currentCallIdRef = useRef<string | null>(null);
+  const callSetupWaitersRef = useRef(new Map<string, {
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  }>());
   const [activeVideo,  setActiveVideo]  = useState(false);
   // Call-history tracking — lives here (single instance) so it logs exactly once
   const historyRef = useRef<{ peer: string; video: boolean; start: number; outgoing: boolean; answered: boolean } | null>(null);
@@ -321,6 +326,31 @@ export function useCall(user: { id: number; username: string } | null) {
   const sendWS = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
+    }
+  }, []);
+
+  const waitForCallReady = useCallback((callId: string) => new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      callSetupWaitersRef.current.delete(callId);
+      reject(new Error("تعذّر تأكيد المكالمة الآمنة من الخادم"));
+    }, 10_000);
+    callSetupWaitersRef.current.set(callId, { resolve, reject, timeout });
+  }), []);
+
+  const settleCallReady = useCallback((callId: string, error?: Error) => {
+    const waiter = callSetupWaitersRef.current.get(callId);
+    if (!waiter) return;
+    clearTimeout(waiter.timeout);
+    callSetupWaitersRef.current.delete(callId);
+    if (error) waiter.reject(error);
+    else waiter.resolve();
+  }, []);
+
+  const rejectPendingCallSetups = useCallback((message: string) => {
+    for (const [callId, waiter] of callSetupWaitersRef.current) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(new Error(message));
+      callSetupWaitersRef.current.delete(callId);
     }
   }, []);
 
@@ -791,6 +821,10 @@ export function useCall(user: { id: number; username: string } | null) {
           }
         }
 
+        if (msg.type === "call-ready" && typeof msg.callId === "string") {
+          settleCallReady(msg.callId);
+        }
+
         // ── Call accepted (caller side) — callee joined the Agora channel ──
         if (msg.type === "call-accepted" && msg.callId === currentCallIdRef.current) {
           clearRingTimer();
@@ -813,6 +847,10 @@ export function useCall(user: { id: number; username: string } | null) {
         }
 
         if (msg.type === "call-busy" || msg.type === "call-unavailable" || msg.type === "call-blocked") {
+          if (typeof msg.callId === "string") {
+            settleCallReady(msg.callId, new Error("CALL_SETUP_REJECTED"));
+          }
+          if (typeof msg.callId === "string" && msg.callId !== currentCallIdRef.current) return;
           clearRingTimer();
           currentCallIdRef.current = null;
           // The server persists offline missed calls so the callee receives them
@@ -883,6 +921,7 @@ export function useCall(user: { id: number; username: string } | null) {
         setRealtimeConnecting();
         window.dispatchEvent(new Event("gdna:realtime-disconnected"));
         if (pingRef.current) clearInterval(pingRef.current);
+        rejectPendingCallSetups("انقطع اتصال المكالمة بالخادم");
         if (currentCallIdRef.current) {
           clearRingTimer();
           currentCallIdRef.current = null;
@@ -936,6 +975,7 @@ export function useCall(user: { id: number; username: string } | null) {
         ws.close();
       }
       clearRingTimer();
+      rejectPendingCallSetups("تم إغلاق اتصال المكالمة");
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
       try { pcRef.current?.close(); } catch { /* already closed */ }
       pcRef.current = null;
@@ -958,7 +998,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setConnectionTest("idle");
       setCallError(null);
     };
-  }, [user?.id, user?.username, isOnline, leaveAgora, setRealtimeConnected, setRealtimeConnecting]);
+  }, [user?.id, user?.username, isOnline, leaveAgora, rejectPendingCallSetups, settleCallReady, setRealtimeConnected, setRealtimeConnecting]);
 
   // A route change or logout must not leave a microphone/camera LED on.
   useEffect(() => () => {
@@ -1032,6 +1072,7 @@ export function useCall(user: { id: number; username: string } | null) {
 
       // The device is usable. Register the server-side call before requesting
       // its channel-scoped Agora token.
+      const callReady = waitForCallReady(callId);
       sendWS({
         type: "call-offer",
         to: targetUsername,
@@ -1050,6 +1091,7 @@ export function useCall(user: { id: number; username: string } | null) {
       historyRef.current = { peer: targetUsername, video: withVideo, start: Date.now(), outgoing: true, answered: false };
       setCallStatus("calling");
 
+      await callReady;
       await joinAgora(callId, withVideo, callSecret, preparedAudioTrack);
 
       // Give up automatically if the callee never answers.
@@ -1073,12 +1115,14 @@ export function useCall(user: { id: number; username: string } | null) {
       setActiveCallId(null);
       void leaveAgora();
       const message = err instanceof Error ? err.message : "";
-      showCallError(message.includes("secure") || message.includes("Secure") || message.includes("E2E")
-        ? `🔐 ${message}`
-        : mediaFailureMessage(err));
+      if (message !== "CALL_SETUP_REJECTED") {
+        showCallError(message.includes("secure") || message.includes("Secure") || message.includes("E2E")
+          ? `🔐 ${message}`
+          : mediaFailureMessage(err));
+      }
       setCallStatus("idle");
     }
-  }, [callStatus, isOnline, joinAgora, leaveAgora, sendWS, user]);
+  }, [callStatus, isOnline, joinAgora, leaveAgora, sendWS, user, waitForCallReady]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {
