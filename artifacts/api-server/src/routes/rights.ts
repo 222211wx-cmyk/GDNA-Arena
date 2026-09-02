@@ -223,11 +223,20 @@ router.get("/rights/my-earnings", async (req, res): Promise<void> => {
       `SELECT COALESCE(SUM(p.earnings),0) AS total, COALESCE(SUM(p.likes),0)::int AS likes
        FROM pulse_posts p JOIN users u ON p.user_id=u.id WHERE u.username=$1 AND p.is_visible=true`, [name]);
     const { rows: settings } = await pool.query(`SELECT content_type, rate, unit FROM monetization_settings`);
+    const { rows: verification } = await pool.query(
+      `SELECT rv.status,rv.name_matches,rv.earnings_frozen FROM royal_verifications rv
+       JOIN users u ON u.id=rv.user_id WHERE u.username=$1`, [name]);
+    const royal = verification[0];
     res.json({
       uploaderName: name,
       globalstar: { earnings: parseFloat(gs[0].total), views: gs[0].views },
       pulse: { earnings: parseFloat(pulse[0].total), likes: pulse[0].likes },
       totalEarnings: parseFloat(gs[0].total) + parseFloat(pulse[0].total),
+      payoutEligibility: {
+        royalVerified: royal?.status === "verified" && royal?.name_matches === true,
+        earningsFrozen: royal?.earnings_frozen !== false,
+        reason: royal?.status === "verified" && royal?.name_matches === true ? null : "Royal verification and matching bank-holder name required",
+      },
       rates: settings,
     });
   } catch { res.status(500).json({ error: "Failed" }); }

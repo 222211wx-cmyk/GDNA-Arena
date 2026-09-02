@@ -105,7 +105,8 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
   const { username } = req.params;
 
   const { rows: userRows } = await pool.query(
-    `SELECT id, username, xp, balance, games_played, wins, created_at, honor_count, is_muted, is_trending
+    `SELECT id, username, xp, balance, games_played, wins, created_at, honor_count, is_muted, is_trending,
+       EXISTS(SELECT 1 FROM royal_verifications rv WHERE rv.user_id="users".id AND rv.status='verified' AND rv.name_matches=TRUE) AS royal_verified
      FROM "users" WHERE username = $1 LIMIT 1`,
     [username]
   );
@@ -115,6 +116,7 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
   user.xp = parseInt(user.xp ?? "0");
   user.balance = parseInt(user.balance ?? "0");
   user.honorCount = parseInt(user.honor_count ?? "0");
+   user.royalVerified = user.royal_verified === true;
 
   if (!req.session?.userId) {
     const honorInfo = getHonorTitle(user.honorCount);
@@ -126,6 +128,7 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
         honorCount: user.honorCount,
         rank: getRank(user.xp),
         honorInfo,
+         royalVerified: user.royalVerified,
       },
       recentPosts: [],
       achievements: [],
@@ -233,7 +236,7 @@ router.get("/citizens/:username", async (req, res): Promise<void> => {
       rank: getRank(user.xp),
       honorInfo: getHonorTitle(user.honorCount),
       specialty, totalDebates, uniqueLegends, totalWatches, recentHonors,
-      followerCount, followingCount,
+       followerCount, followingCount, royalVerified: user.royalVerified,
     },
     recentPosts,
     achievements,

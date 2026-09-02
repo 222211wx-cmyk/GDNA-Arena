@@ -6,6 +6,7 @@ import { pool } from "@workspace/db";
 import { objectStorageClient } from "../lib/chatStorage";
 import type { File as GcsFile } from "@google-cloud/storage";
 import { logger } from "../lib/logger";
+import { spawn } from "node:child_process";
 
 // ─── CLIPS — كليبسز (Reels-style, producer-owned) ────────────────────────────
 // Owner's rules:
@@ -64,6 +65,24 @@ function clipFile(name: string): GcsFile {
   const full = `${dir.replace(/\/$/, "")}/clips/${name}`;
   const parts = (full.startsWith("/") ? full : `/${full}`).split("/");
   return objectStorageClient.bucket(parts[1]).file(parts.slice(2).join("/"));
+}
+
+async function verifiedDuration(file: GcsFile): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = spawn("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", "pipe:0"], { stdio: ["pipe", "pipe", "pipe"] });
+    let output = "", errors = "";
+    const timer = setTimeout(() => { probe.kill("SIGKILL"); reject(new Error("MEDIA_PROBE_TIMEOUT")); }, 30_000);
+    probe.stdout.on("data", chunk => { output += String(chunk); });
+    probe.stderr.on("data", chunk => { errors += String(chunk); });
+    probe.on("error", error => { clearTimeout(timer); reject(error); });
+    probe.on("close", code => {
+      clearTimeout(timer);
+      const duration = Number.parseFloat(output.trim());
+      if (code !== 0 || !Number.isFinite(duration)) reject(new Error(errors || "INVALID_MEDIA_DURATION"));
+      else resolve(duration);
+    });
+    file.createReadStream().on("error", error => probe.stdin.destroy(error)).pipe(probe.stdin);
+  });
 }
 
 // Multer engine: stream straight to GCS while computing sha256 — no local disk,
@@ -164,11 +183,19 @@ router.post("/clips", uploadLimiter, (req, res): void => {
       }
       if (!f?.filename || !f.sha256) { res.status(400).json({ error: "الفيديو مطلوب" }); return; }
       const title = String(req.body?.title ?? "").trim().slice(0, 120);
-      const durationSec = Math.floor(parseFloat(String(req.body?.durationSec ?? "0")));
+       const claimedDurationSec = Math.floor(parseFloat(String(req.body?.durationSec ?? "0")));
       if (!title) { cleanup(); res.status(400).json({ error: "العنوان مطلوب" }); return; }
-      if (!Number.isFinite(durationSec) || durationSec < MIN_DURATION_SEC) {
+       let durationSec: number;
+       try {
+         durationSec = Math.floor(await verifiedDuration(clipFile(f.filename)));
+       } catch {
+         cleanup();
+         res.status(400).json({ error: "تعذّر التحقق من مدة الفيديو — الملف غير صالح أو غير مدعوم" });
+         return;
+       }
+       if (!Number.isFinite(claimedDurationSec) || durationSec < MIN_DURATION_SEC) {
         cleanup();
-        res.status(400).json({ error: "Durée minimale: 1 minute. Les clips de moins d'1 min sont interdits." });
+         res.status(400).json({ error: "أي فيديو أقل من 60 ثانية يتم حظره تلقائياً. الحد الأدنى دقيقة واحدة." });
         return;
       }
       const { rows: urows } = await requirePool().query(`SELECT username FROM users WHERE id=$1`, [userId]);

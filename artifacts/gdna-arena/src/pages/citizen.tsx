@@ -32,6 +32,7 @@ interface Citizen {
   uniqueLegends: number; totalWatches: number;
   recentHonors: string[];
   followerCount: number; followingCount: number;
+  royalVerified?: boolean;
 }
 interface Post {
   id: number; content: string; domain: string; type: string;
@@ -733,7 +734,7 @@ export default function CitizenPage() {
                 {initials}
               </div>
               <div>
-                <h1 className="text-3xl font-black">{citizen.username}</h1>
+                <h1 className="flex items-center justify-center gap-2 text-3xl font-black">{citizen.username}{citizen.royalVerified&&<span title="Royal verified" className="text-sky-400">👑</span>}</h1>
                 <div className="mt-3 flex flex-wrap justify-center gap-2">
                   <RankBadge rank={citizen.rank} />
                   <span
@@ -814,11 +815,16 @@ export default function CitizenPage() {
             {/* Info */}
             <div className="flex-1 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-black">{citizen.username}</h1>
+                <h1 className="flex items-center gap-2 text-3xl font-black">{citizen.username}{citizen.royalVerified&&<span title="Royal verified" className="text-sky-400">👑</span>}</h1>
                 <RankBadge rank={citizen.rank} />
                 <Button variant="outline" size="sm" onClick={shareProfile}>
                   <Share2 className="h-4 w-4" /> {ct.share}
                 </Button>
+                 {isSelf && !citizen.royalVerified && (
+                   <Button asChild size="sm">
+                     <Link href="/royal-verification"><Shield className="h-4 w-4" />{lang==="ar"?"توثيق المنتج الملكي":"Producer verification"}</Link>
+                   </Button>
+                 )}
               </div>
 
               {/* Honor Title */}

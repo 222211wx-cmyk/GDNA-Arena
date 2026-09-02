@@ -12,3 +12,5 @@ Invariants (each closed a real money-farming hole — keep them):
 - **Why:** engagement identity from client-controlled X-Forwarded-For is forgeable; anything that mints withdrawable coins must key on session identity + DB uniqueness.
 
 Gotcha: `pulse_posts.earnings` was added by raw ALTER; Drizzle silently DROPS unknown keys in `.set()` — earnings updates must be raw SQL, and the column had to be added to the ORM schema for the feed to return it. Same session discovered prod-relevant missing `media_type` column; both ALTERs are in the rights DDL bootstrap.
+
+Royal verification is optional and only for producers/original-rights holders who want to claim originals and receive payouts. Ordinary citizens may register and publish without verification or licensing; content must be at least 60 seconds with no maximum. Full-original reuse is blocked, while shorter/transformative use remains allowed. **Why:** the owner explicitly separated producer monetization controls from ordinary citizen creativity. **How to apply:** never gate signup or publishing on royal verification; gate producer payout/original-claim privileges only.

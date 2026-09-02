@@ -130,6 +130,8 @@ router.post("/finance/checkout", async (req, res): Promise<void> => {
 router.post("/finance/payouts", async (req, res): Promise<void> => {
   const id = user(req); const { beneficiaryId, amountMinor, currency: c } = req.body ?? {};
   if (!id) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const verification=await pool.query("SELECT status,name_matches FROM royal_verifications WHERE user_id=$1",[id]);
+  if(verification.rows[0]?.status!=="verified"||verification.rows[0]?.name_matches!==true){res.status(409).json({error:"Royal account verification and matching bank-holder name are required. Earnings remain frozen."});return;}
   if (FINANCE_SIMULATION_MODE) { res.status(409).json({error:"Operational payouts are disabled in simulation mode; test allocations cannot be paid.",simulated:true}); return; }
   if (typeof beneficiaryId !== "string" || !money(amountMinor) || !currency(c)) { res.status(400).json({ error: "Invalid payout" }); return; }
   const beneficiary = await ownedBeneficiary(id, beneficiaryId); if (!beneficiary?.stripe_account_id) { res.status(409).json({ error: "Complete Connect onboarding first" }); return; }
@@ -173,6 +175,8 @@ router.put("/finance/beneficiaries/:id/payout-details",async(req,res):Promise<vo
 });
 router.post("/finance/manual-payouts",async(req,res):Promise<void>=>{
   const id=user(req); if(!id){res.status(401).json({error:"Not authenticated"});return;} const {beneficiaryId,period,currency:c}=req.body??{};
+  const verification=await pool.query("SELECT status,name_matches FROM royal_verifications WHERE user_id=$1",[id]);
+  if(verification.rows[0]?.status!=="verified"||verification.rows[0]?.name_matches!==true){res.status(409).json({error:"Royal account verification and matching bank-holder name are required. Earnings remain frozen."});return;}
   if(typeof beneficiaryId!=="string"||typeof period!=="string"||!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(period)||!currency(c)){res.status(400).json({error:"Invalid monthly payout request"});return;}
   if(FINANCE_SIMULATION_MODE){res.status(409).json({error:"Test allocations cannot be paid via RedotPay. Enable live finance only after production approval.",simulated:true});return;}
   const client=await pool.connect(); try { await client.query("BEGIN");
