@@ -18,8 +18,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
-  Camera, Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
+  Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
   ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ClipboardPaste, ShieldOff, ContactRound,
+  MapPin, Link2, Share2,
 } from "lucide-react";
 import SolidarityRelay from "./SolidarityRelay";
 import type { GroupRoom } from "../social/social-types";
@@ -913,6 +914,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const [e2eReady,     setE2eReady]    = useState(false);
   // Controls the + attachment tray inside the composer
   const [showAttachTray, setShowAttachTray] = useState(false);
+  const [showLinkComposer, setShowLinkComposer] = useState(false);
+  const [linkDraft, setLinkDraft] = useState("");
   // Task #165: reply + reactions
   const [replyTo,       setReplyTo]       = useState<DmMessage | null>(null);
   // Solidarity Relay now lives INSIDE the Communities destination (not a 5th tab).
@@ -927,7 +930,6 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const pendingRef = useRef<PendingFile[]>([]);
   useEffect(() => { pendingRef.current = pending; }, [pending]);
   const galleryRef = useRef<HTMLInputElement>(null);
-  const cameraRef  = useRef<HTMLInputElement>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recStreamRef = useRef<MediaStream | null>(null);
@@ -1670,6 +1672,101 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     setShowAttachTray(false);
   }
 
+  async function shareDeviceContacts() {
+    setShowAttachTray(false);
+    const contactsApi = (navigator as Navigator & {
+      contacts?: {
+        select: (
+          properties: string[],
+          options: { multiple: boolean },
+        ) => Promise<Array<{ name?: string[]; tel?: string[]; email?: string[] }>>;
+      };
+    }).contacts;
+    if (!contactsApi?.select) {
+      setToast(st.device_contacts_unavailable ?? "Device contacts are not supported by this browser.");
+      return;
+    }
+    try {
+      const contacts = await contactsApi.select(["name", "tel", "email"], { multiple: true });
+      if (!contacts.length) return;
+      const content = contacts.map(contact => [
+        `👤 ${contact.name?.[0] ?? (st.contact ?? "Contact")}`,
+        ...(contact.tel ?? []).map(value => `📞 ${value}`),
+        ...(contact.email ?? []).map(value => `✉️ ${value}`),
+      ].join("\n")).join("\n\n");
+      await sendMessage({ content, type: "text" });
+    } catch (error) {
+      if ((error as DOMException)?.name !== "AbortError") {
+        setToast(st.contact_share_failed ?? "Could not open device contacts.");
+      }
+    }
+  }
+
+  function shareLocation() {
+    setShowAttachTray(false);
+    if (!navigator.geolocation) {
+      setToast(st.location_unavailable ?? "Location is not supported by this device.");
+      return;
+    }
+    setToast(st.location_loading ?? "Getting your location…");
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const { latitude, longitude } = position.coords;
+        const mapsUrl = `https://www.google.com/maps?q=${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+        setToast("");
+        void sendMessage({
+          content: `📍 ${st.shared_location ?? "Shared location"}\n${mapsUrl}`,
+          type: "text",
+        });
+      },
+      () => setToast(st.location_denied ?? "Location permission was denied."),
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 30_000 },
+    );
+  }
+
+  async function shareToOtherApps() {
+    setShowAttachTray(false);
+    if (!navigator.share) {
+      setToast(st.external_share_unavailable ?? "Sharing to other apps is not supported by this browser.");
+      return;
+    }
+    try {
+      await navigator.share({
+        title: "GDNA Arena",
+        text: text.trim() || (st.share_from_gdna ?? "Shared from GDNA Arena"),
+        url: window.location.href,
+      });
+    } catch (error) {
+      if ((error as DOMException)?.name !== "AbortError") {
+        setToast(st.external_share_failed ?? "Could not open the share menu.");
+      }
+    }
+  }
+
+  async function sendMultipleLinks() {
+    const candidates = linkDraft
+      .split(/[\n,\s]+/u)
+      .map(value => value.trim())
+      .filter(Boolean);
+    const links = Array.from(new Set(candidates)).slice(0, 20);
+    if (!links.length || links.some(value => {
+      try {
+        const url = new URL(value);
+        return url.protocol !== "https:" && url.protocol !== "http:";
+      } catch {
+        return true;
+      }
+    })) {
+      setToast(st.links_invalid ?? "Enter valid http or https links.");
+      return;
+    }
+    const sent = await sendMessage({ content: links.join("\n"), type: "text" });
+    if (sent) {
+      setLinkDraft("");
+      setShowLinkComposer(false);
+    }
+  }
+
   // Upload every staged file sequentially with per-file progress, then clear.
   async function confirmPending() {
     if (uploading) return;
@@ -1909,6 +2006,30 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         </div>
       )}
 
+      {showLinkComposer && (
+        <div className="mb-2 space-y-2 rounded-xl border border-border bg-card p-3">
+          <textarea
+            value={linkDraft}
+            onChange={event => setLinkDraft(event.target.value)}
+            placeholder={st.multiple_links_hint ?? "Paste multiple links, one per line"}
+            aria-label={st.multiple_links ?? "Multiple links"}
+            dir="auto"
+            rows={3}
+            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+          />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => { setShowLinkComposer(false); setLinkDraft(""); }}
+              className="rounded-md px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent">
+              {st.cancel}
+            </button>
+            <button type="button" onClick={() => void sendMultipleLinks()} disabled={!linkDraft.trim() || sending || !isOnline}
+              className="rounded-md bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50">
+              {st.send}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Input row: [input-with-plus-inside] [send-or-stop] */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", position: "relative" }} ref={attachTrayRef}>
         {/* Attach tray — floats above the composer when open */}
@@ -1928,14 +2049,18 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                 borderRadius: 14,
                 padding: "6px",
                 display: "flex",
+                flexWrap: "wrap",
+                maxWidth: 304,
                 gap: 4,
                 zIndex: 50,
                 boxShadow: "0 8px 28px rgba(0,0,0,0.6)",
               }}>
               {([
-                [<Camera key="cam" size={19} />, st.attach_camera ?? "Camera", () => cameraRef.current?.click()],
-                [<ImageIcon key="gal" size={19} />, st.attach_gallery ?? "Gallery", () => galleryRef.current?.click()],
+                [<ContactRound key="contact" size={19} />, st.share_contact ?? "Contact", shareDeviceContacts],
+                [<MapPin key="location" size={19} />, st.share_location ?? "Location", shareLocation],
                 [<Paperclip key="fil" size={19} />, st.attach_file ?? "Files", () => fileRef.current?.click()],
+                [<Link2 key="links" size={19} />, st.multiple_links ?? "Links", () => { setShowLinkComposer(true); setShowAttachTray(false); }],
+                [<Share2 key="share" size={19} />, st.other_apps ?? "Other apps", () => void shareToOtherApps()],
                 [
                   recording ? <Square key="rec" size={17} /> : <Mic key="rec" size={19} />,
                   recording ? (st.stop_recording ?? "Stop") : (st.record_voice ?? "Microphone"),
@@ -1949,15 +2074,16 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                   onClick={fn}
                   title={label}
                   aria-label={label}
-                  disabled={uploading || (!isOnline && idx < 4)}
+                   data-testid={`share-option-${["contact", "location", "files", "links", "other-apps", "voice", "emoji", "paste"][idx]}`}
+                   disabled={uploading || !isOnline}
                   style={{
                     width: 44,
                     height: 44,
                     borderRadius: 10,
                     border: `1px solid ${GOLD_A(0.082)}`,
                     cursor: "pointer",
-                    background: (idx === 3 && recording) ? "#ef444420" : GOLD_A(0.063),
-                    color: (idx === 3 && recording) ? "#ef4444" : GOLD,
+                    background: (idx === 5 && recording) ? "#ef444420" : GOLD_A(0.063),
+                    color: (idx === 5 && recording) ? "#ef4444" : GOLD,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -1976,7 +2102,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
           {/* + button — inset inside the input shell */}
           <button
             onClick={() => { setShowAttachTray(v => !v); setShowEmoji(false); }}
-            aria-label={st.attach_file}
+            aria-label={st.share_options ?? "Share options"}
+            data-testid="button-share-options"
             disabled={recording || !isOnline}
             style={{
               position: "absolute",
@@ -2032,6 +2159,17 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             }}
           />
         </div>
+
+        <button
+          type="button"
+          onClick={() => galleryRef.current?.click()}
+          disabled={recording || uploading || !isOnline}
+          title={st.attach_gallery ?? "Photos and videos"}
+          aria-label={st.attach_gallery ?? "Photos and videos"}
+          data-testid="button-gallery"
+          style={{ width: 44, height: 44, borderRadius: "50%", background: "#1c1c1c", border: `1px solid ${GOLD_A(0.125)}`, color: GOLD, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <ImageIcon size={20} />
+        </button>
 
         {/* Send button (always visible) or Stop-recording */}
         {recording ? (
@@ -2389,7 +2527,6 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       )}
 
       {/* Hidden pickers */}
-      <input ref={cameraRef}  type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={galleryRef} type="file" multiple accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={fileRef}    type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
 
