@@ -42,6 +42,8 @@ import fortressRouter from "./fortress";
 import solidarityRouter from "./solidarity";
 import financeRouter from "./finance";
 import royalVerificationRouter from "./royal-verification";
+import royalCreditRouter from "./royal-credit";
+import turnConfigRouter from "./turn-config";
 
 const router: IRouter = Router();
 
@@ -76,10 +78,12 @@ router.use(ppoRouter);
 router.use(clipsRouter);
 router.use(levelsRouter);
 router.use(rtcRouter);
+router.use(turnConfigRouter);
 router.use(fortressRouter);
 router.use(solidarityRouter);
 router.use(financeRouter);
 router.use(royalVerificationRouter);
+router.use(royalCreditRouter);
 router.use("/neural", neuralRouter);
 router.use("/genome", genomeRouter);
 router.use("/geo", geoRouter);

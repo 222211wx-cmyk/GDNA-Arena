@@ -28,6 +28,7 @@ import { formatSurfaceDate, formatSurfaceNumber, localeForSurfaceB } from "@/i18
 import { getMessengerCopy } from "@/i18n/messenger-complete-copy";
 import { sharedCopy } from "@/i18n/shared-components-copy";
 import { STORIES_COPY, storiesCopy } from "@/i18n/stories-copy";
+import { getReserveCopy } from "@/i18n/royal-reserve-copy";
 import { task39, task39Text } from "@/i18n/task39";
 import { TECH_COPY_TABLE, techT } from "@/i18n/tech-surfaces-copy";
 import { aboutTraditionsCopy } from "@/globalstar/i18n/about-traditions-copy";
@@ -161,6 +162,7 @@ const expectedSupplementalFiles = [
   "./i18n/locale-surfaces-a-copy.ts",
   "./i18n/locale-surfaces-b-copy.ts",
   "./i18n/messenger-complete-copy.ts",
+  "./i18n/royal-reserve-copy.ts",
   "./i18n/shared-components-copy.ts",
   "./i18n/stories-copy.ts",
   "./i18n/task39.ts",
@@ -280,6 +282,7 @@ describe("Task 39 supplemental copy coverage", () => {
       date: formatSurfaceDate(locale, "2026-01-02T00:00:00Z", { timeZone: "UTC" }),
     })),
     "./i18n/messenger-complete-copy.ts": fromGetter(getMessengerCopy),
+    "./i18n/royal-reserve-copy.ts": fromGetter(getReserveCopy),
     "./i18n/shared-components-copy.ts": fromGetter(sharedCopy),
     "./i18n/stories-copy.ts": fromKeyGetter(
       keysOf(STORIES_COPY.en),

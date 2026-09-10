@@ -71,6 +71,12 @@ test("caller receives authorization acknowledgement before requesting an Agora t
   const calleeCookie = await register(calleeName);
   const callerSocket = await connect(callerCookie);
   const calleeSocket = await connect(calleeCookie);
+  const reserveResponse = await request("/billing/reserve", {
+    method: "POST",
+    headers: { cookie: callerCookie },
+    body: JSON.stringify({ accepted: true, idempotencyKey: `reserve-${suffix}` }),
+  });
+  assert.equal(reserveResponse.status, 201, await reserveResponse.clone().text());
 
   t.after(async () => {
     callerSocket.close();
@@ -96,6 +102,7 @@ test("caller receives authorization acknowledgement before requesting an Agora t
   const incomingPromise = waitFor(calleeSocket, "call-incoming");
   callerSocket.send(JSON.stringify({
     type: "call-offer",
+    offer: null,
     to: calleeName,
     callId,
     video: true,

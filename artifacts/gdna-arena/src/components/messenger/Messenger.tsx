@@ -34,6 +34,11 @@ import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 import { getMessengerCopy, getMessengerIntlLocale } from "@/i18n/messenger-complete-copy";
+import { getReserveCopy } from "@/i18n/royal-reserve-copy";
+import { useRoyalReserve } from "@/hooks/use-royal-reserve";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { RoyalReserveCredit } from "./RoyalReserveCredit";
+import { NetworkDisplay } from "./NetworkDisplay";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
 import {
   decryptAttachmentBlob,
@@ -604,7 +609,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
 }
 
 // ── Appels ────────────────────────────────────────────────────────────────────
-function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline }: {
+function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline, callActive }: {
   st: Record<string, string>;
   lang: string;
   user: { id: number; username: string };
@@ -613,9 +618,16 @@ function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection
   onTestConnection: () => void;
   isOnline: boolean;
   onOffline: () => void;
+  /** True while a call is active — drives credit polling so minutes decrease visibly. */
+  callActive: boolean;
 }) {
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ── Royal Reserve call credit + honest network status (owned by this feature) ──
+  const rt = getReserveCopy(lang);
+  const network = useNetworkStatus();
+  const reserve = useRoyalReserve(user?.id ?? null, { callActive, online: isOnline });
 
   useEffect(() => {
     if (!isOnline) {
@@ -655,6 +667,32 @@ function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
+      {/* Royal Reserve credit first so minutes + activation are reachable
+          immediately on small mobile screens without scrolling. */}
+      <div className="mb-3">
+        <RoyalReserveCredit
+          rt={rt}
+          lang={lang}
+          credit={reserve.credit}
+          policy={reserve.policy}
+          isLoading={reserve.isLoading}
+          isError={reserve.isError}
+          onRetry={() => { void reserve.refetch(); }}
+          canActivate={reserve.canActivate}
+          onActivate={reserve.reserve}
+          reserveIsPending={reserve.reserveIsPending}
+          reserveIsError={reserve.reserveIsError}
+          online={isOnline}
+          showSandboxRepay={import.meta.env.DEV && (reserve.policy?.repaymentSandboxEnabled ?? false)}
+          onRepay={reserve.repay}
+          repayIsPending={reserve.repayIsPending}
+          repayIsError={reserve.repayIsError}
+          repayErrorNotAvailable={reserve.repayErrorNotAvailable}
+        />
+      </div>
+      <div className="mb-3">
+        <NetworkDisplay status={network} rt={rt} />
+      </div>
       <div className="mb-3 rounded-xl border border-border bg-card p-3">
         <div className="flex items-center gap-2">
           <Wifi className="h-4 w-4 shrink-0 text-primary" />
@@ -674,6 +712,11 @@ function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection
           </div>
         )}
       </div>
+      {!isOnline && (
+        <p className="mb-2 text-center text-xs text-muted-foreground" data-testid="text-call-blocked-offline">
+          {rt.call_blocked_offline}
+        </p>
+      )}
       <button onClick={() => isOnline ? onNewCall() : onOffline()} disabled={!isOnline}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#22c55e12", border: "1px solid #22c55e30", borderRadius: 12, cursor: "pointer", marginBottom: 10 }}>
         <Phone size={18} style={{ color: "#22c55e" }} />
@@ -2535,7 +2578,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 
         {/* ── Top bar ── */}
         <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>{st.messageri}</p>
+          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>{getReserveCopy(lang).king_chat}</p>
           <button onClick={() => { setTab("settings"); activeRoomIdRef.current = null; setActiveRoom(null); }} title={st.nav_settings ?? "Settings"}
             data-testid="button-open-settings"
             style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: tab === "settings" ? GOLD_A(0.094) : "transparent", color: tab === "settings" ? GOLD : "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2645,6 +2688,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             onTestConnection={call.testConnection}
             isOnline={isOnline}
             onOffline={blockOffline}
+            callActive={call.callStatus === "active" || call.callStatus === "calling" || call.callStatus === "ringing"}
           />
         )}
 

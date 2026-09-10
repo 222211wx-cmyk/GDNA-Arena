@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { SOCIAL_T, GOLD } from "@/components/social/social-i18n";
 import Messenger from "@/components/messenger/Messenger";
-import { techT } from "@/i18n/tech-surfaces-copy";
+import { getReserveCopy } from "@/i18n/royal-reserve-copy";
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -18,6 +18,7 @@ export default function MessagesPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
+  const rt  = getReserveCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
   const requestedRoom = new URLSearchParams(search).get("room");
   const parsedRoomId = requestedRoom === null ? Number.NaN : Number(requestedRoom);
@@ -37,7 +38,7 @@ export default function MessagesPage() {
         <MessageSquare size={40} style={{ color: GOLD, opacity: 0.5 }} />
         <p style={{ margin: 0, fontSize: 15 }}>{st.login_required}</p>
         <Link href="/login" style={{ background: GOLD, color: "#000", fontWeight: 800, borderRadius: 8, padding: "8px 22px", textDecoration: "none", fontSize: 13 }} data-testid="link-login-messageri">
-          {techT(lang, "messageri")}
+          {rt.king_chat}
         </Link>
       </div>
     );
@@ -47,7 +48,7 @@ export default function MessagesPage() {
     <div dir={dir} lang={lang === "de" ? "de-DE" : lang} style={{ maxWidth: 1100, margin: "0 auto", padding: "16px 12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <MessageSquare size={20} style={{ color: GOLD }} />
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#fff" }} data-testid="heading-messageri">{techT(lang, "messageri")}</h1>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#fff" }} data-testid="heading-messageri">{rt.king_chat}</h1>
         <span style={{ fontSize: 11, color: "#ffffff40" }}>{st.messages}</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "#ffffff40", marginInlineStart: "auto" }}>
           <ShieldCheck size={12} style={{ color: GOLD }} /> {st.server_encrypted}

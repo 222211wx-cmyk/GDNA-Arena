@@ -24,6 +24,17 @@ import {
 import { apiPath, websocketUrl } from "@/lib/network";
 import { trackCallDeviceOutcome } from "@/lib/analytics";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
+import {
+  readCallNetworkState,
+  subscribeCallNetwork,
+  type CallNetworkState,
+} from "@/lib/call-network";
+import {
+  fetchCallRtcConfig,
+  preferOpus,
+  type CallMediaProvider,
+  type CallRtcConfig,
+} from "@/lib/call-rtc-config";
 
 // Fetch a channel-scoped RTC token from the authenticated backend.
 // The Agora client must not be created until this returns a complete signed
@@ -104,6 +115,7 @@ async function fetchAgoraPreflight(): Promise<{ appId: string; token: string; ui
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
 export type LiveStatus  = "idle" | "live" | "ended";
 export type ConnectionTestStatus = "idle" | "testing" | "ready" | "unstable" | "failed";
+export type CallNetworkQuality = "unknown" | "good" | "weak" | "poor";
 export type CallDeviceKind = "audioinput" | "videoinput" | "audiooutput";
 
 export interface CallDevice {
@@ -122,6 +134,8 @@ interface IncomingCall {
   from:   string;
   callId: string;
   video:  boolean;
+  offer?: RTCSessionDescriptionInit | null;
+  transport?: { provider: CallMediaProvider; version: 1 };
   e2e?: {
     devices: Record<string, {
       wrappedSecret: string;
@@ -185,12 +199,28 @@ export function useCall(user: { id: number; username: string } | null) {
     typeof navigator.mediaDevices?.getDisplayMedia === "function";
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
+  const callPcRef = useRef<RTCPeerConnection | null>(null);
+  const callProviderRef = useRef<CallMediaProvider>("agora");
+  const callRtcConfigRef = useRef<CallRtcConfig | null>(null);
+  const remoteCallStreamRef = useRef<MediaStream | null>(null);
+  const webRtcScreenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const webRtcCameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  const iceRestartAttemptedRef = useRef(false);
+  const iceRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const webRtcStatsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previousPacketStatsRef = useRef(new Map<number, { received: number; lost: number }>());
+  const pendingCallIceRef = useRef<RTCIceCandidate[]>([]);
+  const callSignalingReadyRef = useRef(new Set<string>());
+  const pendingRemoteIceRef = useRef<RTCIceCandidateInit[]>([]);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
   const wasConnectedRef = useRef(false);
   const identityGenerationRef = useRef(0);
   const preflightClientRef = useRef<IAgoraRTCClient | null>(null);
+  const mediaConnectedRef = useRef(false);
+  const mediaHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reducedVideoRef = useRef(false);
 
   // ── Agora call engine ──────────────────────────────────────────────────────
   const agoraRef = useRef<IAgoraRTCClient | null>(null);
@@ -240,6 +270,9 @@ export function useCall(user: { id: number; username: string } | null) {
   // ── Error feedback ─────────────────────────────────────────────────────────
   const [callError,    setCallError]    = useState<string | null>(null);
   const [connectionTest, setConnectionTest] = useState<ConnectionTestStatus>("idle");
+  const [networkQuality, setNetworkQuality] = useState<CallNetworkQuality>("unknown");
+  const [networkState, setNetworkState] = useState<CallNetworkState>(() =>
+    readCallNetworkState(navigator));
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showCallError = (msg: string, durationMs = 5_000) => {
@@ -316,8 +349,8 @@ export function useCall(user: { id: number; username: string } | null) {
     return () => navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
   }, [callStatus, refreshCallDevices, selectedCameraId, selectedMicrophoneId, selectedSpeakerId]);
 
-  // ── Ring timeout: give up on unanswered outgoing calls after ~45s ─────────
-  const RING_TIMEOUT_MS = 45_000;
+  // ── Ring timeout: client safety net (the server owns authoritative state) ──
+  const RING_TIMEOUT_MS = 30_000;
   const ringTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearRingTimer = () => {
     if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
@@ -328,6 +361,27 @@ export function useCall(user: { id: number; username: string } | null) {
       wsRef.current.send(JSON.stringify(data));
     }
   }, []);
+
+  const setActualMediaConnected = useCallback((next: boolean) => {
+    mediaConnectedRef.current = next;
+    if (mediaHeartbeatRef.current) {
+      clearInterval(mediaHeartbeatRef.current);
+      mediaHeartbeatRef.current = null;
+    }
+    const sendState = () => {
+      const callId = currentCallIdRef.current;
+      if (callId) sendWS({ type: "call-media-state", callId, connected: mediaConnectedRef.current });
+    };
+    // A false transition must be observable before call state is cleared.
+    if (!next) {
+      sendState();
+      return;
+    }
+    sendState();
+    mediaHeartbeatRef.current = setInterval(sendState, 5_000);
+  }, [sendWS]);
+
+  useEffect(() => subscribeCallNetwork(navigator, window, setNetworkState), []);
 
   const waitForCallReady = useCallback((callId: string) => new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -489,13 +543,26 @@ export function useCall(user: { id: number; username: string } | null) {
     ));
     client.setEncryptionConfig("aes-256-gcm2", encryptionSecret, salt);
 
+    const subscribedPeers = new Set<string>();
+    const refreshAgoraConnectivity = () => {
+      if (agoraRef.current !== client) return;
+      // Muting or switching off a camera is not a network disconnect. Require
+      // an established subscription and the peer still present on the transport.
+      setActualMediaConnected(
+        client.connectionState === "CONNECTED" &&
+        client.remoteUsers.some(peer => subscribedPeers.has(String(peer.uid))),
+      );
+    };
     client.on("user-published", async (remoteUser, mediaType) => {
       if (agoraRef.current !== client) return; // stale client
       await client.subscribe(remoteUser, mediaType);
+      if (agoraRef.current !== client) return;
+      subscribedPeers.add(String(remoteUser.uid));
       if (mediaType === "audio") remoteAudioRef.current = remoteUser.audioTrack ?? null;
       if (mediaType === "video") remoteVideoRef.current = remoteUser.videoTrack ?? null;
       rebuildRemoteStream();
       setCallStatus("active");
+      refreshAgoraConnectivity();
     });
 
     client.on("user-unpublished", (_remoteUser, mediaType) => {
@@ -503,6 +570,35 @@ export function useCall(user: { id: number; username: string } | null) {
       if (mediaType === "audio") remoteAudioRef.current = null;
       if (mediaType === "video") remoteVideoRef.current = null;
       rebuildRemoteStream();
+      refreshAgoraConnectivity();
+    });
+
+    client.on("user-left", remoteUser => {
+      subscribedPeers.delete(String(remoteUser.uid));
+      refreshAgoraConnectivity();
+    });
+
+    client.on("connection-state-change", state => {
+      if (agoraRef.current !== client) return;
+      if (state === "DISCONNECTED" || state === "DISCONNECTING" || state === "RECONNECTING") {
+        setActualMediaConnected(false);
+      } else if (state === "CONNECTED") {
+        refreshAgoraConnectivity();
+      }
+    });
+
+    client.on("network-quality", quality => {
+      if (agoraRef.current !== client) return;
+      const worst = Math.max(quality.uplinkNetworkQuality, quality.downlinkNetworkQuality);
+      setNetworkQuality(worst >= 5 ? "poor" : worst >= 3 ? "weak" : worst > 0 ? "good" : "unknown");
+      const video = localVideoRef.current;
+      if (video && worst >= 4 && !reducedVideoRef.current) {
+        reducedVideoRef.current = true;
+        void video.setEncoderConfiguration("360p_1").catch(() => {});
+      } else if (video && worst > 0 && worst <= 2 && reducedVideoRef.current) {
+        reducedVideoRef.current = false;
+        void video.setEncoderConfiguration("720p_1").catch(() => {});
+      }
     });
 
     await client.join(appId, channel, token, uid);
@@ -540,10 +636,149 @@ export function useCall(user: { id: number; username: string } | null) {
     void refreshCallDevices();
     // Slow device setup must not consume the warning before the overlay renders.
     if (cameraWarning) showCallError(cameraWarning, 15_000);
-  }, [rebuildRemoteStream, refreshCallDevices, refreshCameraZoom]);
+  }, [rebuildRemoteStream, refreshCallDevices, refreshCameraZoom, setActualMediaConnected]);
+
+  const createWebRtcCall = useCallback(async (
+    config: CallRtcConfig,
+    peer: string,
+    callId: string,
+    withVideo: boolean,
+    canInitiateRestart: boolean,
+  ): Promise<{ pc: RTCPeerConnection; stream: MediaStream }> => {
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Secure browser media is unavailable");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: withVideo
+        ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }
+        : false,
+    });
+    const pc = new RTCPeerConnection({ iceServers: config.iceServers });
+    callPcRef.current = pc;
+    callProviderRef.current = "webrtc";
+    callRtcConfigRef.current = config;
+    iceRestartAttemptedRef.current = false;
+    previousPacketStatsRef.current.clear();
+    pendingCallIceRef.current = [];
+
+    for (const track of stream.getTracks()) pc.addTrack(track, stream);
+    if (!stream.getVideoTracks().length) {
+      pc.addTransceiver("video", { direction: "sendrecv" });
+    }
+    for (const transceiver of pc.getTransceivers()) {
+      if (transceiver.receiver.track.kind === "audio") preferOpus(transceiver);
+    }
+    localStreamRef.current = stream;
+    setLocalStream(stream);
+    setSelectedMicrophoneId(stream.getAudioTracks()[0]?.getSettings().deviceId ?? "");
+    setSelectedCameraId(stream.getVideoTracks()[0]?.getSettings().deviceId ?? "");
+    refreshCameraZoom(stream.getVideoTracks()[0]);
+    void refreshCallDevices();
+
+    pc.ontrack = event => {
+      const next = event.streams[0] ?? new MediaStream([event.track]);
+      remoteCallStreamRef.current = next;
+      setRemoteStream(next);
+      event.track.addEventListener("ended", () => setActualMediaConnected(false), { once: true });
+      queueMicrotask(() => {
+        const hasRemoteMedia = next.getTracks().some(track => track.readyState === "live");
+        setActualMediaConnected(pc.connectionState === "connected" && hasRemoteMedia);
+      });
+    };
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        if (callSignalingReadyRef.current.has(callId)) {
+          sendWS({ type: "ice-candidate", to: peer, callId, candidate: event.candidate });
+        } else {
+          pendingCallIceRef.current.push(event.candidate);
+        }
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      const hasRemoteMedia = !!remoteCallStreamRef.current?.getTracks()
+        .some(track => track.readyState === "live");
+      if (pc.connectionState === "connected") {
+        if (hasRemoteMedia) setActualMediaConnected(true);
+        if (iceRestartTimerRef.current) clearTimeout(iceRestartTimerRef.current);
+        return;
+      }
+      setActualMediaConnected(false);
+      if (pc.connectionState !== "failed" && pc.connectionState !== "disconnected") return;
+      // Only the original caller creates a restart offer, avoiding glare when
+      // both peers observe the same network transition simultaneously.
+      if (!canInitiateRestart) return;
+      if (iceRestartAttemptedRef.current) {
+        showCallError("فشل اتصال TURN المرحّل — أنهِ المكالمة وتحقق من الشبكة أو خادم TURN", 15_000);
+        return;
+      }
+      iceRestartAttemptedRef.current = true;
+      try {
+        pc.setConfiguration({ iceServers: config.iceServers, iceTransportPolicy: "relay" });
+        pc.restartIce();
+        void pc.createOffer({ iceRestart: true }).then(async offer => {
+          if (callPcRef.current !== pc) return;
+          await pc.setLocalDescription(offer);
+          sendWS({
+            type: "call-renegotiate-offer",
+            callId,
+            offer: pc.localDescription,
+            transport: { provider: "webrtc", version: 1 },
+          });
+          iceRestartTimerRef.current = setTimeout(() => {
+            if (callPcRef.current === pc && pc.connectionState !== "connected") {
+              setActualMediaConnected(false);
+              showCallError("تعذّر إنشاء مسار TURN مرحّل للمكالمة", 15_000);
+            }
+          }, 8_000);
+        }).catch(() => showCallError("تعذّرت إعادة تفاوض اتصال TURN", 15_000));
+      } catch {
+        showCallError("هذا المتصفح لا يدعم استعادة اتصال TURN", 15_000);
+      }
+    };
+
+    webRtcStatsTimerRef.current = setInterval(() => {
+      void pc.getStats().then(stats => {
+        let weak = false;
+        stats.forEach(report => {
+          if (report.type !== "inbound-rtp" || report.kind !== "video") return;
+          const received = Number(report.packetsReceived ?? 0);
+          const lost = Number(report.packetsLost ?? 0);
+          const previous = previousPacketStatsRef.current.get(report.ssrc);
+          previousPacketStatsRef.current.set(report.ssrc, { received, lost });
+          if (!previous) return;
+          const receivedDelta = received - previous.received;
+          const lostDelta = lost - previous.lost;
+          weak ||= lostDelta > 0 && lostDelta / Math.max(1, receivedDelta + lostDelta) >= 0.05;
+        });
+        setNetworkQuality(weak ? "weak" : pc.connectionState === "connected" ? "good" : "poor");
+        if (weak) {
+          const video = localStreamRef.current?.getVideoTracks()[0];
+          void video?.applyConstraints({
+            width: { max: 640 },
+            height: { max: 360 },
+            frameRate: { max: 20 },
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }, 5_000);
+
+    return { pc, stream };
+  }, [refreshCallDevices, refreshCameraZoom, sendWS, setActualMediaConnected]);
 
   // ── Leave Agora & release all media ────────────────────────────────────────
   const leaveAgora = useCallback(async () => {
+    setActualMediaConnected(false);
+    if (iceRestartTimerRef.current) clearTimeout(iceRestartTimerRef.current);
+    if (webRtcStatsTimerRef.current) clearInterval(webRtcStatsTimerRef.current);
+    iceRestartTimerRef.current = null;
+    webRtcStatsTimerRef.current = null;
+    try { callPcRef.current?.close(); } catch { /* already closed */ }
+    callPcRef.current = null;
+    webRtcScreenTrackRef.current?.stop();
+    webRtcScreenTrackRef.current = null;
+    webRtcCameraTrackRef.current?.stop();
+    webRtcCameraTrackRef.current = null;
     const client = agoraRef.current;
     agoraRef.current = null;
     try { screenTrackRef.current?.close(); } catch { /* already closed */ }
@@ -554,7 +789,11 @@ export function useCall(user: { id: number; username: string } | null) {
     localVideoRef.current  = null;
     remoteAudioRef.current = null;
     remoteVideoRef.current = null;
+    if (callProviderRef.current === "webrtc") {
+      localStreamRef.current?.getTracks().forEach(track => track.stop());
+    }
     localStreamRef.current = null;
+    remoteCallStreamRef.current = null;
     setLocalStream(null);
     setRemoteStream(null);
     setScreenSharing(false);
@@ -565,8 +804,15 @@ export function useCall(user: { id: number; username: string } | null) {
     setCameraZoom(null);
     setDeviceIssue(null);
     setSwitchingDevice(null);
+    setNetworkQuality("unknown");
+    reducedVideoRef.current = false;
+    callProviderRef.current = "agora";
+    callRtcConfigRef.current = null;
+    pendingCallIceRef.current = [];
+    pendingRemoteIceRef.current = [];
+    callSignalingReadyRef.current.clear();
     if (client) { try { await client.leave(); } catch { /* already left */ } }
-  }, []);
+  }, [setActualMediaConnected]);
 
   const rebuildLocalCallStream = useCallback(() => {
     const audioTrack = localAudioRef.current?.getMediaStreamTrack();
@@ -578,6 +824,30 @@ export function useCall(user: { id: number; username: string } | null) {
   }, []);
 
   const switchMicrophone = useCallback(async (deviceId: string) => {
+    if (callProviderRef.current === "webrtc" && callPcRef.current && callStatus === "active") {
+      setSwitchingDevice("audioinput");
+      try {
+        const replacement = (await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: deviceId } },
+          video: false,
+        })).getAudioTracks()[0];
+        if (!replacement) throw new Error("Microphone unavailable");
+        const sender = callPcRef.current.getSenders().find(item => item.track?.kind === "audio");
+        await sender?.replaceTrack(replacement);
+        const stream = localStreamRef.current;
+        stream?.getAudioTracks().forEach(old => { stream.removeTrack(old); old.stop(); });
+        stream?.addTrack(replacement);
+        if (stream) setLocalStream(new MediaStream(stream.getTracks()));
+        setSelectedMicrophoneId(deviceId);
+        setDeviceIssue(null);
+        trackCallDeviceOutcome("audioinput", "switch_succeeded");
+      } catch (error) {
+        setDeviceIssue({ kind: "audioinput", message: `${mediaFailureMessage(error, "microphone")} — اختر ميكروفوناً آخر` });
+      } finally {
+        setSwitchingDevice(null);
+      }
+      return;
+    }
     const track = localAudioRef.current;
     if (!track || callStatus !== "active") return;
     setSwitchingDevice("audioinput");
@@ -599,6 +869,32 @@ export function useCall(user: { id: number; username: string } | null) {
   }, [callStatus, rebuildLocalCallStream]);
 
   const switchCamera = useCallback(async (deviceId: string) => {
+    if (callProviderRef.current === "webrtc" && callPcRef.current && callStatus === "active") {
+      setSwitchingDevice("videoinput");
+      try {
+        const replacement = (await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        })).getVideoTracks()[0];
+        if (!replacement) throw new Error("Camera unavailable");
+        const sender = callPcRef.current.getTransceivers()
+          .find(item => item.receiver.track.kind === "video")?.sender;
+        await sender?.replaceTrack(replacement);
+        const stream = localStreamRef.current;
+        stream?.getVideoTracks().forEach(old => { stream.removeTrack(old); old.stop(); });
+        stream?.addTrack(replacement);
+        if (stream) setLocalStream(new MediaStream(stream.getTracks()));
+        setSelectedCameraId(deviceId);
+        refreshCameraZoom(replacement);
+        setDeviceIssue(null);
+        trackCallDeviceOutcome("videoinput", "switch_succeeded");
+      } catch (error) {
+        setDeviceIssue({ kind: "videoinput", message: `${mediaFailureMessage(error, "camera")} — اختر كاميرا أخرى` });
+      } finally {
+        setSwitchingDevice(null);
+      }
+      return;
+    }
     const track = localVideoRef.current;
     if (!track || callStatus !== "active") return;
     setSwitchingDevice("videoinput");
@@ -631,7 +927,7 @@ export function useCall(user: { id: number; username: string } | null) {
     const currentIndex = cameras.findIndex(device => device.deviceId === currentId);
     const next = cameras[(currentIndex + 1 + cameras.length) % cameras.length];
 
-    if (callStatus === "active" && localVideoRef.current) {
+    if (callStatus === "active" && (localVideoRef.current || callProviderRef.current === "webrtc")) {
       await switchCamera(next.deviceId);
       return;
     }
@@ -816,7 +1112,14 @@ export function useCall(user: { id: number; username: string } | null) {
           // Ignore if already in / being offered another call
           if (!currentCallIdRef.current) {
             currentCallIdRef.current = msg.callId;
-            setIncomingCall({ from: msg.from, callId: msg.callId, video: msg.video, e2e: msg.e2e });
+            setIncomingCall({
+              from: msg.from,
+              callId: msg.callId,
+              video: msg.video,
+              offer: msg.offer,
+              transport: msg.transport,
+              e2e: msg.e2e,
+            });
             setCallStatus("ringing");
           }
         }
@@ -827,14 +1130,83 @@ export function useCall(user: { id: number; username: string } | null) {
 
         // ── Call accepted (caller side) — callee joined the Agora channel ──
         if (msg.type === "call-accepted" && msg.callId === currentCallIdRef.current) {
+          if (
+            msg.transport?.version !== 1 ||
+            msg.transport.provider !== callProviderRef.current
+          ) {
+            showCallError("تعذّر التحقق من بروتوكول وسائط المكالمة");
+            sendWS({ type: "call-end", to: msg.from, callId: msg.callId });
+            void leaveAgora();
+            return;
+          }
+          if (callProviderRef.current === "webrtc" && msg.answer && callPcRef.current) {
+            await callPcRef.current.setRemoteDescription(msg.answer);
+            for (const candidate of pendingRemoteIceRef.current.splice(0)) {
+              try { await callPcRef.current.addIceCandidate(candidate); } catch { /* stale candidate */ }
+            }
+            callSignalingReadyRef.current.add(msg.callId);
+            for (const candidate of pendingCallIceRef.current.splice(0)) {
+              sendWS({ type: "ice-candidate", to: msg.from, callId: msg.callId, candidate });
+            }
+          }
           clearRingTimer();
           setCallStatus("active");
+        }
+
+        if (msg.type === "ice-candidate" && msg.callId === currentCallIdRef.current) {
+          if (callPcRef.current?.remoteDescription) {
+            try { await callPcRef.current.addIceCandidate(msg.candidate); } catch { /* stale candidate */ }
+          } else {
+            pendingRemoteIceRef.current.push(msg.candidate);
+          }
+        }
+
+        if (
+          msg.type === "call-renegotiate-offer" &&
+          msg.callId === currentCallIdRef.current &&
+          msg.transport?.provider === "webrtc" &&
+          msg.transport.version === 1 &&
+          callProviderRef.current === "webrtc" &&
+          callPcRef.current
+        ) {
+          const pc = callPcRef.current;
+          const config = callRtcConfigRef.current;
+          if (!config) return;
+          pc.setConfiguration({ iceServers: config.iceServers, iceTransportPolicy: "relay" });
+          await pc.setRemoteDescription(msg.offer);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          sendWS({
+            type: "call-renegotiate-answer",
+            callId: msg.callId,
+            answer: pc.localDescription,
+            transport: { provider: "webrtc", version: 1 },
+          });
+        }
+
+        if (
+          msg.type === "call-renegotiate-answer" &&
+          msg.callId === currentCallIdRef.current &&
+          msg.transport?.provider === "webrtc" &&
+          msg.transport.version === 1 &&
+          callProviderRef.current === "webrtc" &&
+          callPcRef.current
+        ) {
+          await callPcRef.current.setRemoteDescription(msg.answer);
         }
 
         // ── Call rejected / ended — only for OUR current call ──────────────
         if ((msg.type === "call-rejected" || msg.type === "call-ended")
             && msg.callId === currentCallIdRef.current) {
           clearRingTimer();
+          if (msg.code === "CREDIT_EXHAUSTED") {
+            showCallError("انتهى رصيد المكالمات الملكي وتم إنهاء المكالمة دون احتساب وقت إضافي", 15_000);
+          } else if (msg.code === "CREDIT_BILLING_UNAVAILABLE") {
+            showCallError("توقفت خدمة احتساب الرصيد، لذلك أُنهيت المكالمة بأمان", 15_000);
+          } else if (msg.code === "MEDIA_HEARTBEAT_TIMEOUT" || msg.code === "MEDIA_START_TIMEOUT") {
+            showCallError("أُنهيت المكالمة لأن اتصال الوسائط الفعلي لم يعد قابلاً للتحقق", 15_000);
+          }
+          setActualMediaConnected(false);
           currentCallIdRef.current = null;
           // Callee side: caller gave up while we were ringing — hide the banner.
           setIncomingCall(null);
@@ -861,7 +1233,13 @@ export function useCall(user: { id: number; username: string } | null) {
           // Callee side safety: if a block denial races an incoming banner, clear it.
           setIncomingCall(null);
           showCallError(
-            msg.type === "call-busy"
+            msg.code === "CREDIT_REQUIRED"
+              ? "يلزم رصيد مكالمات ملكي أو موافقة صريحة على الاحتياطي قبل بدء المكالمة"
+              : msg.code === "CREDIT_BILLING_UNAVAILABLE"
+                ? "خدمة رصيد المكالمات غير متاحة حالياً — لم تبدأ المكالمة ولن يتم احتسابها"
+                : msg.code === "MEDIA_PROTOCOL_MISMATCH"
+                  ? "إصدار وسائط المكالمة غير متوافق — حدّث الصفحة وحاول مجدداً"
+            : msg.type === "call-busy"
               ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
               : msg.type === "call-blocked"
                 ? "🚫 لا يمكن إجراء هذه المكالمة — التواصل بينكما محجوب"
@@ -924,6 +1302,7 @@ export function useCall(user: { id: number; username: string } | null) {
         rejectPendingCallSetups("انقطع اتصال المكالمة بالخادم");
         if (currentCallIdRef.current) {
           clearRingTimer();
+          setActualMediaConnected(false);
           currentCallIdRef.current = null;
           setIncomingCall(null);
           setCallStatus("ended");
@@ -950,6 +1329,7 @@ export function useCall(user: { id: number; username: string } | null) {
     const onOffline = () => {
       clearReconnect();
       setRealtimeConnecting();
+      setActualMediaConnected(false);
       wsRef.current?.close();
     };
     const onVisibilityChange = () => {
@@ -965,10 +1345,12 @@ export function useCall(user: { id: number; username: string } | null) {
       window.removeEventListener("offline", onOffline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       if (pingRef.current) clearInterval(pingRef.current);
+      if (mediaHeartbeatRef.current) clearInterval(mediaHeartbeatRef.current);
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       pingRef.current = null;
       reconnectRef.current = null;
       const ws = wsRef.current;
+      setActualMediaConnected(false);
       wsRef.current = null;
       if (ws) {
         ws.onclose = null;
@@ -998,7 +1380,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setConnectionTest("idle");
       setCallError(null);
     };
-  }, [user?.id, user?.username, isOnline, leaveAgora, rejectPendingCallSetups, settleCallReady, setRealtimeConnected, setRealtimeConnecting]);
+  }, [user?.id, user?.username, isOnline, leaveAgora, rejectPendingCallSetups, settleCallReady, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting]);
 
   // A route change or logout must not leave a microphone/camera LED on.
   useEffect(() => () => {
@@ -1042,8 +1424,23 @@ export function useCall(user: { id: number; username: string } | null) {
       // the microphone. This event keeps the shared call engine independent
       // from individual Messenger variants.
       window.dispatchEvent(new Event("gdna:voice-note-stop"));
-      const preparedAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-      localAudioRef.current = preparedAudioTrack;
+      const rtcConfig = await fetchCallRtcConfig();
+      callProviderRef.current = rtcConfig.provider;
+      callRtcConfigRef.current = rtcConfig;
+      let preparedAudioTrack: IMicrophoneAudioTrack | undefined;
+      let webRtcPc: RTCPeerConnection | null = null;
+      if (rtcConfig.provider === "agora") {
+        preparedAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        localAudioRef.current = preparedAudioTrack;
+      } else {
+        webRtcPc = (await createWebRtcCall(
+          rtcConfig,
+          targetUsername,
+          callId,
+          withVideo,
+          true,
+        )).pc;
+      }
 
        let recipients: E2ERecipientKey[] | null = null;
        for (let attempt = 0; attempt < 3 && !recipients; attempt++) {
@@ -1069,6 +1466,12 @@ export function useCall(user: { id: number; username: string } | null) {
          await encryptCallSecret(callSecret, recipient),
        ] as const));
        const e2e = { devices: Object.fromEntries(wrappedDevices) };
+      let offer: RTCSessionDescriptionInit | null = null;
+      if (webRtcPc) {
+        offer = await webRtcPc.createOffer();
+        await webRtcPc.setLocalDescription(offer);
+        offer = webRtcPc.localDescription;
+      }
 
       // The device is usable. Register the server-side call before requesting
       // its channel-scoped Agora token.
@@ -1076,10 +1479,11 @@ export function useCall(user: { id: number; username: string } | null) {
       sendWS({
         type: "call-offer",
         to: targetUsername,
-        offer: null,
+        offer,
         callId,
         from: user.username,
         video: withVideo,
+        transport: { provider: rtcConfig.provider, version: 1 },
         e2e,
       });
       offered = true;
@@ -1092,13 +1496,16 @@ export function useCall(user: { id: number; username: string } | null) {
       setCallStatus("calling");
 
       await callReady;
-      await joinAgora(callId, withVideo, callSecret, preparedAudioTrack);
+      if (rtcConfig.provider === "agora") {
+        await joinAgora(callId, withVideo, callSecret, preparedAudioTrack);
+      }
 
       // Give up automatically if the callee never answers.
       clearRingTimer();
       ringTimerRef.current = setTimeout(() => {
         ringTimerRef.current = null;
         sendWS({ type: "call-end", to: targetUsername, callId });
+        setActualMediaConnected(false);
         currentCallIdRef.current = null;
         void leaveAgora();
         showCallError("📵 لم يتم الرد — حاول مرة أخرى لاحقاً");
@@ -1122,7 +1529,7 @@ export function useCall(user: { id: number; username: string } | null) {
       }
       setCallStatus("idle");
     }
-  }, [callStatus, isOnline, joinAgora, leaveAgora, sendWS, user, waitForCallReady]);
+  }, [callStatus, createWebRtcCall, isOnline, joinAgora, leaveAgora, sendWS, setActualMediaConnected, user, waitForCallReady]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {
@@ -1131,16 +1538,45 @@ export function useCall(user: { id: number; username: string } | null) {
       // A failed local microphone check is rejected immediately so the caller
       // is never left ringing while we attempt to join Agora.
       window.dispatchEvent(new Event("gdna:voice-note-stop"));
-      const preparedAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-      localAudioRef.current = preparedAudioTrack;
       if (!user || !incomingCall.e2e) {
         throw new Error("Secure call handshake is unavailable");
       }
+      if (!incomingCall.transport || incomingCall.transport.version !== 1) {
+        throw new Error("Secure call media protocol is unavailable");
+      }
+      const rtcConfig = await fetchCallRtcConfig();
+      if (rtcConfig.provider !== incomingCall.transport.provider) {
+        throw new Error("Secure call media provider mismatch");
+      }
+      callProviderRef.current = rtcConfig.provider;
+      callRtcConfigRef.current = rtcConfig;
       const identity = await ensureDeviceIdentity(user.id);
       const envelope = incomingCall.e2e.devices?.[identity.deviceId];
       if (!envelope) throw new Error("Secure call was not addressed to this device");
       const callSecret = await decryptCallSecret(user.id, envelope);
-      await joinAgora(incomingCall.callId, withVideo && incomingCall.video, callSecret, preparedAudioTrack);
+      let answer: RTCSessionDescriptionInit | null = null;
+      if (rtcConfig.provider === "agora") {
+        const preparedAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        localAudioRef.current = preparedAudioTrack;
+        await joinAgora(incomingCall.callId, withVideo && incomingCall.video, callSecret, preparedAudioTrack);
+      } else {
+        if (!incomingCall.offer) throw new Error("WebRTC offer is unavailable");
+        callSignalingReadyRef.current.add(incomingCall.callId);
+        const { pc } = await createWebRtcCall(
+          rtcConfig,
+          incomingCall.from,
+          incomingCall.callId,
+          withVideo && incomingCall.video,
+          false,
+        );
+        await pc.setRemoteDescription(incomingCall.offer);
+        for (const candidate of pendingRemoteIceRef.current.splice(0)) {
+          try { await pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
+        }
+        answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        answer = pc.localDescription;
+      }
 
       setActivePeer(incomingCall.from);
       setActiveCallId(incomingCall.callId);
@@ -1148,7 +1584,13 @@ export function useCall(user: { id: number; username: string } | null) {
       setIncomingCall(null);
       setCallStatus("active");
 
-      sendWS({ type: "call-answer", to: incomingCall.from, answer: null, callId: incomingCall.callId });
+      sendWS({
+        type: "call-answer",
+        to: incomingCall.from,
+        answer,
+        callId: incomingCall.callId,
+        transport: incomingCall.transport,
+      });
     } catch (err: unknown) {
       console.error("[CALL] Failed to answer:", err);
       void leaveAgora();
@@ -1170,7 +1612,7 @@ export function useCall(user: { id: number; username: string } | null) {
         ? `🔐 ${message}`
         : mediaFailureMessage(err));
     }
-  }, [incomingCall, joinAgora, leaveAgora, sendWS, user]);
+  }, [createWebRtcCall, incomingCall, joinAgora, leaveAgora, sendWS, user]);
 
   // ── Reject call ───────────────────────────────────────────────────────────
   const rejectCall = useCallback(() => {
@@ -1185,16 +1627,33 @@ export function useCall(user: { id: number; username: string } | null) {
   const endCall = useCallback(() => {
     clearRingTimer();
     if (activePeer && activeCallId) sendWS({ type: "call-end", to: activePeer, callId: activeCallId });
+    setActualMediaConnected(false);
     currentCallIdRef.current = null;
     void leaveAgora();
     pcRef.current?.close();
     setCallStatus("idle");
     setActivePeer(null);
     setActiveCallId(null);
-  }, [activePeer, activeCallId, leaveAgora, sendWS]);
+  }, [activePeer, activeCallId, leaveAgora, sendWS, setActualMediaConnected]);
 
   // ── Screen share (Agora) ──────────────────────────────────────────────────
   const stopScreenShare = useCallback(async () => {
+    if (callProviderRef.current === "webrtc") {
+      const pc = callPcRef.current;
+      const screen = webRtcScreenTrackRef.current;
+      const camera = webRtcCameraTrackRef.current;
+      webRtcScreenTrackRef.current = null;
+      webRtcCameraTrackRef.current = null;
+      const sender = pc?.getTransceivers().find(item => item.receiver.track.kind === "video")?.sender;
+      try { await sender?.replaceTrack(camera); } catch { /* surfaced by current call state */ }
+      screen?.stop();
+      const audio = localStreamRef.current?.getAudioTracks()[0];
+      const restored = new MediaStream([audio, camera].filter((track): track is MediaStreamTrack => Boolean(track)));
+      localStreamRef.current = restored;
+      setLocalStream(restored);
+      setScreenSharing(false);
+      return;
+    }
     const client = agoraRef.current;
     const screen = screenTrackRef.current;
     // close() can emit track-ended synchronously; make manual and browser-driven
@@ -1226,6 +1685,33 @@ export function useCall(user: { id: number; username: string } | null) {
   }, []);
 
   const startScreenShare = useCallback(async () => {
+    if (callProviderRef.current === "webrtc" && callPcRef.current && callStatus === "active") {
+      if (!screenShareSupported) {
+        showCallError("مشاركة الشاشة غير مدعومة على هذا الجهاز — المكالمة ستستمر بشكل طبيعي");
+        return;
+      }
+      try {
+        const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        const screen = display.getVideoTracks()[0];
+        if (!screen) throw new Error("Screen track unavailable");
+        const sender = callPcRef.current.getTransceivers()
+          .find(item => item.receiver.track.kind === "video")?.sender;
+        if (!sender) throw new Error("Video sender unavailable");
+        const camera = localStreamRef.current?.getVideoTracks()[0] ?? null;
+        webRtcCameraTrackRef.current = camera;
+        webRtcScreenTrackRef.current = screen;
+        await sender.replaceTrack(screen);
+        const audio = localStreamRef.current?.getAudioTracks()[0];
+        const shared = new MediaStream([audio, screen].filter((track): track is MediaStreamTrack => Boolean(track)));
+        localStreamRef.current = shared;
+        setLocalStream(shared);
+        setScreenSharing(true);
+        screen.addEventListener("ended", () => { void stopScreenShare(); }, { once: true });
+      } catch (error) {
+        showCallError(mediaFailureMessage(error, "camera"), 15_000);
+      }
+      return;
+    }
     const client = agoraRef.current;
     if (!client || callStatus !== "active") {
       showCallError("مشاركة الشاشة متاحة أثناء المكالمة النشطة فقط");
@@ -1360,6 +1846,7 @@ export function useCall(user: { id: number; username: string } | null) {
     localStream, remoteStream, screenSharing,
     callError,
     connectionTest,
+    networkState, networkQuality,
     callDevices, selectedMicrophoneId, selectedCameraId, selectedSpeakerId,
     cameraZoom, canFlipCamera: callDevices.filter(device => device.kind === "videoinput").length > 1,
     speakerSelectionSupported, screenShareSupported, deviceIssue, switchingDevice,

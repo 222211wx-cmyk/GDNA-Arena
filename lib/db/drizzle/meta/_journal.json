@@ -134,6 +134,13 @@
       "when": 1788324000000,
       "tag": "0018_producer_legal_declaration",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788416400000,
+      "tag": "0019_royal_credit_reserve",
+      "breakpoints": true
     }
   ]
 }

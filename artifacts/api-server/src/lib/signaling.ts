@@ -7,6 +7,10 @@ import type { IncomingMessage } from "http";
 import type { Server } from "http";
 import type { RequestHandler } from "express";
 import { pool } from "@workspace/db";
+import { performance } from "node:perf_hooks";
+import { consumeRoyalCreditSeconds, hasUsableRoyalCredit } from "./royal-credit";
+import { requireReadyCallMediaProvider } from "./turn-config";
+import { sampleMediaContinuity } from "./call-meter";
 
 // ── WebRTC type stubs (browser DOM types not present in Node tsconfig) ────────
 interface RTCSessionDescriptionInit { type: string; sdp?: string; }
@@ -14,6 +18,8 @@ interface RTCIceCandidateInit      { candidate?: string; sdpMid?: string | null;
 interface E2eCallEnvelope {
   devices: Record<string, { wrappedSecret: string; fingerprint: string }>;
 }
+type CallMediaProvider = "agora" | "webrtc";
+interface CallTransport { provider: CallMediaProvider; version: 1; }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Client {
@@ -27,11 +33,14 @@ interface Client {
 
 type SignalMsg =
   | { type: "register";       userId: number; username: string }
-  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit | null; callId: string; from: string; video: boolean; e2e?: E2eCallEnvelope }
-  | { type: "call-answer";    to: string; answer: RTCSessionDescriptionInit | null; callId: string }
+  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit | null; callId: string; from: string; video: boolean; transport?: CallTransport; e2e?: E2eCallEnvelope }
+  | { type: "call-answer";    to: string; answer: RTCSessionDescriptionInit | null; callId: string; transport?: CallTransport }
+  | { type: "call-renegotiate-offer"; callId: string; offer: RTCSessionDescriptionInit; transport?: CallTransport }
+  | { type: "call-renegotiate-answer"; callId: string; answer: RTCSessionDescriptionInit; transport?: CallTransport }
   | { type: "ice-candidate";  to: string; candidate: RTCIceCandidateInit; callId: string }
   | { type: "call-reject";    to: string; callId: string }
   | { type: "call-end";       to: string; callId: string }
+  | { type: "call-media-state"; callId: string; connected: boolean }
   | { type: "live-start";     title: string; domain: string }
   | { type: "live-end" }
   | { type: "live-join";      liveId: string }
@@ -54,7 +63,149 @@ const lives     = new Map<string, { hostUsername: string; title: string; domain:
 const activeCalls = new Map<string, {
   caller: string; callee: string; callerId: number | null; calleeId: number | null;
   callerSocket: WebSocket; calleeSocket: WebSocket | null; startedAt: Date;
+  transport: CallTransport; ringTimer: NodeJS.Timeout;
 }>();
+
+const MEDIA_HEARTBEAT_FRESH_MS = 6_500;
+const MEDIA_MAX_BILLING_STEP_MS = 5_000;
+interface CallBillingMeter {
+  timer: NodeJS.Timeout;
+  callerConnectedAt: number | null;
+  calleeConnectedAt: number | null;
+  lastTickAt: number | null;
+  carryMs: number;
+  busy: boolean;
+  mediaStarted: boolean;
+  startedAt: number;
+  disconnectedAt: number | null;
+  interruptedMs: number;
+}
+const callBilling = new Map<string, CallBillingMeter>();
+
+function stopCallBilling(callId: string): void {
+  const meter = callBilling.get(callId);
+  if (meter) clearInterval(meter.timer);
+  callBilling.delete(callId);
+}
+
+function validDescription(
+  description: RTCSessionDescriptionInit | null,
+  expectedType: "offer" | "answer",
+): description is RTCSessionDescriptionInit {
+  return !!description &&
+    description.type === expectedType &&
+    typeof description.sdp === "string" &&
+    description.sdp.length > 0 &&
+    description.sdp.length <= 256_000;
+}
+
+function transportMatches(
+  value: CallTransport | undefined,
+  provider: CallMediaProvider,
+): value is CallTransport {
+  return value?.version === 1 && value.provider === provider;
+}
+
+function endCallForBilling(callId: string, reason: string, code: string): void {
+  const call = activeCalls.get(callId);
+  stopCallBilling(callId);
+  if (!call) return;
+  clearTimeout(call.ringTimer);
+  activeCalls.delete(callId);
+  setUserInCall(call.caller, false);
+  setUserInCall(call.callee, false);
+  const event = { type: "call-ended", by: "billing", callId, reason, code };
+  send(call.callerSocket, event);
+  if (call.calleeSocket) send(call.calleeSocket, event);
+}
+
+function startCallBilling(callId: string): void {
+  stopCallBilling(callId);
+  const meter: CallBillingMeter = {
+    timer: undefined as unknown as NodeJS.Timeout,
+    callerConnectedAt: null,
+    calleeConnectedAt: null,
+    lastTickAt: null,
+    carryMs: 0,
+    busy: false,
+    mediaStarted: false,
+    startedAt: performance.now(),
+    disconnectedAt: null,
+    interruptedMs: 0,
+  };
+  meter.timer = setInterval(async () => {
+    if (meter.busy) return;
+    const call = activeCalls.get(callId);
+    if (!call || call.callerId === null || !call.calleeSocket) {
+      stopCallBilling(callId);
+      return;
+    }
+    const now = performance.now();
+    const socketsOpen = call.callerSocket.readyState === WebSocket.OPEN
+      && call.calleeSocket.readyState === WebSocket.OPEN
+    const continuity = sampleMediaContinuity(
+      meter,
+      now,
+      socketsOpen ? meter.callerConnectedAt : null,
+      socketsOpen ? meter.calleeConnectedAt : null,
+      MEDIA_HEARTBEAT_FRESH_MS,
+      12_000,
+    );
+    const bothFresh = socketsOpen && continuity.bothFresh;
+    if (!meter.mediaStarted && bothFresh) {
+      // Initial setup has its own 20-second deadline and is never billed. The
+      // handover allowance begins only once both peers have established media.
+      meter.interruptedMs = 0;
+      meter.disconnectedAt = null;
+    }
+    if (!bothFresh) {
+      if (!meter.mediaStarted && now - meter.startedAt > 20_000) {
+        endCallForBilling(callId, "Media connection was not established", "MEDIA_START_TIMEOUT");
+        return;
+      }
+      // Once media has started, stale reporting fails closed: allowing media to
+      // continue indefinitely without two fresh, socket-bound reports would be
+      // unmetered. A short, non-billed grace supports Wi-Fi/cellular handover.
+      if (meter.mediaStarted && continuity.exhausted) {
+        endCallForBilling(callId, "Media connectivity reporting stopped", "MEDIA_HEARTBEAT_TIMEOUT");
+        return;
+      }
+      meter.lastTickAt = null;
+      meter.carryMs = 0;
+      return;
+    }
+    meter.mediaStarted = true;
+    if (meter.lastTickAt === null) {
+      meter.lastTickAt = now;
+      return;
+    }
+    const elapsed = Math.min(now - meter.lastTickAt, MEDIA_MAX_BILLING_STEP_MS);
+    meter.lastTickAt = now;
+    meter.carryMs += elapsed;
+    const seconds = Math.floor(meter.carryMs / 1_000);
+    if (seconds <= 0) return;
+    meter.carryMs -= seconds * 1_000;
+    meter.busy = true;
+    try {
+      const result = await Promise.race([
+        consumeRoyalCreditSeconds(call.callerId, seconds, callId),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Royal call billing timed out")), 5_000)),
+      ]);
+      if (callBilling.get(callId) !== meter || activeCalls.get(callId) !== call) return;
+      if (result.exhausted) {
+        endCallForBilling(callId, "Royal call credit exhausted", "CREDIT_EXHAUSTED");
+      }
+    } catch {
+      // Charging must fail closed; a DB outage cannot create an unmetered call.
+      endCallForBilling(callId, "Royal call billing unavailable", "CREDIT_BILLING_UNAVAILABLE");
+    } finally {
+      meter.busy = false;
+    }
+  }, 1_000);
+  meter.timer.unref?.();
+  callBilling.set(callId, meter);
+}
 
 // Participant authorization for RTC token issuance: a token for channel
 // `callId` is only granted to one of the two recorded call participants.
@@ -67,7 +218,11 @@ export function isCallParticipant(callId: string, userId: number): boolean {
 setInterval(() => {
   const cutoff = Date.now() - 4 * 60 * 60 * 1000;
   for (const [id, call] of activeCalls) {
-    if (call.startedAt.getTime() < cutoff) activeCalls.delete(id);
+    if (call.startedAt.getTime() < cutoff) {
+      activeCalls.delete(id);
+      clearTimeout(call.ringTimer);
+      stopCallBilling(id);
+    }
   }
 }, 30 * 60 * 1000).unref?.();
 
@@ -345,6 +500,33 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
       // ── CALL OFFER ────────────────────────────────────────────────────────
       if (msg.type === "call-offer") {
+        let authoritativeProvider: CallMediaProvider;
+        try {
+          authoritativeProvider = requireReadyCallMediaProvider();
+        } catch {
+          send(ws, {
+            type: "call-unavailable",
+            callId: msg.callId,
+            code: "MEDIA_PROVIDER_UNAVAILABLE",
+            reason: "Configured call media provider is unavailable",
+          });
+          return;
+        }
+        const validMediaEnvelope =
+          (transportMatches(msg.transport, authoritativeProvider) ||
+            (authoritativeProvider === "agora" && msg.transport === undefined)) &&
+          (authoritativeProvider === "agora"
+            ? msg.offer === null
+            : validDescription(msg.offer, "offer"));
+        if (!validMediaEnvelope) {
+          send(ws, {
+            type: "call-unavailable",
+            callId: msg.callId,
+            code: "MEDIA_PROTOCOL_MISMATCH",
+            reason: "Call media protocol does not match the server",
+          });
+          return;
+        }
         const target = findByUsername(msg.to);
         if (!target) {
           try {
@@ -439,6 +621,27 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           send(ws, { type: "call-busy", to: msg.to, callId: msg.callId });
           return;
         }
+        try {
+          if (!await hasUsableRoyalCredit(self.userId)) {
+            send(ws, {
+              type: "call-unavailable",
+              to: msg.to,
+              callId: msg.callId,
+              reason: "Royal call credit or explicit reserve consent is required",
+              code: "CREDIT_REQUIRED",
+            });
+            return;
+          }
+        } catch {
+          send(ws, {
+            type: "call-unavailable",
+            to: msg.to,
+            callId: msg.callId,
+            reason: "Royal call billing unavailable",
+            code: "CREDIT_BILLING_UNAVAILABLE",
+          });
+          return;
+        }
          const lockClient = await pool!.connect();
          try {
            await lockClient.query("BEGIN");
@@ -457,9 +660,28 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
            // Recording the call while holding the same lock used by key
            // registration/revocation closes the key-check→route race.
            await lockClient.query("COMMIT");
-            activeCalls.set(msg.callId, {
+             const ringTimer = setTimeout(() => {
+               const ringing = activeCalls.get(msg.callId);
+               if (!ringing || ringing.calleeSocket !== target.ws) return;
+               activeCalls.delete(msg.callId);
+               stopCallBilling(msg.callId);
+               setUserInCall(ringing.caller, false);
+               setUserInCall(ringing.callee, false);
+               const event = {
+                 type: "call-ended",
+                 by: "timeout",
+                 callId: msg.callId,
+                 code: "RING_TIMEOUT",
+                 reason: "Call was not answered within 30 seconds",
+               };
+               send(ringing.callerSocket, event);
+               send(ringing.calleeSocket, event);
+             }, 30_000);
+             ringTimer.unref?.();
+             activeCalls.set(msg.callId, {
               caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
-              callerSocket: self.ws, calleeSocket: target.ws, startedAt: new Date(),
+               callerSocket: self.ws, calleeSocket: target.ws, startedAt: new Date(),
+               transport: { provider: authoritativeProvider, version: 1 }, ringTimer,
             });
             // Reserve both participants while the call is ringing. Without this,
             // either side could create a second offer before the first answer.
@@ -476,12 +698,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         // channel token. It proves activeCalls already contains both authorized
         // participants and removes the HTTP-vs-WebSocket registration race.
         send(ws, { type: "call-ready", callId: msg.callId });
-        sendToUsername(target.username, {
+         send(target.ws, {
           type: "call-incoming",
           from: self.username,
           callId: msg.callId,
           offer: msg.offer,
           video: msg.video,
+           transport: { provider: authoritativeProvider, version: 1 },
           e2e: msg.e2e,
         });
         console.log(`[WS] 📞 ${self.username} → ${msg.to} [${msg.video ? "video" : "audio"}]`);
@@ -492,9 +715,17 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       if (msg.type === "call-answer") {
         // Only the recorded callee may answer, and only towards the recorded caller.
         const call = activeCalls.get(msg.callId);
-        if (!call || call.calleeId !== self.userId || call.caller !== msg.to.toLowerCase()) return;
-        const caller = findByUsername(msg.to);
+        if (!call || call.calleeId !== self.userId || call.calleeSocket !== ws ||
+            call.caller !== msg.to.toLowerCase() ||
+            !(transportMatches(msg.transport, call.transport.provider) ||
+              (call.transport.provider === "agora" && msg.transport === undefined)) ||
+            (call.transport.provider === "agora"
+              ? msg.answer !== null
+              : !validDescription(msg.answer, "answer"))) return;
+        const caller = Array.from(clientsForUsername(msg.to))
+          .find(candidate => candidate.ws === call.callerSocket);
         if (caller) {
+          clearTimeout(call.ringTimer);
           call.calleeSocket = ws;
           setUserInCall(self.username, true);
           setUserInCall(caller.username, true);
@@ -503,19 +734,87 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               send(device.ws, { type: "call-ended", by: self.username, callId: msg.callId });
             }
           }
-          sendToUsername(caller.username, { type: "call-accepted", from: self.username, callId: msg.callId, answer: msg.answer });
+          send(call.callerSocket, {
+            type: "call-accepted",
+            from: self.username,
+            callId: msg.callId,
+            answer: msg.answer,
+            transport: call.transport,
+          });
+           startCallBilling(msg.callId);
         }
         return;
       }
 
+      if (msg.type === "call-renegotiate-offer") {
+        const call = activeCalls.get(msg.callId);
+        if (!call || call.transport.provider !== "webrtc" ||
+            !transportMatches(msg.transport, "webrtc") ||
+            !validDescription(msg.offer, "offer")) return;
+        if (call.callerSocket === ws && call.calleeSocket) {
+          send(call.calleeSocket, { ...msg, from: self.username, transport: call.transport });
+        } else if (call.calleeSocket === ws) {
+          send(call.callerSocket, { ...msg, from: self.username, transport: call.transport });
+        }
+        return;
+      }
+
+      if (msg.type === "call-renegotiate-answer") {
+        const call = activeCalls.get(msg.callId);
+        if (!call || call.transport.provider !== "webrtc" ||
+            !transportMatches(msg.transport, "webrtc") ||
+            !validDescription(msg.answer, "answer")) return;
+        if (call.callerSocket === ws && call.calleeSocket) {
+          send(call.calleeSocket, { ...msg, from: self.username, transport: call.transport });
+        } else if (call.calleeSocket === ws) {
+          send(call.callerSocket, { ...msg, from: self.username, transport: call.transport });
+        }
+        return;
+      }
+
+       // ── SERVER-OWNED CALL BILLING HEARTBEAT ─────────────────────────────
+       if (msg.type === "call-media-state") {
+         const call = activeCalls.get(msg.callId);
+         const meter = callBilling.get(msg.callId);
+         if (!call || !meter || typeof msg.connected !== "boolean") return;
+         const now = performance.now();
+         // The authenticated participant and exact socket selected for this
+         // call must match; another tab/device cannot spoof media connectivity.
+         if (call.callerId === self.userId && call.callerSocket === ws) {
+           meter.callerConnectedAt = msg.connected ? now : null;
+         } else if (call.calleeId === self.userId && call.calleeSocket === ws) {
+           meter.calleeConnectedAt = msg.connected ? now : null;
+         } else {
+           return;
+         }
+         const continuity = sampleMediaContinuity(
+           meter,
+           now,
+           meter.callerConnectedAt,
+           meter.calleeConnectedAt,
+           MEDIA_HEARTBEAT_FRESH_MS,
+           12_000,
+         );
+         if (meter.mediaStarted && continuity.exhausted) {
+           endCallForBilling(
+             msg.callId,
+             "Cumulative media interruption allowance exhausted",
+             "MEDIA_HEARTBEAT_TIMEOUT",
+           );
+         }
+         return;
+       }
+
       // ── ICE CANDIDATE ─────────────────────────────────────────────────────
       if (msg.type === "ice-candidate") {
         const call = activeCalls.get(msg.callId);
-        if (!call) return;
-        if (call.callerId === self.userId && call.callee === msg.to.toLowerCase()) {
-          if (call.calleeSocket) send(call.calleeSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
-          else sendToUsername(call.callee, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
-        } else if (call.calleeId === self.userId && call.caller === msg.to.toLowerCase()) {
+        if (!call || call.transport.provider !== "webrtc" ||
+            !msg.candidate || typeof msg.candidate.candidate !== "string" ||
+            msg.candidate.candidate.length > 4_096) return;
+        if (call.callerId === self.userId && call.callerSocket === ws &&
+            call.callee === msg.to.toLowerCase() && call.calleeSocket) {
+          send(call.calleeSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+        } else if (call.calleeId === self.userId && call.calleeSocket === ws && call.caller === msg.to.toLowerCase()) {
           send(call.callerSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
         }
         return;
@@ -528,10 +827,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         const call = activeCalls.get(msg.callId);
         if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
         activeCalls.delete(msg.callId);
+        clearTimeout(call.ringTimer);
+        stopCallBilling(msg.callId);
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);
         setUserInCall(peerName, false);
-        sendToUsername(peerName, { type: "call-rejected", by: self.username, callId: msg.callId });
+        const peerSocket = call.callerSocket === ws ? call.calleeSocket : call.callerSocket;
+        if (peerSocket) send(peerSocket, { type: "call-rejected", by: self.username, callId: msg.callId });
         return;
       }
 
@@ -541,10 +843,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         const call = activeCalls.get(msg.callId);
         if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
         activeCalls.delete(msg.callId);
+        clearTimeout(call.ringTimer);
+        stopCallBilling(msg.callId);
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);
         setUserInCall(peerName, false);
-        sendToUsername(peerName, { type: "call-ended", by: self.username, callId: msg.callId });
+        const peerSocket = call.callerSocket === ws ? call.calleeSocket : call.callerSocket;
+        if (peerSocket) send(peerSocket, { type: "call-ended", by: self.username, callId: msg.callId });
         return;
       }
 
@@ -599,10 +904,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       for (const [callId, call] of activeCalls) {
         if (call.callerSocket !== ws && call.calleeSocket !== ws) continue;
         activeCalls.delete(callId);
+        clearTimeout(call.ringTimer);
+        stopCallBilling(callId);
         const peerName = call.callerSocket === ws ? call.callee : call.caller;
         setUserInCall(self.username, false);
         setUserInCall(peerName, false);
-        sendToUsername(peerName, { type: "call-ended", by: self.username, callId });
+        const peerSocket = call.callerSocket === ws ? call.calleeSocket : call.callerSocket;
+        if (peerSocket) send(peerSocket, { type: "call-ended", by: self.username, callId });
       }
       if (self.liveId) {
         lives.delete(self.liveId);
