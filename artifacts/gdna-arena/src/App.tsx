@@ -68,7 +68,6 @@ import AdminRevenuePage from "@/pages/admin-revenue";
 import FinanceOnboarding from "@/pages/finance-onboarding";
 import AdminFinance from "@/pages/admin-finance";
 import RoyalVerificationPage from "@/pages/royal-verification";
-import AdminRoyalVerifications from "@/pages/admin-royal-verifications";
 
 const queryClient = new QueryClient();
 
@@ -145,7 +144,6 @@ function PageWrapper() {
           <Route path="/royal-verification" component={RoyalVerificationPage} />
           <Route path="/admin/revenue" component={AdminRevenuePage} />
           <Route path="/admin/finance" component={AdminFinance} />
-          <Route path="/admin/royal-verifications" component={AdminRoyalVerifications} />
           <Route component={NotFound} />
         </Switch>
       </ErrorBoundary>
