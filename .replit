@@ -28,6 +28,8 @@ channel = "stable-25_05"
 ADMIN_EMAILS = "222211wx@gmail.com"
 GIPHY_API_KEY = "dc6zaT0xFJmzC"
 AGORA_APP_ID = "62585b9b53c44c47baa7600ee5d74e54"
+CALL_MEDIA_PROVIDER = "webrtc"
+TURN_URLS = "turn:2.29.33.159:3478?transport=udp,turn:2.29.33.159:3478?transport=tcp"
 
 [userenv.development]
 ROYAL_CREDIT_SANDBOX = "true"
