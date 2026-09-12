@@ -107,7 +107,7 @@ const AR: MissedCallsCopy = {
   incoming_call: "مكالمة واردة",
   answer: "رد",
   decline: "رفض",
-  ringing: "جارٍ الرنين…",
+  ringing: "يتصل... Ringing",
   cancel: "إلغاء",
   connecting: "جارٍ الاتصال…",
   status_title: "إشعارات المكالمات",

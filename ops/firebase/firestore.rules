@@ -10,11 +10,11 @@ service cloud.firestore {
     }
 
     // The server creates and changes invitations. A Firebase custom token has a
-    // numeric userId claim matching the PostgreSQL user id stored in each call.
-    match /calls/{callId} {
+    // numeric userId claim matching one of the canonical invitation participants.
+    match /callInvites/{callId} {
       allow get, list: if hasLiveServerSession()
-        && (resource.data.callerId == request.auth.token.userId
-          || resource.data.calleeId == request.auth.token.userId);
+        && (resource.data.fromId == request.auth.token.userId
+          || resource.data.toId == request.auth.token.userId);
       allow create, update, delete: if false;
     }
 
@@ -26,7 +26,12 @@ service cloud.firestore {
 
     match /users/{userId}/missedCalls/{callId} {
       allow get, list: if hasLiveServerSession() && request.auth.uid == userId;
-      allow create, update, delete: if false;
+      // The server owns lifecycle fields. A client may only acknowledge its
+      // own inbox item; all other writes remain server-mediated.
+      allow update: if hasLiveServerSession() && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["seen"])
+        && request.resource.data.seen == true;
+      allow create, delete: if false;
     }
 
     match /users/{userId}/sessions/{sessionTag} {

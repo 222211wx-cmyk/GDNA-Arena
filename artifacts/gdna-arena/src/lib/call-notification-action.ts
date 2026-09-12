@@ -1,5 +1,16 @@
 export type NotificationCallAction = "answer" | "decline";
 
+/** Show a foreground status notification only when the browser already granted
+ * permission. It never prompts and never stands in for credential-gated FCM. */
+export function showForegroundCallNotification(title: string, body: string): Notification | null {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return null;
+  try {
+    return new Notification(title, { body, tag: "gdna-call-status" });
+  } catch {
+    return null;
+  }
+}
+
 export interface PendingNotificationCallAction {
   callId: string;
   action: NotificationCallAction;
@@ -16,6 +27,13 @@ export function readNotificationCallAction(search: string): Omit<PendingNotifica
     return null;
   }
   return { callId, action };
+}
+
+/** Read a notification's canonical invitation id without granting permission
+ * to answer or decline. Used for a plain notification-body click. */
+export function readNotificationCallResume(search: string): { callId: string } | null {
+  const callId = new URLSearchParams(search).get("callId");
+  return callId && /^[A-Za-z0-9_-]{1,128}$/.test(callId) ? { callId } : null;
 }
 
 export function canApplyNotificationCallAction(

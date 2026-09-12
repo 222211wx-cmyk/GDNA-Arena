@@ -1,7 +1,7 @@
 {
   "indexes": [
     {
-      "collectionGroup": "calls",
+      "collectionGroup": "callInvites",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
@@ -9,10 +9,10 @@
       ]
     },
     {
-      "collectionGroup": "calls",
+      "collectionGroup": "callInvites",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "calleeId", "order": "ASCENDING" },
+        { "fieldPath": "toId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
     }

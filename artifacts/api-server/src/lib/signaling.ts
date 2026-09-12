@@ -16,6 +16,7 @@ import {
   acceptDeferredCallInvitation,
   CallPushError,
   createDeferredCallInvitation,
+  durableTerminalStatus,
   finishDeferredCallInvitation,
   getCallPushStatus,
   isFirebaseCallPushConfigured,
@@ -95,7 +96,7 @@ function deferredInvitation(callId: string, call: ActiveCall): DeferredCallInvit
   };
 }
 
-function persistDeferredTerminal(callId: string, call: ActiveCall, status: "declined" | "missed" | "cancelled" | "ended"): void {
+function persistDeferredTerminal(callId: string, call: ActiveCall, status: "declined" | "missed" | "ended"): void {
   const invitation = deferredInvitation(callId, call);
   if (invitation && call.firebasePersisted) void finishDeferredCallInvitation(invitation, status).catch(() => {});
   if (invitation && !call.firebasePersisted && (status === "declined" || status === "missed")) {
@@ -1235,7 +1236,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           persistDeferredTerminal(
             msg.callId,
             call,
-            call.status === "accepted" ? "ended" : call.callerId === self.userId ? "cancelled" : "declined",
+            durableTerminalStatus(call.status, call.callerId === self.userId),
           );
         }
         const peerName = call.caller === self.username ? call.callee : call.caller;
@@ -1262,7 +1263,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           persistDeferredTerminal(
             msg.callId,
             call,
-            call.status === "accepted" ? "ended" : call.callerId === self.userId ? "cancelled" : "declined",
+            durableTerminalStatus(call.status, call.callerId === self.userId),
           );
         }
         const peerName = call.caller === self.username ? call.callee : call.caller;
@@ -1337,7 +1338,11 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         clearTimeout(call.ringTimer);
         stopCallBilling(callId);
         if (call.deferredMedia) {
-          persistDeferredTerminal(callId, call, call.status === "accepted" ? "ended" : "cancelled");
+          persistDeferredTerminal(
+            callId,
+            call,
+            durableTerminalStatus(call.status, call.callerSocket === ws),
+          );
         }
         const peerName = call.callerSocket === ws ? call.callee : call.caller;
         setUserInCall(self.username, false);

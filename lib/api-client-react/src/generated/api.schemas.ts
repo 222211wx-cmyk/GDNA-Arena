@@ -24,6 +24,9 @@ export type CallPushConfigFirebase = {
 export interface CallPushConfig {
   enabled: boolean;
   reason?: string;
+  /** Browser push readiness; Firestore may remain enabled when this is false. */
+  pushEnabled?: boolean;
+  pushReason?: string;
   firebase?: CallPushConfigFirebase;
   vapidPublicKey?: string;
 }

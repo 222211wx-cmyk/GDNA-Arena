@@ -615,11 +615,12 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
 }
 
 // ── Appels ────────────────────────────────────────────────────────────────────
-function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline, callActive, callExtras, tabActive }: {
+function AppelsTab({ st, lang, user, onNewCall, onCallBack, connectionTest, onTestConnection, isOnline, onOffline, callActive, callExtras, tabActive }: {
   st: Record<string, string>;
   lang: string;
   user: { id: number; username: string };
   onNewCall: () => void;
+  onCallBack: (call: MissedCall) => void;
   connectionTest: "idle" | "testing" | "ready" | "unstable" | "failed";
   onTestConnection: () => void;
   isOnline: boolean;
@@ -679,7 +680,7 @@ function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
       {/* Royal Reserve credit first so minutes + activation are reachable
           immediately on small mobile screens without scrolling. */}
-      <div className="mb-3">
+      <div id="call-credit-panel" className="mb-3">
         <RoyalReserveCredit
           rt={rt}
           lang={lang}
@@ -713,11 +714,15 @@ function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection
         markMissedCallsSeen={callExtras.markMissedCallsSeen}
         firebaseStatus={callExtras.firebaseStatus}
         firebaseError={callExtras.firebaseError}
+        pushEnabled={callExtras.pushEnabled}
+        pushReason={callExtras.pushReason}
         notificationPermission={callExtras.notificationPermission}
         enableCallNotifications={callExtras.enableCallNotifications}
         soundBlocked={callExtras.soundBlocked}
         enableCallSound={callExtras.enableCallSound}
         active={tabActive}
+        onCallBack={onCallBack}
+        inCall={callActive}
       />
       <div className="mb-3 rounded-xl border border-border bg-card p-3">
         <div className="flex items-center gap-2">
@@ -932,6 +937,8 @@ interface CallExtras {
   onRetryMissedCalls?: () => void;
   firebaseStatus: FirebaseStatus;
   firebaseError: string | null;
+  pushEnabled: boolean;
+  pushReason: string | null;
   notificationPermission: CallNotificationPermission;
   enableCallNotifications?: () => void;
   soundBlocked: boolean;
@@ -960,6 +967,8 @@ function readCallExtras(call: unknown): CallExtras {
       ? (c.firebaseStatus as FirebaseStatus)
       : "loading",
     firebaseError: typeof c.firebaseError === "string" ? c.firebaseError : null,
+    pushEnabled: c.pushEnabled === true,
+    pushReason: typeof c.pushReason === "string" ? c.pushReason : null,
     notificationPermission: (["default", "granted", "denied", "unsupported"] as const).includes(
       c.notificationPermission as CallNotificationPermission,
     )
@@ -1018,7 +1027,10 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const callExtras = readCallExtras(call);
   const { isOnline } = useConnectivity();
 
-  const [tab,         setTab]         = useState<BottomTab>("chats");
+  const [tab,         setTab]         = useState<BottomTab>(() => {
+    if (typeof window === "undefined") return "chats";
+    return new URLSearchParams(window.location.search).get("tab") === "calls" ? "calls" : "chats";
+  });
   const [rooms,       setRooms]       = useState<DmRoom[]>([]);
   const [roomQuery,   setRoomQuery]   = useState("");
   const [activeRoom,  setActiveRoom]  = useState<DmRoom | null>(null);
@@ -2769,6 +2781,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             lang={lang}
             user={user}
             onNewCall={() => setShowContacts("call")}
+            onCallBack={missedCall => {
+              if (!isOnline) {
+                blockOffline();
+                return;
+              }
+              void call.startCall(missedCall.caller.name, missedCall.type === "video");
+            }}
             connectionTest={call.connectionTest}
             onTestConnection={call.testConnection}
             isOnline={isOnline}

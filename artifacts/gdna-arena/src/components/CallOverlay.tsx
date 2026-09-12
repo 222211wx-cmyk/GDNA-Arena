@@ -195,6 +195,9 @@ export default function CallOverlay({
   // ── Incoming call — fullscreen modal ───────────────────────────────────────
   if (status === "ringing" && incomingCall) {
     const callerName = incomingCall.callerName || incomingCall.from;
+    const incomingHeading = lang === "ar" && incomingCall.video
+      ? `مكالمة فيديو من ${callerName}`
+      : ct.incoming_call;
     return (
       <AnimatePresence>
         <motion.div
@@ -209,7 +212,7 @@ export default function CallOverlay({
           style={{ background: "hsl(var(--background))" }}
         >
           <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            {ct.incoming_call}
+            {incomingHeading}
           </p>
 
           <div className="flex flex-col items-center gap-4">
@@ -248,13 +251,13 @@ export default function CallOverlay({
               <button
                 data-testid="button-decline-call"
                 onClick={onReject}
-                aria-label={ct.decline}
+                aria-label={lang === "ar" ? "رفض" : ct.decline}
                 className="flex h-16 w-16 items-center justify-center rounded-full transition-all active:scale-95"
                 style={{ background: "hsl(var(--destructive))" }}
               >
                 <PhoneOff className="h-7 w-7" style={{ color: "hsl(var(--destructive-foreground))" }} />
               </button>
-              <span className="text-xs font-medium text-muted-foreground">{ct.decline}</span>
+                <span className="text-xs font-medium text-muted-foreground">{lang === "ar" ? "رفض" : ct.decline}</span>
             </div>
 
             {/* Answer with voice (offered on video calls too) */}
@@ -278,7 +281,7 @@ export default function CallOverlay({
               <button
                 data-testid="button-answer-call"
                 onClick={() => onAnswer(incomingCall.video)}
-                aria-label={incomingCall.video ? st.answer_video : ct.answer}
+                aria-label={lang === "ar" ? "رد" : incomingCall.video ? st.answer_video : ct.answer}
                 className="flex h-16 w-16 items-center justify-center rounded-full transition-all active:scale-95"
                 style={{ background: "hsl(var(--chart-3))" }}
               >
@@ -287,7 +290,7 @@ export default function CallOverlay({
                   : <Phone className="h-7 w-7 text-white" />}
               </button>
               <span className="text-xs font-medium text-muted-foreground">
-                {incomingCall.video ? st.answer_video : ct.answer}
+                {lang === "ar" ? "رد" : incomingCall.video ? st.answer_video : ct.answer}
               </span>
             </div>
           </div>

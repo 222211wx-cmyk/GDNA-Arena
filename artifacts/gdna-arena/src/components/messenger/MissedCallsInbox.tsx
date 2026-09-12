@@ -15,7 +15,8 @@
  * Built only from GDNA design-system tokens and primitives. No emojis.
  */
 import { useEffect, useMemo, useRef } from "react";
-import { PhoneMissed, Video, Phone, BellRing, Volume2, LoaderCircle } from "lucide-react";
+import { PhoneMissed, Video, Phone, PhoneCall, BellRing, Volume2, LoaderCircle } from "lucide-react";
+import { Link } from "wouter";
 import Avatar from "../social/Avatar";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { timeAgo } from "../social/social-i18n";
@@ -38,12 +39,18 @@ interface Props {
   /** Honest background-notification (Firebase) setup state. */
   firebaseStatus?: FirebaseStatus;
   firebaseError?: string | null;
+  pushEnabled?: boolean;
+  pushReason?: string | null;
   notificationPermission?: CallNotificationPermission;
   enableCallNotifications?: () => void;
   soundBlocked?: boolean;
   enableCallSound?: () => void;
   /** True when the Calls tab is currently visible to the user. */
   active: boolean;
+  /** Re-dial a missed caller using the existing authenticated call flow. */
+  onCallBack?: (call: MissedCall) => void;
+  /** Prevents a second call while another call is ringing or active. */
+  inCall?: boolean;
 }
 
 export function MissedCallsInbox({
@@ -56,11 +63,17 @@ export function MissedCallsInbox({
   markMissedCallsSeen,
   firebaseStatus = "loading",
   firebaseError = null,
+  // Keep the standalone component backwards-compatible for callers that
+  // predate the separate server/browser push capability field.
+  pushEnabled = true,
+  pushReason = null,
   notificationPermission = "default",
   enableCallNotifications,
   soundBlocked = false,
   enableCallSound,
   active,
+  onCallBack,
+  inCall = false,
 }: Props) {
   const t = getMissedCallsCopy(lang);
   const locale = getMessengerIntlLocale(lang);
@@ -86,7 +99,7 @@ export function MissedCallsInbox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, loading, error, unseenKey]);
 
-  const statusRow = firebaseStatusView(firebaseStatus, firebaseError, t);
+  const statusRow = firebaseStatusView(firebaseStatus, firebaseError, pushEnabled, pushReason, t);
 
   return (
     <section
@@ -132,7 +145,7 @@ export function MissedCallsInbox({
           <p className="m-0 text-xs text-muted-foreground">{t.notifications_enabled}</p>
         ) : notificationPermission === "denied" ? (
           <p className="m-0 text-xs text-muted-foreground">{t.notifications_denied}</p>
-        ) : notificationPermission !== "unsupported" && enableCallNotifications ? (
+        ) : pushEnabled && notificationPermission !== "unsupported" && enableCallNotifications ? (
           <Button
             data-testid="button-enable-call-notifications"
             size="sm"
@@ -158,6 +171,13 @@ export function MissedCallsInbox({
             {t.enable_sound}
           </Button>
         )}
+        <Link
+          href="/missed-calls"
+          data-testid="link-missed-calls-page"
+          className="inline-flex items-center text-xs font-semibold text-primary underline-offset-4 hover:underline"
+        >
+          {lang === "ar" ? "فتح علبة المكالمات الفائتة" : t.inbox_title}
+        </Link>
       </div>
 
       {/* ── List / loading / error / empty ─────────────────────────────────── */}
@@ -228,6 +248,25 @@ export function MissedCallsInbox({
                 <time className="shrink-0 text-xs text-muted-foreground">
                   {timeAgo(missedCallTime(call.time), {}, locale)}
                 </time>
+                {onCallBack && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 gap-1 px-2 text-xs"
+                    disabled={inCall}
+                    data-testid={`button-call-back-${call.id}`}
+                    aria-label={`${lang === "ar" ? "معاودة الاتصال بـ" : "Call back "}${call.caller.name}`}
+                    onClick={() => onCallBack(call)}
+                  >
+                    {call.type === "video" ? (
+                      <Video className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <PhoneCall className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    <span>{lang === "ar" ? "اتصال" : "Call back"}</span>
+                  </Button>
+                )}
               </div>
             </li>
           ))}
@@ -245,13 +284,18 @@ function missedCallTime(time: string | number): string {
 function firebaseStatusView(
   status: FirebaseStatus,
   error: string | null,
+  pushEnabled: boolean,
+  pushReason: string | null,
   t: ReturnType<typeof getMissedCallsCopy>,
 ): { tone: "loading" | "info"; message: string } {
   switch (status) {
     case "loading":
       return { tone: "loading", message: t.status_firebase_loading };
     case "ready":
-      return { tone: "info", message: t.status_in_app_available };
+      return {
+        tone: "info",
+        message: pushEnabled ? t.status_in_app_available : pushReason || t.status_background_not_configured,
+      };
     case "error":
       return { tone: "info", message: error || t.status_firebase_error };
     case "disabled":

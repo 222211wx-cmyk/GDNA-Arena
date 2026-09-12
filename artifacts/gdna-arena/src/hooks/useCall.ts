@@ -1,7 +1,6 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  useCall — Agora RTC calls + WebSocket signaling for Arena Qaisypro
-//  Media rides Agora's global relay network (works on strict NATs/firewalls).
-//  The WS layer keeps ring / accept / reject / end + presence + notifications.
+//  useCall — authenticated WebSocket signaling + deferred WebRTC/TURN media.
+//  Invitations never request media until the callee accepts.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useState, useEffect, useCallback } from "react";
@@ -44,84 +43,17 @@ import {
 import {
   canApplyNotificationCallAction,
   readNotificationCallAction,
+  readNotificationCallResume,
+  showForegroundCallNotification,
   shouldClearTerminalCall,
   type PendingNotificationCallAction,
 } from "@/lib/call-notification-action";
 
-// Fetch a channel-scoped RTC token from the authenticated backend.
-// The Agora client must not be created until this returns a complete signed
-// configuration sourced from the server's runtime process.env.
-async function fetchAgoraToken(channel: string): Promise<{ appId: string; token: string; uid: number }> {
-  // 403 can briefly race the WS call registration. 503 means Replit's runtime
-  // configuration is not ready yet. Neither condition may start Agora.
-  let lastError = "Secure call token unavailable";
-  const retryDelayMs = [350, 700, 1_400, 2_000];
-  for (let attempt = 0; attempt < retryDelayMs.length; attempt++) {
-    try {
-      const r = await fetch(`${apiPath("/api/rtc/agora-token")}?channel=${encodeURIComponent(channel)}`, { credentials: "include" });
-      if (r.status === 403 || r.status === 503) {
-        const body = await r.json().catch(() => ({} as { error?: string }));
-        lastError = body.error ?? `Secure call token failed: HTTP ${r.status}`;
-        if (attempt < retryDelayMs.length - 1) {
-          await new Promise(res => setTimeout(res, retryDelayMs[attempt]));
-          continue;
-        }
-      }
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({} as { error?: string }));
-        throw new Error(body.error ?? `Secure call token failed: HTTP ${r.status}`);
-      }
-      const data = await r.json() as { appId?: unknown; token?: unknown; uid?: unknown };
-      if (
-        typeof data.appId !== "string" ||
-        !/^[a-f0-9]{32}$/i.test(data.appId) ||
-        typeof data.token !== "string" ||
-        data.token.length === 0 ||
-        typeof data.uid !== "number"
-      ) {
-        throw new Error("Secure call token server returned incomplete configuration");
-      }
-      return { appId: data.appId, token: data.token, uid: data.uid };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : lastError;
-      if (attempt < retryDelayMs.length - 1) {
-        await new Promise(res => setTimeout(res, retryDelayMs[attempt]));
-      }
-    }
-  }
-  throw new Error(lastError);
-}
-
-async function fetchAgoraPreflight(): Promise<{ appId: string; token: string; uid: number; channel: string }> {
-  const retryDelayMs = [400, 800, 1_600, 2_000];
-  let lastError = "Agora preflight unavailable";
-
-  for (let attempt = 0; attempt < retryDelayMs.length; attempt++) {
-    const response = await fetch(apiPath("/api/rtc/preflight-token"), { credentials: "include" });
-    const data = await response.json().catch(() => ({})) as {
-      appId?: unknown; token?: unknown; uid?: unknown; channel?: unknown; error?: string;
-    };
-    if (response.status === 503 && attempt < retryDelayMs.length - 1) {
-      lastError = data.error ?? lastError;
-      await new Promise(resolve => setTimeout(resolve, retryDelayMs[attempt]));
-      continue;
-    }
-    if (!response.ok) throw new Error(data.error ?? `Agora preflight unavailable: HTTP ${response.status}`);
-    if (
-      typeof data.appId !== "string" ||
-      !/^[a-f0-9]{32}$/i.test(data.appId) ||
-      typeof data.token !== "string" ||
-      data.token.length === 0 ||
-      typeof data.uid !== "number" ||
-      typeof data.channel !== "string" ||
-      data.channel.length === 0
-    ) {
-      throw new Error("Agora preflight token server returned incomplete configuration");
-    }
-    return { appId: data.appId, token: data.token, uid: data.uid, channel: data.channel };
-  }
-
-  throw new Error(lastError);
+// Kept only for an unreachable legacy SDK helper below. Call setup never
+// invokes this function; authenticated calls fetch TURN through
+// fetchCallRtcConfig and use deferred WebRTC.
+async function fetchAgoraToken(_channel: string): Promise<{ appId: string; token: string; uid: number }> {
+  throw new Error("Native call transport is unavailable; use WebRTC/TURN");
 }
 
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
@@ -169,7 +101,7 @@ interface LiveStream {
   domain: string;
 }
 
-// STUN-only config for the live-story WebRTC path (calls now use Agora).
+// Live stories use the same browser WebRTC primitives, independently of calls.
 const LIVE_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
@@ -218,7 +150,7 @@ export function useCall(user: { id: number; username: string } | null) {
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
   const callPcRef = useRef<RTCPeerConnection | null>(null);
-  const callProviderRef = useRef<CallMediaProvider>("agora");
+  const callProviderRef = useRef<CallMediaProvider>("webrtc");
   const callRtcConfigRef = useRef<CallRtcConfig | null>(null);
   const remoteCallStreamRef = useRef<MediaStream | null>(null);
   const webRtcScreenTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -248,13 +180,15 @@ export function useCall(user: { id: number; username: string } | null) {
   const terminalCallRef = useRef<(callId: string, status: string) => void>(() => {});
   const pendingNotificationActionRef = useRef<PendingNotificationCallAction | null>(null);
   const seenNotificationActionRef = useRef<string | null>(null);
+  const seenNotificationResumeRef = useRef<string | null>(null);
   const registeredSocketRef = useRef(false);
   const pendingCallResumesRef = useRef(new Map<string, { userId: number; until: number }>());
 
-  // ── Agora call engine ──────────────────────────────────────────────────────
+  // Legacy SDK refs are kept isolated from the call state machine. Calls
+  // themselves always select the WebRTC/TURN provider below.
   const agoraRef = useRef<IAgoraRTCClient | null>(null);
-  const localAudioRef  = useRef<IMicrophoneAudioTrack | null>(null);
-  const localVideoRef  = useRef<ICameraVideoTrack | null>(null);
+  const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null);
+  const localVideoRef = useRef<ICameraVideoTrack | null>(null);
   const screenTrackRef = useRef<ILocalVideoTrack | null>(null);
   const remoteAudioRef = useRef<IRemoteAudioTrack | null>(null);
   const remoteVideoRef = useRef<IRemoteVideoTrack | null>(null);
@@ -541,10 +475,9 @@ export function useCall(user: { id: number; username: string } | null) {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  // ── Pre-call Agora quality test ───────────────────────────────────────────
-  // Agora computes this last-mile metric from bitrate, packet loss, RTT, and
-  // jitter. It measures the same network path calls use without opening a real
-  // call or requesting microphone/camera permission.
+  // ── Pre-call TURN configuration test ─────────────────────────────────────
+  // Fetch and validate the authenticated relay configuration without opening
+  // a media client or requesting microphone/camera permission.
   const testConnection = useCallback(async () => {
     if (connectionTest === "testing") return;
     if (!isOnline) {
@@ -556,73 +489,17 @@ export function useCall(user: { id: number; username: string } | null) {
       return;
     }
 
-    if (preflightClientRef.current) {
-      try { await preflightClientRef.current.leave(); } catch { /* already disconnected */ }
-      preflightClientRef.current = null;
-    }
     setConnectionTest("testing");
-    let client: IAgoraRTCClient | null = null;
-    let silentTrack: ILocalAudioTrack | null = null;
-    let audioContext: AudioContext | null = null;
-    let oscillator: OscillatorNode | null = null;
-
     try {
-      const data = await fetchAgoraPreflight();
-
-      client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-      const activeClient = client;
-      preflightClientRef.current = activeClient;
-      await activeClient.join(data.appId, data.channel, data.token, data.uid);
-
-      // Publish a silent track so Agora can calculate meaningful uplink quality
-      // without prompting for the citizen's microphone.
-      audioContext = new AudioContext();
-      await audioContext.resume();
-      const destination = audioContext.createMediaStreamDestination();
-      oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      gain.gain.value = 0;
-      oscillator.connect(gain).connect(destination);
-      oscillator.start();
-      const sourceTrack = destination.stream.getAudioTracks()[0];
-      if (!sourceTrack) throw new Error("Unable to create preflight audio track");
-      silentTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: sourceTrack, encoderConfig: "speech_low_quality" });
-      await activeClient.publish(silentTrack);
-
-      const result = await new Promise<ConnectionTestStatus>((resolve) => {
-        let complete = false;
-        const finish = (status: ConnectionTestStatus) => {
-          if (complete) return;
-          complete = true;
-          window.clearTimeout(timeout);
-          resolve(status);
-        };
-
-        const timeout = window.setTimeout(() => finish("failed"), 8_000);
-        activeClient.on("connection-state-change", state => {
-          if (state === "DISCONNECTED" || state === "DISCONNECTING") finish("failed");
-        });
-        activeClient.on("network-quality", quality => {
-          const uplink = quality.uplinkNetworkQuality;
-          if (uplink === 1 || uplink === 2) finish("ready");
-          if (uplink === 3 || uplink === 4) finish("unstable");
-          if (uplink === 5 || uplink === 6) finish("failed");
-        });
-      });
-      setConnectionTest(result);
+      const config = await fetchCallRtcConfig();
+      setConnectionTest(config.turnConfigured ? "ready" : "failed");
     } catch (error) {
-      console.warn("[CALL] Agora preflight failed:", error);
+      console.warn("[CALL] TURN preflight failed:", error);
       setConnectionTest("failed");
-    } finally {
-      try { oscillator?.stop(); } catch { /* already stopped */ }
-      try { silentTrack?.close(); } catch { /* already closed */ }
-      try { await client?.leave(); } catch { /* already left */ }
-      if (audioContext) void audioContext.close();
-      if (preflightClientRef.current === client) preflightClientRef.current = null;
     }
   }, [connectionTest, isOnline, user]);
 
-  // ── Rebuild the remote MediaStream from current Agora remote tracks ───────
+  // Legacy SDK helpers below are unreachable; calls use createWebRtcCall.
   const rebuildRemoteStream = useCallback(() => {
     const tracks: MediaStreamTrack[] = [];
     if (remoteAudioRef.current) tracks.push(remoteAudioRef.current.getMediaStreamTrack());
@@ -630,15 +507,16 @@ export function useCall(user: { id: number; username: string } | null) {
     setRemoteStream(tracks.length > 0 ? new MediaStream(tracks) : null);
   }, []);
 
-  // ── Join an Agora channel & publish local media ────────────────────────────
+  // Legacy provider helper retained only for source compatibility. It is not
+  // referenced by any call path; all invitations use deferred WebRTC/TURN.
   const joinAgora = useCallback(async (
     channel: string,
     withVideo: boolean,
     encryptionSecret: string,
     preparedAudioTrack?: IMicrophoneAudioTrack,
   ) => {
-    // Resolve and validate runtime server configuration before Agora creates or
-    // joins any channel. This prevents a half-started client during secret boot.
+    // Resolve and validate runtime server configuration before any legacy
+    // provider could create or join a channel.
     const { appId, token, uid } = await fetchAgoraToken(channel);
     const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
     agoraRef.current = client;
@@ -928,7 +806,7 @@ export function useCall(user: { id: number; username: string } | null) {
     setSwitchingDevice(null);
     setNetworkQuality("unknown");
     reducedVideoRef.current = false;
-    callProviderRef.current = "agora";
+    callProviderRef.current = "webrtc";
     callRtcConfigRef.current = null;
     pendingCallIceRef.current = [];
     pendingRemoteIceRef.current = [];
@@ -1364,21 +1242,6 @@ export function useCall(user: { id: number; username: string } | null) {
             setCallPhase("ringing");
             setCallStatus("ringing");
             clearRingTimer();
-            const expiresAt = typeof msg.expiresAt === "number"
-              ? msg.expiresAt
-              : typeof msg.expiresAt === "string" ? Date.parse(msg.expiresAt) : NaN;
-            const remaining = Number.isFinite(expiresAt)
-              ? Math.max(0, Math.min(RING_TIMEOUT_MS, expiresAt - Date.now()))
-              : RING_TIMEOUT_MS;
-            ringTimerRef.current = setTimeout(() => {
-              if (currentCallIdRef.current !== msg.callId) return;
-              sendWS({ type: "call-end", to: msg.from, callId: msg.callId });
-              callGenerationRef.current += 1;
-              currentCallIdRef.current = null;
-              setIncomingCall(null);
-              setCallPhase("ended");
-              setCallStatus("ended");
-            }, remaining);
           }
         }
 
@@ -1460,6 +1323,14 @@ export function useCall(user: { id: number; username: string } | null) {
         if ((msg.type === "call-rejected" || msg.type === "call-ended")
             && msg.callId === currentCallIdRef.current) {
           clearRingTimer();
+          if (callDirectionRef.current === "outgoing") {
+            showForegroundCallNotification(
+              "GDNA Arena",
+              msg.type === "call-rejected"
+                ? "The call was declined."
+                : msg.code === "RING_TIMEOUT" ? "The call was not answered." : "The call has ended.",
+            );
+          }
           if (msg.code === "CREDIT_EXHAUSTED") {
             showCallError("انتهى رصيد المكالمات الملكي وتم إنهاء المكالمة دون احتساب وقت إضافي", 15_000);
           } else if (msg.code === "CREDIT_BILLING_UNAVAILABLE") {
@@ -1740,22 +1611,8 @@ export function useCall(user: { id: number; username: string } | null) {
       });
       offered = true;
 
-      clearRingTimer();
-      ringTimerRef.current = setTimeout(() => {
-        ringTimerRef.current = null;
-        sendWS({ type: "call-end", to: targetUsername, callId });
-        setActualMediaConnected(false);
-        callGenerationRef.current += 1;
-        currentCallIdRef.current = null;
-        callDirectionRef.current = null;
-        setCallPhase("ended");
-        void leaveAgora();
-        showCallError("📵 لم يتم الرد — حاول مرة أخرى لاحقاً");
-        setCallStatus("ended");
-        setTimeout(() => { setCallStatus("idle"); setActivePeer(null); setActiveCallId(null); }, 1500);
-      }, RING_TIMEOUT_MS);
-      // Keep server-side authorization/billing validation, but never let a
-      // missing acknowledgement leave a browser ringing indefinitely.
+      // The signaling server owns the 30-second ring timeout and durable
+      // missed-call write. Do not race it with a browser call-end message.
       await callReady;
     } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
@@ -1882,6 +1739,18 @@ export function useCall(user: { id: number; username: string } | null) {
     sendWS({ type: "call-resume", callId: pending.callId });
   }, [connected, sendWS, user?.id]);
 
+  // A notification body click carries only callId. Resume the authenticated
+  // invitation so the normal incoming banner appears, but never auto-answer.
+  useEffect(() => {
+    if (!connected || !user) return;
+    if (readNotificationCallAction(window.location.search)) return;
+    const parsed = readNotificationCallResume(window.location.search);
+    if (!parsed || seenNotificationResumeRef.current === `${user.id}:${parsed.callId}`) return;
+    seenNotificationResumeRef.current = `${user.id}:${parsed.callId}`;
+    sendWS({ type: "call-resume", callId: parsed.callId });
+    clearNotificationCallActionUrl();
+  }, [clearNotificationCallActionUrl, connected, sendWS, user?.id]);
+
   useEffect(() => {
     const pending = pendingNotificationActionRef.current;
     if (!pending || !incomingCall || !user || !canApplyNotificationCallAction(pending, user.id, incomingCall.callId)) return;
@@ -1901,7 +1770,7 @@ export function useCall(user: { id: number; username: string } | null) {
     clearRingTimer();
     if (activePeer && activeCallId) {
       sendWS(callStatus === "calling" && callDirectionRef.current === "outgoing"
-        ? { type: "call-cancel", callId: activeCallId }
+        ? { type: "call-cancel", callId: activeCallId, status: "missed" }
         : { type: "call-end", to: activePeer, callId: activeCallId });
     }
     setActualMediaConnected(false);

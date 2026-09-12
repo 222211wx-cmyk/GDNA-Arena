@@ -1,6 +1,6 @@
 import { apiPath } from "./network";
 
-export type CallMediaProvider = "agora" | "webrtc";
+export type CallMediaProvider = "webrtc";
 
 export interface CallRtcConfig {
   provider: CallMediaProvider;
@@ -12,7 +12,7 @@ export interface CallRtcConfig {
 export function validateCallRtcConfig(value: unknown): CallRtcConfig {
   if (!value || typeof value !== "object") throw new Error("Invalid RTC configuration");
   const config = value as Partial<CallRtcConfig>;
-  if (config.provider !== "agora" && config.provider !== "webrtc") {
+  if (config.provider !== "webrtc") {
     throw new Error("Invalid RTC media provider");
   }
   if (!Array.isArray(config.iceServers)) throw new Error("Invalid ICE server list");
@@ -29,9 +29,6 @@ export function validateCallRtcConfig(value: unknown): CallRtcConfig {
   });
   if (config.provider === "webrtc" && (config.turnConfigured !== true || !hasTurn)) {
     throw new Error("WebRTC provider requires TURN");
-  }
-  if (config.provider === "agora" && config.turnConfigured !== false) {
-    throw new Error("Agora fallback must not advertise TURN readiness");
   }
   return config as CallRtcConfig;
 }

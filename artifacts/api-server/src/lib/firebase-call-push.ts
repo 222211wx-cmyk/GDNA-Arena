@@ -13,7 +13,8 @@ const INCOMING_PUSH_TTL_SECONDS = 30;
 const MISSED_PUSH_TTL_SECONDS = 86_400;
 
 type CallType = "video" | "voice";
-type CallStatus = "ringing" | "accepted" | "declined" | "missed" | "cancelled" | "ended";
+type CallStatus = "ringing" | "answered" | "declined" | "missed";
+type DeferredTerminalStatus = "declined" | "missed" | "ended";
 
 export interface CallerIdentity {
   id: number;
@@ -48,7 +49,31 @@ export interface CallPushStatus {
   enabled: boolean;
   reason?: string;
   firebase?: PublicFirebaseConfig;
+  /** Durable Firestore invitations can work without browser push credentials. */
+  pushEnabled?: boolean;
+  pushReason?: string;
   vapidPublicKey?: string;
+}
+
+export function firebaseReadiness(
+  serviceAccountConfigured: boolean,
+  webConfigConfigured: boolean,
+  vapidConfigured: boolean,
+): Pick<CallPushStatus, "enabled" | "reason" | "pushEnabled" | "pushReason"> {
+  if (!serviceAccountConfigured) {
+    return { enabled: false, reason: "Firebase service account is not configured" };
+  }
+  if (!webConfigConfigured) {
+    return { enabled: false, reason: "Firebase web configuration is not configured" };
+  }
+  if (!vapidConfigured) {
+    return {
+      enabled: true,
+      pushEnabled: false,
+      pushReason: "Firebase web push VAPID key is not configured",
+    };
+  }
+  return { enabled: true, pushEnabled: true };
 }
 
 export class CallPushError extends Error {
@@ -59,6 +84,26 @@ export class CallPushError extends Error {
 }
 
 let servicesPromise: Promise<FirebaseServices> | undefined;
+
+/**
+ * Maps the WebSocket's terminal state to the durable invitation contract.
+ * `ended` is intentionally transport-only: an answered Firestore invitation
+ * keeps status=answered and records its completion with endedAt.
+ */
+export function durableTerminalStatus(
+  wsStatus: "ringing" | "accepting" | "accepted",
+  callerInitiated: boolean,
+): DeferredTerminalStatus {
+  if (wsStatus === "accepted") return "ended";
+  return callerInitiated ? "missed" : "declined";
+}
+
+export function durableTerminalUpdate(
+  status: DeferredTerminalStatus,
+  endedAt: Date,
+): { status?: Exclude<CallStatus, "ringing" | "answered">; endedAt: Date } {
+  return status === "ended" ? { endedAt } : { status, endedAt };
+}
 
 function sessionTag(sessionId: string): string {
   return createHash("sha256").update(sessionId).digest("hex");
@@ -97,11 +142,29 @@ function readServiceAccount(): Record<string, unknown> | null {
   }
 }
 
-function configurationProblem(): string | null {
+function adminConfigurationProblem(): string | null {
   if (!readServiceAccount()) return "Firebase service account is not configured";
+  return null;
+}
+
+function clientConfigurationProblem(): string | null {
   if (!asPublicConfig()) return "Firebase web configuration is not configured";
+  return null;
+}
+
+function pushConfigurationProblem(): string | null {
+  const adminProblem = adminConfigurationProblem();
+  if (adminProblem) return adminProblem;
+  const clientProblem = clientConfigurationProblem();
+  if (clientProblem) return clientProblem;
   if (!process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim()) return "Firebase web push VAPID key is not configured";
   return null;
+}
+
+// Firestore invitation persistence and custom-token issuance do not require
+// browser push. Keep the durable lifecycle available when VAPID is absent.
+function configurationProblem(): string | null {
+  return adminConfigurationProblem() ?? clientConfigurationProblem();
 }
 
 export function isFirebaseCallPushConfigured(): boolean {
@@ -140,7 +203,7 @@ function dateValue(value: unknown, fallback = new Date()): Date {
 }
 
 function callRef(db: Firestore, callId: string) {
-  return db.collection("calls").doc(callId);
+  return db.collection("callInvites").doc(callId);
 }
 
 function userRef(db: Firestore, userId: number) {
@@ -154,15 +217,17 @@ function missedRef(db: Firestore, userId: number, callId: string) {
 function invitationPayload(invitation: DeferredCallInvitation) {
   const createdAt = invitation.createdAt ?? new Date();
   const expiresAt = invitation.expiresAt ?? new Date(createdAt.getTime() + DEFERRED_INVITATION_TTL_MS);
+  // Keep the Firestore contract independent from the WebSocket's caller/callee
+  // vocabulary. The latter remains internal transport state.
   return {
-    callerId: invitation.caller.id,
-    calleeId: invitation.calleeId,
+    fromId: invitation.caller.id,
+    fromName: invitation.caller.name,
+    toId: invitation.calleeId,
     status: "ringing" as const,
     type: invitation.type,
     createdAt,
     expiresAt,
-    callerName: invitation.caller.name,
-    callerAvatar: invitation.caller.avatar,
+    fromAvatar: invitation.caller.avatar,
     deferredMedia: true,
   };
 }
@@ -191,6 +256,9 @@ async function sendPush(
   includeFocused = false,
   ttlSeconds = INCOMING_PUSH_TTL_SECONDS,
 ): Promise<void> {
+  // VAPID is a browser-push credential, not a Firestore credential. The
+  // invitation must already be persisted before this best-effort path runs.
+  if (pushConfigurationProblem()) return;
   try {
     const devices = await deviceTokens(services.db, userId, includeFocused);
     if (!devices.length) return;
@@ -224,8 +292,9 @@ export async function getCallPushStatus(): Promise<CallPushStatus> {
       reason: error instanceof CallPushError ? error.message : "Firebase Admin is unavailable",
     };
   }
+  const readiness = firebaseReadiness(true, true, !!process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim());
   return {
-    enabled: true,
+    ...readiness,
     firebase: asPublicConfig() ?? undefined,
     vapidPublicKey: process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim(),
   };
@@ -366,14 +435,13 @@ export async function acceptDeferredCallInvitation(callId: string, calleeId: num
       const ref = callRef(db, callId);
       const snapshot = await transaction.get(ref);
       const data = snapshot.data();
-      if (!data || data.calleeId !== calleeId || data.status !== "ringing" ||
+      if (!data || data.toId !== calleeId || data.status !== "ringing" ||
         dateValue(data.expiresAt, new Date(0)).getTime() <= Date.now()) return false;
-      transaction.update(ref, { status: "accepted", acceptedAt: new Date() });
+      transaction.update(ref, { status: "answered", answeredAt: new Date() });
       return true;
     });
-    if (accepted) {
-      await sendPush({ db, messaging, auth }, calleeId, { type: "CALL_ENDED", roomId: callId }, undefined, true);
-    }
+    // The requested basic service worker displays every push. Terminal
+    // synchronization stays on Firestore/WS to avoid false missed notifications.
     return accepted;
   } catch {
     throw new CallPushError("Firebase invitation acceptance failed");
@@ -382,7 +450,7 @@ export async function acceptDeferredCallInvitation(callId: string, calleeId: num
 
 export async function finishDeferredCallInvitation(
   invitation: DeferredCallInvitation,
-  status: Exclude<CallStatus, "ringing" | "accepted">,
+  status: DeferredTerminalStatus,
 ): Promise<boolean> {
   const { db, messaging, auth } = await loadServices();
   try {
@@ -390,15 +458,21 @@ export async function finishDeferredCallInvitation(
       const ref = callRef(db, invitation.callId);
       const snapshot = await transaction.get(ref);
       const data = snapshot.data();
-      if (!data || data.callerId !== invitation.caller.id || data.calleeId !== invitation.calleeId) return false;
+      if (!data || data.fromId !== invitation.caller.id || data.toId !== invitation.calleeId) return false;
       if (data.status !== "ringing" &&
-        !(data.status === "accepted" && (status === "ended" || status === "cancelled"))) return false;
-      transaction.update(ref, { status, endedAt: new Date() });
+        !(data.status === "answered" && status === "ended")) return false;
+      transaction.update(ref, durableTerminalUpdate(status, new Date()));
       if (status === "declined" || status === "missed") {
         transaction.set(missedRef(db, invitation.calleeId, invitation.callId), {
-          caller: invitation.caller,
+          fromId: invitation.caller.id,
+          fromName: invitation.caller.name,
+          fromAvatar: invitation.caller.avatar,
           type: invitation.type,
           time: new Date(),
+          seen: false,
+          // Legacy aliases are intentionally retained in inbox documents so
+          // older clients can continue reading the same durable record.
+          caller: invitation.caller,
           isSeen: false,
           status,
         });
@@ -421,8 +495,6 @@ export async function finishDeferredCallInvitation(
         true,
         MISSED_PUSH_TTL_SECONDS,
       );
-    } else {
-      await sendPush({ db, messaging, auth }, invitation.calleeId, { type: "CALL_ENDED", roomId: invitation.callId }, undefined, true);
     }
     return true;
   } catch {
@@ -437,29 +509,42 @@ export async function listMissedCalls(userId: number): Promise<{
   const { db } = await loadServices();
   try {
     const collection = userRef(db, userId).collection("missedCalls");
-    const [itemsSnapshot, unseenSnapshot] = await Promise.all([
+    const [itemsSnapshot, unseenSnapshot, legacyUnseenSnapshot] = await Promise.all([
       collection.orderBy("time", "desc").limit(100).get(),
-      collection.where("isSeen", "==", false).count().get(),
+      collection.where("seen", "==", false).get(),
+      // This query keeps pre-contract inbox documents visible while all new
+      // writes use the canonical `seen` field.
+      collection.where("isSeen", "==", false).get(),
     ]);
     const items = itemsSnapshot.docs.flatMap(doc => {
       const value = doc.data();
       if ((value.type !== "video" && value.type !== "voice") ||
         (value.status !== "declined" && value.status !== "missed") ||
-        !value.caller || typeof value.caller.id !== "number" || typeof value.caller.name !== "string") return [];
+        (typeof value.fromId !== "number" && (!value.caller || typeof value.caller.id !== "number")) ||
+        (typeof value.fromName !== "string" && (!value.caller || typeof value.caller.name !== "string"))) return [];
+      const fromId = typeof value.fromId === "number" ? value.fromId : value.caller.id;
+      const fromName = typeof value.fromName === "string" ? value.fromName : value.caller.name;
+      const fromAvatar = typeof value.fromAvatar === "string"
+        ? value.fromAvatar
+        : typeof value.caller?.avatar === "string" ? value.caller.avatar : null;
       return [{
         id: doc.id,
         caller: {
-          id: value.caller.id,
-          name: value.caller.name,
-          avatar: typeof value.caller.avatar === "string" ? value.caller.avatar : null,
+          id: fromId,
+          name: fromName,
+          avatar: fromAvatar,
         },
         type: value.type as CallType,
         time: dateValue(value.time).toISOString(),
-        isSeen: value.isSeen === true,
+        isSeen: value.seen === true || value.isSeen === true,
         status: value.status as "declined" | "missed",
       }];
     });
-    return { items, unseenCount: unseenSnapshot.data().count };
+    const unseenIds = new Set([
+      ...unseenSnapshot.docs.map(doc => doc.id),
+      ...legacyUnseenSnapshot.docs.map(doc => doc.id),
+    ]);
+    return { items, unseenCount: unseenIds.size };
   } catch {
     throw new CallPushError("Firebase missed-call retrieval failed");
   }
@@ -473,7 +558,14 @@ export async function markMissedCallsSeen(userId: number, ids: unknown): Promise
   const { db } = await loadServices();
   try {
     const batch = db.batch();
-    for (const id of new Set(ids)) batch.update(missedRef(db, userId, id), { isSeen: true, seenAt: new Date() });
+    for (const id of new Set(ids)) {
+      batch.update(missedRef(db, userId, id), {
+        seen: true,
+        // Keep the old API/client alias synchronized while clients migrate.
+        isSeen: true,
+        seenAt: new Date(),
+      });
+    }
     await batch.commit();
   } catch {
     throw new CallPushError("Firebase missed-call update failed");
@@ -543,12 +635,12 @@ export function revokeAllCallPushSessions(userId: number): Promise<boolean> {
 async function expireInvitation(db: Firestore, callId: string, data: Record<string, unknown>): Promise<void> {
   const invitation: DeferredCallInvitation = {
     callId,
-    caller: {
-      id: data.callerId as number,
-      name: data.callerName as string,
-      avatar: typeof data.callerAvatar === "string" ? data.callerAvatar : null,
+      caller: {
+      id: data.fromId as number,
+      name: data.fromName as string,
+      avatar: typeof data.fromAvatar === "string" ? data.fromAvatar : null,
     },
-    calleeId: data.calleeId as number,
+    calleeId: data.toId as number,
     type: data.type as CallType,
   };
   if (!Number.isInteger(invitation.caller.id) || !Number.isInteger(invitation.calleeId) ||
@@ -563,7 +655,7 @@ export function startFirebaseCallExpirationSweep(): void {
     for (let page = 0; page < SWEEP_MAX_PAGES; page += 1) {
       try {
         const { db } = await loadServices();
-        let query = db.collection("calls").where("status", "==", "ringing")
+        let query = db.collection("callInvites").where("status", "==", "ringing")
           .where("expiresAt", "<=", new Date()).orderBy("expiresAt").limit(SWEEP_PAGE_SIZE);
         if (last) query = query.startAfter(last);
         const snapshot = await query.get();

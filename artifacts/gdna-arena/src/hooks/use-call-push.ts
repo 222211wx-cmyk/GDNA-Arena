@@ -17,7 +17,11 @@ export function useCallPush(
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
     typeof Notification === "undefined" ? "unsupported" : Notification.permission,
   );
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushReason, setPushReason] = useState<string | null>(null);
   const [missedCalls, setMissedCalls] = useState<MissedCall[]>([]);
+  const [missedCallsLoading, setMissedCallsLoading] = useState(false);
+  const [missedCallsError, setMissedCallsError] = useState(false);
   const firebaseRef = useRef<Awaited<ReturnType<typeof createCallFirebase>> | null>(null);
   const pushCleanupRef = useRef<(() => Promise<void>) | null>(null);
   const sessionGenerationRef = useRef(0);
@@ -32,18 +36,29 @@ export function useCallPush(
     // Never render one citizen's missed calls while the next Firebase session
     // is being established.
     setMissedCalls([]);
+    setMissedCallsError(false);
+    setPushEnabled(false);
+    setPushReason(null);
     if (!user) {
       setFirebaseStatus("disabled");
       setFirebaseError(null);
       setMissedCalls([]);
+      setMissedCallsLoading(false);
       return;
     }
     setFirebaseStatus("loading");
     setFirebaseError(null);
+    setMissedCallsLoading(true);
     void createCallFirebase(
       callId => resumeRef.current(callId),
       (callId, status) => terminalRef.current(callId, status),
-      items => { if (!cancelled) setMissedCalls(items); },
+      items => {
+        if (!cancelled) {
+          setMissedCalls(items);
+          setMissedCallsLoading(false);
+          setMissedCallsError(false);
+        }
+      },
       error => {
         if (!cancelled) {
           setFirebaseStatus("error");
@@ -56,8 +71,13 @@ export function useCallPush(
       if (!firebase.enabled) {
         setFirebaseStatus("disabled");
         setFirebaseError(firebase.reason);
+        setPushEnabled(false);
+        setPushReason(firebase.pushReason ?? firebase.reason);
+        setMissedCallsLoading(false);
         return;
       }
+      setPushEnabled(firebase.pushEnabled);
+      setPushReason(firebase.pushReason ?? null);
       await firebase.ready;
       if (cancelled || generation !== sessionGenerationRef.current) {
         await firebase.cleanup();
@@ -66,17 +86,23 @@ export function useCallPush(
       setFirebaseStatus("ready");
       try {
         const missed = await fetchMissedCalls();
-        if (!cancelled) setMissedCalls(missed.items);
+        if (!cancelled) {
+          setMissedCalls(missed.items);
+          setMissedCallsError(false);
+          setMissedCallsLoading(false);
+        }
       } catch (error) {
         if (!cancelled) {
           setFirebaseStatus("error");
           setFirebaseError(error instanceof Error ? error.message : "Missed calls could not be loaded");
+          setMissedCallsError(true);
+          setMissedCallsLoading(false);
         }
         return;
       }
       // Permission prompts are only made by enableCallNotifications. A prior
       // grant, however, should restore this account's FCM registration.
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      if (firebase.pushEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
         const result = await firebase.enableMessaging();
         if (typeof result !== "string" && (cancelled || generation !== sessionGenerationRef.current)) {
           await result.cleanup();
@@ -91,6 +117,8 @@ export function useCallPush(
       if (!cancelled) {
         setFirebaseStatus("error");
         setFirebaseError(error instanceof Error ? error.message : "Firebase call notifications failed");
+        setMissedCallsError(true);
+        setMissedCallsLoading(false);
       }
     });
     return () => {
@@ -106,11 +134,27 @@ export function useCallPush(
 
   const enableCallNotifications = useCallback(async () => {
     const firebase = firebaseRef.current;
-    if (!firebase?.enabled) throw new Error("Call notifications are not configured");
+    if (!firebase?.enabled) {
+      setPushEnabled(false);
+      setPushReason(firebase?.pushReason ?? firebase?.reason ?? "Call notifications are not configured");
+      return notificationPermission;
+    }
+    if (!firebase.pushEnabled) {
+      setPushEnabled(false);
+      setPushReason(firebase.pushReason ?? "Background call notifications are not configured");
+      return notificationPermission;
+    }
     const existing = pushCleanupRef.current;
     if (existing) return notificationPermission;
     const generation = sessionGenerationRef.current;
-    const result = await firebase.enableMessaging();
+    let result: Awaited<ReturnType<typeof firebase.enableMessaging>>;
+    try {
+      result = await firebase.enableMessaging();
+    } catch (error) {
+      setPushEnabled(false);
+      setPushReason(error instanceof Error ? error.message : "Background call notifications are unavailable");
+      return notificationPermission;
+    }
     if (generation !== sessionGenerationRef.current) {
       if (typeof result !== "string") await result.cleanup();
       throw new Error("Call notification session changed");
@@ -131,8 +175,25 @@ export function useCallPush(
     setMissedCalls(items => items.map(item => selected.includes(item.id) ? { ...item, isSeen: true } : item));
   }, [missedCalls]);
 
+  const refreshMissedCalls = useCallback(async () => {
+    if (!user) return;
+    setMissedCallsLoading(true);
+    setMissedCallsError(false);
+    try {
+      const missed = await fetchMissedCalls();
+      setMissedCalls(missed.items);
+    } catch (error) {
+      setMissedCallsError(true);
+      setFirebaseError(error instanceof Error ? error.message : "Missed calls could not be loaded");
+    } finally {
+      setMissedCallsLoading(false);
+    }
+  }, [user?.id]);
+
   return {
     firebaseStatus, firebaseError, notificationPermission, enableCallNotifications,
     missedCalls, missedCallCount: missedCalls.filter(item => !item.isSeen).length, markMissedCallsSeen,
+    missedCallsLoading, missedCallsError, refreshMissedCalls,
+    pushEnabled, pushReason,
   };
 }

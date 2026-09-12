@@ -10,6 +10,9 @@ export interface MissedCall {
   status: string;
 }
 
+const MISSED_CALL_TYPES = new Set(["video", "voice"]);
+const MISSED_CALL_STATUSES = new Set(["ringing", "answered", "declined", "missed", "ended"]);
+
 function normalizeMissedTime(value: unknown): string | null {
   if (value && typeof (value as { toDate?: unknown }).toDate === "function") {
     const date = (value as { toDate(): Date }).toDate();
@@ -28,11 +31,30 @@ function normalizeMissedTime(value: unknown): string | null {
 export function parseMissedCall(id: string, value: unknown): MissedCall | null {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || !value || typeof value !== "object") return null;
   const data = value as Record<string, unknown>;
-  const caller = data.caller;
-  if (!caller || typeof caller !== "object") return null;
-  const callerData = caller as Record<string, unknown>;
-  if (typeof callerData.id !== "number" || !Number.isFinite(callerData.id) || typeof callerData.name !== "string" ||
-    (data.type !== "video" && data.type !== "voice") || typeof data.isSeen !== "boolean" || typeof data.status !== "string") {
+  // callInvites/missedCalls is the canonical Firestore shape. The API still
+  // returns the old nested caller shape in some deployments, so normalize both
+  // at this boundary and keep the rest of the web UI canonical.
+  const caller = data.caller && typeof data.caller === "object"
+    ? data.caller as Record<string, unknown>
+    : null;
+  const rawCallerId = caller?.id ?? data.fromId;
+  const callerId = typeof rawCallerId === "number"
+    ? rawCallerId
+    : typeof rawCallerId === "string" && rawCallerId.trim() !== ""
+      ? Number(rawCallerId)
+      : NaN;
+  const callerName = typeof caller?.name === "string" ? caller.name : data.fromName;
+  const type = data.type === "audio" ? "voice" : data.type;
+  const seen = typeof data.seen === "boolean" ? data.seen : data.isSeen;
+  const rawStatus = typeof data.status === "string" ? data.status : "missed";
+  const status = rawStatus === "rejected"
+    ? "declined"
+    : rawStatus === "cancelled" || rawStatus === "expired"
+      ? "missed"
+      : rawStatus;
+  if (!Number.isSafeInteger(callerId) || callerId < 0 || typeof callerName !== "string" ||
+    !MISSED_CALL_TYPES.has(type as string) || typeof seen !== "boolean" ||
+    !MISSED_CALL_STATUSES.has(status)) {
     return null;
   }
   const time = normalizeMissedTime(data.time);
@@ -40,22 +62,55 @@ export function parseMissedCall(id: string, value: unknown): MissedCall | null {
   return {
     id,
     caller: {
-      id: callerData.id,
-      name: callerData.name,
-      avatar: typeof callerData.avatar === "string" ? callerData.avatar : null,
+      id: callerId,
+      name: callerName,
+      avatar: typeof caller?.avatar === "string"
+        ? caller.avatar
+        : typeof data.fromAvatar === "string" ? data.fromAvatar : null,
     },
-    type: data.type,
+    type: type as "video" | "voice",
     time,
-    isSeen: data.isSeen,
-    status: data.status,
+    isSeen: seen,
+    status,
   };
 }
 
 interface PushConfig {
   enabled: boolean;
   reason?: string;
+  /** Firestore readiness is independent from browser push readiness. */
+  pushEnabled?: boolean;
+  pushReason?: string;
   firebase?: { apiKey: string; authDomain: string; projectId: string; messagingSenderId: string; appId: string };
   vapidPublicKey?: string;
+}
+
+export function resolvePushCapability(
+  serverPushEnabled: boolean | undefined,
+  vapidPublicKey: string | undefined,
+  messagingSupported: boolean,
+  serverPushReason?: string,
+): { enabled: boolean; reason?: string } {
+  const hasVapid = typeof vapidPublicKey === "string" && vapidPublicKey.trim().length > 0;
+  if (!hasVapid) {
+    return {
+      enabled: false,
+      reason: serverPushReason ?? "Firebase web push VAPID key is not configured",
+    };
+  }
+  if (serverPushEnabled !== true) {
+    return {
+      enabled: false,
+      reason: serverPushReason ?? "Background call notifications are not configured",
+    };
+  }
+  if (!messagingSupported) {
+    return {
+      enabled: false,
+      reason: "Background call notifications are not supported by this browser (IndexedDB, Push API, and a service worker are required)",
+    };
+  }
+  return { enabled: true };
 }
 
 const json = async <T,>(path: string, init?: RequestInit): Promise<T> => {
@@ -78,21 +133,37 @@ export async function createCallFirebase(
 ) {
   const config = await json<PushConfig>("/api/call-push/config");
   if (!config.enabled || !config.firebase) {
-    return { enabled: false as const, reason: config.reason ?? "Call notifications are not configured" };
+    return {
+      enabled: false as const,
+      reason: config.reason ?? "Call notifications are not configured",
+      pushEnabled: false,
+      pushReason: config.pushReason ?? config.reason ?? "Background call notifications are not configured",
+    };
   }
 
-  const [{ initializeApp, getApps }, authSdk, firestoreSdk] = await Promise.all([
-    import("firebase/app"),
+  // The app module owns the one public Firebase app instance. Import it only
+  // after the server confirms call-push is configured; this keeps optional
+  // Firebase startup out of ordinary web sessions and avoids a second
+  // initializeApp call.
+  const [{ app, db, firebaseConfig, messaging: messagingReady, getToken, onMessage }, authSdk, firestoreSdk] = await Promise.all([
+    import("./firebase"),
     import("firebase/auth"),
     import("firebase/firestore"),
   ]);
-  const app = getApps().find(item => item.options.projectId === config.firebase!.projectId)
-    ?? initializeApp(config.firebase);
+  if (app.options.projectId !== config.firebase.projectId || firebaseConfig.projectId !== app.options.projectId) {
+    throw new Error("Firebase web configuration does not match the configured call project");
+  }
+  const messaging = await messagingReady;
+  const pushCapability = resolvePushCapability(
+    config.pushEnabled,
+    config.vapidPublicKey,
+    Boolean(messaging),
+    config.pushReason,
+  );
   const auth = authSdk.getAuth(app);
   await authSdk.setPersistence(auth, authSdk.inMemoryPersistence);
   const session = await json<{ customToken: string; userId: string }>("/api/call-push/session", { method: "POST" });
   await authSdk.signInWithCustomToken(auth, session.customToken);
-  const db = firestoreSdk.getFirestore(app);
   const unsubs: Array<() => void> = [];
   const callIds = new Set<string>();
   let readyCount = 0;
@@ -113,13 +184,17 @@ export async function createCallFirebase(
   const activeUnsub = new Map<string, () => void>();
   const watchCall = (callId: string) => {
     if (activeUnsub.has(callId)) return;
-    const stop = firestoreSdk.onSnapshot(firestoreSdk.doc(db, "calls", callId), snap => {
-      const status = snap.data()?.status;
-      if (typeof status === "string" && ["ended", "rejected", "cancelled", "expired", "declined", "missed"].includes(status)) {
+    const stop = firestoreSdk.onSnapshot(firestoreSdk.doc(db, "callInvites", callId), snap => {
+      const data = snap.data();
+      const status = data?.status;
+      // A normally completed call stays durably `answered`; endedAt is the
+      // canonical terminal marker and avoids rewriting the lifecycle status.
+      const ended = data?.endedAt != null;
+      if (ended || (typeof status === "string" && ["declined", "missed", "ended"].includes(status))) {
         activeUnsub.get(callId)?.();
         activeUnsub.delete(callId);
         callIds.delete(callId);
-        onTerminal(callId, status);
+        onTerminal(callId, ended ? "ended" : status as string);
       }
     }, error => {
       activeUnsub.delete(callId);
@@ -129,9 +204,9 @@ export async function createCallFirebase(
   };
 
   const callsQuery = firestoreSdk.query(
-    firestoreSdk.collection(db, "calls"),
+    firestoreSdk.collection(db, "callInvites"),
     // Firebase rules and the server store identity claims as numbers.
-    firestoreSdk.where("calleeId", "==", Number(session.userId)),
+    firestoreSdk.where("toId", "==", Number(session.userId)),
     firestoreSdk.where("status", "==", "ringing"),
   );
   unsubs.push(firestoreSdk.onSnapshot(callsQuery, snapshot => {
@@ -164,6 +239,8 @@ export async function createCallFirebase(
 
   return {
     enabled: true as const,
+    pushEnabled: pushCapability.enabled,
+    pushReason: pushCapability.reason,
     vapidPublicKey: config.vapidPublicKey,
     userId: session.userId,
     watchCall,
@@ -172,14 +249,21 @@ export async function createCallFirebase(
       if (!("Notification" in window)) throw new Error("Notifications are not supported by this browser");
       const permission = await Notification.requestPermission();
       if (permission !== "granted") return permission;
-      const [{ getMessaging, getToken, onMessage }] = await Promise.all([import("firebase/messaging")]);
+      if (!pushCapability.enabled) {
+        throw new Error(
+          pushCapability.reason
+            ?? "Background call notifications are not supported by this browser (IndexedDB, Push API, and a service worker are required)",
+        );
+      }
+      if (!messaging || !getToken || !onMessage) {
+        throw new Error("Background call notifications are not supported by this browser (IndexedDB, Push API, and a service worker are required)");
+      }
       const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL ?? "/"}firebase-messaging-sw.js`, window.location.origin);
       // This is Firebase's public web configuration, not a credential. Passing
       // it makes background handler initialization synchronous on a cold start.
-      serviceWorkerUrl.searchParams.set("firebaseConfig", JSON.stringify(config.firebase));
+      serviceWorkerUrl.searchParams.set("firebaseConfig", JSON.stringify(firebaseConfig));
       serviceWorkerUrl.searchParams.set("vapidPublicKey", config.vapidPublicKey ?? "");
       const registration = await navigator.serviceWorker.register(serviceWorkerUrl.toString());
-      const messaging = getMessaging(app);
       let token = await getToken(messaging, {
         vapidKey: config.vapidPublicKey,
         serviceWorkerRegistration: registration,

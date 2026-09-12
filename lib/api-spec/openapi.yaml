@@ -625,6 +625,11 @@ components:
           type: boolean
         reason:
           type: string
+        pushEnabled:
+          type: boolean
+          description: Browser push readiness; Firestore may remain enabled when this is false.
+        pushReason:
+          type: string
         firebase:
           type: object
           properties:

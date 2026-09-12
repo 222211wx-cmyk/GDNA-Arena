@@ -40,6 +40,7 @@ import LearnPage from "@/pages/learn";
 import StoriesPage from "@/pages/stories";
 import EventsPage from "@/pages/events";
 import MessagesPage from "@/pages/messages";
+import MissedCallsPage from "@/pages/missed-calls";
 import CelebrationsPage from "@/pages/celebrations";
 import Hub from "@/pages/hub";
 import Empire from "@/pages/empire";
@@ -128,6 +129,7 @@ function PageWrapper() {
           <Route path="/stories" component={StoriesPage} />
           <Route path="/events" component={EventsPage} />
           <Route path="/messages" component={MessagesPage} />
+          <Route path="/missed-calls" component={MissedCallsPage} />
           <Route path="/celebrations" component={CelebrationsPage} />
           <Route path="/press" component={PressPage} />
           <Route path="/neural-core" component={NeuralCorePage} />

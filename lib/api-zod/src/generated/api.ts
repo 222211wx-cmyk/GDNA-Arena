@@ -98,6 +98,8 @@ export const GetMeResponse = zod.object({
 export const GetCallPushConfigResponse = zod.object({
   "enabled": zod.boolean(),
   "reason": zod.string().optional(),
+  "pushEnabled": zod.boolean().optional().describe('Browser push readiness; Firestore may remain enabled when this is false.'),
+  "pushReason": zod.string().optional(),
   "firebase": zod.object({
   "apiKey": zod.string(),
   "authDomain": zod.string(),

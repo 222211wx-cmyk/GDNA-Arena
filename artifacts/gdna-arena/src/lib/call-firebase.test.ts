@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMissedCall } from "./call-firebase";
+import { parseMissedCall, resolvePushCapability } from "./call-firebase";
 
 describe("parseMissedCall", () => {
   it("normalizes an actual Firestore Timestamp-like value to an ISO time", () => {
@@ -43,5 +43,34 @@ describe("parseMissedCall", () => {
       isSeen: true,
       status: "declined",
     })).toBeNull();
+  });
+
+  it("normalizes the canonical callInvites/missedCalls fields", () => {
+    expect(parseMissedCall("invite_7", {
+      fromId: 77,
+      fromName: "Nour",
+      type: "video",
+      time: { toMillis: () => 1_700_000_000_000 },
+      seen: false,
+    })).toEqual({
+      id: "invite_7",
+      caller: { id: 77, name: "Nour", avatar: null },
+      type: "video",
+      time: "2023-11-14T22:13:20.000Z",
+      isSeen: false,
+      status: "missed",
+    });
+  });
+
+  it("gates FCM readiness independently from Firestore and names missing VAPID", () => {
+    expect(resolvePushCapability(true, undefined, true)).toEqual({
+      enabled: false,
+      reason: "Firebase web push VAPID key is not configured",
+    });
+    expect(resolvePushCapability(false, "vapid", true, "Push credentials are disabled")).toEqual({
+      enabled: false,
+      reason: "Push credentials are disabled",
+    });
+    expect(resolvePushCapability(true, "vapid", false).reason).toContain("IndexedDB");
   });
 });
