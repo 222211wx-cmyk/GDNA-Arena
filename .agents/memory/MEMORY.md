@@ -23,3 +23,4 @@
 - [Language policy](language-policy.md) — preserve foundational AR/EN/FR/ES/DE in language switchers; Arabic remains the canonical first-visit default.
 - [Production schema ownership](production-schema-ownership.md) — Publish owns production schema application; never replay Drizzle application migrations during startup.
 - [Royal Reserve policy](royal-reserve-policy.md) — 120-minute/48-hour app-credit loan requires consent; no internet means no call or usage charge; money stays simulated.
+- [Drizzle peer alignment](drizzle-peer-alignment.md) — Firebase Admin can split Drizzle type identities through optional OpenTelemetry peers; align consumers, not query casts.

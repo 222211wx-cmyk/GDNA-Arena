@@ -1,0 +1,258 @@
+import { apiPath } from "./network";
+
+export type FirebaseStatus = "loading" | "disabled" | "ready" | "error";
+export interface MissedCall {
+  id: string;
+  caller: { id: number; name: string; avatar?: string | null };
+  type: "video" | "voice";
+  time: string | number;
+  isSeen: boolean;
+  status: string;
+}
+
+function normalizeMissedTime(value: unknown): string | null {
+  if (value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    const date = (value as { toDate(): Date }).toDate();
+    return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+  }
+  if (value && typeof (value as { toMillis?: unknown }).toMillis === "function") {
+    const millis = (value as { toMillis(): number }).toMillis();
+    return Number.isFinite(millis) ? new Date(millis).toISOString() : null;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? new Date(value).toISOString() : null;
+  if (typeof value === "string" && Number.isFinite(Date.parse(value))) return new Date(value).toISOString();
+  return null;
+}
+
+/** Converts Firestore data to the API/UI shape; never expose a Timestamp object. */
+export function parseMissedCall(id: string, value: unknown): MissedCall | null {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || !value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  const caller = data.caller;
+  if (!caller || typeof caller !== "object") return null;
+  const callerData = caller as Record<string, unknown>;
+  if (typeof callerData.id !== "number" || !Number.isFinite(callerData.id) || typeof callerData.name !== "string" ||
+    (data.type !== "video" && data.type !== "voice") || typeof data.isSeen !== "boolean" || typeof data.status !== "string") {
+    return null;
+  }
+  const time = normalizeMissedTime(data.time);
+  if (!time) return null;
+  return {
+    id,
+    caller: {
+      id: callerData.id,
+      name: callerData.name,
+      avatar: typeof callerData.avatar === "string" ? callerData.avatar : null,
+    },
+    type: data.type,
+    time,
+    isSeen: data.isSeen,
+    status: data.status,
+  };
+}
+
+interface PushConfig {
+  enabled: boolean;
+  reason?: string;
+  firebase?: { apiKey: string; authDomain: string; projectId: string; messagingSenderId: string; appId: string };
+  vapidPublicKey?: string;
+}
+
+const json = async <T,>(path: string, init?: RequestInit): Promise<T> => {
+  const response = await fetch(apiPath(path), { credentials: "include", ...init });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error((body as { error?: string }).error ?? `Call push request failed: HTTP ${response.status}`);
+  return body as T;
+};
+
+/**
+ * Firebase is loaded only after the server confirms that this deployment is
+ * configured. Keeping the SDK behind dynamic imports also keeps normal chat
+ * startup independent from optional push infrastructure.
+ */
+export async function createCallFirebase(
+  onRinging: (callId: string) => void,
+  onTerminal: (callId: string, status: string) => void,
+  onMissedCalls: (items: MissedCall[]) => void,
+  onSnapshotError: (error: Error) => void,
+) {
+  const config = await json<PushConfig>("/api/call-push/config");
+  if (!config.enabled || !config.firebase) {
+    return { enabled: false as const, reason: config.reason ?? "Call notifications are not configured" };
+  }
+
+  const [{ initializeApp, getApps }, authSdk, firestoreSdk] = await Promise.all([
+    import("firebase/app"),
+    import("firebase/auth"),
+    import("firebase/firestore"),
+  ]);
+  const app = getApps().find(item => item.options.projectId === config.firebase!.projectId)
+    ?? initializeApp(config.firebase);
+  const auth = authSdk.getAuth(app);
+  await authSdk.setPersistence(auth, authSdk.inMemoryPersistence);
+  const session = await json<{ customToken: string; userId: string }>("/api/call-push/session", { method: "POST" });
+  await authSdk.signInWithCustomToken(auth, session.customToken);
+  const db = firestoreSdk.getFirestore(app);
+  const unsubs: Array<() => void> = [];
+  const callIds = new Set<string>();
+  let readyCount = 0;
+  let settleReady: (() => void) | null = null;
+  let rejectReady: ((error: Error) => void) | null = null;
+  const ready = new Promise<void>((resolve, reject) => {
+    settleReady = resolve;
+    rejectReady = reject;
+  });
+  const snapshotReady = () => {
+    readyCount += 1;
+    if (readyCount === 2) settleReady?.();
+  };
+  const snapshotFailed = (error: Error) => {
+    onSnapshotError(error);
+    rejectReady?.(error);
+  };
+  const activeUnsub = new Map<string, () => void>();
+  const watchCall = (callId: string) => {
+    if (activeUnsub.has(callId)) return;
+    const stop = firestoreSdk.onSnapshot(firestoreSdk.doc(db, "calls", callId), snap => {
+      const status = snap.data()?.status;
+      if (typeof status === "string" && ["ended", "rejected", "cancelled", "expired", "declined", "missed"].includes(status)) {
+        activeUnsub.get(callId)?.();
+        activeUnsub.delete(callId);
+        callIds.delete(callId);
+        onTerminal(callId, status);
+      }
+    }, error => {
+      activeUnsub.delete(callId);
+      onSnapshotError(error);
+    });
+    activeUnsub.set(callId, stop);
+  };
+
+  const callsQuery = firestoreSdk.query(
+    firestoreSdk.collection(db, "calls"),
+    // Firebase rules and the server store identity claims as numbers.
+    firestoreSdk.where("calleeId", "==", Number(session.userId)),
+    firestoreSdk.where("status", "==", "ringing"),
+  );
+  unsubs.push(firestoreSdk.onSnapshot(callsQuery, snapshot => {
+    snapshot.docChanges().forEach(change => {
+      if (change.type === "removed") return;
+      const id = change.doc.id;
+      if (callIds.has(id)) return;
+      callIds.add(id);
+      watchCall(id);
+      // A Firestore document is only a wake-up signal. The WS resume endpoint
+      // returns the authenticated, authoritative invitation envelope.
+      onRinging(id);
+    });
+    snapshotReady();
+  }, snapshotFailed));
+
+  const missedQuery = firestoreSdk.query(
+    firestoreSdk.collection(db, "users", String(session.userId), "missedCalls"),
+    firestoreSdk.orderBy("time", "desc"),
+    firestoreSdk.limit(100),
+  );
+  unsubs.push(firestoreSdk.onSnapshot(missedQuery, snapshot => {
+    const items = snapshot.docs
+      .map(doc => parseMissedCall(doc.id, doc.data()))
+      .filter((item): item is MissedCall => item !== null)
+      .sort((left, right) => Date.parse(right.time as string) - Date.parse(left.time as string));
+    onMissedCalls(items);
+    snapshotReady();
+  }, snapshotFailed));
+
+  return {
+    enabled: true as const,
+    vapidPublicKey: config.vapidPublicKey,
+    userId: session.userId,
+    watchCall,
+    ready,
+    async enableMessaging() {
+      if (!("Notification" in window)) throw new Error("Notifications are not supported by this browser");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return permission;
+      const [{ getMessaging, getToken, onMessage }] = await Promise.all([import("firebase/messaging")]);
+      const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL ?? "/"}firebase-messaging-sw.js`, window.location.origin);
+      // This is Firebase's public web configuration, not a credential. Passing
+      // it makes background handler initialization synchronous on a cold start.
+      serviceWorkerUrl.searchParams.set("firebaseConfig", JSON.stringify(config.firebase));
+      serviceWorkerUrl.searchParams.set("vapidPublicKey", config.vapidPublicKey ?? "");
+      const registration = await navigator.serviceWorker.register(serviceWorkerUrl.toString());
+      const messaging = getMessaging(app);
+      let token = await getToken(messaging, {
+        vapidKey: config.vapidPublicKey,
+        serviceWorkerRegistration: registration,
+      });
+      const installationId = crypto.randomUUID();
+      const registerToken = async () => json("/api/call-push/devices", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, installationId, focused: document.visibilityState === "visible" }),
+      });
+      await registerToken();
+      const updateFocus = () => {
+        // Firebase v9 refreshes tokens through getToken rather than an
+        // onTokenRefresh callback. Re-check on foreground and re-register a
+        // rotated token against the same installation.
+        void getToken(messaging, {
+          vapidKey: config.vapidPublicKey,
+          serviceWorkerRegistration: registration,
+        }).then(nextToken => {
+          if (nextToken && nextToken !== token) {
+            token = nextToken;
+            void registerToken();
+          }
+        }).catch(() => {});
+        void json("/api/call-push/focus", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ installationId, focused: document.visibilityState === "visible" }),
+        }).catch(() => {});
+      };
+      document.addEventListener("visibilitychange", updateFocus);
+      const stopMessage = onMessage(messaging, payload => {
+        const callId = payload.data?.roomId;
+        if (!callId) return;
+        if (payload.data?.type === "INCOMING_CALL") onRinging(callId);
+        if (payload.data?.type === "CALL_ENDED") onTerminal(callId, "ended");
+        if (payload.data?.type === "MISSED_CALL") {
+          void fetchMissedCalls()
+            .then(result => onMissedCalls(result.items))
+            .catch(error => onSnapshotError(error instanceof Error ? error : new Error("Missed calls could not be loaded")));
+        }
+      });
+      return {
+        permission,
+        cleanup: async () => {
+          document.removeEventListener("visibilitychange", updateFocus);
+          stopMessage();
+          await json("/api/call-push/devices", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ installationId }),
+          }).catch(() => {});
+        },
+      };
+    },
+    cleanup: async () => {
+      activeUnsub.forEach(stop => stop());
+      unsubs.forEach(stop => stop());
+      // Do not sign a newly selected Arena account out if an older hook's
+      // asynchronous cleanup finishes after the new Firebase session starts.
+      if (auth.currentUser?.uid === session.userId) {
+        await authSdk.signOut(auth).catch(() => {});
+      }
+    },
+  };
+}
+
+export async function fetchMissedCalls(): Promise<{ items: MissedCall[]; unseenCount: number }> {
+  return json("/api/call-push/missed");
+}
+
+export async function markMissedCallsSeen(ids: string[]): Promise<void> {
+  await json("/api/call-push/missed/seen", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+}

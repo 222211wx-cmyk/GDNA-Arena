@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import CallOverlay from "./CallOverlay";
 
 Object.defineProperties(HTMLElement.prototype, {
@@ -245,6 +245,45 @@ describe("CallOverlay media recovery", () => {
 
     expect(onDeviceRecoveryAttempt).toHaveBeenCalledWith(kind);
     expect(onSwitch).toHaveBeenCalledWith(availableId);
+  });
+
+  it("renders a fullscreen incoming modal with the caller name and Answer/Decline", () => {
+    const onAnswer = vi.fn();
+    const onReject = vi.fn();
+    render(
+      <CallOverlay
+        {...baseProps}
+        status="ringing"
+        incomingCall={{ from: "peer-handle", video: true, callerName: "Layla Q" }}
+        onAnswer={onAnswer}
+        onReject={onReject}
+      />,
+    );
+
+    expect(screen.getByTestId("incoming-call-modal")).toBeVisible();
+    expect(screen.getByTestId("incoming-call-name")).toHaveTextContent("Layla Q");
+
+    fireEvent.click(screen.getByTestId("button-answer-call"));
+    expect(onAnswer).toHaveBeenCalledWith(true);
+
+    fireEvent.click(screen.getByTestId("button-decline-call"));
+    expect(onReject).toHaveBeenCalledOnce();
+  });
+
+  it("shows Ringing with a Cancel action and no media controls while calling out", () => {
+    const onEnd = vi.fn();
+    render(<CallOverlay {...baseProps} status="calling" onEnd={onEnd} />);
+
+    expect(screen.getByTestId("call-phase-label")).toHaveTextContent("Ringing");
+    expect(screen.queryByRole("button", { name: "Mute" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("button-cancel-call"));
+    expect(onEnd).toHaveBeenCalledOnce();
+  });
+
+  it("shows a distinct connecting phase after accept before remote media arrives", () => {
+    render(<CallOverlay {...baseProps} status="active" remoteStream={null} />);
+    expect(screen.getByTestId("call-phase-label")).toHaveTextContent("Connecting");
   });
 
   it("exposes simple camera flip and zoom controls only when supported", () => {

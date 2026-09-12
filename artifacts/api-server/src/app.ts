@@ -11,6 +11,7 @@ import { logger } from "./lib/logger";
 import { WebhookHandlers } from "./webhookHandlers";
 import { processStripeEvent } from "./lib/finance-events";
 import { FINANCE_SIMULATION_MODE, stripeWebhookEnabled } from "./lib/finance-simulation";
+import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
 
 const app: Express = express();
 
@@ -238,5 +239,9 @@ app.use("/api", (req, _res, next) => {
   next();
 });
 app.use("/api", router);
+
+// Firestore invitations are durable, so expiration cannot depend on a process
+// timer surviving a restart. This remains a no-op until Firebase is configured.
+startFirebaseCallExpirationSweep();
 
 export default app;

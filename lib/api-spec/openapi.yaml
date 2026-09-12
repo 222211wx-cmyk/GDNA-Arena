@@ -9,6 +9,7 @@ servers:
 tags:
   - name: health
   - name: auth
+  - name: call-push
   - name: leaderboard
   - name: games
   - name: messages
@@ -112,6 +113,209 @@ paths:
                 $ref: "#/components/schemas/AuthUser"
         "401":
           description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /call-push/config:
+    get:
+      operationId: getCallPushConfig
+      tags: [call-push]
+      summary: Get public Firebase web-call push configuration and readiness
+      responses:
+        "200":
+          description: Firebase call push readiness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallPushConfig"
+
+  /call-push/session:
+    post:
+      operationId: createCallPushSession
+      tags: [call-push]
+      summary: Mint a Firebase custom token for the authenticated web session
+      responses:
+        "200":
+          description: Firebase custom authentication token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallPushSession"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Firebase call push is not configured or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /call-push/devices:
+    post:
+      operationId: registerCallPushDevice
+      tags: [call-push]
+      summary: Register or update this web installation's FCM token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallPushDeviceInput"
+      responses:
+        "200":
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallPushOk"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Firebase call push is not configured or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: unregisterCallPushDevice
+      tags: [call-push]
+      summary: Remove this authenticated web installation's FCM token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallPushInstallationInput"
+      responses:
+        "200":
+          description: Device removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallPushOk"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Firebase call push is not configured or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /call-push/focus:
+    post:
+      operationId: setCallPushFocus
+      tags: [call-push]
+      summary: Update whether this web installation currently has focus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallPushFocusInput"
+      responses:
+        "200":
+          description: Focus state updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallPushOk"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Firebase call push is not configured or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /call-push/missed:
+    get:
+      operationId: getMissedCalls
+      tags: [call-push]
+      summary: List missed and declined calls for the authenticated citizen
+      responses:
+        "200":
+          description: Missed calls
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissedCallsResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Firebase call push is not configured or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /call-push/missed/seen:
+    post:
+      operationId: markMissedCallsSeen
+      tags: [call-push]
+      summary: Mark selected missed calls as seen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MissedCallsSeenInput"
+      responses:
+        "200":
+          description: Missed calls marked seen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallPushOk"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Firebase call push is not configured or unavailable
           content:
             application/json:
               schema:
@@ -413,6 +617,117 @@ components:
         error:
           type: string
       required: [error]
+
+    CallPushConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        reason:
+          type: string
+        firebase:
+          type: object
+          properties:
+            apiKey: { type: string }
+            authDomain: { type: string }
+            projectId: { type: string }
+            messagingSenderId: { type: string }
+            appId: { type: string }
+          required: [apiKey, authDomain, projectId, messagingSenderId, appId]
+        vapidPublicKey:
+          type: string
+      required: [enabled]
+
+    CallPushSession:
+      type: object
+      properties:
+        customToken: { type: string }
+        userId: { type: string }
+      required: [customToken, userId]
+
+    CallPushOk:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]
+
+    CallPushDeviceInput:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 20
+          maxLength: 4096
+        installationId:
+          type: string
+          minLength: 16
+          maxLength: 128
+        focused: { type: boolean }
+      required: [token, installationId, focused]
+
+    CallPushInstallationInput:
+      type: object
+      properties:
+        installationId:
+          type: string
+          minLength: 16
+          maxLength: 128
+      required: [installationId]
+
+    CallPushFocusInput:
+      type: object
+      properties:
+        installationId:
+          type: string
+          minLength: 16
+          maxLength: 128
+        focused: { type: boolean }
+      required: [installationId, focused]
+
+    MissedCallItem:
+      type: object
+      properties:
+        id: { type: string }
+        caller:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            avatar:
+              type: ["string", "null"]
+          required: [id, name, avatar]
+        type:
+          type: string
+          enum: [video, voice]
+        time:
+          type: string
+          format: date-time
+        isSeen: { type: boolean }
+        status:
+          type: string
+          enum: [declined, missed]
+      required: [id, caller, type, time, isSeen, status]
+
+    MissedCallsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MissedCallItem"
+        unseenCount: { type: integer }
+      required: [items, unseenCount]
+
+    MissedCallsSeenInput:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 100
+      required: [ids]
 
     SuccessResponse:
       type: object

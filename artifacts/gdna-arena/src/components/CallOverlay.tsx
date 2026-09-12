@@ -15,13 +15,32 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/gdna-ds/components/ui/select";
 import { MEDIA_CONTROL_LABELS } from "./media-control-labels";
+import Avatar from "@/components/social/Avatar";
+import { getMissedCallsCopy } from "@/i18n/missed-calls-copy";
+
+interface IncomingCallView {
+  from: string;
+  video: boolean;
+  /** Extras attached by the useCall hook to the incoming payload; optional so
+   *  the overlay stays resilient to the exact shape. */
+  callerId?: number;
+  callerName?: string;
+  callerAvatar?: string | null;
+  expiresAt?: number;
+  deferredMedia?: boolean;
+}
+
+type CallPhaseView = "idle" | "ringing" | "accepted" | "connecting" | "connected" | "ended";
 
 interface Props {
   status:         CallStatus;
+  /** Fine-grained phase from useCall; lets the overlay show a distinct
+   *  "connecting" state after accept, before media is flowing. Optional. */
+  callPhase?:     CallPhaseView;
   peer:           string | null;
   localStream:    MediaStream | null;
   remoteStream:   MediaStream | null;
-  incomingCall:   { from: string; video: boolean } | null;
+  incomingCall:   IncomingCallView | null;
   onAnswer:       (video: boolean) => void;
   onReject:       () => void;
   onEnd:          () => void;
@@ -50,7 +69,7 @@ interface Props {
 }
 
 export default function CallOverlay({
-  status, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd,
+  status, callPhase, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd,
   screenSharing = false, onScreenShare, onStopScreen, callError,
   devices = [], selectedMicrophoneId = "", selectedCameraId = "", selectedSpeakerId = "",
   speakerSelectionSupported = false, deviceIssue = null, switchingDevice = null,
@@ -64,6 +83,12 @@ export default function CallOverlay({
   const { lang } = useLang();
   const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const mediaLabels = MEDIA_CONTROL_LABELS[lang] ?? MEDIA_CONTROL_LABELS.en;
+  const ct = getMissedCallsCopy(lang);
+  // Connecting = the call is accepted but media is not yet flowing. Prefer the
+  // hook's explicit phase; fall back to "active but no remote stream yet".
+  const isConnecting = callPhase
+    ? (callPhase === "accepted" || callPhase === "connecting")
+    : (status === "active" && !remoteStream);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef  = useRef<HTMLVideoElement>(null);
   const [muted,       setMuted]       = useState(false);
@@ -158,7 +183,7 @@ export default function CallOverlay({
             display: "flex", alignItems: "center", gap: 12,
             boxShadow: "0 8px 32px hsl(var(--destructive) / 0.2)",
           }}>
-          <span style={{ fontSize: 22 }}>📵</span>
+          <PhoneOff className="w-5 h-5 shrink-0" style={{ color: "hsl(var(--destructive))" }} />
           <p style={{ margin: 0, color: "hsl(var(--destructive))", fontWeight: 700, fontSize: 13, lineHeight: 1.4 }}>
             {callError}
           </p>
@@ -167,69 +192,109 @@ export default function CallOverlay({
     );
   }
 
-  // ── Incoming call ring ─────────────────────────────────────────────────────
-  if (status === "ringing" && incomingCall) return (
-    <AnimatePresence>
-      <motion.div initial={{ opacity: 0, y: 80 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 80 }}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] rounded-2xl overflow-hidden shadow-2xl"
-        style={{ width: 320, background: "hsl(var(--card))", border: "1px solid hsl(var(--primary) / 0.4)" }}>
+  // ── Incoming call — fullscreen modal ───────────────────────────────────────
+  if (status === "ringing" && incomingCall) {
+    const callerName = incomingCall.callerName || incomingCall.from;
+    return (
+      <AnimatePresence>
+        <motion.div
+          data-testid="incoming-call-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label={ct.incoming_call}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-between px-6 py-14 text-center"
+          style={{ background: "hsl(var(--background))" }}
+        >
+          <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            {ct.incoming_call}
+          </p>
 
-        {/* Pulse ring */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-0 animate-ping rounded-2xl opacity-10" style={{ background: "#22c55e" }} />
-        </div>
-
-        <div className="relative p-5 space-y-4">
-          <div className="text-center space-y-1">
-            <div className="w-16 h-16 rounded-full mx-auto flex items-center justify-center font-black text-2xl text-black"
-              style={{ background: "linear-gradient(135deg, #C9A84C, #FFD700)" }}>
-              {incomingCall.from.charAt(0).toUpperCase()}
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <span
+                aria-hidden="true"
+                className="absolute inset-0 animate-ping rounded-full bg-primary/20"
+              />
+              <Avatar name={callerName} size={128} />
             </div>
-            <p className="font-black text-white text-lg">{incomingCall.from}</p>
-            <p className="text-xs font-mono animate-pulse" style={{ color: "#22c55e" }}>
-               {incomingCall.video ? `📹 ${st.incoming_video_call}` : `📞 ${st.incoming_voice_call}`}
-            </p>
+            <div className="space-y-1">
+              <p data-testid="incoming-call-name" className="text-2xl font-bold text-foreground">
+                {callerName}
+              </p>
+              <p className="flex items-center justify-center gap-2 text-sm font-medium text-primary">
+                {incomingCall.video
+                  ? <Video className="h-4 w-4" aria-hidden="true" />
+                  : <Phone className="h-4 w-4" aria-hidden="true" />}
+                {incomingCall.video ? st.incoming_video_call : st.incoming_voice_call}
+              </p>
+            </div>
+
             {callError && (
               <div
                 role="alert"
-                className="mt-3 rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-start text-xs font-semibold leading-relaxed text-destructive"
+                className="max-w-sm rounded-xl border border-destructive/50 bg-destructive/10 p-3 text-start text-xs font-semibold leading-relaxed text-destructive"
               >
                 {callError}
               </div>
             )}
           </div>
 
-          <div className="flex justify-center gap-6">
-            {/* Reject */}
-            <button onClick={onReject}
-              aria-label={st.reject_call}
-              className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
-              style={{ background: "hsl(var(--destructive))" }}>
-              <PhoneOff className="w-6 h-6 text-white" />
-            </button>
-
-            {/* Answer audio */}
-            {incomingCall.video && (
-              <button onClick={() => onAnswer(false)}
-                aria-label={st.answer_voice}
-                className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
-                style={{ background: "#3b82f6" }}>
-                <Phone className="w-6 h-6 text-white" />
+          <div className="flex w-full max-w-sm items-end justify-center gap-10">
+            {/* Decline */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                data-testid="button-decline-call"
+                onClick={onReject}
+                aria-label={ct.decline}
+                className="flex h-16 w-16 items-center justify-center rounded-full transition-all active:scale-95"
+                style={{ background: "hsl(var(--destructive))" }}
+              >
+                <PhoneOff className="h-7 w-7" style={{ color: "hsl(var(--destructive-foreground))" }} />
               </button>
+              <span className="text-xs font-medium text-muted-foreground">{ct.decline}</span>
+            </div>
+
+            {/* Answer with voice (offered on video calls too) */}
+            {incomingCall.video && (
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  data-testid="button-answer-voice"
+                  onClick={() => onAnswer(false)}
+                  aria-label={st.answer_voice}
+                  className="flex h-16 w-16 items-center justify-center rounded-full transition-all active:scale-95"
+                  style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}
+                >
+                  <Phone className="h-7 w-7" style={{ color: "hsl(var(--secondary-foreground))" }} />
+                </button>
+                <span className="text-xs font-medium text-muted-foreground">{st.answer_voice}</span>
+              </div>
             )}
 
-            {/* Answer video */}
-            <button onClick={() => onAnswer(incomingCall.video)}
-              aria-label={incomingCall.video ? st.answer_video : st.answer_voice}
-              className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
-              style={{ background: "#22c55e" }}>
-              {incomingCall.video ? <Video className="w-6 h-6 text-white" /> : <Phone className="w-6 h-6 text-white" />}
-            </button>
+            {/* Answer */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                data-testid="button-answer-call"
+                onClick={() => onAnswer(incomingCall.video)}
+                aria-label={incomingCall.video ? st.answer_video : ct.answer}
+                className="flex h-16 w-16 items-center justify-center rounded-full transition-all active:scale-95"
+                style={{ background: "hsl(var(--chart-3))" }}
+              >
+                {incomingCall.video
+                  ? <Video className="h-7 w-7 text-white" />
+                  : <Phone className="h-7 w-7 text-white" />}
+              </button>
+              <span className="text-xs font-medium text-muted-foreground">
+                {incomingCall.video ? st.answer_video : ct.answer}
+              </span>
+            </div>
           </div>
-        </div>
-      </motion.div>
-    </AnimatePresence>
-  );
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
 
   // ── Active call / calling / ended ──────────────────────────────────────────
   if (minimized) return (
@@ -244,7 +309,11 @@ export default function CallOverlay({
               <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center font-black text-sm text-black"
                 style={{ background: "hsl(var(--primary))" }}>{peer?.charAt(0).toUpperCase()}</div>
               <p className="text-[10px] font-mono" style={{ color: "hsl(var(--primary))" }}>
-                {status === "calling" ? st.calling : status === "active" ? formatDuration(duration) : st.call_ended}
+                {status === "calling"
+                  ? ct.ringing
+                  : status === "active"
+                    ? (isConnecting ? ct.connecting : formatDuration(duration))
+                    : st.call_ended}
               </p>
             </div>
           </div>}
@@ -268,17 +337,23 @@ export default function CallOverlay({
           <video id="remote-player" ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" muted={speakerOff} />
         ) : (
           <div className="text-center space-y-4">
-            <div className="w-28 h-28 rounded-full mx-auto flex items-center justify-center font-black text-5xl text-black"
-              style={{ background: "linear-gradient(135deg, #C9A84C, #FFD700)" }}>
-              {peer?.charAt(0).toUpperCase() ?? "?"}
+            <div className="mx-auto w-fit">
+              <Avatar name={peer ?? "?"} size={112} />
             </div>
             <div className="space-y-1">
-              <p className="text-white font-black text-2xl">{peer}</p>
-              <p className="text-sm font-mono animate-pulse" style={{ color: status === "active" ? "#22c55e" : "hsl(var(--primary))" }}>
-                 {status === "calling"  ? `⏳ ${st.calling}`
-                 : status === "active"  ? `✅ ${st.connected} — ${formatDuration(duration)}`
-                 : status === "ended"   ? `📵 ${st.call_ended}`
-                : ""}
+              <p className="text-2xl font-bold text-foreground">{peer}</p>
+              <p
+                data-testid="call-phase-label"
+                className="animate-pulse text-sm font-medium"
+                style={{ color: status === "active" && !isConnecting ? "hsl(var(--chart-3))" : "hsl(var(--primary))" }}
+              >
+                {status === "calling"
+                  ? ct.ringing
+                  : status === "active"
+                    ? (isConnecting ? ct.connecting : `${st.connected} — ${formatDuration(duration)}`)
+                    : status === "ended"
+                      ? st.call_ended
+                      : ""}
               </p>
             </div>
           </div>
@@ -354,7 +429,27 @@ export default function CallOverlay({
         )}
       </div>
 
-      {/* Controls bar */}
+      {/* Outgoing ringing — Cancel only, no media controls until accepted */}
+      {status === "calling" && (
+        <div
+          className="shrink-0 flex flex-col items-center gap-2 px-3 py-6 sm:py-8"
+          style={{ background: "hsl(var(--card))", borderTop: "1px solid hsl(var(--border))" }}
+        >
+          <button
+            data-testid="button-cancel-call"
+            onClick={onEnd}
+            aria-label={ct.cancel}
+            className="flex h-16 w-16 items-center justify-center rounded-full transition-all active:scale-95 shadow-lg"
+            style={{ background: "hsl(var(--destructive))" }}
+          >
+            <PhoneOff className="h-7 w-7" style={{ color: "hsl(var(--destructive-foreground))" }} />
+          </button>
+          <span className="text-xs font-medium text-muted-foreground">{ct.cancel}</span>
+        </div>
+      )}
+
+      {/* Controls bar — shown once the call is active (connected) */}
+      {status === "active" && (
       <div className="shrink-0 relative flex flex-wrap items-center justify-center gap-3 px-3 py-5 sm:gap-4 sm:py-8"
         style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(12px)" }}>
 
@@ -475,6 +570,7 @@ export default function CallOverlay({
           <Minimize2 className="w-5 h-5 text-white" />
         </button>
       </div>
+      )}
     </motion.div>
   );
 }

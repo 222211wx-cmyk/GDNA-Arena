@@ -13,6 +13,7 @@
     "push": "pnpm run migrate"
   },
   "dependencies": {
+    "@opentelemetry/api": "1.9.1",
     "drizzle-orm": "catalog:",
     "drizzle-zod": "^0.8.3",
     "pg": "^8.22.0",

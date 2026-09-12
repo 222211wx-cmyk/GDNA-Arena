@@ -23,6 +23,12 @@ import type {
   ArenaWithdrawInput,
   ArenaWithdrawResponse,
   AuthUser,
+  CallPushConfig,
+  CallPushDeviceInput,
+  CallPushFocusInput,
+  CallPushInstallationInput,
+  CallPushOk,
+  CallPushSession,
   DailyRewardResult,
   ErrorResponse,
   GetGsFiguresParams,
@@ -39,6 +45,8 @@ import type {
   HealthStatus,
   LeaderboardResponse,
   LoginInput,
+  MissedCallsResponse,
+  MissedCallsSeenInput,
   PlayResult,
   RegistrationInput,
   SuccessResponse,
@@ -435,6 +443,510 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+
+export const getGetCallPushConfigUrl = () => {
+
+
+
+
+  return `/api/call-push/config`
+}
+
+/**
+ * @summary Get public Firebase web-call push configuration and readiness
+ */
+export const getCallPushConfig = async ( options?: RequestInit): Promise<CallPushConfig> => {
+
+  return customFetch<CallPushConfig>(getGetCallPushConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCallPushConfigQueryKey = () => {
+    return [
+    `/api/call-push/config`
+    ] as const;
+    }
+
+
+export const getGetCallPushConfigQueryOptions = <TData = Awaited<ReturnType<typeof getCallPushConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallPushConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCallPushConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCallPushConfig>>> = ({ signal }) => getCallPushConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCallPushConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCallPushConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getCallPushConfig>>>
+export type GetCallPushConfigQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get public Firebase web-call push configuration and readiness
+ */
+
+export function useGetCallPushConfig<TData = Awaited<ReturnType<typeof getCallPushConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCallPushConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCallPushConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCallPushSessionUrl = () => {
+
+
+
+
+  return `/api/call-push/session`
+}
+
+/**
+ * @summary Mint a Firebase custom token for the authenticated web session
+ */
+export const createCallPushSession = async ( options?: RequestInit): Promise<CallPushSession> => {
+
+  return customFetch<CallPushSession>(getCreateCallPushSessionUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCreateCallPushSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCallPushSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCallPushSession>>, TError,void, TContext> => {
+
+const mutationKey = ['createCallPushSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCallPushSession>>, void> = () => {
+
+
+          return  createCallPushSession(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCallPushSessionMutationResult = NonNullable<Awaited<ReturnType<typeof createCallPushSession>>>
+
+    export type CreateCallPushSessionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Mint a Firebase custom token for the authenticated web session
+ */
+export const useCreateCallPushSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCallPushSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCallPushSession>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getCreateCallPushSessionMutationOptions(options));
+    }
+
+export const getRegisterCallPushDeviceUrl = () => {
+
+
+
+
+  return `/api/call-push/devices`
+}
+
+/**
+ * @summary Register or update this web installation's FCM token
+ */
+export const registerCallPushDevice = async (callPushDeviceInput: CallPushDeviceInput, options?: RequestInit): Promise<CallPushOk> => {
+
+  return customFetch<CallPushOk>(getRegisterCallPushDeviceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(callPushDeviceInput)
+  }
+);}
+
+
+
+
+export const getRegisterCallPushDeviceMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerCallPushDevice>>, TError,{data: BodyType<CallPushDeviceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerCallPushDevice>>, TError,{data: BodyType<CallPushDeviceInput>}, TContext> => {
+
+const mutationKey = ['registerCallPushDevice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerCallPushDevice>>, {data: BodyType<CallPushDeviceInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerCallPushDevice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterCallPushDeviceMutationResult = NonNullable<Awaited<ReturnType<typeof registerCallPushDevice>>>
+    export type RegisterCallPushDeviceMutationBody = BodyType<CallPushDeviceInput>
+    export type RegisterCallPushDeviceMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Register or update this web installation's FCM token
+ */
+export const useRegisterCallPushDevice = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerCallPushDevice>>, TError,{data: BodyType<CallPushDeviceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerCallPushDevice>>,
+        TError,
+        {data: BodyType<CallPushDeviceInput>},
+        TContext
+      > => {
+      return useMutation(getRegisterCallPushDeviceMutationOptions(options));
+    }
+
+export const getUnregisterCallPushDeviceUrl = () => {
+
+
+
+
+  return `/api/call-push/devices`
+}
+
+/**
+ * @summary Remove this authenticated web installation's FCM token
+ */
+export const unregisterCallPushDevice = async (callPushInstallationInput: CallPushInstallationInput, options?: RequestInit): Promise<CallPushOk> => {
+
+  return customFetch<CallPushOk>(getUnregisterCallPushDeviceUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(callPushInstallationInput)
+  }
+);}
+
+
+
+
+export const getUnregisterCallPushDeviceMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unregisterCallPushDevice>>, TError,{data: BodyType<CallPushInstallationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unregisterCallPushDevice>>, TError,{data: BodyType<CallPushInstallationInput>}, TContext> => {
+
+const mutationKey = ['unregisterCallPushDevice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unregisterCallPushDevice>>, {data: BodyType<CallPushInstallationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  unregisterCallPushDevice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnregisterCallPushDeviceMutationResult = NonNullable<Awaited<ReturnType<typeof unregisterCallPushDevice>>>
+    export type UnregisterCallPushDeviceMutationBody = BodyType<CallPushInstallationInput>
+    export type UnregisterCallPushDeviceMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Remove this authenticated web installation's FCM token
+ */
+export const useUnregisterCallPushDevice = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unregisterCallPushDevice>>, TError,{data: BodyType<CallPushInstallationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unregisterCallPushDevice>>,
+        TError,
+        {data: BodyType<CallPushInstallationInput>},
+        TContext
+      > => {
+      return useMutation(getUnregisterCallPushDeviceMutationOptions(options));
+    }
+
+export const getSetCallPushFocusUrl = () => {
+
+
+
+
+  return `/api/call-push/focus`
+}
+
+/**
+ * @summary Update whether this web installation currently has focus
+ */
+export const setCallPushFocus = async (callPushFocusInput: CallPushFocusInput, options?: RequestInit): Promise<CallPushOk> => {
+
+  return customFetch<CallPushOk>(getSetCallPushFocusUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(callPushFocusInput)
+  }
+);}
+
+
+
+
+export const getSetCallPushFocusMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setCallPushFocus>>, TError,{data: BodyType<CallPushFocusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setCallPushFocus>>, TError,{data: BodyType<CallPushFocusInput>}, TContext> => {
+
+const mutationKey = ['setCallPushFocus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setCallPushFocus>>, {data: BodyType<CallPushFocusInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setCallPushFocus(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetCallPushFocusMutationResult = NonNullable<Awaited<ReturnType<typeof setCallPushFocus>>>
+    export type SetCallPushFocusMutationBody = BodyType<CallPushFocusInput>
+    export type SetCallPushFocusMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update whether this web installation currently has focus
+ */
+export const useSetCallPushFocus = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setCallPushFocus>>, TError,{data: BodyType<CallPushFocusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setCallPushFocus>>,
+        TError,
+        {data: BodyType<CallPushFocusInput>},
+        TContext
+      > => {
+      return useMutation(getSetCallPushFocusMutationOptions(options));
+    }
+
+export const getGetMissedCallsUrl = () => {
+
+
+
+
+  return `/api/call-push/missed`
+}
+
+/**
+ * @summary List missed and declined calls for the authenticated citizen
+ */
+export const getMissedCalls = async ( options?: RequestInit): Promise<MissedCallsResponse> => {
+
+  return customFetch<MissedCallsResponse>(getGetMissedCallsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMissedCallsQueryKey = () => {
+    return [
+    `/api/call-push/missed`
+    ] as const;
+    }
+
+
+export const getGetMissedCallsQueryOptions = <TData = Awaited<ReturnType<typeof getMissedCalls>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMissedCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMissedCallsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMissedCalls>>> = ({ signal }) => getMissedCalls({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMissedCalls>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMissedCallsQueryResult = NonNullable<Awaited<ReturnType<typeof getMissedCalls>>>
+export type GetMissedCallsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List missed and declined calls for the authenticated citizen
+ */
+
+export function useGetMissedCalls<TData = Awaited<ReturnType<typeof getMissedCalls>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMissedCalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMissedCallsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMarkMissedCallsSeenUrl = () => {
+
+
+
+
+  return `/api/call-push/missed/seen`
+}
+
+/**
+ * @summary Mark selected missed calls as seen
+ */
+export const markMissedCallsSeen = async (missedCallsSeenInput: MissedCallsSeenInput, options?: RequestInit): Promise<CallPushOk> => {
+
+  return customFetch<CallPushOk>(getMarkMissedCallsSeenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(missedCallsSeenInput)
+  }
+);}
+
+
+
+
+export const getMarkMissedCallsSeenMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markMissedCallsSeen>>, TError,{data: BodyType<MissedCallsSeenInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markMissedCallsSeen>>, TError,{data: BodyType<MissedCallsSeenInput>}, TContext> => {
+
+const mutationKey = ['markMissedCallsSeen'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markMissedCallsSeen>>, {data: BodyType<MissedCallsSeenInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  markMissedCallsSeen(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkMissedCallsSeenMutationResult = NonNullable<Awaited<ReturnType<typeof markMissedCallsSeen>>>
+    export type MarkMissedCallsSeenMutationBody = BodyType<MissedCallsSeenInput>
+    export type MarkMissedCallsSeenMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Mark selected missed calls as seen
+ */
+export const useMarkMissedCallsSeen = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markMissedCallsSeen>>, TError,{data: BodyType<MissedCallsSeenInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markMissedCallsSeen>>,
+        TError,
+        {data: BodyType<MissedCallsSeenInput>},
+        TContext
+      > => {
+      return useMutation(getMarkMissedCallsSeenMutationOptions(options));
+    }
 
 export const getGetLeaderboardUrl = () => {
 

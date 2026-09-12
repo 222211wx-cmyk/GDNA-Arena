@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function hasLiveServerSession() {
+      return request.auth != null
+        && request.auth.token.sessionTag is string
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sessionTag))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sessionTag)).data.revokedAt == null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sessionTag)).data.expiresAt > request.time;
+    }
+
+    // The server creates and changes invitations. A Firebase custom token has a
+    // numeric userId claim matching the PostgreSQL user id stored in each call.
+    match /calls/{callId} {
+      allow get, list: if hasLiveServerSession()
+        && (resource.data.callerId == request.auth.token.userId
+          || resource.data.calleeId == request.auth.token.userId);
+      allow create, update, delete: if false;
+    }
+
+    // Firebase Auth UID is String(PostgreSQL user id). Device-token documents
+    // are server-managed and are deliberately not readable by the browser.
+    match /users/{userId}/devices/{installationId} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId}/missedCalls/{callId} {
+      allow get, list: if hasLiveServerSession() && request.auth.uid == userId;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/sessions/{sessionTag} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, write: if false;
+    }
+  }
+}

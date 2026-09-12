@@ -93,6 +93,125 @@ export const GetMeResponse = zod.object({
 
 
 /**
+ * @summary Get public Firebase web-call push configuration and readiness
+ */
+export const GetCallPushConfigResponse = zod.object({
+  "enabled": zod.boolean(),
+  "reason": zod.string().optional(),
+  "firebase": zod.object({
+  "apiKey": zod.string(),
+  "authDomain": zod.string(),
+  "projectId": zod.string(),
+  "messagingSenderId": zod.string(),
+  "appId": zod.string()
+}).optional(),
+  "vapidPublicKey": zod.string().optional()
+})
+
+
+/**
+ * @summary Mint a Firebase custom token for the authenticated web session
+ */
+export const CreateCallPushSessionResponse = zod.object({
+  "customToken": zod.string(),
+  "userId": zod.string()
+})
+
+
+/**
+ * @summary Register or update this web installation's FCM token
+ */
+export const registerCallPushDeviceBodyTokenMin = 20;
+export const registerCallPushDeviceBodyTokenMax = 4096;
+
+export const registerCallPushDeviceBodyInstallationIdMin = 16;
+export const registerCallPushDeviceBodyInstallationIdMax = 128;
+
+
+
+export const RegisterCallPushDeviceBody = zod.object({
+  "token": zod.string().min(registerCallPushDeviceBodyTokenMin).max(registerCallPushDeviceBodyTokenMax),
+  "installationId": zod.string().min(registerCallPushDeviceBodyInstallationIdMin).max(registerCallPushDeviceBodyInstallationIdMax),
+  "focused": zod.boolean()
+})
+
+export const RegisterCallPushDeviceResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Remove this authenticated web installation's FCM token
+ */
+export const unregisterCallPushDeviceBodyInstallationIdMin = 16;
+export const unregisterCallPushDeviceBodyInstallationIdMax = 128;
+
+
+
+export const UnregisterCallPushDeviceBody = zod.object({
+  "installationId": zod.string().min(unregisterCallPushDeviceBodyInstallationIdMin).max(unregisterCallPushDeviceBodyInstallationIdMax)
+})
+
+export const UnregisterCallPushDeviceResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Update whether this web installation currently has focus
+ */
+export const setCallPushFocusBodyInstallationIdMin = 16;
+export const setCallPushFocusBodyInstallationIdMax = 128;
+
+
+
+export const SetCallPushFocusBody = zod.object({
+  "installationId": zod.string().min(setCallPushFocusBodyInstallationIdMin).max(setCallPushFocusBodyInstallationIdMax),
+  "focused": zod.boolean()
+})
+
+export const SetCallPushFocusResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary List missed and declined calls for the authenticated citizen
+ */
+export const GetMissedCallsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "caller": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "avatar": zod.string().nullable()
+}),
+  "type": zod.enum(['video', 'voice']),
+  "time": zod.coerce.date(),
+  "isSeen": zod.boolean(),
+  "status": zod.enum(['declined', 'missed'])
+})),
+  "unseenCount": zod.number()
+})
+
+
+/**
+ * @summary Mark selected missed calls as seen
+ */
+export const markMissedCallsSeenBodyIdsMax = 100;
+
+
+
+export const MarkMissedCallsSeenBody = zod.object({
+  "ids": zod.array(zod.string()).min(1).max(markMissedCallsSeenBodyIdsMax)
+})
+
+export const MarkMissedCallsSeenResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Get top players
  */
 export const GetLeaderboardResponse = zod.object({

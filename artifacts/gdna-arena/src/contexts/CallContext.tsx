@@ -15,6 +15,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       {children}
       <CallOverlay
         status={call.callStatus}
+        callPhase={call.callPhase}
         peer={call.activePeer}
         localStream={call.localStream}
         remoteStream={call.remoteStream}

@@ -8,6 +8,7 @@ import { logger } from "../lib/logger";
 import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { isAdultForGames, normalizeBirthDate } from "../lib/age";
+import { revokeAllCallPushSessions, revokeCallPushSession } from "../lib/firebase-call-push";
 
 const pool = nullablePool!;
 
@@ -305,13 +306,17 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     // deleted session before issuing the replacement credential.
     for (const { sid } of revokedSessions.rows) disconnectSessionSockets(sid);
     disconnectUserSockets(userId);
+    const firebaseRevoked = await revokeAllCallPushSessions(userId);
     await new Promise<void>((resolve, reject) =>
       req.session.regenerate((err) => (err ? reject(err) : resolve()))
     );
     req.session.userId = userId;
     req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
     req.log.info({ userId }, "Password changed from settings");
-    res.json({ message: "تم تغيير كلمة السر بنجاح ✅ — Mot de passe modifié" });
+    res.json({
+      message: "تم تغيير كلمة السر بنجاح ✅ — Mot de passe modifié",
+      firebaseRevocationPending: !firebaseRevoked,
+    });
   } catch (err) {
     req.log.error(err, "Change password error");
     res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
@@ -320,6 +325,7 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
 
 router.post("/auth/logout", async (req, res): Promise<void> => {
   const sessionId = req.sessionID;
+  const userId = req.session.userId;
   try {
     await new Promise<void>((resolve, reject) =>
       req.session.destroy((err) => (err ? reject(err) : resolve()))
@@ -340,8 +346,9 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
   }
 
   disconnectSessionSockets(sessionId);
+  const firebaseRevoked = userId ? await revokeCallPushSession(userId, sessionId) : true;
   clearSessionCookie(res);
-  res.json({ message: "Logged out" });
+  res.json({ message: "Logged out", firebaseRevocationPending: !firebaseRevoked });
 });
 
 router.get("/auth/me", async (req, res): Promise<void> => {
@@ -450,9 +457,13 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
 
     for (const sessionId of revokedSessionIds) disconnectSessionSockets(sessionId);
     disconnectUserSockets(userId);
+    const firebaseRevoked = await revokeAllCallPushSessions(userId);
     await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
     clearSessionCookie(res);
-    res.json({ message: "Account erased. All personal data has been deleted per GDPR Art. 17." });
+    res.json({
+      message: "Account erased. All personal data has been deleted per GDPR Art. 17.",
+      firebaseRevocationPending: !firebaseRevoked,
+    });
   } catch (err) {
     logger.error(err, "GDPR erasure error");
     res.status(500).json({ error: "Erasure failed. Contact legal@gdna-arena.com." });

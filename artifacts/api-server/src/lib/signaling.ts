@@ -11,6 +11,16 @@ import { performance } from "node:perf_hooks";
 import { consumeRoyalCreditSeconds, hasUsableRoyalCredit } from "./royal-credit";
 import { requireReadyCallMediaProvider } from "./turn-config";
 import { sampleMediaContinuity } from "./call-meter";
+import { reserveDeferredAnsweringSocket } from "./deferred-call-policy";
+import {
+  acceptDeferredCallInvitation,
+  CallPushError,
+  createDeferredCallInvitation,
+  finishDeferredCallInvitation,
+  getCallPushStatus,
+  isFirebaseCallPushConfigured,
+  type DeferredCallInvitation,
+} from "./firebase-call-push";
 
 // ── WebRTC type stubs (browser DOM types not present in Node tsconfig) ────────
 interface RTCSessionDescriptionInit { type: string; sdp?: string; }
@@ -33,8 +43,12 @@ interface Client {
 
 type SignalMsg =
   | { type: "register";       userId: number; username: string }
-  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit | null; callId: string; from: string; video: boolean; transport?: CallTransport; e2e?: E2eCallEnvelope }
-  | { type: "call-answer";    to: string; answer: RTCSessionDescriptionInit | null; callId: string; transport?: CallTransport }
+  | { type: "call-offer";     to: string; offer: RTCSessionDescriptionInit | null; callId: string; from: string; video: boolean; deferredMedia?: boolean; transport?: CallTransport; e2e?: E2eCallEnvelope }
+  | { type: "call-answer";    to: string; answer: RTCSessionDescriptionInit | null; callId: string; deferredMedia?: boolean; transport?: CallTransport }
+  | { type: "call-resume";    callId: string }
+  | { type: "call-cancel";    callId: string }
+  | { type: "call-webrtc-offer"; callId: string; to?: string; offer: RTCSessionDescriptionInit; transport?: CallTransport }
+  | { type: "call-webrtc-answer"; callId: string; to?: string; answer: RTCSessionDescriptionInit; transport?: CallTransport }
   | { type: "call-renegotiate-offer"; callId: string; offer: RTCSessionDescriptionInit; transport?: CallTransport }
   | { type: "call-renegotiate-answer"; callId: string; answer: RTCSessionDescriptionInit; transport?: CallTransport }
   | { type: "ice-candidate";  to: string; candidate: RTCIceCandidateInit; callId: string }
@@ -60,11 +74,56 @@ const lives     = new Map<string, { hostUsername: string; title: string; domain:
 
 // Active call state keyed by callId — signaling only relays answer/reject/end
 // for calls it saw offered, and only between the two recorded participants.
-const activeCalls = new Map<string, {
+interface ActiveCall {
   caller: string; callee: string; callerId: number | null; calleeId: number | null;
   callerSocket: WebSocket; calleeSocket: WebSocket | null; startedAt: Date;
   transport: CallTransport; ringTimer: NodeJS.Timeout;
-}>();
+  deferredMedia: boolean; firebasePersisted: boolean; status: "ringing" | "accepting" | "accepted"; callerAvatar: string | null;
+  type: "video" | "voice"; expiresAt?: Date;
+}
+const activeCalls = new Map<string, ActiveCall>();
+
+function deferredInvitation(callId: string, call: ActiveCall): DeferredCallInvitation | null {
+  if (!call.deferredMedia || call.callerId === null || call.calleeId === null) return null;
+  return {
+    callId,
+    caller: { id: call.callerId, name: call.caller, avatar: call.callerAvatar },
+    calleeId: call.calleeId,
+    type: call.type,
+    createdAt: call.startedAt,
+    expiresAt: call.expiresAt,
+  };
+}
+
+function persistDeferredTerminal(callId: string, call: ActiveCall, status: "declined" | "missed" | "cancelled" | "ended"): void {
+  const invitation = deferredInvitation(callId, call);
+  if (invitation && call.firebasePersisted) void finishDeferredCallInvitation(invitation, status).catch(() => {});
+  if (invitation && !call.firebasePersisted && (status === "declined" || status === "missed")) {
+    void persistLegacyDeferredMissedCall(callId, call);
+  }
+}
+
+function persistLegacyDeferredMissedCall(callId: string, call: ActiveCall): Promise<void> {
+  if (!pool || call.callerId === null || call.calleeId === null) return Promise.resolve();
+  return pool.query(
+    `INSERT INTO call_history
+       (caller_id, caller_username, callee_id, callee_username, call_type, status, duration_sec)
+     VALUES ($1, $2, $3, $4, $5, 'missed', 0)`,
+    [call.callerId, call.caller, call.calleeId, call.callee, call.type === "video" ? "video" : "audio"],
+  ).then(async () => {
+    const settings = await pool.query<{ notifications: boolean }>(
+      `SELECT COALESCE(notifications, true) AS notifications FROM dm_user_settings WHERE user_id = $1`,
+      [call.calleeId],
+    );
+    if (settings.rows[0]?.notifications === false) return;
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, body, icon, link_path, source_ref)
+       VALUES ($1, 'missed_call', $2, $3, '📞', '/messages', $4)
+       ON CONFLICT (user_id, source_ref) WHERE source_ref IS NOT NULL DO NOTHING`,
+      [call.calleeId, "مكالمة فائتة · Missed call", `@${call.caller} حاول الاتصال بك`, `missed_call:${callId}`],
+    );
+  }).catch(() => {});
+}
 
 const MEDIA_HEARTBEAT_FRESH_MS = 6_500;
 const MEDIA_MAX_BILLING_STEP_MS = 5_000;
@@ -112,6 +171,7 @@ function endCallForBilling(callId: string, reason: string, code: string): void {
   if (!call) return;
   clearTimeout(call.ringTimer);
   activeCalls.delete(callId);
+  persistDeferredTerminal(callId, call, "ended");
   setUserInCall(call.caller, false);
   setUserInCall(call.callee, false);
   const event = { type: "call-ended", by: "billing", callId, reason, code };
@@ -325,6 +385,12 @@ function userIsInCall(username: string): boolean {
   return Array.from(clientsForUsername(username)).some(client => client.inCall);
 }
 
+function userHasRecordedCall(userId: number): boolean {
+  return Array.from(activeCalls.values()).some(call =>
+    call.callerId === userId || call.calleeId === userId,
+  );
+}
+
 function sendToUsername(username: string, data: object) {
   for (const client of clientsForUsername(username)) send(client.ws, data);
 }
@@ -346,6 +412,37 @@ function callEnvelopeMatchesDevices(
   const registered = rows.map(row => `${row.device_id}.${row.fingerprint}`).sort();
   const offered = entries.map(([deviceId, entry]) => `${deviceId}.${entry.fingerprint}`).sort();
   return registered.length === offered.length && registered.every((value, index) => value === offered[index]);
+}
+
+function safeCallerAvatar(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const avatar = value.trim();
+  return avatar.length > 0 && avatar.length <= 2_048 ? avatar : null;
+}
+
+// Avatar fields have existed in different production user/profile shapes over
+// time, while the current shared users schema intentionally has none. Converting
+// the server row to JSON lets us read any persisted optional field without
+// introducing a migration or trusting caller-supplied display metadata.
+async function persistedCallerAvatar(userId: number): Promise<string | null> {
+  if (!pool) return null;
+  try {
+    const { rows } = await pool.query<{ avatar: string | null }>(
+      `SELECT NULLIF(COALESCE(
+         to_jsonb(u)->>'avatar_url',
+         to_jsonb(u)->>'avatar',
+         to_jsonb(u)->'profile'->>'avatarUrl',
+         to_jsonb(u)->'profile'->>'avatar_url',
+         to_jsonb(u)->'profile_json'->>'avatarUrl',
+         to_jsonb(u)->'profile_json'->>'avatar_url'
+       ), '') AS avatar
+       FROM users u WHERE u.id = $1 LIMIT 1`,
+      [userId],
+    );
+    return safeCallerAvatar(rows[0]?.avatar);
+  } catch {
+    return null;
+  }
 }
 
 // ── Broadcast a notification payload to a specific authenticated userId ────────
@@ -513,11 +610,15 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           return;
         }
         const validMediaEnvelope =
-          (transportMatches(msg.transport, authoritativeProvider) ||
-            (authoritativeProvider === "agora" && msg.transport === undefined)) &&
+          (msg.deferredMedia === true
+            ? transportMatches(msg.transport, "webrtc")
+            : transportMatches(msg.transport, authoritativeProvider) ||
+              (authoritativeProvider === "agora" && msg.transport === undefined)) &&
           (authoritativeProvider === "agora"
             ? msg.offer === null
-            : validDescription(msg.offer, "offer"));
+            : msg.deferredMedia === true
+              ? msg.offer === null
+              : validDescription(msg.offer, "offer"));
         if (!validMediaEnvelope) {
           send(ws, {
             type: "call-unavailable",
@@ -525,6 +626,170 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             code: "MEDIA_PROTOCOL_MISMATCH",
             reason: "Call media protocol does not match the server",
           });
+          return;
+        }
+        // Deferred media is the web-only invitation protocol. It deliberately
+        // carries no SDP until a callee has accepted, and is never substituted
+        // onto Agora or an unconfigured TURN path.
+        if (msg.deferredMedia === true && authoritativeProvider !== "webrtc") {
+          send(ws, {
+            type: "call-unavailable",
+            callId: msg.callId,
+            code: "MEDIA_PROTOCOL_MISMATCH",
+            reason: "Deferred web calls require the configured WebRTC provider",
+          });
+          return;
+        }
+        if (msg.deferredMedia === true && !transportMatches(msg.transport, "webrtc")) {
+          send(ws, {
+            type: "call-unavailable",
+            callId: msg.callId,
+            code: "MEDIA_PROTOCOL_MISMATCH",
+            reason: "Deferred web call transport is unsupported",
+          });
+          return;
+        }
+        if (msg.deferredMedia === true) {
+          if (self.userId === null) {
+            send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
+            return;
+          }
+          try {
+            // Resolve against persisted users even when the recipient has no
+            // socket. This keeps block checks and call reservation identical
+            // for online and offline invitees.
+            const result = await pool!.query<{ id: number; username: string }>(
+              `SELECT id, username FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`,
+              [msg.to],
+            );
+            const callee = result.rows[0];
+            if (!callee || callee.id === self.userId) {
+              send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
+              return;
+            }
+            const block = await pool!.query(
+              `SELECT 1 FROM citizen_blocks
+               WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)
+               LIMIT 1`,
+              [self.userId, callee.id],
+            );
+            if (block.rows.length) {
+              send(ws, { type: "call-blocked", callId: msg.callId });
+              return;
+            }
+            if (userIsInCall(self.username) || userIsInCall(callee.username) ||
+                userHasRecordedCall(self.userId) || userHasRecordedCall(callee.id)) {
+              send(ws, { type: "call-busy", to: callee.username, callId: msg.callId });
+              return;
+            }
+            if (!await hasUsableRoyalCredit(self.userId)) {
+              send(ws, {
+                type: "call-unavailable", to: callee.username, callId: msg.callId,
+                reason: "Royal call credit or explicit reserve consent is required", code: "CREDIT_REQUIRED",
+              });
+              return;
+            }
+            const lockClient = await pool!.connect();
+            try {
+              await lockClient.query("BEGIN");
+              await lockClient.query("SELECT pg_advisory_xact_lock(47201, 1)");
+              const keyRows = await lockClient.query<{ device_id: string; fingerprint: string }>(
+                `SELECT device_id, fingerprint FROM dm_user_e2ee_keys
+                 WHERE user_id=$1 AND updated_at >= now() - interval '90 days'`,
+                [callee.id],
+              );
+              if (!callEnvelopeMatchesDevices(keyRows.rows, msg.e2e)) {
+                await lockClient.query("ROLLBACK");
+                send(ws, { type: "call-unavailable", to: callee.username, callId: msg.callId, reason: "secure-device-keys-changed" });
+                return;
+              }
+              await lockClient.query("COMMIT");
+            } catch {
+              await lockClient.query("ROLLBACK").catch(() => {});
+              send(ws, { type: "call-unavailable", to: callee.username, callId: msg.callId });
+              return;
+            } finally {
+              lockClient.release();
+            }
+            const createdAt = new Date();
+            const callerAvatar = await persistedCallerAvatar(self.userId);
+            const localInvitation: DeferredCallInvitation = {
+              callId: msg.callId,
+              caller: { id: self.userId, name: self.username, avatar: callerAvatar },
+              calleeId: callee.id,
+              type: msg.video ? "video" : "voice",
+              createdAt,
+              expiresAt: new Date(createdAt.getTime() + 30_000),
+            };
+            // Firebase absent is an explicitly exposed UI state, not a reason
+            // to regress a live web socket call. Once configured, however, any
+            // Firebase failure is terminal and never silently falls back.
+            const firebaseConfigured = isFirebaseCallPushConfigured();
+            const firebaseStatus = await getCallPushStatus();
+            if (firebaseConfigured && !firebaseStatus.enabled) {
+              throw new CallPushError(firebaseStatus.reason ?? "Firebase call push is unavailable");
+            }
+            const firebasePersisted = firebaseStatus.enabled;
+            const invitation = firebasePersisted
+              ? await createDeferredCallInvitation(localInvitation)
+              : localInvitation;
+            const ringTimer = setTimeout(() => {
+              const ringing = activeCalls.get(msg.callId);
+              if (!ringing || ringing.status !== "ringing") return;
+              activeCalls.delete(msg.callId);
+              stopCallBilling(msg.callId);
+              persistDeferredTerminal(msg.callId, ringing, "missed");
+              setUserInCall(ringing.caller, false);
+              setUserInCall(ringing.callee, false);
+              const event = { type: "call-ended", by: "timeout", callId: msg.callId, code: "RING_TIMEOUT", reason: "Call was not answered within 30 seconds" };
+              send(ringing.callerSocket, event);
+              sendToUsername(ringing.callee, event);
+            }, Math.max(1, invitation.expiresAt!.getTime() - Date.now()));
+            ringTimer.unref?.();
+            activeCalls.set(msg.callId, {
+              caller: self.username,
+              callee: callee.username.toLowerCase(),
+              callerId: self.userId,
+              calleeId: callee.id,
+              callerSocket: self.ws,
+              calleeSocket: null,
+              startedAt: invitation.createdAt!,
+              transport: { provider: "webrtc", version: 1 },
+              ringTimer,
+              deferredMedia: true,
+              firebasePersisted,
+              status: "ringing",
+              callerAvatar,
+              type: invitation.type,
+              expiresAt: invitation.expiresAt,
+            });
+            setUserInCall(self.username, true);
+            setUserInCall(callee.username, true);
+            send(ws, { type: "call-ready", callId: msg.callId, deferredMedia: true, expiresAt: invitation.expiresAt!.toISOString() });
+            sendToUsername(callee.username, {
+              type: "call-incoming",
+              from: self.username,
+              callerId: self.userId,
+              callerName: self.username,
+              callerAvatar,
+              callId: msg.callId,
+              offer: null,
+              video: msg.video,
+              deferredMedia: true,
+              expiresAt: invitation.expiresAt!.toISOString(),
+              transport: { provider: "webrtc", version: 1 },
+              e2e: msg.e2e,
+            });
+          } catch (error) {
+            const firebaseFailure = error instanceof CallPushError;
+            send(ws, {
+              type: "call-unavailable",
+              to: msg.to,
+              callId: msg.callId,
+              code: firebaseFailure ? "FIREBASE_OPERATION_FAILED" : "CALL_RESERVATION_UNAVAILABLE",
+              reason: firebaseFailure ? error.message : "Call reservation unavailable",
+            });
+          }
           return;
         }
         const target = findByUsername(msg.to);
@@ -682,6 +947,8 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               caller: self.username, callee: target.username, callerId: self.userId, calleeId: target.userId,
                callerSocket: self.ws, calleeSocket: target.ws, startedAt: new Date(),
                transport: { provider: authoritativeProvider, version: 1 }, ringTimer,
+                deferredMedia: false, firebasePersisted: false, status: "ringing", callerAvatar: null,
+                type: msg.video ? "video" : "voice",
             });
             // Reserve both participants while the call is ringing. Without this,
             // either side could create a second offer before the first answer.
@@ -711,10 +978,106 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         return;
       }
 
+      // A pushed/Firestore-discovered callee binds one socket before accepting.
+      // It can never replace an already selected answering device.
+      if (msg.type === "call-resume") {
+        const call = activeCalls.get(msg.callId);
+        if (!call || !call.deferredMedia || call.status !== "ringing" || call.calleeId !== self.userId) return;
+        try {
+          if (!await sessionIsActive(sessionId, sessionUserId)) {
+            send(ws, { type: "session-ended" });
+            ws.close(4001, "Session ended");
+            return;
+          }
+        } catch {
+          send(ws, { type: "error", message: "Session validation failed" });
+          return;
+        }
+        // Resume authorizes delivery of a durable invitation after a push or
+        // Firestore listener woke this tab. It must not reserve the answering
+        // socket: multiple tabs may resume, and only an actual answer wins.
+        send(ws, {
+          type: "call-resumed",
+          callId: msg.callId,
+          from: call.caller,
+          callerId: call.callerId,
+          callerName: call.caller,
+          callerAvatar: call.callerAvatar,
+          deferredMedia: true,
+          expiresAt: call.expiresAt?.toISOString(),
+          video: call.type === "video",
+          transport: call.transport,
+        });
+        return;
+      }
+
       // ── CALL ANSWER ───────────────────────────────────────────────────────
       if (msg.type === "call-answer") {
-        // Only the recorded callee may answer, and only towards the recorded caller.
         const call = activeCalls.get(msg.callId);
+        if (call?.deferredMedia) {
+          if (call.status !== "ringing" || call.calleeId !== self.userId ||
+              call.caller !== msg.to.toLowerCase() ||
+              !transportMatches(msg.transport, "webrtc") || msg.answer !== null ||
+              !reserveDeferredAnsweringSocket(call, self.userId, ws)) return;
+          // This synchronous binding makes one socket the only contender while
+          // Firestore's transaction arbitrates the same race across processes.
+          // Marking it accepting also prevents the ring timer from tearing down
+          // a transaction that started before its final tick.
+          call.status = "accepting";
+          if (call.firebasePersisted) {
+            try {
+              if (!await acceptDeferredCallInvitation(msg.callId, self.userId!)) {
+                activeCalls.delete(msg.callId);
+                clearTimeout(call.ringTimer);
+                setUserInCall(call.caller, false);
+                setUserInCall(call.callee, false);
+                send(ws, { type: "call-ended", by: "server", callId: msg.callId, code: "INVITATION_NO_LONGER_RINGING" });
+                send(call.callerSocket, { type: "call-ended", by: "server", callId: msg.callId, code: "INVITATION_NO_LONGER_RINGING" });
+                return;
+              }
+            } catch {
+              activeCalls.delete(msg.callId);
+              clearTimeout(call.ringTimer);
+              setUserInCall(call.caller, false);
+              setUserInCall(call.callee, false);
+              send(ws, {
+                type: "call-unavailable", callId: msg.callId,
+                code: "FIREBASE_OPERATION_FAILED", reason: "Firebase invitation acceptance failed",
+              });
+              send(call.callerSocket, {
+                type: "call-ended", by: "server", callId: msg.callId,
+                code: "FIREBASE_OPERATION_FAILED", reason: "Firebase invitation acceptance failed",
+              });
+              return;
+            }
+          }
+          // The caller may cancel while Firestore arbitrates the answer. Never
+          // revive a deleted/replaced call or emit a late acceptance/offer.
+          if (activeCalls.get(msg.callId) !== call || call.status !== "accepting") return;
+          if (ws.readyState !== WebSocket.OPEN || call.callerSocket.readyState !== WebSocket.OPEN) {
+            persistDeferredTerminal(msg.callId, call, "ended");
+            activeCalls.delete(msg.callId);
+            return;
+          }
+          clearTimeout(call.ringTimer);
+          call.status = "accepted";
+          setUserInCall(self.username, true);
+          setUserInCall(call.caller, true);
+          for (const device of clientsForUsername(self.username)) {
+            if (device.ws !== ws) send(device.ws, { type: "call-ended", by: self.username, callId: msg.callId });
+          }
+          send(call.callerSocket, {
+            type: "call-accepted",
+            from: self.username,
+            callId: msg.callId,
+            answer: null,
+            deferredMedia: true,
+            transport: call.transport,
+          });
+          startCallBilling(msg.callId);
+          return;
+        }
+        // Only the recorded callee may answer, and only towards the recorded caller.
         if (!call || call.calleeId !== self.userId || call.calleeSocket !== ws ||
             call.caller !== msg.to.toLowerCase() ||
             !(transportMatches(msg.transport, call.transport.provider) ||
@@ -727,6 +1090,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         if (caller) {
           clearTimeout(call.ringTimer);
           call.calleeSocket = ws;
+          call.status = "accepted";
           setUserInCall(self.username, true);
           setUserInCall(caller.username, true);
           for (const device of clientsForUsername(self.username)) {
@@ -743,6 +1107,41 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           });
            startCallBilling(msg.callId);
         }
+        return;
+      }
+
+      // Deferred invitations exchange SDP only after the accepted state is
+      // committed. Unlike legacy renegotiation, these frames are directional:
+      // caller creates the first offer and the exact bound callee answers it.
+      if (msg.type === "call-webrtc-offer") {
+        const call = activeCalls.get(msg.callId);
+        if (!call || !call.deferredMedia || call.status !== "accepted" ||
+            call.transport.provider !== "webrtc" || (msg.transport !== undefined && !transportMatches(msg.transport, "webrtc")) ||
+            !validDescription(msg.offer, "offer") || call.callerId !== self.userId ||
+            call.callerSocket !== ws || !call.calleeSocket) return;
+        send(call.calleeSocket, {
+          type: "call-webrtc-offer",
+          from: self.username,
+          callId: msg.callId,
+          offer: msg.offer,
+          transport: call.transport,
+        });
+        return;
+      }
+
+      if (msg.type === "call-webrtc-answer") {
+        const call = activeCalls.get(msg.callId);
+        if (!call || !call.deferredMedia || call.status !== "accepted" ||
+            call.transport.provider !== "webrtc" || (msg.transport !== undefined && !transportMatches(msg.transport, "webrtc")) ||
+            !validDescription(msg.answer, "answer") || call.calleeId !== self.userId ||
+            call.calleeSocket !== ws) return;
+        send(call.callerSocket, {
+          type: "call-webrtc-answer",
+          from: self.username,
+          callId: msg.callId,
+          answer: msg.answer,
+          transport: call.transport,
+        });
         return;
       }
 
@@ -809,6 +1208,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       if (msg.type === "ice-candidate") {
         const call = activeCalls.get(msg.callId);
         if (!call || call.transport.provider !== "webrtc" ||
+            (call.deferredMedia && call.status !== "accepted") ||
             !msg.candidate || typeof msg.candidate.candidate !== "string" ||
             msg.candidate.candidate.length > 4_096) return;
         if (call.callerId === self.userId && call.callerSocket === ws &&
@@ -821,19 +1221,32 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       }
 
       // ── CALL REJECT ───────────────────────────────────────────────────────
-      if (msg.type === "call-reject") {
+      if (msg.type === "call-reject" || msg.type === "call-cancel") {
         // Recipient is DERIVED from the recorded call — client "to" is ignored,
         // so a participant can never target a third party.
         const call = activeCalls.get(msg.callId);
         if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
+        if (msg.type === "call-cancel" &&
+            (call.callerId !== self.userId || (call.status !== "ringing" && call.status !== "accepting"))) return;
         activeCalls.delete(msg.callId);
         clearTimeout(call.ringTimer);
         stopCallBilling(msg.callId);
+        if (call.deferredMedia) {
+          persistDeferredTerminal(
+            msg.callId,
+            call,
+            call.status === "accepted" ? "ended" : call.callerId === self.userId ? "cancelled" : "declined",
+          );
+        }
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);
         setUserInCall(peerName, false);
-        const peerSocket = call.callerSocket === ws ? call.calleeSocket : call.callerSocket;
-        if (peerSocket) send(peerSocket, { type: "call-rejected", by: self.username, callId: msg.callId });
+        if (call.callerSocket === ws) {
+          sendToUsername(call.callee, { type: "call-rejected", by: self.username, callId: msg.callId });
+        } else {
+          send(call.callerSocket, { type: "call-rejected", by: self.username, callId: msg.callId });
+          sendToUsername(call.callee, { type: "call-ended", by: self.username, callId: msg.callId });
+        }
         return;
       }
 
@@ -845,11 +1258,22 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         activeCalls.delete(msg.callId);
         clearTimeout(call.ringTimer);
         stopCallBilling(msg.callId);
+        if (call.deferredMedia) {
+          persistDeferredTerminal(
+            msg.callId,
+            call,
+            call.status === "accepted" ? "ended" : call.callerId === self.userId ? "cancelled" : "declined",
+          );
+        }
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);
         setUserInCall(peerName, false);
-        const peerSocket = call.callerSocket === ws ? call.calleeSocket : call.callerSocket;
-        if (peerSocket) send(peerSocket, { type: "call-ended", by: self.username, callId: msg.callId });
+        if (call.callerSocket === ws) {
+          sendToUsername(call.callee, { type: "call-ended", by: self.username, callId: msg.callId });
+        } else {
+          send(call.callerSocket, { type: "call-ended", by: self.username, callId: msg.callId });
+          sendToUsername(call.callee, { type: "call-ended", by: self.username, callId: msg.callId });
+        }
         return;
       }
 
@@ -903,9 +1327,18 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       // tab cannot tear down a call occurring in a newer one.
       for (const [callId, call] of activeCalls) {
         if (call.callerSocket !== ws && call.calleeSocket !== ws) continue;
+        // A ringing deferred invitation may be resumed on another callee
+        // socket. Only a caller disconnect (or an accepted call) ends it.
+        if (call.deferredMedia && call.status === "ringing" && call.calleeSocket === ws && call.callerSocket !== ws) {
+          call.calleeSocket = null;
+          continue;
+        }
         activeCalls.delete(callId);
         clearTimeout(call.ringTimer);
         stopCallBilling(callId);
+        if (call.deferredMedia) {
+          persistDeferredTerminal(callId, call, call.status === "accepted" ? "ended" : "cancelled");
+        }
         const peerName = call.callerSocket === ws ? call.callee : call.caller;
         setUserInCall(self.username, false);
         setUserInCall(peerName, false);

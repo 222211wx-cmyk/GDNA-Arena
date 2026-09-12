@@ -39,6 +39,12 @@ import { useRoyalReserve } from "@/hooks/use-royal-reserve";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { RoyalReserveCredit } from "./RoyalReserveCredit";
 import { NetworkDisplay } from "./NetworkDisplay";
+import { MissedCallsInbox } from "./MissedCallsInbox";
+import type {
+  MissedCall,
+  FirebaseStatus,
+  CallNotificationPermission,
+} from "./call-types";
 import type { DmRoom, DmMessage, CallRecord } from "../social/social-types";
 import {
   decryptAttachmentBlob,
@@ -609,7 +615,7 @@ function CommunautesTab({ st, myRoomIds, onJoined, onOpen, onCreate, onViewRelay
 }
 
 // ── Appels ────────────────────────────────────────────────────────────────────
-function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline, callActive }: {
+function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection, isOnline, onOffline, callActive, callExtras, tabActive }: {
   st: Record<string, string>;
   lang: string;
   user: { id: number; username: string };
@@ -620,6 +626,10 @@ function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection
   onOffline: () => void;
   /** True while a call is active — drives credit polling so minutes decrease visibly. */
   callActive: boolean;
+  /** Missed-call inbox + honest notification status data from useCall. */
+  callExtras: CallExtras;
+  /** True when the Calls destination is the visible tab (drives mark-seen). */
+  tabActive: boolean;
 }) {
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -693,6 +703,22 @@ function AppelsTab({ st, lang, user, onNewCall, connectionTest, onTestConnection
       <div className="mb-3">
         <NetworkDisplay status={network} rt={rt} />
       </div>
+      <MissedCallsInbox
+        lang={lang}
+        missedCalls={callExtras.missedCalls}
+        missedCallCount={callExtras.missedCallCount}
+        loading={callExtras.missedCallsLoading}
+        error={callExtras.missedCallsError}
+        onRetry={callExtras.onRetryMissedCalls}
+        markMissedCallsSeen={callExtras.markMissedCallsSeen}
+        firebaseStatus={callExtras.firebaseStatus}
+        firebaseError={callExtras.firebaseError}
+        notificationPermission={callExtras.notificationPermission}
+        enableCallNotifications={callExtras.enableCallNotifications}
+        soundBlocked={callExtras.soundBlocked}
+        enableCallSound={callExtras.enableCallSound}
+        active={tabActive}
+      />
       <div className="mb-3 rounded-xl border border-border bg-card p-3">
         <div className="flex items-center gap-2">
           <Wifi className="h-4 w-4 shrink-0 text-primary" />
@@ -891,6 +917,64 @@ const TAB_LABELS: Record<BottomTab, string> = {
   settings: "Settings",
 };
 
+/**
+ * Missed-call / call-notification fields the useCall hook worker adds to its
+ * return value. Read defensively so the messenger builds and behaves gracefully
+ * both before and after the hook lands. Do not edit useCall to satisfy this —
+ * coordinate if the field names differ.
+ */
+interface CallExtras {
+  missedCalls: MissedCall[];
+  missedCallCount: number;
+  markMissedCallsSeen: (ids: string[]) => void;
+  missedCallsLoading: boolean;
+  missedCallsError: boolean;
+  onRetryMissedCalls?: () => void;
+  firebaseStatus: FirebaseStatus;
+  firebaseError: string | null;
+  notificationPermission: CallNotificationPermission;
+  enableCallNotifications?: () => void;
+  soundBlocked: boolean;
+  enableCallSound?: () => void;
+}
+
+function readCallExtras(call: unknown): CallExtras {
+  const c = (call ?? {}) as Record<string, unknown>;
+  const missedCalls = Array.isArray(c.missedCalls) ? (c.missedCalls as MissedCall[]) : [];
+  return {
+    missedCalls,
+    missedCallCount: typeof c.missedCallCount === "number"
+      ? c.missedCallCount
+      : missedCalls.filter(m => !m.isSeen).length,
+    markMissedCallsSeen: typeof c.markMissedCallsSeen === "function"
+      ? (c.markMissedCallsSeen as (ids: string[]) => void)
+      : () => undefined,
+    missedCallsLoading: c.missedCallsLoading === true,
+    missedCallsError: c.missedCallsError === true,
+    onRetryMissedCalls: typeof c.refreshMissedCalls === "function"
+      ? (c.refreshMissedCalls as () => void)
+      : undefined,
+    firebaseStatus: (["loading", "ready", "disabled", "error"] as const).includes(
+      c.firebaseStatus as FirebaseStatus,
+    )
+      ? (c.firebaseStatus as FirebaseStatus)
+      : "loading",
+    firebaseError: typeof c.firebaseError === "string" ? c.firebaseError : null,
+    notificationPermission: (["default", "granted", "denied", "unsupported"] as const).includes(
+      c.notificationPermission as CallNotificationPermission,
+    )
+      ? (c.notificationPermission as CallNotificationPermission)
+      : "default",
+    enableCallNotifications: typeof c.enableCallNotifications === "function"
+      ? (c.enableCallNotifications as () => void)
+      : undefined,
+    soundBlocked: c.soundBlocked === true,
+    enableCallSound: typeof c.enableCallSound === "function"
+      ? (c.enableCallSound as () => void)
+      : undefined,
+  };
+}
+
 // ── Main Messenger ────────────────────────────────────────────────────────────
 export type MessengerVariant = "full" | "embedded" | "widget";
 
@@ -931,6 +1015,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const st = { ...(SOCIAL_T[lang] ?? SOCIAL_T.en), ...getMessengerCopy(lang) };
   const dir = lang === "ar" ? "rtl" : "ltr";
   const call = useCallContext();
+  const callExtras = readCallExtras(call);
   const { isOnline } = useConnectivity();
 
   const [tab,         setTab]         = useState<BottomTab>("chats");
@@ -2689,6 +2774,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             isOnline={isOnline}
             onOffline={blockOffline}
             callActive={call.callStatus === "active" || call.callStatus === "calling" || call.callStatus === "ringing"}
+            callExtras={callExtras}
+            tabActive={tab === "calls"}
           />
         )}
 
@@ -2791,6 +2878,15 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                   {k === "chats" && totalUnread > 0 && (
                     <span style={{ position: "absolute", top: -5, insetInlineEnd: -9, background: GOLD, color: "#000", borderRadius: 9, minWidth: 16, textAlign: "center", fontSize: 9.5, fontWeight: 900, padding: "1px 4px" }}>
                       {totalUnread}
+                    </span>
+                  )}
+                  {k === "calls" && callExtras.missedCallCount > 0 && (
+                    <span
+                      data-testid="nav-calls-unread-badge"
+                      aria-label={`${callExtras.missedCallCount}`}
+                      style={{ position: "absolute", top: -5, insetInlineEnd: -9, background: "hsl(var(--destructive))", color: "hsl(var(--destructive-foreground))", borderRadius: 9, minWidth: 16, textAlign: "center", fontSize: 9.5, fontWeight: 900, padding: "1px 4px" }}
+                    >
+                      {callExtras.missedCallCount}
                     </span>
                   )}
                 </div>

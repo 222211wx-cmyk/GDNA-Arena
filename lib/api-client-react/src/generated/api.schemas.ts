@@ -13,6 +13,106 @@ export interface ErrorResponse {
   error: string;
 }
 
+export type CallPushConfigFirebase = {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  messagingSenderId: string;
+  appId: string;
+};
+
+export interface CallPushConfig {
+  enabled: boolean;
+  reason?: string;
+  firebase?: CallPushConfigFirebase;
+  vapidPublicKey?: string;
+}
+
+export interface CallPushSession {
+  customToken: string;
+  userId: string;
+}
+
+export interface CallPushOk {
+  ok: boolean;
+}
+
+export interface CallPushDeviceInput {
+  /**
+     * @minLength 20
+     * @maxLength 4096
+     */
+  token: string;
+  /**
+     * @minLength 16
+     * @maxLength 128
+     */
+  installationId: string;
+  focused: boolean;
+}
+
+export interface CallPushInstallationInput {
+  /**
+     * @minLength 16
+     * @maxLength 128
+     */
+  installationId: string;
+}
+
+export interface CallPushFocusInput {
+  /**
+     * @minLength 16
+     * @maxLength 128
+     */
+  installationId: string;
+  focused: boolean;
+}
+
+export type MissedCallItemCaller = {
+  id: number;
+  name: string;
+  /** @nullable */
+  avatar: string | null;
+};
+
+export type MissedCallItemType = typeof MissedCallItemType[keyof typeof MissedCallItemType];
+
+
+export const MissedCallItemType = {
+  video: 'video',
+  voice: 'voice',
+} as const;
+
+export type MissedCallItemStatus = typeof MissedCallItemStatus[keyof typeof MissedCallItemStatus];
+
+
+export const MissedCallItemStatus = {
+  declined: 'declined',
+  missed: 'missed',
+} as const;
+
+export interface MissedCallItem {
+  id: string;
+  caller: MissedCallItemCaller;
+  type: MissedCallItemType;
+  time: string;
+  isSeen: boolean;
+  status: MissedCallItemStatus;
+}
+
+export interface MissedCallsResponse {
+  items: MissedCallItem[];
+  unseenCount: number;
+}
+
+export interface MissedCallsSeenInput {
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  ids: string[];
+}
+
 export interface SuccessResponse {
   message: string;
 }
