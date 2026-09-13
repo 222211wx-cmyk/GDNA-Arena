@@ -18,6 +18,7 @@
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.
 - [Games age policy](games-age-policy.md) — registration and all non-game sections are open to every age; only Games is 18+, enforced by persisted DOB on both UI and API.
 - [Expo native module boundaries](expo-native-module-boundaries.md) — native-only Expo dependencies need web façades; use architecture-compatible package lines.
+- [Expo publishing validation](expo-publishing-validation.md) — shared website releases also build mobile; verify native production bundles, not just TypeScript and web builds.
 - [Finance beta controls](finance-beta-controls.md) — Stripe removed by explicit request; preserve historical records, 70/30 simulation, and manual RedotPay payouts.
 - [Four-door module boundaries](four-door-module-boundaries.md) — AMIS admin, MESSAGERI messaging, SOCIAL contacts, and ARENA exploration must stay independent.
 - [Language policy](language-policy.md) — preserve foundational AR/EN/FR/ES/DE in language switchers; Arabic remains the canonical first-visit default.

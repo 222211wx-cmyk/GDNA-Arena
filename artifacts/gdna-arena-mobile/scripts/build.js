@@ -154,7 +154,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 
   metroProcess = spawn(
     'pnpm',
-    ['exec', 'expo', 'start', '--no-dev', '--minify', '--localhost'],
+    ['exec', 'expo', 'start', '--clear', '--no-dev', '--minify', '--localhost'],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
@@ -200,7 +200,15 @@ async function downloadFile(url, outputPath) {
     const response = await fetch(url, { signal: controller.signal });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const errorBody = await response.text();
+      let detail = errorBody;
+      try {
+        const metroError = JSON.parse(errorBody);
+        detail = metroError.message || metroError.error || errorBody;
+      } catch {
+        // Non-JSON failures still need a bounded diagnostic in publishing logs.
+      }
+      throw new Error(`HTTP ${response.status}: ${String(detail).slice(0, 4000)}`);
     }
 
     const file = fs.createWriteStream(outputPath);
