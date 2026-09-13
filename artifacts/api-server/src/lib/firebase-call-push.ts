@@ -4,6 +4,7 @@ import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
 import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
+import { parseServiceAccount, selectServiceAccount } from "./firebase-service-account.mjs";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -151,40 +152,17 @@ function asPublicConfig(): PublicFirebaseConfig | null {
   }
 }
 
-function configuredServiceAccount(): { raw: string | null; configured: boolean } {
-  // FIREBASE_SERVICE_ACCOUNT is the current secret name. Deliberately select
-  // it whenever it exists, even when malformed, so an invalid replacement
-  // cannot silently fall back to an older credential.
-  if (typeof process.env.FIREBASE_SERVICE_ACCOUNT === "string") {
-    return { raw: process.env.FIREBASE_SERVICE_ACCOUNT.trim(), configured: true };
-  }
-  if (typeof process.env.FIREBASE_SERVICE_ACCOUNT_JSON === "string") {
-    return { raw: process.env.FIREBASE_SERVICE_ACCOUNT_JSON.trim(), configured: true };
-  }
-  return { raw: null, configured: false };
-}
+let lastAccountParseError: string | null = null;
 
 function readServiceAccount(): Record<string, unknown> | null {
-  const { raw } = configuredServiceAccount();
-  if (!raw) return null;
-  try {
-    const value = JSON.parse(raw) as Record<string, unknown>;
-    return typeof value.project_id === "string" && value.project_id.trim().length > 0 &&
-      typeof value.client_email === "string" && value.client_email.trim().length > 0 &&
-      typeof value.private_key === "string" && value.private_key.trim().length > 0
-      ? value
-      : null;
-  } catch {
-    return null;
-  }
+  return parseServiceAccount(selectServiceAccount(process.env)).account;
 }
 
 function adminConfigurationProblem(): string | null {
-  const configured = configuredServiceAccount();
-  if (!configured.configured) return "Firebase service account is not configured";
-  if (!configured.raw) return "Firebase service account is invalid";
-  if (!readServiceAccount()) return "Firebase service account is invalid";
-  return null;
+  const { error } = parseServiceAccount(selectServiceAccount(process.env));
+  if (error && error !== lastAccountParseError) console.error("[Firebase]", error);
+  lastAccountParseError = error;
+  return error;
 }
 
 function clientConfigurationProblem(): string | null {
@@ -218,6 +196,7 @@ async function loadServices(): Promise<FirebaseServices> {
     servicesPromise = (async () => {
       const account = readServiceAccount();
       if (!account) throw new CallPushError("Firebase service account is not configured");
+      console.info("[Firebase] Service account parsed successfully");
       let app: App;
       try {
         app = getApps()[0] ?? initializeApp({ credential: cert(account) });

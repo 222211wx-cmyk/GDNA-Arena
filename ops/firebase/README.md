@@ -10,7 +10,12 @@ background invitations. No mobile client is part of this setup.
 Set these server secrets/configuration values through the deployment secret
 manager (never commit their contents):
 
-- `FIREBASE_SERVICE_ACCOUNT_JSON`: Firebase service-account JSON.
+- `FIREBASE_SERVICE_ACCOUNT`: preferred Firebase service-account JSON.
+  Legacy `FIREBASE_SERVICE_ACCOUNT_JSON` and the existing spelling
+  `FIBERASE_SERVICE_ACCOUNT` are supported aliases, in that order.
+  The shared parser accepts raw/quoted/double-stringified JSON and normalizes
+  escaped private-key newlines. Parse errors never log input or private keys.
+  Parse/Admin initialization failures leave in-app WebSocket ringing available.
 - `FIREBASE_WEB_CONFIG`: public Firebase web config as JSON, containing
   `apiKey`, `authDomain`, `projectId`, `messagingSenderId`, and `appId`.
 - `FIREBASE_VAPID_PUBLIC_KEY`: Web Push VAPID public key (optional; without it,

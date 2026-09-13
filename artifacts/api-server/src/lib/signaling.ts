@@ -914,13 +914,12 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               createdAt,
               expiresAt: new Date(createdAt.getTime() + 30_000),
             };
-            // Firebase absent is an explicitly exposed UI state, not a reason
-            // to regress a live web socket call. Once configured, however, any
-            // Firebase failure is terminal and never silently falls back.
-            const firebaseConfigured = isFirebaseCallPushConfigured();
+            // Configuration/parsing/Admin initialization failures are exposed
+            // by the readiness UI but must not disable in-app ringing.
+            // A write failure after Firebase is ready still fails explicitly.
             const firebaseStatus = await getCallPushStatus();
-            if (firebaseConfigured && !firebaseStatus.enabled) {
-              throw new CallPushError(firebaseStatus.reason ?? "Firebase call push is unavailable");
+            if (!firebaseStatus.enabled) {
+              console.warn("[CALL] Firebase unavailable; using in-app ringing:", firebaseStatus.reason);
             }
             const firebasePersisted = firebaseStatus.enabled;
             const invitation = firebasePersisted

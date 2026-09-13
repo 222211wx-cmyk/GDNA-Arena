@@ -1,45 +1,35 @@
 import { randomUUID } from "node:crypto";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
+import { parseServiceAccount, selectServiceAccount } from "../src/lib/firebase-service-account.mjs";
 
-function selectedServiceAccount() {
-  if (typeof process.env.FIREBASE_SERVICE_ACCOUNT === "string") {
-    return process.env.FIREBASE_SERVICE_ACCOUNT.trim();
-  }
-  if (typeof process.env.FIREBASE_SERVICE_ACCOUNT_JSON === "string") {
-    return process.env.FIREBASE_SERVICE_ACCOUNT_JSON.trim();
-  }
-  return "";
-}
-
-function parseServiceAccount(raw) {
-  if (!raw) return null;
-  try {
-    const value = JSON.parse(raw);
-    if (!value || typeof value !== "object" ||
-      typeof value.project_id !== "string" ||
-      typeof value.client_email !== "string" ||
-      typeof value.private_key !== "string") return null;
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-const raw = selectedServiceAccount();
+const raw = selectServiceAccount(process.env);
 if (!raw) {
   console.log(JSON.stringify({ enabled: false, reason: "Firebase service account is not configured" }));
   process.exit(0);
 }
 
-const serviceAccount = parseServiceAccount(raw);
+const { account: serviceAccount, error: parseError } = parseServiceAccount(raw);
 if (!serviceAccount) {
-  console.log(JSON.stringify({ enabled: false, reason: "Firebase service account is invalid" }));
+  console.log(JSON.stringify({ enabled: false, reason: parseError }));
   process.exitCode = 1;
 } else {
   let app;
   try {
     app = getApps()[0] ?? initializeApp({ credential: cert(serviceAccount) });
+    // Real FCM API validation without delivering unsolicited notifications.
+    // Success verifies send authorization, not browser receipt.
+    try {
+      await getMessaging(app).send({
+        topic: "gdna-call-diagnostics",
+        data: { type: "DIAGNOSTIC", title: "FCM validation" },
+      }, true);
+      console.log(JSON.stringify({ fcm: "dry-run-accepted", delivered: false }));
+    } catch {
+      console.error(JSON.stringify({ fcm: "dry-run-failed", delivered: false }));
+      process.exitCode = 1;
+    }
     const db = getFirestore(app);
     const callId = `probe-${randomUUID().replaceAll("-", "")}`;
     const ref = db.collection("callInvites").doc(callId);
