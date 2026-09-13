@@ -1,13 +1,19 @@
 ---
 name: Royal Reserve policy
-description: Meaning of reserve call credit, debt consent, offline limits, and beta settlement boundaries.
+description: Free messaging calls, legacy reserve data, offline limits, and beta settlement boundaries.
 ---
 
-Royal Reserve means application call credit, not carrier connectivity. The agreed package is 120 minutes valid for 48 hours, with an explicitly accepted simulated 15 MAD debt; incoming top-ups pay debt before adding spendable credit. Do not create a new loan silently or reset an outstanding loan through repeat activation.
+Messaging voice and video calls are free. Never gate initiation, acceptance, or continued media on balance, royal credits, reserve activation, or planning approval, and never meter call time into a credit debit.
 
-**Why:** The owner accepted an internet-required reserve but later repeated “even without internet.” That wording cannot be implemented as an offline internet call, and charging disconnected time would misrepresent the service.
+**Why:** On 2026-09-13 the owner explicitly removed the previous reserve requirement because it blocked all messaging calls.
 
-**How to apply:** Present the reserve as “رصيد احتياطي”. Use the activation message “تم تفعيل الرصيد الاحتياطي. سيتم خصم الرصيد عند الشحن التالي”. Clearly disclose consent, expiry, and simulation. Charge the initiating caller's connected talk time only; no charge for ringing or offline intervals. Treat online/browser connection hints as hints, not proof of media connectivity.
+**How to apply:** Free-call policy supersedes the earlier paid/reserve calling policy. Retain authentication, block checks, recipient Answer/Decline, and genuine network/media errors. Do not delete existing balances, debt records, or unrelated finance functionality merely to make calls free.
+
+Free calling still requires internet; it is not carrier connectivity. Treat browser online hints as hints, not proof of media connectivity.
+
+**Why:** The prior “even without internet” request cannot be implemented as an offline internet call.
+
+**How to apply:** Never advertise offline WebRTC calling or disguise connection failures as credit requirements.
 
 Do not enable real top-ups or debt collection as part of call-network work.
 

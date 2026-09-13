@@ -77,17 +77,6 @@ export async function getRoyalCredit(userId: number, now = new Date()) {
   };
 }
 
-export async function hasUsableRoyalCredit(userId: number): Promise<boolean> {
-  await ensureAccount(pool, userId);
-  const result = await pool.query<{ funded: boolean }>(
-    `SELECT (paid_seconds > 0 OR
-      (reserve_seconds > 0 AND reserve_expires_at IS NOT NULL AND reserve_expires_at > NOW())) AS funded
-     FROM royal_credit_accounts WHERE user_id=$1`,
-    [userId],
-  );
-  return result.rows[0]?.funded === true;
-}
-
 async function priorResponse(
   db: Queryable,
   userId: number,
@@ -220,63 +209,6 @@ export async function repayRoyalCredit(userId: number, amountMinor: number, idem
     );
     await client.query("COMMIT");
     return response;
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-export async function consumeRoyalCreditSeconds(userId: number, requestedSeconds: number, callId?: string) {
-  if (!Number.isSafeInteger(requestedSeconds) || requestedSeconds <= 0) {
-    throw new Error("requestedSeconds must be a positive safe integer");
-  }
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SET LOCAL lock_timeout = '2500ms'");
-    await client.query("SET LOCAL statement_timeout = '3s'");
-    const account = await lockAccount(client, userId);
-    const paid = integer(account.paid_seconds);
-    const reserve = account.reserve_expires_at
-      && new Date(account.reserve_expires_at).getTime() > Date.now()
-      ? integer(account.reserve_seconds)
-      : 0;
-    const paidDebit = Math.min(paid, requestedSeconds);
-    const reserveDebit = Math.min(reserve, requestedSeconds - paidDebit);
-    const consumedSeconds = paidDebit + reserveDebit;
-    await client.query(
-      `UPDATE royal_credit_accounts
-       SET paid_seconds=paid_seconds-$2,
-           reserve_seconds=CASE
-             WHEN reserve_expires_at IS NULL OR reserve_expires_at <= NOW() THEN 0
-             ELSE reserve_seconds-$3
-           END,
-           reserve_expires_at=CASE
-             WHEN reserve_expires_at IS NULL OR reserve_expires_at <= NOW() OR reserve_seconds-$3 <= 0
-             THEN NULL ELSE reserve_expires_at
-           END,
-           updated_at=NOW()
-       WHERE user_id=$1`,
-      [userId, paidDebit, reserveDebit],
-    );
-    if (consumedSeconds > 0) {
-      const auditId = crypto.randomUUID();
-      await client.query(
-        `INSERT INTO debt_log (id,user_id,cost_minor,action,idempotency_key,metadata)
-         VALUES ($1,$2,0,'call_usage',$3,$4::jsonb)`,
-        [auditId, userId, `call-usage:${auditId}`, JSON.stringify({
-          callId: callId ?? null,
-          requestedSeconds,
-          consumedSeconds,
-          paidSeconds: paidDebit,
-          reserveSeconds: reserveDebit,
-        })],
-      );
-    }
-    await client.query("COMMIT");
-    return { consumedSeconds, exhausted: consumedSeconds < requestedSeconds || paidDebit + reserveDebit === paid + reserve };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;

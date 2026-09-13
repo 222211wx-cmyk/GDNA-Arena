@@ -110,14 +110,6 @@ async function connect(cookie) {
   return probe;
 }
 
-async function activateReserve(cookie) {
-  await responseJson(await request("/billing/reserve", {
-    method: "POST",
-    headers: { cookie },
-    body: JSON.stringify({ accepted: true, idempotencyKey: unique("reserve") }),
-  }), 201);
-}
-
 async function registerCalleeKey(cookie, deviceId) {
   return responseJson(await request("/messages/e2e/key", {
     method: "PUT",
@@ -178,7 +170,12 @@ test("deferred WebRTC invitations authenticate, bind one callee, and support Fir
   assert.equal(typeof config.enabled, "boolean");
   // Configured deployments use Firestore as canonical state; local runs
   // without Firebase web configuration exercise the bounded WS fallback.
-  await activateReserve(caller.cookie);
+  const credit = await responseJson(await request("/billing/credit", {
+    headers: { cookie: caller.cookie },
+  }), 200);
+  assert.equal(credit.credit.balanceMinutes, 0);
+  assert.equal(credit.credit.reserveMinutes, 0);
+  assert.equal(credit.credit.debtMinor, 0);
   const key = await registerCalleeKey(callee.cookie, unique("device"));
 
   const callerWs = await connect(caller.cookie);

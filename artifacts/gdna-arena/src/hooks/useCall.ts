@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  useCall — authenticated WebSocket signaling + deferred WebRTC/TURN media.
-//  Invitations never request media until the callee accepts.
+//  useCall — authenticated WebSocket signaling + direct WebRTC/TURN media.
+//  New callers publish an SDP offer immediately; durable deferred invitations
+//  remain supported for older push-delivered calls.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useState, useEffect, useCallback } from "react";
@@ -36,7 +37,9 @@ import {
 import { CallRingtone } from "@/lib/call-ringtone";
 import { useCallPush } from "@/hooks/use-call-push";
 import {
+  WEBRTC_TRANSPORT,
   DEFERRED_WEBRTC_TRANSPORT,
+  isDirectWebRtcTransport,
   isDeferredWebRtcTransport,
   loadDeferredConfig,
 } from "@/lib/call-deferred";
@@ -51,7 +54,7 @@ import {
 
 // Kept only for an unreachable legacy SDK helper below. Call setup never
 // invokes this function; authenticated calls fetch TURN through
-// fetchCallRtcConfig and use deferred WebRTC.
+// fetchCallRtcConfig and use direct WebRTC.
 async function fetchAgoraToken(_channel: string): Promise<{ appId: string; token: string; uid: number }> {
   throw new Error("Native call transport is unavailable; use WebRTC/TURN");
 }
@@ -92,6 +95,17 @@ interface IncomingCall {
   callerAvatar?: string;
   expiresAt?: number;
   deferredMedia?: boolean;
+}
+
+function isRtcDescription(
+  value: unknown,
+  type: "offer" | "answer",
+): value is RTCSessionDescriptionInit {
+  if (!value || typeof value !== "object") return false;
+  const description = value as { type?: unknown; sdp?: unknown };
+  return description.type === type &&
+    typeof description.sdp === "string" &&
+    description.sdp.length > 0;
 }
 
 interface LiveStream {
@@ -508,7 +522,8 @@ export function useCall(user: { id: number; username: string } | null) {
   }, []);
 
   // Legacy provider helper retained only for source compatibility. It is not
-  // referenced by any call path; all invitations use deferred WebRTC/TURN.
+  // referenced by any call path; all invitations use direct WebRTC/TURN (with
+  // deferred push invitations accepted for compatibility).
   const joinAgora = useCallback(async (
     channel: string,
     withVideo: boolean,
@@ -766,7 +781,7 @@ export function useCall(user: { id: number; username: string } | null) {
     return { pc, stream };
   }, [refreshCallDevices, refreshCameraZoom, sendWS, setActualMediaConnected]);
 
-  // ── Leave Agora & release all media ────────────────────────────────────────
+  // ── Release all call media ────────────────────────────────────────────────
   const leaveAgora = useCallback(async () => {
     setActualMediaConnected(false);
     if (iceRestartTimerRef.current) clearTimeout(iceRestartTimerRef.current);
@@ -1058,42 +1073,72 @@ export function useCall(user: { id: number; username: string } | null) {
     }
   }, [createWebRtcCall, leaveAgora, sendWS]);
 
+  // New invitations carry the caller's SDP offer from the first socket frame.
+  // This is intentionally separate from beginCallerWebRtc, which remains the
+  // compatibility path for older deferred invitations.
+  const createDirectCallerOffer = useCallback(async (
+    callId: string,
+    peer: string,
+    withVideo: boolean,
+  ): Promise<RTCSessionDescriptionInit | null> => {
+    if (mediaSetupCallRef.current === callId) return null;
+    mediaSetupCallRef.current = callId;
+    const generation = callGenerationRef.current;
+    const isCurrentCall = () => currentCallIdRef.current === callId && callGenerationRef.current === generation;
+    const config = await loadDeferredConfig(isCurrentCall, fetchCallRtcConfig);
+    if (!config) return null;
+    if (config.provider !== "webrtc") throw new Error("WebRTC TURN calling is unavailable");
+    const { pc } = await createWebRtcCall(config, peer, callId, withVideo, true, isCurrentCall);
+    if (!isCurrentCall()) return null;
+    const offer = await pc.createOffer();
+    if (!isCurrentCall()) return null;
+    await pc.setLocalDescription(offer);
+    if (!isCurrentCall()) return null;
+    if (!pc.localDescription) throw new Error("WebRTC offer was not created");
+    return pc.localDescription;
+  }, [createWebRtcCall]);
+
   const answerWebRtcOffer = useCallback(async (msg: {
     callId: string; from: string; offer: RTCSessionDescriptionInit;
-  }, withVideo: boolean) => {
-    if (mediaSetupCallRef.current === msg.callId) return;
+  }, withVideo: boolean, mode: "deferred" | "direct" = "deferred"): Promise<RTCSessionDescriptionInit | null> => {
+    if (mediaSetupCallRef.current === msg.callId) return null;
     mediaSetupCallRef.current = msg.callId;
     const generation = callGenerationRef.current;
     const isCurrentCall = () => currentCallIdRef.current === msg.callId && callGenerationRef.current === generation;
     try {
       setCallPhase("connecting");
       const config = await loadDeferredConfig(isCurrentCall, fetchCallRtcConfig);
-      if (!config) return;
+      if (!config) return null;
       if (config.provider !== "webrtc") throw new Error("WebRTC TURN calling is unavailable");
       callSignalingReadyRef.current.add(msg.callId);
       const { pc } = await createWebRtcCall(config, msg.from, msg.callId, withVideo, false, isCurrentCall);
-      if (!isCurrentCall()) return;
+      if (!isCurrentCall()) return null;
       await pc.setRemoteDescription(msg.offer);
-      if (!isCurrentCall()) return;
+      if (!isCurrentCall()) return null;
       for (const candidate of pendingRemoteIceRef.current.splice(0)) {
         try { await pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
       }
       const answer = await pc.createAnswer();
-      if (!isCurrentCall()) return;
+      if (!isCurrentCall()) return null;
       await pc.setLocalDescription(answer);
-      if (!isCurrentCall()) return;
+      if (!isCurrentCall()) return null;
+      if (!pc.localDescription) throw new Error("WebRTC answer was not created");
+      if (mode === "direct") return pc.localDescription;
       sendWS({
         type: "call-webrtc-answer", callId: msg.callId, to: msg.from, answer: pc.localDescription,
         transport: DEFERRED_WEBRTC_TRANSPORT,
       });
+      return null;
     } catch (error) {
-      if (!isCurrentCall()) return;
+      if (mode === "direct") throw error;
+      if (!isCurrentCall()) return null;
       showCallError(mediaFailureMessage(error), 12_000);
       sendWS({ type: "call-reject", to: msg.from, callId: msg.callId });
       currentCallIdRef.current = null;
       setCallPhase("ended");
       setCallStatus("ended");
       void leaveAgora();
+      return null;
     }
   }, [createWebRtcCall, leaveAgora, sendWS]);
 
@@ -1212,9 +1257,11 @@ export function useCall(user: { id: number; username: string } | null) {
           pendingCallResumesRef.current.delete(msg.callId);
           // Ignore if already in / being offered another call
           if (!currentCallIdRef.current) {
-            // This runtime intentionally does not downgrade a deferred call to
-            // the legacy Agora/SDP-on-ring protocol.
-            if (!isDeferredWebRtcTransport(msg.transport, msg.deferredMedia)) {
+            const deferred = isDeferredWebRtcTransport(msg.transport, msg.deferredMedia);
+            const direct = isDirectWebRtcTransport(msg.transport, msg.deferredMedia, msg.offer);
+            // Direct offers are shown but never answered automatically. The
+            // callee's explicit Answer gesture is the media-permission gate.
+            if (!deferred && !direct) {
               sendWS({ type: "call-reject", to: msg.from, callId: msg.callId, code: "MEDIA_PROTOCOL_MISMATCH" });
               return;
             }
@@ -1226,8 +1273,8 @@ export function useCall(user: { id: number; username: string } | null) {
               from: msg.from,
               callId: msg.callId,
               video: msg.video,
-              offer: null,
-              transport: DEFERRED_WEBRTC_TRANSPORT,
+              offer: direct ? msg.offer : null,
+              transport: direct ? msg.transport : DEFERRED_WEBRTC_TRANSPORT,
               e2e: msg.e2e,
               callerId: msg.callerId,
               callerName: msg.callerName,
@@ -1237,7 +1284,7 @@ export function useCall(user: { id: number; username: string } | null) {
                 : typeof msg.expiresAt === "string" && Number.isFinite(Date.parse(msg.expiresAt))
                   ? Date.parse(msg.expiresAt)
                   : undefined,
-              deferredMedia: true,
+              deferredMedia: deferred,
             });
             setCallPhase("ringing");
             setCallStatus("ringing");
@@ -1249,18 +1296,77 @@ export function useCall(user: { id: number; username: string } | null) {
           settleCallReady(msg.callId);
         }
 
-        // ── Accepted means permission to begin WebRTC, not "active" ─────────
+        // ── Accepted means the callee consented; media becomes active only
+        // once the peer connection actually delivers remote tracks. ─────────
         if (msg.type === "call-accepted" && msg.callId === currentCallIdRef.current) {
-          if (!isDeferredWebRtcTransport(msg.transport, msg.deferredMedia)) {
+          const deferred = isDeferredWebRtcTransport(msg.transport, msg.deferredMedia);
+          const direct = !deferred &&
+            msg.transport?.provider === WEBRTC_TRANSPORT.provider &&
+            msg.transport?.version === WEBRTC_TRANSPORT.version &&
+            isRtcDescription(msg.answer, "answer");
+          if (!deferred && !direct) {
             showCallError("تعذّر التحقق من بروتوكول وسائط المكالمة");
             sendWS({ type: "call-end", to: msg.from, callId: msg.callId });
+            setActualMediaConnected(false);
+            const endedGeneration = ++callGenerationRef.current;
+            currentCallIdRef.current = null;
+            callDirectionRef.current = null;
             void leaveAgora();
+            setCallPhase("ended");
+            setCallStatus("ended");
+            setTimeout(() => {
+              if (!isCurrent(ws) || currentCallIdRef.current || callGenerationRef.current !== endedGeneration) return;
+              setCallStatus("idle");
+              setActivePeer(null);
+              setActiveCallId(null);
+            }, 1_500);
             return;
           }
           clearRingTimer();
           setCallPhase("accepted");
           if (callDirectionRef.current === "outgoing") {
-            void beginCallerWebRtc(msg.callId, msg.from, callVideoRef.current);
+            if (deferred) {
+              void beginCallerWebRtc(msg.callId, msg.from, callVideoRef.current);
+            } else if (callPcRef.current && isRtcDescription(msg.answer, "answer")) {
+              try {
+                await callPcRef.current.setRemoteDescription(msg.answer);
+                for (const candidate of pendingRemoteIceRef.current.splice(0)) {
+                  try { await callPcRef.current.addIceCandidate(candidate); } catch { /* stale candidate */ }
+                }
+              } catch {
+                showCallError("تعذّر إكمال اتصال WebRTC", 12_000);
+                sendWS({ type: "call-end", to: msg.from, callId: msg.callId });
+                setActualMediaConnected(false);
+                const endedGeneration = ++callGenerationRef.current;
+                currentCallIdRef.current = null;
+                callDirectionRef.current = null;
+                void leaveAgora();
+                setCallPhase("ended");
+                setCallStatus("ended");
+                setTimeout(() => {
+                  if (!isCurrent(ws) || currentCallIdRef.current || callGenerationRef.current !== endedGeneration) return;
+                  setCallStatus("idle");
+                  setActivePeer(null);
+                  setActiveCallId(null);
+                }, 1_500);
+              }
+            } else {
+              showCallError("تعذّر إكمال اتصال WebRTC", 12_000);
+              sendWS({ type: "call-end", to: msg.from, callId: msg.callId });
+              setActualMediaConnected(false);
+              const endedGeneration = ++callGenerationRef.current;
+              currentCallIdRef.current = null;
+              callDirectionRef.current = null;
+              void leaveAgora();
+              setCallPhase("ended");
+              setCallStatus("ended");
+              setTimeout(() => {
+                if (!isCurrent(ws) || currentCallIdRef.current || callGenerationRef.current !== endedGeneration) return;
+                setCallStatus("idle");
+                setActivePeer(null);
+                setActiveCallId(null);
+              }, 1_500);
+            }
           }
         }
 
@@ -1331,11 +1437,7 @@ export function useCall(user: { id: number; username: string } | null) {
                 : msg.code === "RING_TIMEOUT" ? "The call was not answered." : "The call has ended.",
             );
           }
-          if (msg.code === "CREDIT_EXHAUSTED") {
-            showCallError("انتهى رصيد المكالمات الملكي وتم إنهاء المكالمة دون احتساب وقت إضافي", 15_000);
-          } else if (msg.code === "CREDIT_BILLING_UNAVAILABLE") {
-            showCallError("توقفت خدمة احتساب الرصيد، لذلك أُنهيت المكالمة بأمان", 15_000);
-          } else if (msg.code === "MEDIA_HEARTBEAT_TIMEOUT" || msg.code === "MEDIA_START_TIMEOUT") {
+          if (msg.code === "MEDIA_HEARTBEAT_TIMEOUT" || msg.code === "MEDIA_START_TIMEOUT") {
             showCallError("أُنهيت المكالمة لأن اتصال الوسائط الفعلي لم يعد قابلاً للتحقق", 15_000);
           }
           setActualMediaConnected(false);
@@ -1371,12 +1473,8 @@ export function useCall(user: { id: number; username: string } | null) {
           // Callee side safety: if a block denial races an incoming banner, clear it.
           setIncomingCall(null);
           showCallError(
-            msg.code === "CREDIT_REQUIRED"
-              ? "يلزم رصيد مكالمات ملكي أو موافقة صريحة على الاحتياطي قبل بدء المكالمة"
-              : msg.code === "CREDIT_BILLING_UNAVAILABLE"
-                ? "خدمة رصيد المكالمات غير متاحة حالياً — لم تبدأ المكالمة ولن يتم احتسابها"
-                : msg.code === "MEDIA_PROTOCOL_MISMATCH"
-                  ? "إصدار وسائط المكالمة غير متوافق — حدّث الصفحة وحاول مجدداً"
+            msg.code === "MEDIA_PROTOCOL_MISMATCH"
+              ? "إصدار وسائط المكالمة غير متوافق — حدّث الصفحة وحاول مجدداً"
             : msg.type === "call-busy"
               ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
               : msg.type === "call-blocked"
@@ -1559,19 +1657,29 @@ export function useCall(user: { id: number; username: string } | null) {
     }
     const callId = `call_${crypto.randomUUID().replace(/-/g, "")}`;
     let offered = false;
+    let callGeneration = 0;
+    let callStateStarted = false;
     try {
-      // Starting a call is a signaling-only operation. In particular, do not
-      // create RTCPeerConnection, SDP, or request microphone/camera until the
-      // recipient accepts the canonical invitation.
-       let recipients: E2ERecipientKey[] | null = null;
-       for (let attempt = 0; attempt < 3 && !recipients; attempt++) {
+      currentCallIdRef.current = callId;
+      callGeneration = ++callGenerationRef.current;
+      callStateStarted = true;
+      callDirectionRef.current = "outgoing";
+      callVideoRef.current = withVideo;
+      setActivePeer(targetUsername);
+      setActiveCallId(callId);
+      setActiveVideo(withVideo);
+      setCallPhase("ringing");
+      setCallStatus("calling");
+
+      let recipients: E2ERecipientKey[] | null = null;
+      for (let attempt = 0; attempt < 3 && !recipients; attempt++) {
         const keyResponse = await fetch(
           apiPath(`/api/messages/e2e/users/${encodeURIComponent(targetUsername)}/key`),
           { credentials: "include" },
         );
         if (keyResponse.ok) {
-           const keyData = await keyResponse.json() as { keys?: E2ERecipientKey[] };
-           recipients = keyData.keys?.length ? keyData.keys : null;
+          const keyData = await keyResponse.json() as { keys?: E2ERecipientKey[] };
+          recipients = keyData.keys?.length ? keyData.keys : null;
           break;
         }
         if (keyResponse.status !== 409 || attempt === 2) {
@@ -1580,45 +1688,61 @@ export function useCall(user: { id: number; username: string } | null) {
         }
         await new Promise(resolve => setTimeout(resolve, 350));
       }
-       if (!recipients) throw new Error("Secure call key unavailable");
+      if (!recipients) throw new Error("Secure call key unavailable");
       const callSecret = randomSecret();
-       const wrappedDevices = await Promise.all(recipients.map(async recipient => [
-         recipient.deviceId,
-         await encryptCallSecret(callSecret, recipient),
-       ] as const));
-       const e2e = { devices: Object.fromEntries(wrappedDevices) };
-      currentCallIdRef.current = callId;
-      callGenerationRef.current += 1;
-      callDirectionRef.current = "outgoing";
-      callVideoRef.current = withVideo;
-      setActivePeer(targetUsername);
-      setActiveCallId(callId);
-      setActiveVideo(withVideo);
-      setCallPhase("ringing");
-      setCallStatus("calling");
-      historyRef.current = { peer: targetUsername, video: withVideo, start: Date.now(), outgoing: true, answered: false };
+      const wrappedDevices = await Promise.all(recipients.map(async recipient => [
+        recipient.deviceId,
+        await encryptCallSecret(callSecret, recipient),
+      ] as const));
+      const e2e = { devices: Object.fromEntries(wrappedDevices) };
+
+      // Request caller media, build the direct offer, and put that offer in
+      // the first socket message. The callee still sees Answer/Decline before
+      // any callee-side media permission is requested.
+      const offer = await createDirectCallerOffer(callId, targetUsername, withVideo);
+      if (!offer || currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration) {
+        throw new Error("CALL_SETUP_CANCELLED");
+      }
       const callReady = waitForCallReady(callId);
       sendWS({
         type: "call-offer",
         to: targetUsername,
-        offer: null,
+        offer,
         callId,
         from: user.username,
         video: withVideo,
-        deferredMedia: true,
-        transport: DEFERRED_WEBRTC_TRANSPORT,
+        deferredMedia: false,
+        transport: WEBRTC_TRANSPORT,
         e2e,
       });
       offered = true;
+      historyRef.current = { peer: targetUsername, video: withVideo, start: Date.now(), outgoing: true, answered: false };
 
       // The signaling server owns the 30-second ring timeout and durable
       // missed-call write. Do not race it with a browser call-end message.
       await callReady;
+      if (currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration) {
+        throw new Error("CALL_SETUP_CANCELLED");
+      }
+      callSignalingReadyRef.current.add(callId);
+      for (const candidate of pendingCallIceRef.current.splice(0)) {
+        sendWS({ type: "ice-candidate", to: targetUsername, callId, candidate });
+      }
     } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
+      if (callStateStarted &&
+        (currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration)) {
+        // A late acknowledgement can arrive after local cancellation. End
+        // that exact offer without touching a newer call's UI or media.
+        if (offered) sendWS({ type: "call-end", to: targetUsername, callId });
+        return;
+      }
       clearRingTimer();
       // Only a callee who actually received an offer needs an end signal.
-      if (offered) sendWS({ type: "call-end", to: targetUsername, callId });
+      const message = err instanceof Error ? err.message : "";
+      if (offered && message !== "CALL_SETUP_REJECTED") {
+        sendWS({ type: "call-end", to: targetUsername, callId });
+      }
       currentCallIdRef.current = null;
       callGenerationRef.current += 1;
       callDirectionRef.current = null;
@@ -1626,7 +1750,6 @@ export function useCall(user: { id: number; username: string } | null) {
       setActivePeer(null);
       setActiveCallId(null);
       void leaveAgora();
-      const message = err instanceof Error ? err.message : "";
       if (message !== "CALL_SETUP_REJECTED") {
         showCallError(message.includes("secure") || message.includes("Secure") || message.includes("E2E")
           ? `🔐 ${message}`
@@ -1634,39 +1757,62 @@ export function useCall(user: { id: number; username: string } | null) {
       }
       setCallStatus("idle");
     }
-  }, [callStatus, isOnline, leaveAgora, sendWS, setActualMediaConnected, user, waitForCallReady]);
+  }, [callStatus, createDirectCallerOffer, isOnline, leaveAgora, sendWS, setActualMediaConnected, user, waitForCallReady]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {
-    if (!incomingCall) return;
+    const invitation = incomingCall;
+    if (!invitation) return;
+    const deferred = isDeferredWebRtcTransport(invitation.transport, invitation.deferredMedia);
+    const generation = callGenerationRef.current;
     try {
-      if (!isDeferredWebRtcTransport(incomingCall.transport, incomingCall.deferredMedia)) {
+      if (!deferred && !isDirectWebRtcTransport(invitation.transport, invitation.deferredMedia, invitation.offer)) {
         throw new Error("Secure call media protocol is unavailable");
       }
-      // Answer only accepts the invitation. The caller creates the initial
-      // offer afterwards, so this button never causes a media permission
-      // request or RTCPeerConnection before acceptance has been acknowledged.
       clearRingTimer();
-      setActivePeer(incomingCall.from);
-      setActiveCallId(incomingCall.callId);
-      setActiveVideo(withVideo && incomingCall.video);
-      callVideoRef.current = withVideo && incomingCall.video;
+      setActivePeer(invitation.from);
+      setActiveCallId(invitation.callId);
+      setActiveVideo(withVideo && invitation.video);
+      callVideoRef.current = withVideo && invitation.video;
       setIncomingCall(null);
-      setCallPhase("accepted");
+      setCallPhase(deferred ? "accepted" : "connecting");
       setCallStatus("calling");
+      if (deferred) {
+        // Compatibility path: the caller creates SDP after this consent frame.
+        sendWS({
+          type: "call-answer",
+          to: invitation.from,
+          answer: null,
+          callId: invitation.callId,
+          deferredMedia: true,
+          transport: DEFERRED_WEBRTC_TRANSPORT,
+        });
+        return;
+      }
+
+      // Direct invitations already contain the caller's offer. Creating the
+      // answer here is the first callee media operation, after explicit Answer.
+      const answer = await answerWebRtcOffer({
+        callId: invitation.callId,
+        from: invitation.from,
+        offer: invitation.offer!,
+      }, withVideo && invitation.video, "direct");
+      if (!answer) throw new Error("CALL_SETUP_CANCELLED");
+      if (currentCallIdRef.current !== invitation.callId || callGenerationRef.current !== generation) return;
       sendWS({
         type: "call-answer",
-        to: incomingCall.from,
-        answer: null,
-        callId: incomingCall.callId,
-        deferredMedia: true,
-        transport: DEFERRED_WEBRTC_TRANSPORT,
+        to: invitation.from,
+        answer,
+        callId: invitation.callId,
+        deferredMedia: false,
+        transport: WEBRTC_TRANSPORT,
       });
     } catch (err: unknown) {
       console.error("[CALL] Failed to answer:", err);
+      if (currentCallIdRef.current !== invitation.callId || callGenerationRef.current !== generation) return;
       void leaveAgora();
       // Tell the caller the answer failed so they don't ring forever.
-      sendWS({ type: "call-reject", to: incomingCall.from, callId: incomingCall.callId });
+      sendWS({ type: "call-reject", to: invitation.from, callId: invitation.callId });
       currentCallIdRef.current = null;
       callGenerationRef.current += 1;
       callDirectionRef.current = null;
@@ -1678,7 +1824,7 @@ export function useCall(user: { id: number; username: string } | null) {
         ? `🔐 ${message}`
         : mediaFailureMessage(err));
     }
-  }, [incomingCall, leaveAgora, sendWS]);
+  }, [answerWebRtcOffer, incomingCall, leaveAgora, sendWS]);
 
   // ── Reject call ───────────────────────────────────────────────────────────
   const rejectCall = useCallback(() => {

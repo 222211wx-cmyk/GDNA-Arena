@@ -63,7 +63,13 @@ function waitFor(socket, type) {
   });
 }
 
-test("caller receives authorization acknowledgement before requesting an Agora token", async t => {
+const directTransport = { provider: "webrtc", version: 1 };
+const validOffer = {
+  type: "offer",
+  sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=test\r\nt=0 0\r\n",
+};
+
+test("caller receives authorization acknowledgement with the configured call provider", async t => {
   const suffix = `${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 5)}`;
   const callerName = `ac${suffix}`;
   const calleeName = `at${suffix}`;
@@ -71,12 +77,6 @@ test("caller receives authorization acknowledgement before requesting an Agora t
   const calleeCookie = await register(calleeName);
   const callerSocket = await connect(callerCookie);
   const calleeSocket = await connect(calleeCookie);
-  const reserveResponse = await request("/billing/reserve", {
-    method: "POST",
-    headers: { cookie: callerCookie },
-    body: JSON.stringify({ accepted: true, idempotencyKey: `reserve-${suffix}` }),
-  });
-  assert.equal(reserveResponse.status, 201, await reserveResponse.clone().text());
 
   t.after(async () => {
     callerSocket.close();
@@ -86,6 +86,13 @@ test("caller receives authorization acknowledgement before requesting an Agora t
       request("/auth/me", { method: "DELETE", headers: { cookie: calleeCookie } }),
     ]);
   });
+
+  const iceConfigResponse = await request("/rtc/ice-servers", {
+    headers: { cookie: callerCookie },
+  });
+  assert.equal(iceConfigResponse.status, 200, await iceConfigResponse.clone().text());
+  const iceConfig = await iceConfigResponse.json();
+  assert.ok(iceConfig.provider === "agora" || iceConfig.provider === "webrtc");
 
   const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const deviceId = `device_${suffix}_secure`;
@@ -102,10 +109,11 @@ test("caller receives authorization acknowledgement before requesting an Agora t
   const incomingPromise = waitFor(calleeSocket, "call-incoming");
   callerSocket.send(JSON.stringify({
     type: "call-offer",
-    offer: null,
+    offer: iceConfig.provider === "webrtc" ? validOffer : null,
     to: calleeName,
     callId,
     video: true,
+    transport: iceConfig.provider === "webrtc" ? directTransport : undefined,
     e2e: {
       devices: {
         [deviceId]: {
@@ -119,15 +127,21 @@ test("caller receives authorization acknowledgement before requesting an Agora t
   const [ready, incoming] = await Promise.all([readyPromise, incomingPromise]);
   assert.equal(ready.callId, callId);
   assert.equal(incoming.callId, callId);
+  if (iceConfig.provider === "webrtc") {
+    assert.deepEqual(incoming.offer, validOffer);
+    assert.deepEqual(incoming.transport, directTransport);
+  }
 
-  const tokenResponse = await request(`/rtc/agora-token?channel=${encodeURIComponent(callId)}`, {
-    headers: { cookie: callerCookie },
-  });
-  assert.notEqual(tokenResponse.status, 403, await tokenResponse.clone().text());
-  assert.ok(
-    tokenResponse.status === 200 || tokenResponse.status === 503,
-    `expected configured token issuance or an explicit configuration response, got ${tokenResponse.status}`,
-  );
+  if (iceConfig.provider === "agora") {
+    const tokenResponse = await request(`/rtc/agora-token?channel=${encodeURIComponent(callId)}`, {
+      headers: { cookie: callerCookie },
+    });
+    assert.notEqual(tokenResponse.status, 403, await tokenResponse.clone().text());
+    assert.ok(
+      tokenResponse.status === 200 || tokenResponse.status === 503,
+      `expected configured token issuance or an explicit configuration response, got ${tokenResponse.status}`,
+    );
+  }
 
   callerSocket.send(JSON.stringify({ type: "call-end", to: calleeName, callId }));
 });

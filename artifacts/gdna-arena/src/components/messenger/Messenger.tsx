@@ -34,10 +34,7 @@ import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 import { getMessengerCopy, getMessengerIntlLocale } from "@/i18n/messenger-complete-copy";
-import { getReserveCopy } from "@/i18n/royal-reserve-copy";
-import { useRoyalReserve } from "@/hooks/use-royal-reserve";
 import { useNetworkStatus } from "@/hooks/use-network-status";
-import { RoyalReserveCredit } from "./RoyalReserveCredit";
 import { NetworkDisplay } from "./NetworkDisplay";
 import { MissedCallsInbox } from "./MissedCallsInbox";
 import type {
@@ -625,7 +622,7 @@ function AppelsTab({ st, lang, user, onNewCall, onCallBack, connectionTest, onTe
   onTestConnection: () => void;
   isOnline: boolean;
   onOffline: () => void;
-  /** True while a call is active — drives credit polling so minutes decrease visibly. */
+  /** True while a call is active — disables competing call actions. */
   callActive: boolean;
   /** Missed-call inbox + honest notification status data from useCall. */
   callExtras: CallExtras;
@@ -635,10 +632,8 @@ function AppelsTab({ st, lang, user, onNewCall, onCallBack, connectionTest, onTe
   const [records, setRecords] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ── Royal Reserve call credit + honest network status (owned by this feature) ──
-  const rt = getReserveCopy(lang);
+  // ── Honest network status for the direct WebRTC call path ────────────────
   const network = useNetworkStatus();
-  const reserve = useRoyalReserve(user?.id ?? null, { callActive, online: isOnline });
 
   useEffect(() => {
     if (!isOnline) {
@@ -678,31 +673,8 @@ function AppelsTab({ st, lang, user, onNewCall, onCallBack, connectionTest, onTe
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px 16px" }}>
-      {/* Royal Reserve credit first so minutes + activation are reachable
-          immediately on small mobile screens without scrolling. */}
-      <div id="call-credit-panel" className="mb-3">
-        <RoyalReserveCredit
-          rt={rt}
-          lang={lang}
-          credit={reserve.credit}
-          policy={reserve.policy}
-          isLoading={reserve.isLoading}
-          isError={reserve.isError}
-          onRetry={() => { void reserve.refetch(); }}
-          canActivate={reserve.canActivate}
-          onActivate={reserve.reserve}
-          reserveIsPending={reserve.reserveIsPending}
-          reserveIsError={reserve.reserveIsError}
-          online={isOnline}
-          showSandboxRepay={import.meta.env.DEV && (reserve.policy?.repaymentSandboxEnabled ?? false)}
-          onRepay={reserve.repay}
-          repayIsPending={reserve.repayIsPending}
-          repayIsError={reserve.repayIsError}
-          repayErrorNotAvailable={reserve.repayErrorNotAvailable}
-        />
-      </div>
       <div className="mb-3">
-        <NetworkDisplay status={network} rt={rt} />
+        <NetworkDisplay status={network} lang={lang} />
       </div>
       <MissedCallsInbox
         lang={lang}
@@ -745,7 +717,7 @@ function AppelsTab({ st, lang, user, onNewCall, onCallBack, connectionTest, onTe
       </div>
       {!isOnline && (
         <p className="mb-2 text-center text-xs text-muted-foreground" data-testid="text-call-blocked-offline">
-          {rt.call_blocked_offline}
+          {st.offline_action ?? "Reconnect to place a call."}
         </p>
       )}
       <button onClick={() => isOnline ? onNewCall() : onOffline()} disabled={!isOnline}
@@ -2675,7 +2647,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 
         {/* ── Top bar ── */}
         <div style={{ padding: "12px 16px", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>{getReserveCopy(lang).king_chat}</p>
+          <p style={{ margin: 0, fontWeight: 900, color: GOLD, fontSize: 17, flex: 1, letterSpacing: 0.5 }}>{st.messageri ?? "Messenger"}</p>
           <button onClick={() => { setTab("settings"); activeRoomIdRef.current = null; setActiveRoom(null); }} title={st.nav_settings ?? "Settings"}
             data-testid="button-open-settings"
             style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: tab === "settings" ? GOLD_A(0.094) : "transparent", color: tab === "settings" ? GOLD : "#999", display: "flex", alignItems: "center", justifyContent: "center" }}>

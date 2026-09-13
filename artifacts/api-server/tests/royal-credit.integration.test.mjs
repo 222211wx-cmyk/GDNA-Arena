@@ -61,6 +61,15 @@ function waitFor(socket, type) {
 }
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const directTransport = { provider: "webrtc", version: 1 };
+const validOffer = {
+  type: "offer",
+  sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=test\r\nt=0 0\r\n",
+};
+const validAnswer = {
+  type: "answer",
+  sdp: "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=test\r\nt=0 0\r\n",
+};
 
 test("Royal Reserve activation, expiry, debt-first repayment, and idempotency", async t => {
   assert.ok(process.env.DATABASE_URL, "DATABASE_URL is required for fixture-only expiry setup");
@@ -155,36 +164,30 @@ test("Royal Reserve activation, expiry, debt-first repayment, and idempotency", 
   assert.match((await response.json()).error, /one year/i);
 });
 
-test("call metering rejects unfunded calls and ignores spoofed, one-sided, and disconnected media", async t => {
+test("zero-balance voice and video calls are free and require no reserve consent", async t => {
   assert.ok(process.env.DATABASE_URL);
   const db = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   const suffix = `${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 4)}`;
   const callerName = `rcc${suffix}`;
   const calleeName = `rct${suffix}`;
-  const attackerName = `rcx${suffix}`;
   const callerCookie = await register(callerName);
   const calleeCookie = await register(calleeName);
-  const attackerCookie = await register(attackerName);
   const caller = await connect(callerCookie);
   const callee = await connect(calleeCookie);
-  const attacker = await connect(attackerCookie);
   t.after(async () => {
-    caller.close(); callee.close(); attacker.close();
-    await Promise.allSettled([callerCookie, calleeCookie, attackerCookie].map(cookie =>
+    caller.close(); callee.close();
+    await Promise.allSettled([callerCookie, calleeCookie].map(cookie =>
       request("/auth/me", { method: "DELETE", headers: { cookie } })));
     await db.end();
   });
 
-  const unfundedId = `unfunded-${suffix}`;
-  const creditRequired = waitFor(caller, "call-unavailable");
-  caller.send(JSON.stringify({ type: "call-offer", to: calleeName, callId: unfundedId, video: false, offer: null }));
-  assert.equal((await creditRequired).code, "CREDIT_REQUIRED");
-
-  let response = await request("/billing/reserve", {
-    method: "POST", headers: { cookie: callerCookie },
-    body: JSON.stringify({ accepted: true, idempotencyKey: `call-reserve-${suffix}` }),
-  });
-  assert.equal(response.status, 201, await response.clone().text());
+  let response = await request("/billing/credit", { headers: { cookie: callerCookie } });
+  assert.equal(response.status, 200);
+  let body = await response.json();
+  assert.equal(body.credit.balanceMinutes, 0);
+  assert.equal(body.credit.reserveMinutes, 0);
+  assert.equal(body.credit.debtMinor, 0);
+  assert.equal(body.credit.canActivate, true);
 
   const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const deviceId = `device_${suffix}_secure`;
@@ -194,57 +197,70 @@ test("call metering rejects unfunded calls and ignores spoofed, one-sided, and d
   });
   assert.equal(response.status, 200, await response.clone().text());
   const key = await response.json();
-  const callId = `meter-${suffix}`;
-  const ready = waitFor(caller, "call-ready");
-  const incoming = waitFor(callee, "call-incoming");
-  caller.send(JSON.stringify({
-    type: "call-offer", to: calleeName, callId, video: false, offer: null,
-    e2e: { devices: { [deviceId]: { wrappedSecret: "x".repeat(256), fingerprint: key.fingerprint } } },
-  }));
-  await Promise.all([ready, incoming]);
-  const accepted = waitFor(caller, "call-accepted");
-  callee.send(JSON.stringify({ type: "call-answer", to: callerName, callId, answer: null }));
-  await accepted;
+  const e2e = {
+    devices: {
+      [deviceId]: { wrappedSecret: "x".repeat(256), fingerprint: key.fingerprint },
+    },
+  };
 
   const balance = async () => {
     const result = await db.query(
-      `SELECT a.paid_seconds::int paid, a.reserve_seconds::int reserve
+      `SELECT a.paid_seconds::int paid, a.reserve_seconds::int reserve, a.debt_minor::int debt
        FROM royal_credit_accounts a JOIN users u ON u.id=a.user_id WHERE u.username=$1`,
       [callerName],
     );
-    return result.rows[0].paid + result.rows[0].reserve;
+    return result.rows[0];
   };
   const initial = await balance();
-  // A third participant cannot forge either bound device's heartbeat.
-  attacker.send(JSON.stringify({ type: "call-media-state", callId, connected: true }));
-  await delay(1_200);
-  assert.equal(await balance(), initial);
+  assert.deepEqual(initial, { paid: 0, reserve: 0, debt: 0 });
 
-  caller.send(JSON.stringify({ type: "call-media-state", callId, connected: true }));
-  await delay(1_200);
-  assert.equal(await balance(), initial, "one-sided media is never billed");
+  for (const [video, label] of [[false, "voice"], [true, "video"]]) {
+    const callId = `free-${label}-${suffix}`;
+    const ready = waitFor(caller, "call-ready");
+    const incoming = waitFor(callee, "call-incoming");
+    caller.send(JSON.stringify({
+      type: "call-offer",
+      to: calleeName,
+      callId,
+      video,
+      offer: validOffer,
+      transport: directTransport,
+      e2e,
+    }));
+    const [readyEvent, incomingEvent] = await Promise.all([ready, incoming]);
+    assert.equal(readyEvent.callId, callId);
+    assert.deepEqual(incomingEvent.offer, validOffer);
+    assert.deepEqual(incomingEvent.transport, directTransport);
+    assert.equal(incomingEvent.deferredMedia, undefined);
 
-  callee.send(JSON.stringify({ type: "call-media-state", callId, connected: true }));
-  await delay(2_300);
-  const afterConnected = await balance();
-  assert.ok(afterConnected < initial, "fresh heartbeats from both bound sockets are billed");
+    const accepted = waitFor(caller, "call-accepted");
+    callee.send(JSON.stringify({
+      type: "call-answer",
+      to: callerName,
+      callId,
+      answer: validAnswer,
+      transport: directTransport,
+    }));
+    const acceptedEvent = await accepted;
+    assert.deepEqual(acceptedEvent.answer, validAnswer);
+    assert.deepEqual(acceptedEvent.transport, directTransport);
+    assert.equal(acceptedEvent.deferredMedia, undefined);
+
+    await delay(1_200);
+    assert.deepEqual(await balance(), initial, `${label} call must not debit Royal credit`);
+
+    const ended = waitFor(callee, "call-ended");
+    caller.send(JSON.stringify({ type: "call-end", to: calleeName, callId }));
+    await ended;
+  }
+
   const usage = await db.query(
-    `SELECT cost_minor::int cost_minor, metadata
+    `SELECT COUNT(*)::int AS count
      FROM debt_log d JOIN users u ON u.id=d.user_id
-     WHERE u.username=$1 AND d.action='call_usage' ORDER BY d.created_at DESC LIMIT 1`,
+     WHERE u.username=$1 AND d.action='call_usage'`,
     [callerName],
   );
-  assert.equal(usage.rows[0]?.cost_minor, 0);
-  assert.ok(usage.rows[0]?.metadata?.consumedSeconds > 0);
-  assert.equal(
-    usage.rows[0].metadata.consumedSeconds,
-    usage.rows[0].metadata.paidSeconds + usage.rows[0].metadata.reserveSeconds,
-  );
-
-  callee.send(JSON.stringify({ type: "call-media-state", callId, connected: false }));
-  await delay(1_300);
-  assert.equal(await balance(), afterConnected, "disconnect intervals are not billed or caught up");
-  caller.send(JSON.stringify({ type: "call-end", to: calleeName, callId }));
+  assert.equal(usage.rows[0]?.count, 0, "free calls must never create call usage records");
 });
 
 test("soft account erasure preserves append-only Royal debt evidence", async t => {

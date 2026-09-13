@@ -19,8 +19,6 @@ export default function MissedCallsPage() {
   const copy = getMissedCallsCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
   const inCall = call.callStatus !== "idle";
-  const creditRequired = typeof call.callError === "string" &&
-    (call.callError.includes("يلزم رصيد") || call.callError.includes("CREDIT_REQUIRED"));
 
   if (!user) {
     return (
@@ -50,21 +48,6 @@ export default function MissedCallsPage() {
           {lang === "ar" ? "علبة المكالمات الفائتة" : copy.inbox_title}
         </h1>
       </div>
-      {creditRequired && (
-        <div role="alert" className="mb-4 rounded-xl border border-primary/40 bg-primary/10 p-3 text-sm text-foreground">
-          <p className="m-0 font-semibold">
-            {lang === "ar"
-              ? "يلزم رصيد مكالمات ملكي أو موافقة صريحة على الاحتياطي قبل بدء المكالمة."
-              : "Royal call credit or explicit reserve consent is required before starting this call."}
-          </p>
-          <Link
-            href="/messages?tab=calls#call-credit-panel"
-            className="mt-2 inline-flex font-semibold text-primary underline-offset-4 hover:underline"
-          >
-            {lang === "ar" ? "فتح لوحة الرصيد والموافقة على الاحتياطي" : "Open call credit and reserve consent"}
-          </Link>
-        </div>
-      )}
       <MissedCallsInbox
         lang={lang}
         missedCalls={call.missedCalls}

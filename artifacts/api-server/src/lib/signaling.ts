@@ -7,10 +7,7 @@ import type { IncomingMessage } from "http";
 import type { Server } from "http";
 import type { RequestHandler } from "express";
 import { pool } from "@workspace/db";
-import { performance } from "node:perf_hooks";
-import { consumeRoyalCreditSeconds, hasUsableRoyalCredit } from "./royal-credit";
 import { requireReadyCallMediaProvider } from "./turn-config";
-import { sampleMediaContinuity } from "./call-meter";
 import { reserveDeferredAnsweringSocket } from "./deferred-call-policy";
 import {
   acceptDeferredCallInvitation,
@@ -59,7 +56,6 @@ type SignalMsg =
   | { type: "ice-candidate";  to: string; candidate: RTCIceCandidateInit; callId: string }
   | { type: "call-reject";    to: string; callId: string }
   | { type: "call-end";       to: string; callId: string }
-  | { type: "call-media-state"; callId: string; connected: boolean }
   | { type: "live-start";     title: string; domain: string }
   | { type: "live-end" }
   | { type: "live-join";      liveId: string }
@@ -91,6 +87,66 @@ const activeCalls = new Map<string, ActiveCall>();
 // responses after the in-memory call is removed. Keep only a bounded terminal
 // cache; configured deployments use Firestore as the source of truth instead.
 const localTerminalCalls = new Map<string, DeferredCallDeclineResult>();
+
+interface PendingDirectOffer {
+  callerId: number | null;
+  callerSocket: WebSocket;
+  canceled: boolean;
+  expiryTimer: NodeJS.Timeout | null;
+}
+const pendingDirectOffers = new Map<string, PendingDirectOffer>();
+const MAX_PENDING_DIRECT_OFFERS = 10_000;
+const PENDING_DIRECT_OFFER_TTL_MS = 30_000;
+
+function beginPendingDirectOffer(
+  callId: string,
+  callerId: number | null,
+  callerSocket: WebSocket,
+): PendingDirectOffer | null {
+  if (activeCalls.has(callId) || pendingDirectOffers.has(callId) ||
+      pendingDirectOffers.size >= MAX_PENDING_DIRECT_OFFERS) return null;
+  const pending: PendingDirectOffer = {
+    callerId,
+    callerSocket,
+    canceled: false,
+    expiryTimer: null,
+  };
+  pendingDirectOffers.set(callId, pending);
+  pending.expiryTimer = setTimeout(() => {
+    if (pendingDirectOffers.get(callId) !== pending) return;
+    pending.canceled = true;
+    pendingDirectOffers.delete(callId);
+  }, PENDING_DIRECT_OFFER_TTL_MS);
+  pending.expiryTimer.unref?.();
+  return pending;
+}
+
+function pendingDirectOfferIsLive(
+  callId: string,
+  pending: PendingDirectOffer,
+  callerSocket: WebSocket,
+): boolean {
+  return pendingDirectOffers.get(callId) === pending &&
+    !pending.canceled &&
+    pending.callerSocket === callerSocket &&
+    callerSocket.readyState === WebSocket.OPEN;
+}
+
+function finishPendingDirectOffer(callId: string, pending: PendingDirectOffer): void {
+  if (pending.expiryTimer) clearTimeout(pending.expiryTimer);
+  if (pendingDirectOffers.get(callId) === pending) pendingDirectOffers.delete(callId);
+}
+
+function cancelPendingDirectOffer(
+  callId: string,
+  callerId: number | null,
+  callerSocket: WebSocket,
+): boolean {
+  const pending = pendingDirectOffers.get(callId);
+  if (!pending || pending.callerId !== callerId || pending.callerSocket !== callerSocket) return false;
+  pending.canceled = true;
+  return true;
+}
 
 function rememberLocalTerminalCall(callId: string, result: DeferredCallDeclineResult): void {
   localTerminalCalls.set(callId, result);
@@ -159,28 +215,6 @@ function persistLegacyDeferredMissedCall(callId: string, call: ActiveCall): Prom
   }).catch(() => {});
 }
 
-const MEDIA_HEARTBEAT_FRESH_MS = 6_500;
-const MEDIA_MAX_BILLING_STEP_MS = 5_000;
-interface CallBillingMeter {
-  timer: NodeJS.Timeout;
-  callerConnectedAt: number | null;
-  calleeConnectedAt: number | null;
-  lastTickAt: number | null;
-  carryMs: number;
-  busy: boolean;
-  mediaStarted: boolean;
-  startedAt: number;
-  disconnectedAt: number | null;
-  interruptedMs: number;
-}
-const callBilling = new Map<string, CallBillingMeter>();
-
-function stopCallBilling(callId: string): void {
-  const meter = callBilling.get(callId);
-  if (meter) clearInterval(meter.timer);
-  callBilling.delete(callId);
-}
-
 function validDescription(
   description: RTCSessionDescriptionInit | null,
   expectedType: "offer" | "answer",
@@ -199,109 +233,6 @@ function transportMatches(
   return value?.version === 1 && value.provider === provider;
 }
 
-function endCallForBilling(callId: string, reason: string, code: string): void {
-  const call = activeCalls.get(callId);
-  stopCallBilling(callId);
-  if (!call) return;
-  disposeCallWatcher(call);
-  clearTimeout(call.ringTimer);
-  activeCalls.delete(callId);
-  persistDeferredTerminal(callId, call, "ended");
-  setUserInCall(call.caller, false);
-  setUserInCall(call.callee, false);
-  const event = { type: "call-ended", by: "billing", callId, reason, code };
-  send(call.callerSocket, event);
-  if (call.calleeSocket) send(call.calleeSocket, event);
-}
-
-function startCallBilling(callId: string): void {
-  stopCallBilling(callId);
-  const meter: CallBillingMeter = {
-    timer: undefined as unknown as NodeJS.Timeout,
-    callerConnectedAt: null,
-    calleeConnectedAt: null,
-    lastTickAt: null,
-    carryMs: 0,
-    busy: false,
-    mediaStarted: false,
-    startedAt: performance.now(),
-    disconnectedAt: null,
-    interruptedMs: 0,
-  };
-  meter.timer = setInterval(async () => {
-    if (meter.busy) return;
-    const call = activeCalls.get(callId);
-    if (!call || call.callerId === null || !call.calleeSocket) {
-      stopCallBilling(callId);
-      return;
-    }
-    const now = performance.now();
-    const socketsOpen = call.callerSocket.readyState === WebSocket.OPEN
-      && call.calleeSocket.readyState === WebSocket.OPEN
-    const continuity = sampleMediaContinuity(
-      meter,
-      now,
-      socketsOpen ? meter.callerConnectedAt : null,
-      socketsOpen ? meter.calleeConnectedAt : null,
-      MEDIA_HEARTBEAT_FRESH_MS,
-      12_000,
-    );
-    const bothFresh = socketsOpen && continuity.bothFresh;
-    if (!meter.mediaStarted && bothFresh) {
-      // Initial setup has its own 20-second deadline and is never billed. The
-      // handover allowance begins only once both peers have established media.
-      meter.interruptedMs = 0;
-      meter.disconnectedAt = null;
-    }
-    if (!bothFresh) {
-      if (!meter.mediaStarted && now - meter.startedAt > 20_000) {
-        endCallForBilling(callId, "Media connection was not established", "MEDIA_START_TIMEOUT");
-        return;
-      }
-      // Once media has started, stale reporting fails closed: allowing media to
-      // continue indefinitely without two fresh, socket-bound reports would be
-      // unmetered. A short, non-billed grace supports Wi-Fi/cellular handover.
-      if (meter.mediaStarted && continuity.exhausted) {
-        endCallForBilling(callId, "Media connectivity reporting stopped", "MEDIA_HEARTBEAT_TIMEOUT");
-        return;
-      }
-      meter.lastTickAt = null;
-      meter.carryMs = 0;
-      return;
-    }
-    meter.mediaStarted = true;
-    if (meter.lastTickAt === null) {
-      meter.lastTickAt = now;
-      return;
-    }
-    const elapsed = Math.min(now - meter.lastTickAt, MEDIA_MAX_BILLING_STEP_MS);
-    meter.lastTickAt = now;
-    meter.carryMs += elapsed;
-    const seconds = Math.floor(meter.carryMs / 1_000);
-    if (seconds <= 0) return;
-    meter.carryMs -= seconds * 1_000;
-    meter.busy = true;
-    try {
-      const result = await Promise.race([
-        consumeRoyalCreditSeconds(call.callerId, seconds, callId),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Royal call billing timed out")), 5_000)),
-      ]);
-      if (callBilling.get(callId) !== meter || activeCalls.get(callId) !== call) return;
-      if (result.exhausted) {
-        endCallForBilling(callId, "Royal call credit exhausted", "CREDIT_EXHAUSTED");
-      }
-    } catch {
-      // Charging must fail closed; a DB outage cannot create an unmetered call.
-      endCallForBilling(callId, "Royal call billing unavailable", "CREDIT_BILLING_UNAVAILABLE");
-    } finally {
-      meter.busy = false;
-    }
-  }, 1_000);
-  meter.timer.unref?.();
-  callBilling.set(callId, meter);
-}
-
 // Participant authorization for RTC token issuance: a token for channel
 // `callId` is only granted to one of the two recorded call participants.
 export function isCallParticipant(callId: string, userId: number): boolean {
@@ -317,7 +248,6 @@ setInterval(() => {
       activeCalls.delete(id);
       disposeCallWatcher(call);
       clearTimeout(call.ringTimer);
-      stopCallBilling(id);
     }
   }
 }, 30 * 60 * 1000).unref?.();
@@ -491,7 +421,6 @@ function clearActiveCall(callId: string, call: ActiveCall): void {
   activeCalls.delete(callId);
   disposeCallWatcher(call);
   clearTimeout(call.ringTimer);
-  stopCallBilling(callId);
   setUserInCall(call.caller, false);
   setUserInCall(call.callee, false);
 }
@@ -875,13 +804,6 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               send(ws, { type: "call-busy", to: callee.username, callId: msg.callId });
               return;
             }
-            if (!await hasUsableRoyalCredit(self.userId)) {
-              send(ws, {
-                type: "call-unavailable", to: callee.username, callId: msg.callId,
-                reason: "Royal call credit or explicit reserve consent is required", code: "CREDIT_REQUIRED",
-              });
-              return;
-            }
             const lockClient = await pool!.connect();
             try {
               await lockClient.query("BEGIN");
@@ -930,7 +852,6 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               if (!ringing || ringing.status !== "ringing") return;
               activeCalls.delete(msg.callId);
               disposeCallWatcher(ringing);
-              stopCallBilling(msg.callId);
               persistDeferredTerminal(msg.callId, ringing, "missed");
               setUserInCall(ringing.caller, false);
               setUserInCall(ringing.callee, false);
@@ -988,8 +909,20 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           }
           return;
         }
+        const pending = beginPendingDirectOffer(msg.callId, self.userId, ws);
+        if (!pending) {
+          send(ws, {
+            type: "call-unavailable",
+            callId: msg.callId,
+            code: "CALL_RESERVATION_UNAVAILABLE",
+            reason: "Call setup is already in progress",
+          });
+          return;
+        }
+        try {
         const target = findByUsername(msg.to);
         if (!target) {
+          if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
           try {
             const offlineTarget = await pool!.query<{
               id: number;
@@ -1004,6 +937,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               [msg.to],
             );
             const callee = offlineTarget.rows[0];
+             if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
             if (!callee) {
               send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
               return;
@@ -1022,6 +956,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             }
 
             const callType = msg.video ? "video" : "audio";
+            if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
             await pool!.query(
               `INSERT INTO call_history
                  (caller_id, caller_username, callee_id, callee_username, call_type, status, duration_sec)
@@ -1029,6 +964,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               [self.userId, self.username, callee.id, callee.username, callType],
             );
 
+            if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
             if (callee.notifications) {
               await pool!.query(
                 `INSERT INTO notifications
@@ -1082,27 +1018,6 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           send(ws, { type: "call-busy", to: msg.to, callId: msg.callId });
           return;
         }
-        try {
-          if (!await hasUsableRoyalCredit(self.userId)) {
-            send(ws, {
-              type: "call-unavailable",
-              to: msg.to,
-              callId: msg.callId,
-              reason: "Royal call credit or explicit reserve consent is required",
-              code: "CREDIT_REQUIRED",
-            });
-            return;
-          }
-        } catch {
-          send(ws, {
-            type: "call-unavailable",
-            to: msg.to,
-            callId: msg.callId,
-            reason: "Royal call billing unavailable",
-            code: "CREDIT_BILLING_UNAVAILABLE",
-          });
-          return;
-        }
          const lockClient = await pool!.connect();
          try {
            await lockClient.query("BEGIN");
@@ -1121,12 +1036,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
            // Recording the call while holding the same lock used by key
            // registration/revocation closes the key-check→route race.
            await lockClient.query("COMMIT");
+            if (!pendingDirectOfferIsLive(msg.callId, pending, ws) ||
+                target.ws.readyState !== WebSocket.OPEN) return;
              const ringTimer = setTimeout(() => {
                const ringing = activeCalls.get(msg.callId);
                if (!ringing || ringing.calleeSocket !== target.ws) return;
                activeCalls.delete(msg.callId);
               disposeCallWatcher(ringing);
-               stopCallBilling(msg.callId);
                setUserInCall(ringing.caller, false);
                setUserInCall(ringing.callee, false);
                const event = {
@@ -1158,6 +1074,17 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
          } finally {
            lockClient.release();
         }
+        if (!pendingDirectOfferIsLive(msg.callId, pending, ws) ||
+            target.ws.readyState !== WebSocket.OPEN) {
+          const inserted = activeCalls.get(msg.callId);
+          if (inserted) {
+            activeCalls.delete(msg.callId);
+            clearTimeout(inserted.ringTimer);
+            setUserInCall(inserted.caller, false);
+            setUserInCall(inserted.callee, false);
+          }
+          return;
+        }
         // The caller must wait for this acknowledgement before requesting its
         // channel token. It proves activeCalls already contains both authorized
         // participants and removes the HTTP-vs-WebSocket registration race.
@@ -1172,6 +1099,9 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           e2e: msg.e2e,
         });
         console.log(`[WS] 📞 ${self.username} → ${msg.to} [${msg.video ? "video" : "audio"}]`);
+        } finally {
+          finishPendingDirectOffer(msg.callId, pending);
+        }
         return;
       }
 
@@ -1274,7 +1204,6 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             deferredMedia: true,
             transport: call.transport,
           });
-          startCallBilling(msg.callId);
           return;
         }
         // Only the recorded callee may answer, and only towards the recorded caller.
@@ -1305,7 +1234,6 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             answer: msg.answer,
             transport: call.transport,
           });
-           startCallBilling(msg.callId);
         }
         return;
       }
@@ -1371,39 +1299,6 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         return;
       }
 
-       // ── SERVER-OWNED CALL BILLING HEARTBEAT ─────────────────────────────
-       if (msg.type === "call-media-state") {
-         const call = activeCalls.get(msg.callId);
-         const meter = callBilling.get(msg.callId);
-         if (!call || !meter || typeof msg.connected !== "boolean") return;
-         const now = performance.now();
-         // The authenticated participant and exact socket selected for this
-         // call must match; another tab/device cannot spoof media connectivity.
-         if (call.callerId === self.userId && call.callerSocket === ws) {
-           meter.callerConnectedAt = msg.connected ? now : null;
-         } else if (call.calleeId === self.userId && call.calleeSocket === ws) {
-           meter.calleeConnectedAt = msg.connected ? now : null;
-         } else {
-           return;
-         }
-         const continuity = sampleMediaContinuity(
-           meter,
-           now,
-           meter.callerConnectedAt,
-           meter.calleeConnectedAt,
-           MEDIA_HEARTBEAT_FRESH_MS,
-           12_000,
-         );
-         if (meter.mediaStarted && continuity.exhausted) {
-           endCallForBilling(
-             msg.callId,
-             "Cumulative media interruption allowance exhausted",
-             "MEDIA_HEARTBEAT_TIMEOUT",
-           );
-         }
-         return;
-       }
-
       // ── ICE CANDIDATE ─────────────────────────────────────────────────────
       if (msg.type === "ice-candidate") {
         const call = activeCalls.get(msg.callId);
@@ -1422,6 +1317,8 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
       // ── CALL REJECT ───────────────────────────────────────────────────────
       if (msg.type === "call-reject" || msg.type === "call-cancel") {
+        if (msg.type === "call-cancel" &&
+            cancelPendingDirectOffer(msg.callId, self.userId, ws)) return;
         // Recipient is DERIVED from the recorded call — client "to" is ignored,
         // so a participant can never target a third party.
         const call = activeCalls.get(msg.callId);
@@ -1445,11 +1342,11 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           return;
         }
         if (msg.type === "call-cancel" &&
-            (call.callerId !== self.userId || (call.status !== "ringing" && call.status !== "accepting"))) return;
+            (call.callerId !== self.userId ||
+              (call.status !== "ringing" && call.status !== "accepting" && call.status !== "accepted"))) return;
         activeCalls.delete(msg.callId);
         disposeCallWatcher(call);
         clearTimeout(call.ringTimer);
-        stopCallBilling(msg.callId);
         if (call.deferredMedia) {
           persistDeferredTerminal(
             msg.callId,
@@ -1460,8 +1357,22 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);
         setUserInCall(peerName, false);
-        if (call.callerSocket === ws) {
-          sendToUsername(call.callee, { type: "call-rejected", by: self.username, callId: msg.callId });
+        const callerEndedAccepted = msg.type === "call-cancel" &&
+          call.callerId === self.userId &&
+          call.status === "accepted";
+        if (callerEndedAccepted) {
+          if (call.callerSocket !== ws) {
+            send(call.callerSocket, { type: "call-ended", by: self.username, callId: msg.callId });
+          }
+          sendToUsername(call.callee, { type: "call-ended", by: self.username, callId: msg.callId });
+        } else if (call.callerSocket === ws) {
+          sendToUsername(call.callee, {
+            type: msg.type === "call-cancel" && call.status === "accepted"
+              ? "call-ended"
+              : "call-rejected",
+            by: self.username,
+            callId: msg.callId,
+          });
         } else {
           send(call.callerSocket, { type: "call-rejected", by: self.username, callId: msg.callId });
           sendToUsername(call.callee, { type: "call-ended", by: self.username, callId: msg.callId });
@@ -1471,13 +1382,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
 
       // ── CALL END ──────────────────────────────────────────────────────────
       if (msg.type === "call-end") {
+        if (cancelPendingDirectOffer(msg.callId, self.userId, ws)) return;
         // Recipient DERIVED from recorded call state — client "to" is ignored.
         const call = activeCalls.get(msg.callId);
         if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
         activeCalls.delete(msg.callId);
         disposeCallWatcher(call);
         clearTimeout(call.ringTimer);
-        stopCallBilling(msg.callId);
         if (call.deferredMedia) {
           persistDeferredTerminal(
             msg.callId,
@@ -1543,6 +1454,9 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       cancelSessionExpiry();
       untrackSessionSocket(sessionId, ws);
       if (!self) return;
+      for (const pending of pendingDirectOffers.values()) {
+        if (pending.callerSocket === ws) pending.canceled = true;
+      }
       // Only calls owned by this exact socket end. Closing an older duplicate
       // tab cannot tear down a call occurring in a newer one.
       for (const [callId, call] of activeCalls) {
@@ -1556,7 +1470,6 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         activeCalls.delete(callId);
         disposeCallWatcher(call);
         clearTimeout(call.ringTimer);
-        stopCallBilling(callId);
         if (call.deferredMedia) {
           persistDeferredTerminal(
             callId,

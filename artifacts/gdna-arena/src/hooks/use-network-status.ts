@@ -1,5 +1,5 @@
 /**
- * use-network-status — a SCOPED network listener owned by the credit/network UI.
+ * use-network-status — a scoped network listener for call and messaging UI.
  *
  * Reports the browser's actual connectivity from navigator.onLine and, when the
  * Network Information API is present, its .type / .effectiveType. It never
