@@ -14,6 +14,7 @@ describe("notification call actions", () => {
     expect(readNotificationCallAction("?callId=call_1")).toBeNull(); // passive missed-call click
     expect(readNotificationCallAction("?callId=call_1&action=ring")).toBeNull();
     expect(readNotificationCallAction("?callId=../other&action=answer")).toBeNull();
+    expect(readNotificationCallAction("?answer=call_1")).toEqual({ callId: "call_1", action: "answer" });
     expect(readNotificationCallResume("?callId=call_1")).toEqual({ callId: "call_1" });
     expect(readNotificationCallResume("?callId=../other")).toBeNull();
   });

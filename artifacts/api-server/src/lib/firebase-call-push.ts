@@ -12,6 +12,10 @@ const SWEEP_MAX_PAGES = 5;
 const INCOMING_PUSH_TTL_SECONDS = 30;
 const MISSED_PUSH_TTL_SECONDS = 86_400;
 
+export function isValidCallId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
+
 type CallType = "video" | "voice";
 type CallStatus = "ringing" | "answered" | "declined" | "missed";
 type DeferredTerminalStatus = "declined" | "missed" | "ended";
@@ -29,6 +33,25 @@ export interface DeferredCallInvitation {
   type: CallType;
   createdAt?: Date;
   expiresAt?: Date;
+}
+
+export type DeferredCallDeclineOutcome =
+  | "declined"
+  | "expired"
+  | "finished"
+  | "not-found"
+  | "not-callee";
+
+export interface DeferredCallDeclineResult {
+  callId: string;
+  outcome: DeferredCallDeclineOutcome;
+  changed: boolean;
+  status?: CallStatus;
+  callerId?: number;
+  callerName?: string;
+  callerAvatar?: string | null;
+  calleeId?: number;
+  type?: CallType;
 }
 
 interface FirebaseServices {
@@ -128,13 +151,27 @@ function asPublicConfig(): PublicFirebaseConfig | null {
   }
 }
 
+function configuredServiceAccount(): { raw: string | null; configured: boolean } {
+  // FIREBASE_SERVICE_ACCOUNT is the current secret name. Deliberately select
+  // it whenever it exists, even when malformed, so an invalid replacement
+  // cannot silently fall back to an older credential.
+  if (typeof process.env.FIREBASE_SERVICE_ACCOUNT === "string") {
+    return { raw: process.env.FIREBASE_SERVICE_ACCOUNT.trim(), configured: true };
+  }
+  if (typeof process.env.FIREBASE_SERVICE_ACCOUNT_JSON === "string") {
+    return { raw: process.env.FIREBASE_SERVICE_ACCOUNT_JSON.trim(), configured: true };
+  }
+  return { raw: null, configured: false };
+}
+
 function readServiceAccount(): Record<string, unknown> | null {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  const { raw } = configuredServiceAccount();
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
-    return typeof value.project_id === "string" && typeof value.client_email === "string" &&
-      typeof value.private_key === "string"
+    return typeof value.project_id === "string" && value.project_id.trim().length > 0 &&
+      typeof value.client_email === "string" && value.client_email.trim().length > 0 &&
+      typeof value.private_key === "string" && value.private_key.trim().length > 0
       ? value
       : null;
   } catch {
@@ -143,7 +180,10 @@ function readServiceAccount(): Record<string, unknown> | null {
 }
 
 function adminConfigurationProblem(): string | null {
-  if (!readServiceAccount()) return "Firebase service account is not configured";
+  const configured = configuredServiceAccount();
+  if (!configured.configured) return "Firebase service account is not configured";
+  if (!configured.raw) return "Firebase service account is invalid";
+  if (!readServiceAccount()) return "Firebase service account is invalid";
   return null;
 }
 
@@ -216,7 +256,11 @@ function missedRef(db: Firestore, userId: number, callId: string) {
 
 function invitationPayload(invitation: DeferredCallInvitation) {
   const createdAt = invitation.createdAt ?? new Date();
-  const expiresAt = invitation.expiresAt ?? new Date(createdAt.getTime() + DEFERRED_INVITATION_TTL_MS);
+  const maximumExpiry = new Date(createdAt.getTime() + DEFERRED_INVITATION_TTL_MS);
+  const requestedExpiry = invitation.expiresAt?.getTime();
+  const expiresAt = Number.isFinite(requestedExpiry)
+    ? new Date(Math.min(requestedExpiry as number, maximumExpiry.getTime()))
+    : maximumExpiry;
   // Keep the Firestore contract independent from the WebSocket's caller/callee
   // vocabulary. The latter remains internal transport state.
   return {
@@ -403,6 +447,7 @@ export async function setCallPushFocus(
 }
 
 export async function createDeferredCallInvitation(invitation: DeferredCallInvitation): Promise<DeferredCallInvitation> {
+  if (!isValidCallId(invitation.callId)) throw new CallPushError("Invalid call ID");
   const { db, messaging, auth } = await loadServices();
   const record = invitationPayload(invitation);
   try {
@@ -417,6 +462,11 @@ export async function createDeferredCallInvitation(invitation: DeferredCallInvit
     invitation.calleeId,
     {
       type: "INCOMING_CALL",
+      callId: invitation.callId,
+      fromName: invitation.caller.name,
+      title: `مكالمة واردة من ${invitation.caller.name}`,
+      // Keep the established aliases while clients migrate to the canonical
+      // callId/fromName fields.
       callerId: String(invitation.caller.id),
       callerName: invitation.caller.name,
       callerAvatar: invitation.caller.avatar ?? "",
@@ -431,20 +481,216 @@ export async function createDeferredCallInvitation(invitation: DeferredCallInvit
 export async function acceptDeferredCallInvitation(callId: string, calleeId: number): Promise<boolean> {
   const { db, messaging, auth } = await loadServices();
   try {
+    let callerName = "";
     const accepted = await db.runTransaction(async transaction => {
       const ref = callRef(db, callId);
       const snapshot = await transaction.get(ref);
       const data = snapshot.data();
       if (!data || data.toId !== calleeId || data.status !== "ringing" ||
         dateValue(data.expiresAt, new Date(0)).getTime() <= Date.now()) return false;
+      callerName = typeof data.fromName === "string" ? data.fromName : "";
       transaction.update(ref, { status: "answered", answeredAt: new Date() });
       return true;
     });
-    // The requested basic service worker displays every push. Terminal
-    // synchronization stays on Firestore/WS to avoid false missed notifications.
+    if (accepted) {
+      await sendPush(
+        { db, messaging, auth },
+        calleeId,
+        {
+          type: "CALL_ENDED",
+          callId,
+          fromName: callerName,
+          title: "انتهت المكالمة",
+          // Retain aliases consumed by existing workers/clients.
+          roomId: callId,
+          callerName,
+          body: "تم قبول المكالمة",
+        },
+        undefined,
+        true,
+        INCOMING_PUSH_TTL_SECONDS,
+      );
+    }
     return accepted;
   } catch {
     throw new CallPushError("Firebase invitation acceptance failed");
+  }
+}
+
+export function evaluateDeferredCallDecline(
+  input: {
+    calleeId: number;
+    invitationCalleeId: number;
+    status: CallStatus;
+    expiresAt: Date;
+  },
+  now = new Date(),
+): Pick<DeferredCallDeclineResult, "outcome" | "changed" | "status"> {
+  if (input.calleeId !== input.invitationCalleeId) {
+    return { outcome: "not-callee", changed: false };
+  }
+  if (input.status !== "ringing") {
+    return { outcome: "finished", changed: false, status: input.status };
+  }
+  // A stale decline is also the first opportunity to close an invitation
+  // after a browser missed its 30-second timer. Mark it missed, never
+  // declined, and never reopen a terminal invitation.
+  if (input.expiresAt.getTime() <= now.getTime()) {
+    return { outcome: "expired", changed: true, status: "missed" };
+  }
+  return { outcome: "declined", changed: true, status: "declined" };
+}
+
+function canonicalInvitation(
+  callId: string,
+  data: Record<string, unknown>,
+): DeferredCallInvitation | null {
+  if (typeof data.fromId !== "number" || !Number.isSafeInteger(data.fromId) ||
+    typeof data.fromName !== "string" || typeof data.toId !== "number" ||
+    !Number.isSafeInteger(data.toId) ||
+    (data.type !== "video" && data.type !== "voice")) return null;
+  return {
+    callId,
+    caller: {
+      id: data.fromId,
+      name: data.fromName,
+      avatar: typeof data.fromAvatar === "string" ? data.fromAvatar : null,
+    },
+    calleeId: data.toId,
+    type: data.type,
+    createdAt: dateValue(data.createdAt),
+    expiresAt: dateValue(data.expiresAt, new Date(0)),
+  };
+}
+
+function canonicalStatus(value: unknown): CallStatus {
+  return value === "ringing" || value === "answered" || value === "declined" || value === "missed"
+    ? value
+    : "answered";
+}
+
+function missedCallPayload(invitation: DeferredCallInvitation, status: "declined" | "missed") {
+  return {
+    fromId: invitation.caller.id,
+    fromName: invitation.caller.name,
+    fromAvatar: invitation.caller.avatar,
+    type: invitation.type,
+    time: new Date(),
+    seen: false,
+    // Legacy aliases are intentionally retained in inbox documents so older
+    // clients can continue reading the same durable record.
+    caller: invitation.caller,
+    isSeen: false,
+    status,
+  };
+}
+
+/**
+ * Atomically declines the canonical ringing invitation for its recorded
+ * callee. This is shared by the HTTP action and WebSocket rejection path so a
+ * stale tab cannot race a second device into reviving or duplicating a call.
+ */
+export async function declineDeferredCallInvitation(
+  callId: string,
+  calleeId: number,
+): Promise<DeferredCallDeclineResult> {
+  const { db, messaging, auth } = await loadServices();
+  try {
+    const result = await db.runTransaction<DeferredCallDeclineResult>(async transaction => {
+      const ref = callRef(db, callId);
+      const snapshot = await transaction.get(ref);
+      const data = snapshot.data();
+      if (!data) return { callId, outcome: "not-found", changed: false };
+      const invitation = canonicalInvitation(callId, data);
+      if (!invitation) return { callId, outcome: "not-found", changed: false };
+
+      const decision = evaluateDeferredCallDecline({
+        calleeId,
+        invitationCalleeId: invitation.calleeId,
+        status: canonicalStatus(data.status),
+        expiresAt: invitation.expiresAt ?? new Date(0),
+      });
+      if (decision.outcome === "not-callee") {
+        return {
+          callId,
+          outcome: decision.outcome,
+          changed: false,
+          callerId: invitation.caller.id,
+          callerName: invitation.caller.name,
+          callerAvatar: invitation.caller.avatar,
+          calleeId: invitation.calleeId,
+          type: invitation.type,
+        };
+      }
+      if (!decision.changed || !decision.status) {
+        return {
+          callId,
+          outcome: decision.outcome,
+          changed: false,
+          status: canonicalStatus(data.status),
+          callerId: invitation.caller.id,
+          callerName: invitation.caller.name,
+          callerAvatar: invitation.caller.avatar,
+          calleeId: invitation.calleeId,
+          type: invitation.type,
+        };
+      }
+
+      // Read the inbox item before any writes, as required by Firestore
+      // transactions. A repeated/racing transition preserves an existing
+      // seen=true acknowledgement and never creates a second record.
+      const inboxRef = missedRef(db, invitation.calleeId, callId);
+      const inboxSnapshot = await transaction.get(inboxRef);
+      const endedAt = new Date();
+      transaction.update(ref, {
+        status: decision.status,
+        endedAt,
+        ...(decision.outcome === "expired" ? { expiredAt: endedAt } : {}),
+      });
+      const inboxStatus = decision.status === "missed" || decision.status === "declined"
+        ? decision.status
+        : "missed";
+      const inboxPayload = missedCallPayload(invitation, inboxStatus);
+      if (!inboxSnapshot.exists) {
+        transaction.create(inboxRef, inboxPayload);
+      } else {
+        transaction.set(inboxRef, inboxPayload, { merge: true });
+      }
+      return {
+        callId,
+        outcome: decision.outcome,
+        changed: true,
+        status: decision.status,
+        callerId: invitation.caller.id,
+        callerName: invitation.caller.name,
+        callerAvatar: invitation.caller.avatar,
+        calleeId: invitation.calleeId,
+        type: invitation.type,
+      };
+    });
+    if (result.changed && (result.status === "declined" || result.status === "missed") &&
+      result.calleeId !== undefined && result.callerName !== undefined) {
+      await sendPush(
+        { db, messaging, auth },
+        result.calleeId,
+        {
+          type: "MISSED_CALL",
+          callId,
+          fromName: result.callerName,
+          title: `مكالمة فائتة من ${result.callerName}`,
+          // Retain aliases consumed by existing workers/clients.
+          roomId: callId,
+          callerName: result.callerName,
+          body: "لديك مكالمة فائتة",
+        },
+        undefined,
+        true,
+        MISSED_PUSH_TTL_SECONDS,
+      );
+    }
+    return result;
+  } catch {
+    throw new CallPushError("Firebase call status update failed");
   }
 }
 
@@ -454,52 +700,123 @@ export async function finishDeferredCallInvitation(
 ): Promise<boolean> {
   const { db, messaging, auth } = await loadServices();
   try {
-    const changed = await db.runTransaction(async transaction => {
+    const transition = await db.runTransaction(async transaction => {
       const ref = callRef(db, invitation.callId);
       const snapshot = await transaction.get(ref);
       const data = snapshot.data();
-      if (!data || data.fromId !== invitation.caller.id || data.toId !== invitation.calleeId) return false;
-      if (data.status !== "ringing" &&
-        !(data.status === "answered" && status === "ended")) return false;
-      transaction.update(ref, durableTerminalUpdate(status, new Date()));
-      if (status === "declined" || status === "missed") {
-        transaction.set(missedRef(db, invitation.calleeId, invitation.callId), {
-          fromId: invitation.caller.id,
-          fromName: invitation.caller.name,
-          fromAvatar: invitation.caller.avatar,
-          type: invitation.type,
-          time: new Date(),
-          seen: false,
-          // Legacy aliases are intentionally retained in inbox documents so
-          // older clients can continue reading the same durable record.
-          caller: invitation.caller,
-          isSeen: false,
-          status,
-        });
+      if (!data || data.fromId !== invitation.caller.id || data.toId !== invitation.calleeId) {
+        return { changed: false, sendMissed: false };
       }
-      return true;
+      // A timeout/caller-close can race a callee acceptance transaction. The
+      // invitation is already answered in that race: record only endedAt,
+      // leave status=answered, and never create a false missed-call inbox item.
+      if (data.status === "answered" && status === "missed") {
+        if (data.endedAt !== undefined && data.endedAt !== null) {
+          return { changed: false, sendMissed: false };
+        }
+        transaction.update(ref, { endedAt: new Date() });
+        return { changed: true, sendMissed: false };
+      }
+      if (data.status === "answered" && status === "ended" &&
+        data.endedAt !== undefined && data.endedAt !== null) {
+        return { changed: false, sendMissed: false };
+      }
+      if (data.status !== "ringing" && !(data.status === "answered" && status === "ended")) {
+        return { changed: false, sendMissed: false };
+      }
+      if (status === "declined" || status === "missed") {
+        const inboxRef = missedRef(db, invitation.calleeId, invitation.callId);
+        const inboxSnapshot = await transaction.get(inboxRef);
+        transaction.update(ref, durableTerminalUpdate(status, new Date()));
+        if (!inboxSnapshot.exists) {
+          transaction.create(inboxRef, missedCallPayload(invitation, status));
+        } else {
+          transaction.set(inboxRef, missedCallPayload(invitation, status), { merge: true });
+        }
+      } else {
+        transaction.update(ref, durableTerminalUpdate(status, new Date()));
+      }
+      return { changed: true, sendMissed: status === "declined" || status === "missed" };
     });
-    if (!changed) return false;
-    if (status === "declined" || status === "missed") {
+    if (!transition.changed) return false;
+    if (transition.sendMissed) {
       await sendPush(
         { db, messaging, auth },
         invitation.calleeId,
         {
           type: "MISSED_CALL",
+          callId: invitation.callId,
+          fromName: invitation.caller.name,
+          title: `مكالمة فائتة من ${invitation.caller.name}`,
+          // Legacy aliases remain for existing workers/clients.
           roomId: invitation.callId,
           callerName: invitation.caller.name,
-          title: `مكالمة فائتة من ${invitation.caller.name}`,
           body: "لديك مكالمة فائتة",
         },
         undefined,
         true,
         MISSED_PUSH_TTL_SECONDS,
       );
+    } else if (status === "ended") {
+      await sendPush(
+        { db, messaging, auth },
+        invitation.calleeId,
+        {
+          type: "CALL_ENDED",
+          callId: invitation.callId,
+          fromName: invitation.caller.name,
+          title: "انتهت المكالمة",
+          // Legacy aliases remain for existing workers/clients.
+          roomId: invitation.callId,
+          callerName: invitation.caller.name,
+          body: "انتهت المكالمة",
+        },
+        undefined,
+        true,
+        INCOMING_PUSH_TTL_SECONDS,
+      );
     }
     return true;
   } catch {
     throw new CallPushError("Firebase call status update failed");
   }
+}
+
+export type DeferredCallWatcherStatus = "declined" | "missed" | "ended";
+
+/**
+ * Watches one owner-instance invitation document. This is deliberately
+ * per-call rather than a process-wide query: HTTP declines can be handled by
+ * another API instance, while the owner still needs prompt WS cleanup.
+ */
+export async function watchDeferredCallInvitation(
+  callId: string,
+  onTerminal: (status: DeferredCallWatcherStatus) => void,
+): Promise<() => void> {
+  const { db } = await loadServices();
+  let disposed = false;
+  const unsubscribe = callRef(db, callId).onSnapshot(snapshot => {
+    if (disposed || !snapshot.exists) return;
+    const data = snapshot.data();
+    if (!data) return;
+    if (data.status === "declined" || data.status === "missed") {
+      onTerminal(data.status);
+      return;
+    }
+    // `answered` alone is still an active call. Only its explicit endedAt
+    // marker is a durable terminal event.
+    if (data.status === "answered" && data.endedAt !== undefined && data.endedAt !== null) {
+      onTerminal("ended");
+    }
+  }, () => {
+    // Firestore/WS remain authoritative if a transient watch stream fails.
+    // The bounded per-call listener is intentionally not replaced by polling.
+  });
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    unsubscribe();
+  };
 }
 
 export async function listMissedCalls(userId: number): Promise<{

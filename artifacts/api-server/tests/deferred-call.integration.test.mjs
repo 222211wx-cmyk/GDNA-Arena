@@ -160,7 +160,7 @@ function deferredOffer(callId, to, device) {
 const validOffer = { type: "offer", sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=test\r\nt=0 0\r\n" };
 const validAnswer = { type: "answer", sdp: "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=test\r\nt=0 0\r\n" };
 
-test("deferred WebRTC invitations authenticate, bind one callee, and preserve disabled-Firebase WS fallback", async t => {
+test("deferred WebRTC invitations authenticate, bind one callee, and support Firestore or WS fallback", async t => {
   const caller = await registerWithSession(unique("caller"));
   const callee = await registerWithSession(unique("callee"));
   const outsider = await registerWithSession(unique("outsider"));
@@ -175,7 +175,9 @@ test("deferred WebRTC invitations authenticate, bind one callee, and preserve di
   });
 
   const config = await responseJson(await request("/call-push/config"), 200);
-  assert.equal(config.enabled, false, "this no-credential integration suite exercises the explicit WS fallback");
+  assert.equal(typeof config.enabled, "boolean");
+  // Configured deployments use Firestore as canonical state; local runs
+  // without Firebase web configuration exercise the bounded WS fallback.
   await activateReserve(caller.cookie);
   const key = await registerCalleeKey(callee.cookie, unique("device"));
 
@@ -243,6 +245,53 @@ test("deferred WebRTC invitations authenticate, bind one callee, and preserve di
   await calleeFirst.waitFor(message => message.type === "call-ended" && message.callId === firstId);
   await calleeSecond.waitFor(message => message.type === "call-ended" && message.callId === firstId);
 
+  // HTTP decline is session-bound, callee-owned, and origin-protected. Keep
+  // the call ringing while each negative assertion runs, then verify the
+  // legitimate callee action closes every tab and the caller.
+  const httpDeclineId = unique("call");
+  callerWs.send(deferredOffer(httpDeclineId, callee.username, key));
+  await calleeFirst.waitFor(message => message.type === "call-incoming" && message.callId === httpDeclineId);
+
+  await responseJson(await request(`/call/decline?id=${httpDeclineId}`, {
+    method: "POST",
+  }), 401);
+  await responseJson(await request(`/call/decline?id=${httpDeclineId}`, {
+    method: "POST",
+    headers: { cookie: outsider.cookie },
+  }), 403);
+  await responseJson(await request(`/call/decline?id=${httpDeclineId}`, {
+    method: "POST",
+    headers: { cookie: callee.cookie, origin: "https://attacker.invalid" },
+  }), 403);
+  await responseJson(await request("/call/decline?id=invalid%20call%20id", {
+    method: "POST",
+    headers: { cookie: callee.cookie },
+  }), 400);
+
+  const declinedHttp = await responseJson(await request(`/call/decline?id=${httpDeclineId}`, {
+    method: "POST",
+    headers: { cookie: callee.cookie, origin: new URL(apiBaseUrl).origin },
+  }), 200);
+  assert.equal(declinedHttp.ok, true);
+  assert.equal(declinedHttp.callId, httpDeclineId);
+  assert.equal(declinedHttp.status, "declined");
+  assert.equal(declinedHttp.changed, true);
+  const callerDeclined = await callerWs.waitFor(
+    message => message.type === "call-rejected" && message.callId === httpDeclineId,
+  );
+  assert.equal(callerDeclined.callId, httpDeclineId);
+  await calleeFirst.waitFor(message => message.type === "call-ended" && message.callId === httpDeclineId);
+  await calleeSecond.waitFor(message => message.type === "call-ended" && message.callId === httpDeclineId);
+
+  const repeatedDecline = await responseJson(await request(`/call/decline?id=${httpDeclineId}`, {
+    method: "POST",
+    headers: { cookie: callee.cookie },
+  }), 200);
+  assert.equal(repeatedDecline.ok, true);
+  assert.equal(repeatedDecline.callId, httpDeclineId);
+  assert.equal(repeatedDecline.status, "declined");
+  assert.equal(repeatedDecline.changed, false);
+
   const declinedId = unique("call");
   callerWs.send(deferredOffer(declinedId, callee.username, key));
   await calleeFirst.waitFor(message => message.type === "call-incoming" && message.callId === declinedId);
@@ -268,24 +317,26 @@ test("deferred WebRTC invitations authenticate, bind one callee, and preserve di
   await calleeFirst.waitFor(message => message.type === "call-ended" && message.callId === timeoutId && message.code === "RING_TIMEOUT");
   await calleeSecond.waitFor(message => message.type === "call-ended" && message.callId === timeoutId && message.code === "RING_TIMEOUT");
 
-  assert.ok(process.env.DATABASE_URL, "DATABASE_URL is required for legacy missed-call verification");
-  const db = new Client({ connectionString: process.env.DATABASE_URL });
-  await db.connect();
-  t.after(() => db.end());
-  // Ring-stop delivery must not wait for database I/O. Allow the separately
-  // persisted terminal event to finish before asserting durable history.
-  let missed;
-  for (let attempt = 0; attempt < 40; attempt++) {
-    missed = await db.query(
-      `SELECT status, count(*)::int AS count
-       FROM call_history
-       WHERE caller_id = $1 AND callee_id = $2 AND status = 'missed'
-       GROUP BY status`,
-      [caller.id, callee.id],
-    );
-    if (missed.rows[0]?.count >= 2) break;
-    await new Promise(resolve => setTimeout(resolve, 50));
+  if (!config.enabled) {
+    assert.ok(process.env.DATABASE_URL, "DATABASE_URL is required for legacy missed-call verification");
+    const db = new Client({ connectionString: process.env.DATABASE_URL });
+    await db.connect();
+    t.after(() => db.end());
+    // Ring-stop delivery must not wait for database I/O. Allow the separately
+    // persisted terminal event to finish before asserting durable history.
+    let missed;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      missed = await db.query(
+        `SELECT status, count(*)::int AS count
+         FROM call_history
+         WHERE caller_id = $1 AND callee_id = $2 AND status = 'missed'
+         GROUP BY status`,
+        [caller.id, callee.id],
+      );
+      if (missed.rows[0]?.count >= 2) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(missed.rows[0]?.status, "missed");
+    assert.ok(missed.rows[0]?.count >= 2, "declined and timeout calls must use the legacy missed-call path");
   }
-  assert.equal(missed.rows[0]?.status, "missed");
-  assert.ok(missed.rows[0]?.count >= 2, "declined and timeout calls must use the legacy missed-call path");
 });

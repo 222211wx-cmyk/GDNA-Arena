@@ -1696,6 +1696,7 @@ export function useCall(user: { id: number; username: string } | null) {
     const url = new URL(window.location.href);
     url.searchParams.delete("callId");
     url.searchParams.delete("action");
+    url.searchParams.delete("answer");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 

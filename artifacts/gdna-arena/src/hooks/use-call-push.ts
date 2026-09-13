@@ -50,7 +50,7 @@ export function useCallPush(
     setFirebaseError(null);
     setMissedCallsLoading(true);
     void createCallFirebase(
-      callId => resumeRef.current(callId),
+      (callId, _fromName) => resumeRef.current(callId),
       (callId, status) => terminalRef.current(callId, status),
       items => {
         if (!cancelled) {

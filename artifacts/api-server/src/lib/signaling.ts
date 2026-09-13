@@ -16,11 +16,15 @@ import {
   acceptDeferredCallInvitation,
   CallPushError,
   createDeferredCallInvitation,
+  declineDeferredCallInvitation,
   durableTerminalStatus,
   finishDeferredCallInvitation,
   getCallPushStatus,
   isFirebaseCallPushConfigured,
+  watchDeferredCallInvitation,
+  type DeferredCallDeclineResult,
   type DeferredCallInvitation,
+  type DeferredCallWatcherStatus,
 } from "./firebase-call-push";
 
 // ── WebRTC type stubs (browser DOM types not present in Node tsconfig) ────────
@@ -80,9 +84,27 @@ interface ActiveCall {
   callerSocket: WebSocket; calleeSocket: WebSocket | null; startedAt: Date;
   transport: CallTransport; ringTimer: NodeJS.Timeout;
   deferredMedia: boolean; firebasePersisted: boolean; status: "ringing" | "accepting" | "accepted"; callerAvatar: string | null;
-  type: "video" | "voice"; expiresAt?: Date;
+  type: "video" | "voice"; expiresAt?: Date; firebaseWatcher?: () => void; terminalEventSent?: boolean;
 }
 const activeCalls = new Map<string, ActiveCall>();
+// Firebase-disabled development deployments still need retry-safe HTTP
+// responses after the in-memory call is removed. Keep only a bounded terminal
+// cache; configured deployments use Firestore as the source of truth instead.
+const localTerminalCalls = new Map<string, DeferredCallDeclineResult>();
+
+function rememberLocalTerminalCall(callId: string, result: DeferredCallDeclineResult): void {
+  localTerminalCalls.set(callId, result);
+  if (localTerminalCalls.size > 10_000) {
+    const oldest = localTerminalCalls.keys().next().value;
+    if (oldest) localTerminalCalls.delete(oldest);
+  }
+}
+
+function disposeCallWatcher(call: ActiveCall): void {
+  const watcher = call.firebaseWatcher;
+  call.firebaseWatcher = undefined;
+  watcher?.();
+}
 
 function deferredInvitation(callId: string, call: ActiveCall): DeferredCallInvitation | null {
   if (!call.deferredMedia || call.callerId === null || call.calleeId === null) return null;
@@ -100,6 +122,17 @@ function persistDeferredTerminal(callId: string, call: ActiveCall, status: "decl
   const invitation = deferredInvitation(callId, call);
   if (invitation && call.firebasePersisted) void finishDeferredCallInvitation(invitation, status).catch(() => {});
   if (invitation && !call.firebasePersisted && (status === "declined" || status === "missed")) {
+    rememberLocalTerminalCall(callId, {
+      callId,
+      outcome: status === "missed" ? "expired" : "declined",
+      changed: true,
+      status,
+      callerId: call.callerId ?? undefined,
+      callerName: call.caller,
+      callerAvatar: call.callerAvatar,
+      calleeId: call.calleeId ?? undefined,
+      type: call.type,
+    });
     void persistLegacyDeferredMissedCall(callId, call);
   }
 }
@@ -170,6 +203,7 @@ function endCallForBilling(callId: string, reason: string, code: string): void {
   const call = activeCalls.get(callId);
   stopCallBilling(callId);
   if (!call) return;
+  disposeCallWatcher(call);
   clearTimeout(call.ringTimer);
   activeCalls.delete(callId);
   persistDeferredTerminal(callId, call, "ended");
@@ -281,6 +315,7 @@ setInterval(() => {
   for (const [id, call] of activeCalls) {
     if (call.startedAt.getTime() < cutoff) {
       activeCalls.delete(id);
+      disposeCallWatcher(call);
       clearTimeout(call.ringTimer);
       stopCallBilling(id);
     }
@@ -449,6 +484,163 @@ async function persistedCallerAvatar(userId: number): Promise<string | null> {
 // ── Broadcast a notification payload to a specific authenticated userId ────────
 export function broadcastToUser(userId: number, data: object) {
   for (const client of byUserId.get(userId) ?? []) send(client.ws, data);
+}
+
+function clearActiveCall(callId: string, call: ActiveCall): void {
+  if (activeCalls.get(callId) !== call) return;
+  activeCalls.delete(callId);
+  disposeCallWatcher(call);
+  clearTimeout(call.ringTimer);
+  stopCallBilling(callId);
+  setUserInCall(call.caller, false);
+  setUserInCall(call.callee, false);
+}
+
+function broadcastDeclinedCall(
+  callId: string,
+  result: DeferredCallDeclineResult,
+  call?: ActiveCall,
+): void {
+  const callerId = result.callerId ?? call?.callerId;
+  const calleeId = result.calleeId ?? call?.calleeId;
+  const callerName = result.callerName ?? call?.caller;
+  const calleeName = call?.callee;
+  if (result.status === "declined") {
+    const callerEvent = { type: "call-rejected", by: calleeName ?? "callee", callId };
+    if (callerId !== undefined && callerId !== null) broadcastToUser(callerId, callerEvent);
+    const calleeEvent = { type: "call-ended", by: calleeName ?? "callee", callId };
+    if (calleeId !== undefined && calleeId !== null) broadcastToUser(calleeId, calleeEvent);
+    return;
+  }
+  if (result.status === "missed" || result.outcome === "expired") {
+    const event = {
+      type: "call-ended",
+      by: "timeout",
+      callId,
+      code: "RING_TIMEOUT",
+      reason: "Call was not answered within 30 seconds",
+    };
+    if (callerId !== undefined && callerId !== null) broadcastToUser(callerId, event);
+    if (calleeId !== undefined && calleeId !== null) broadcastToUser(calleeId, event);
+  }
+  void callerName;
+}
+
+function handleDurableCallTerminal(callId: string, status: DeferredCallWatcherStatus): void {
+  const call = activeCalls.get(callId);
+  if (!call || !call.firebasePersisted) return;
+  if (call.terminalEventSent) return;
+  call.terminalEventSent = true;
+  const result: DeferredCallDeclineResult = {
+    callId,
+    outcome: status === "declined" ? "declined" : status === "missed" ? "expired" : "finished",
+    changed: true,
+    status: status === "ended" ? "answered" : status,
+    callerId: call.callerId ?? undefined,
+    callerName: call.caller,
+    callerAvatar: call.callerAvatar,
+    calleeId: call.calleeId ?? undefined,
+    type: call.type,
+  };
+  clearActiveCall(callId, call);
+  if (status === "ended") {
+    const event = { type: "call-ended", by: call.callee, callId };
+    if (result.callerId !== undefined) broadcastToUser(result.callerId, event);
+    if (result.calleeId !== undefined) broadcastToUser(result.calleeId, event);
+  } else {
+    broadcastDeclinedCall(callId, result, call);
+  }
+}
+
+function watchDurableInvitation(callId: string, call: ActiveCall): void {
+  if (!call.firebasePersisted) return;
+  void watchDeferredCallInvitation(callId, terminal => {
+    handleDurableCallTerminal(callId, terminal);
+  }).then(stop => {
+    if (activeCalls.get(callId) !== call || !call.firebasePersisted) {
+      stop();
+      return;
+    }
+    call.firebaseWatcher = stop;
+  }).catch(() => {});
+}
+
+/**
+ * Authenticated HTTP and WebSocket callee rejection share this path. The
+ * Firestore transaction runs before in-memory cleanup/broadcast, then every
+ * active tab for both recorded participants receives the same terminal event.
+ */
+export async function declineCallForUser(
+  callId: string,
+  userId: number,
+): Promise<DeferredCallDeclineResult> {
+  const call = activeCalls.get(callId);
+  if (call && (!call.deferredMedia || call.calleeId !== userId)) {
+    return { callId, outcome: "not-callee", changed: false, calleeId: call.calleeId ?? undefined };
+  }
+  if (call && call.status !== "ringing") {
+    return {
+      callId,
+      outcome: "finished",
+      changed: false,
+      status: "answered",
+      callerId: call.callerId ?? undefined,
+      callerName: call.caller,
+      callerAvatar: call.callerAvatar,
+      calleeId: call.calleeId ?? undefined,
+      type: call.type,
+    };
+  }
+  const localTerminal = localTerminalCalls.get(callId);
+  if (!call && localTerminal) {
+    if (localTerminal.calleeId !== undefined && localTerminal.calleeId !== userId) {
+      return { callId, outcome: "not-callee", changed: false, calleeId: localTerminal.calleeId };
+    }
+    return { ...localTerminal, outcome: "finished", changed: false };
+  }
+
+  let result: DeferredCallDeclineResult;
+  if (call?.firebasePersisted || isFirebaseCallPushConfigured()) {
+    result = await declineDeferredCallInvitation(callId, userId);
+  } else if (call) {
+    // The explicit Firebase-disabled deployment keeps the established
+    // in-memory/legacy missed-call path. It still enforces ownership and
+    // removes the call before broadcasting, so a stale tab cannot revive it.
+    const expired = call.expiresAt !== undefined && call.expiresAt.getTime() <= Date.now();
+    result = {
+      callId,
+      outcome: expired ? "expired" : "declined",
+      changed: true,
+      status: expired ? "missed" : "declined",
+      callerId: call.callerId ?? undefined,
+      callerName: call.caller,
+      callerAvatar: call.callerAvatar,
+      calleeId: call.calleeId ?? undefined,
+      type: call.type,
+    };
+    rememberLocalTerminalCall(callId, result);
+  } else {
+    // A process that restarted cannot authoritatively decline a call without
+    // its durable Firestore record. Surface the precise readiness failure
+    // rather than pretending that cloud state was updated.
+    result = await declineDeferredCallInvitation(callId, userId);
+  }
+
+  // A finished answered call must remain alive; only a canonical declined or
+  // expired/missed ringing record can clear the local ring state.
+  const persistLegacy = call && result.changed && !call.firebasePersisted &&
+    (result.status === "declined" || result.status === "missed") && call.status === "ringing";
+  const terminalRing = result.status === "declined" || result.status === "missed";
+  if (call && call.status === "ringing" && (result.changed || terminalRing)) {
+    clearActiveCall(callId, call);
+  }
+  const shouldBroadcast = call ? !call.terminalEventSent : true;
+  if (call) call.terminalEventSent = true;
+  if (result.changed && shouldBroadcast) broadcastDeclinedCall(callId, result, call);
+  // Keep the legacy no-Firebase fallback durable before the HTTP action
+  // resolves, but only after in-memory cleanup and broadcasts are immediate.
+  if (persistLegacy) await persistLegacyDeferredMissedCall(callId, call);
+  return result;
 }
 
 // An upgraded WebSocket otherwise remains authenticated after its backing HTTP
@@ -738,6 +930,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               const ringing = activeCalls.get(msg.callId);
               if (!ringing || ringing.status !== "ringing") return;
               activeCalls.delete(msg.callId);
+              disposeCallWatcher(ringing);
               stopCallBilling(msg.callId);
               persistDeferredTerminal(msg.callId, ringing, "missed");
               setUserInCall(ringing.caller, false);
@@ -747,7 +940,8 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               sendToUsername(ringing.callee, event);
             }, Math.max(1, invitation.expiresAt!.getTime() - Date.now()));
             ringTimer.unref?.();
-            activeCalls.set(msg.callId, {
+            localTerminalCalls.delete(msg.callId);
+            const activeCall: ActiveCall = {
               caller: self.username,
               callee: callee.username.toLowerCase(),
               callerId: self.userId,
@@ -763,7 +957,9 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               callerAvatar,
               type: invitation.type,
               expiresAt: invitation.expiresAt,
-            });
+            };
+            activeCalls.set(msg.callId, activeCall);
+            watchDurableInvitation(msg.callId, activeCall);
             setUserInCall(self.username, true);
             setUserInCall(callee.username, true);
             send(ws, { type: "call-ready", callId: msg.callId, deferredMedia: true, expiresAt: invitation.expiresAt!.toISOString() });
@@ -930,6 +1126,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
                const ringing = activeCalls.get(msg.callId);
                if (!ringing || ringing.calleeSocket !== target.ws) return;
                activeCalls.delete(msg.callId);
+              disposeCallWatcher(ringing);
                stopCallBilling(msg.callId);
                setUserInCall(ringing.caller, false);
                setUserInCall(ringing.callee, false);
@@ -1029,6 +1226,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             try {
               if (!await acceptDeferredCallInvitation(msg.callId, self.userId!)) {
                 activeCalls.delete(msg.callId);
+                disposeCallWatcher(call);
                 clearTimeout(call.ringTimer);
                 setUserInCall(call.caller, false);
                 setUserInCall(call.callee, false);
@@ -1038,6 +1236,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               }
             } catch {
               activeCalls.delete(msg.callId);
+              disposeCallWatcher(call);
               clearTimeout(call.ringTimer);
               setUserInCall(call.caller, false);
               setUserInCall(call.callee, false);
@@ -1058,6 +1257,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           if (ws.readyState !== WebSocket.OPEN || call.callerSocket.readyState !== WebSocket.OPEN) {
             persistDeferredTerminal(msg.callId, call, "ended");
             activeCalls.delete(msg.callId);
+            disposeCallWatcher(call);
             return;
           }
           clearTimeout(call.ringTimer);
@@ -1227,9 +1427,28 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         // so a participant can never target a third party.
         const call = activeCalls.get(msg.callId);
         if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
+        // Callee rejection is also available to a background/push-discovered
+        // tab through HTTP. Use the same Firestore-first helper for both paths
+        // so the first rejection wins and all tabs receive the terminal event.
+        if (msg.type === "call-reject" && call.deferredMedia &&
+            call.calleeId === self.userId && call.status === "ringing") {
+          if (self.userId === null) return;
+          try {
+            await declineCallForUser(msg.callId, self.userId);
+          } catch {
+            send(ws, {
+              type: "call-unavailable",
+              callId: msg.callId,
+              code: "FIREBASE_OPERATION_FAILED",
+              reason: "Firebase call status update failed",
+            });
+          }
+          return;
+        }
         if (msg.type === "call-cancel" &&
             (call.callerId !== self.userId || (call.status !== "ringing" && call.status !== "accepting"))) return;
         activeCalls.delete(msg.callId);
+        disposeCallWatcher(call);
         clearTimeout(call.ringTimer);
         stopCallBilling(msg.callId);
         if (call.deferredMedia) {
@@ -1257,6 +1476,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         const call = activeCalls.get(msg.callId);
         if (!call || (call.calleeId !== self.userId && call.callerId !== self.userId)) return;
         activeCalls.delete(msg.callId);
+        disposeCallWatcher(call);
         clearTimeout(call.ringTimer);
         stopCallBilling(msg.callId);
         if (call.deferredMedia) {
@@ -1335,6 +1555,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           continue;
         }
         activeCalls.delete(callId);
+        disposeCallWatcher(call);
         clearTimeout(call.ringTimer);
         stopCallBilling(callId);
         if (call.deferredMedia) {

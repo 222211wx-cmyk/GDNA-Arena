@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import {
   CallPushError,
   createCallPushSession,
+  isValidCallId,
   getCallPushStatus,
   listMissedCalls,
   markMissedCallsSeen,
@@ -10,6 +11,7 @@ import {
   removeCallPushDevice,
   setCallPushFocus,
 } from "../lib/firebase-call-push";
+import { declineCallForUser } from "../lib/signaling";
 
 const router: IRouter = Router();
 const callPushLimiter = rateLimit({
@@ -32,6 +34,66 @@ function errorStatus(error: unknown): number {
 
 function errorMessage(error: unknown): string {
   return error instanceof CallPushError ? error.message : "Call push service failed";
+}
+
+function normalizedOrigin(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username || parsed.password || parsed.pathname !== "/" ||
+      parsed.search || parsed.hash) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function requestOrigin(req: Request): string | null {
+  const protocol = req.protocol;
+  const host = req.get("host")?.trim();
+  if ((protocol !== "http" && protocol !== "https") || !host) return null;
+  return normalizedOrigin(`${protocol}://${host}`);
+}
+
+function requestOriginAllowed(req: Request): boolean {
+  const origin = req.get("origin")?.trim();
+  const referer = req.get("referer")?.trim();
+  if (!origin && !referer) return true;
+
+  const allowedOrigins = new Set<string>([
+    "https://helixly.app",
+    "https://www.helixly.app",
+    "https://arena-qaisypro.com",
+    "https://www.arena-qaisypro.com",
+  ]);
+  if (process.env.REPLIT_DEV_DOMAIN) allowedOrigins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+  if (process.env.REPLIT_EXPO_DEV_DOMAIN) allowedOrigins.add(`https://${process.env.REPLIT_EXPO_DEV_DOMAIN}`);
+  for (const domain of (process.env.REPLIT_DOMAINS ?? "").split(",")) {
+    const value = domain.trim();
+    if (value) allowedOrigins.add(`https://${value}`);
+  }
+  if (process.env.NODE_ENV !== "production") {
+    allowedOrigins.add("http://localhost:80");
+    allowedOrigins.add("http://localhost");
+  }
+
+  const sameOrigin = requestOrigin(req);
+  if (origin) {
+    const candidate = origin === "null" ? null : normalizedOrigin(origin);
+    return candidate !== null && (
+      candidate === sameOrigin ||
+      allowedOrigins.has(origin) ||
+      allowedOrigins.has(candidate)
+    );
+  }
+  try {
+    const refererOrigin = new URL(referer!).origin;
+    return refererOrigin === sameOrigin ||
+      allowedOrigins.has(referer!) ||
+      allowedOrigins.has(refererOrigin);
+  } catch {
+    return false;
+  }
 }
 
 router.get("/call-push/config", async (_req, res): Promise<void> => {
@@ -123,6 +185,44 @@ router.post("/call-push/missed/seen", callPushLimiter, async (req, res): Promise
   try {
     await markMissedCallsSeen(userId, req.body?.ids);
     res.json({ ok: true });
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: errorMessage(error) });
+  }
+});
+
+router.post("/call/decline", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  if (!requestOriginAllowed(req)) {
+    res.status(403).json({ error: "Request origin is not allowed" });
+    return;
+  }
+  const callId = typeof req.query.id === "string" ? req.query.id.trim() : "";
+  if (!isValidCallId(callId)) {
+    res.status(400).json({ error: "Invalid call ID" });
+    return;
+  }
+  try {
+    const result = await declineCallForUser(callId, userId);
+    if (result.outcome === "not-callee") {
+      res.status(403).json({ error: "Only the invited callee can decline this call" });
+      return;
+    }
+    if (result.outcome === "not-found") {
+      res.status(404).json({ error: "Call invitation not found" });
+      return;
+    }
+    // `changed: false` is intentionally still successful for a terminal
+    // invitation: retries are idempotent and never recreate/resurrect it.
+    res.json({
+      ok: true,
+      callId,
+      status: result.status ?? "finished",
+      changed: result.changed,
+    });
   } catch (error) {
     res.status(errorStatus(error)).json({ error: errorMessage(error) });
   }

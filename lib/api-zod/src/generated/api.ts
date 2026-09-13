@@ -214,6 +214,24 @@ export const MarkMissedCallsSeenResponse = zod.object({
 
 
 /**
+ * @summary Decline a ringing call invitation as its authenticated callee
+ */
+export const declineCallQueryIdRegExp = new RegExp('^[A-Za-z0-9_-]{1,128}$');
+
+
+export const DeclineCallQueryParams = zod.object({
+  "id": zod.coerce.string().regex(declineCallQueryIdRegExp)
+})
+
+export const DeclineCallResponse = zod.object({
+  "ok": zod.boolean(),
+  "callId": zod.string(),
+  "status": zod.enum(['declined', 'missed', 'answered', 'ringing', 'finished']),
+  "changed": zod.boolean()
+})
+
+
+/**
  * @summary Get top players
  */
 export const GetLeaderboardResponse = zod.object({

@@ -126,7 +126,10 @@ const json = async <T,>(path: string, init?: RequestInit): Promise<T> => {
  * startup independent from optional push infrastructure.
  */
 export async function createCallFirebase(
-  onRinging: (callId: string) => void,
+  // `fromName` is advisory push metadata only. The callback intentionally
+  // resumes by canonical callId; the authenticated websocket supplies the
+  // caller identity before anything is rendered or answered.
+  onRinging: (callId: string, fromName?: string) => void,
   onTerminal: (callId: string, status: string) => void,
   onMissedCalls: (items: MissedCall[]) => void,
   onSnapshotError: (error: Error) => void,
@@ -294,9 +297,14 @@ export async function createCallFirebase(
       };
       document.addEventListener("visibilitychange", updateFocus);
       const stopMessage = onMessage(messaging, payload => {
-        const callId = payload.data?.roomId;
+        const callId = payload.data?.callId || payload.data?.roomId;
         if (!callId) return;
-        if (payload.data?.type === "INCOMING_CALL") onRinging(callId);
+        const fromName = payload.data?.fromName || payload.data?.callerName;
+        if (payload.data?.type === "INCOMING_CALL") {
+          // Push identity is never trusted. It is passed only as optional
+          // context while the callback performs an authenticated WS resume.
+          onRinging(callId, typeof fromName === "string" ? fromName : undefined);
+        }
         if (payload.data?.type === "CALL_ENDED") onTerminal(callId, "ended");
         if (payload.data?.type === "MISSED_CALL") {
           void fetchMissedCalls()

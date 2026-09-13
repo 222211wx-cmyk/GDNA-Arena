@@ -321,6 +321,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /call/decline:
+    post:
+      operationId: declineCall
+      tags: [call-push]
+      summary: Decline a ringing call invitation as its authenticated callee
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,128}$'
+      responses:
+        "200":
+          description: Call declined, or an already-terminal invitation was handled idempotently
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallDeclineResponse"
+        "400":
+          description: Invalid call ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Request origin is not allowed or caller is not the invited callee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Call invitation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Firebase call state is not configured or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /leaderboard:
     get:
       operationId: getLeaderboard
@@ -655,6 +705,17 @@ components:
       properties:
         ok: { type: boolean }
       required: [ok]
+
+    CallDeclineResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        callId: { type: string }
+        status:
+          type: string
+          enum: [declined, missed, answered, ringing, finished]
+        changed: { type: boolean }
+      required: [ok, callId, status, changed]
 
     CallPushDeviceInput:
       type: object

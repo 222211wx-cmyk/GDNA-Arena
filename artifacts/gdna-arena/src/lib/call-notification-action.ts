@@ -21,8 +21,11 @@ export interface PendingNotificationCallAction {
 
 export function readNotificationCallAction(search: string): Omit<PendingNotificationCallAction, "accountId" | "expiresAt" | "resumeSent"> | null {
   const params = new URLSearchParams(search);
-  const callId = params.get("callId");
-  const action = params.get("action");
+  // `callId + action` is the canonical route. `?answer=<id>` remains a
+  // narrow compatibility alias for links produced by older workers.
+  const answerAlias = params.get("answer");
+  const callId = params.get("callId") ?? answerAlias;
+  const action = answerAlias ? "answer" : params.get("action");
   if (!callId || !/^[A-Za-z0-9_-]{1,128}$/.test(callId) || (action !== "answer" && action !== "decline")) {
     return null;
   }

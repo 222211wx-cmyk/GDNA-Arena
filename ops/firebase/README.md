@@ -111,23 +111,45 @@ Caller `call-cancel` (or legacy pre-answer end) marks a ringing invitation
 Declined and missed calls create missed-call entries and send an
 Arabic data-only `MISSED_CALL` push (with `title`, `body`, and `callerName`)
 with a longer TTL. Answer/end synchronization uses Firestore and WebSockets,
-not push, because the requested basic worker displays every received push.
+not push; a `CALL_ENDED` push is only a best-effort notification cleanup hint.
 The server runs a bounded, paginated expiration sweep at startup and every
 minute, so a process restart cannot leave Firestore invitations ringing
 forever.
 
-## Requested basic background worker
+## Background worker and notification actions
 
-The web worker uses the exact Firebase compat 10.7.0 source supplied by the
-owner. It displays `payload.notification` or the supplied Arabic defaults.
+The web worker uses Firebase compat **10.7.0** and the public
+`helixly-b7653` web configuration. Notification-click handling is registered
+before the compat imports so a cold worker does not lose a click. Incoming
+pushes accept canonical data (`callId`, `fromName`, `title`, `type`) and the
+legacy `roomId`/caller aliases while the server migrates.
+
+Incoming-call notifications are Arabic, require interaction, vibrate, and
+provide `answer` and `decline` actions. The worker drops an invitation whose
+`expiresAt` has passed (with a 30-second safety window when the field is
+absent), waits for a bounded expiry-close attempt, and closes it when a
+terminal call push arrives. This is best-effort browser cleanup: an operating
+system may suspend or terminate a service worker before the timer runs, so the
+worker cannot promise precise offline dismissal. The server's 30-second
+invitation expiry remains authoritative, and receive/click paths check
+`expiresAt` again. An answer click opens the scoped messages route with
+`callId` and `action=answer`; the authenticated foreground WebSocket resumes
+the invitation before answering, so push metadata is never treated as caller
+identity. A notification body click only resumes/renders the incoming call and
+never auto-answers.
+
+Decline clicks make an authenticated same-origin `POST /api/call/decline?id=…`
+request. If that request fails, the worker opens the scoped messages route with
+the decline action so the authenticated WebSocket client can retry visibly.
+`MISSED_CALL` pushes are passive, have no answer actions, and open the
+scoped missed-calls inbox. Asset and app URLs are derived from the worker
+scope, preserving an artifact base path without allowing a call ID to escape
+its route.
+
 Our server sends data-only messages to avoid Firebase auto-display plus the
-worker's manual display producing duplicate notifications. Consequently the
-basic worker uses its default text for these pushes, including incoming calls.
-Caller-specific content and explicit acceptance remain in the foreground app.
-This exact worker has no notification-click actions, expiration filtering,
-or notification cleanup. Do not claim it provides those features.
-FCM sending stays on the authenticated API server with Firebase Admin; never
-place a service-account credential in browser code.
+worker's manual display producing duplicate notifications. FCM sending stays
+on the authenticated API server with Firebase Admin; never place a
+service-account credential in browser code.
 
 ## HTTP contract
 

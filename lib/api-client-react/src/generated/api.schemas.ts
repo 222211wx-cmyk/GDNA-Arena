@@ -40,6 +40,24 @@ export interface CallPushOk {
   ok: boolean;
 }
 
+export type CallDeclineResponseStatus = typeof CallDeclineResponseStatus[keyof typeof CallDeclineResponseStatus];
+
+
+export const CallDeclineResponseStatus = {
+  declined: 'declined',
+  missed: 'missed',
+  answered: 'answered',
+  ringing: 'ringing',
+  finished: 'finished',
+} as const;
+
+export interface CallDeclineResponse {
+  ok: boolean;
+  callId: string;
+  status: CallDeclineResponseStatus;
+  changed: boolean;
+}
+
 export interface CallPushDeviceInput {
   /**
      * @minLength 20
@@ -320,6 +338,13 @@ export interface TransactionsResponse {
   transactions: TransactionItem[];
   balance: number;
 }
+
+export type DeclineCallParams = {
+/**
+ * @pattern ^[A-Za-z0-9_-]{1,128}$
+ */
+id: string;
+};
 
 export type GetGsFiguresParams = {
 domain?: string;

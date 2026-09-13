@@ -23,6 +23,7 @@ import type {
   ArenaWithdrawInput,
   ArenaWithdrawResponse,
   AuthUser,
+  CallDeclineResponse,
   CallPushConfig,
   CallPushDeviceInput,
   CallPushFocusInput,
@@ -30,6 +31,7 @@ import type {
   CallPushOk,
   CallPushSession,
   DailyRewardResult,
+  DeclineCallParams,
   ErrorResponse,
   GetGsFiguresParams,
   GetGsNewsParams,
@@ -946,6 +948,83 @@ export const useMarkMissedCallsSeen = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getMarkMissedCallsSeenMutationOptions(options));
+    }
+
+export const getDeclineCallUrl = (params: DeclineCallParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/call/decline?${stringifiedParams}` : `/api/call/decline`
+}
+
+/**
+ * @summary Decline a ringing call invitation as its authenticated callee
+ */
+export const declineCall = async (params: DeclineCallParams, options?: RequestInit): Promise<CallDeclineResponse> => {
+
+  return customFetch<CallDeclineResponse>(getDeclineCallUrl(params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDeclineCallMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineCall>>, TError,{params: DeclineCallParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof declineCall>>, TError,{params: DeclineCallParams}, TContext> => {
+
+const mutationKey = ['declineCall'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof declineCall>>, {params: DeclineCallParams}> = (props) => {
+          const {params} = props ?? {};
+
+          return  declineCall(params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeclineCallMutationResult = NonNullable<Awaited<ReturnType<typeof declineCall>>>
+
+    export type DeclineCallMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Decline a ringing call invitation as its authenticated callee
+ */
+export const useDeclineCall = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof declineCall>>, TError,{params: DeclineCallParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof declineCall>>,
+        TError,
+        {params: DeclineCallParams},
+        TContext
+      > => {
+      return useMutation(getDeclineCallMutationOptions(options));
     }
 
 export const getGetLeaderboardUrl = () => {
