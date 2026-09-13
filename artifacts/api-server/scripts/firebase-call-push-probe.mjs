@@ -10,9 +10,9 @@ if (!raw) {
   process.exit(0);
 }
 
-const { account: serviceAccount, error: parseError } = parseServiceAccount(raw);
+const { account: serviceAccount, error: parseError, diagnostic } = parseServiceAccount(raw);
 if (!serviceAccount) {
-  console.log(JSON.stringify({ enabled: false, reason: parseError }));
+  console.log(JSON.stringify({ enabled: false, reason: parseError, diagnostic }));
   process.exitCode = 1;
 } else {
   let app;

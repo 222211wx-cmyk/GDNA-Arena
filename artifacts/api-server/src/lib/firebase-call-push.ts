@@ -193,8 +193,8 @@ function readServiceAccount(): Record<string, unknown> | null {
 }
 
 function adminConfigurationProblem(): string | null {
-  const { error } = parseServiceAccount(selectServiceAccount(process.env));
-  if (error && error !== lastAccountParseError) console.error("[Firebase]", error);
+  const { error, diagnostic } = parseServiceAccount(selectServiceAccount(process.env));
+  if (error && error !== lastAccountParseError) console.error("[Firebase]", error, diagnostic ?? "");
   lastAccountParseError = error;
   return error;
 }
@@ -250,6 +250,51 @@ async function loadServices(): Promise<FirebaseServices> {
     });
   }
   return servicesPromise;
+}
+
+/**
+ * The call signalling store intentionally obtains its Admin Firestore handle
+ * here instead of initializing a second Firebase app.  Call documents are
+ * server-written only; this is not a browser SDK escape hatch.
+ */
+export async function getAuthoritativeCallFirestore(): Promise<Firestore> {
+  return (await loadServices()).db;
+}
+
+/** A raw express-session id must never be put in Firestore. */
+export function callSessionBinding(sessionId: string): string {
+  return sessionTag(sessionId);
+}
+
+/** Best-effort wake-up after a call has already been committed to Firestore. */
+export async function sendAuthoritativeIncomingCallPush(input: {
+  callId: string;
+  callerId: number;
+  callerName: string;
+  callerAvatar: string | null;
+  calleeId: number;
+  expiresAt: Date;
+  video: boolean;
+}): Promise<void> {
+  try {
+    const services = await loadServices();
+    await sendPush(services, input.calleeId, {
+      type: "INCOMING_CALL",
+      callId: input.callId,
+      callerId: String(input.callerId),
+      callerName: input.callerName,
+      callerAvatar: input.callerAvatar ?? "",
+      fromName: input.callerName,
+      title: `مكالمة واردة من ${input.callerName}`,
+      expiresAt: input.expiresAt.toISOString(),
+      video: input.video ? "true" : "false",
+      roomId: input.callId,
+      url: `/messages?callId=${encodeURIComponent(input.callId)}`,
+    }, undefined, true);
+  } catch {
+    // FCM is a wake-up transport only. The Firestore document is authoritative.
+    console.warn("[Firebase] Incoming call wake-up unavailable");
+  }
 }
 
 function dateValue(value: unknown, fallback = new Date()): Date {
@@ -781,9 +826,8 @@ export type DirectCallWatcherEvent =
   | { kind: "terminal"; status: "declined" | "missed" | "ended" };
 
 /**
- * Owner-instance watcher for a direct invitation. It is intentionally scoped
- * to the call owner; WebSocket routing still requires the caller socket in
- * this process and is not presented as a cross-replica transport.
+ * Compatibility watcher for older consumers. Authoritative WebSocket routing
+ * subscribes by participant document and does not depend on an owner replica.
  */
 export async function watchDirectCallInvitation(
   callId: string,
@@ -992,12 +1036,18 @@ export async function declineDeferredCallInvitation(
       // seen=true acknowledgement and never creates a second record.
       const inboxRef = missedRef(db, invitation.calleeId, callId);
       const inboxSnapshot = await transaction.get(inboxRef);
+      const [callerLock, calleeLock] = await Promise.all([
+        transaction.get(db.collection("callLocks").doc(String(invitation.caller.id))),
+        transaction.get(db.collection("callLocks").doc(String(invitation.calleeId))),
+      ]);
       const endedAt = new Date();
       transaction.update(ref, {
         status: decision.status,
         endedAt,
         ...(decision.outcome === "expired" ? { expiredAt: endedAt } : {}),
       });
+      if (callerLock.data()?.callId === callId) transaction.delete(db.collection("callLocks").doc(String(invitation.caller.id)));
+      if (calleeLock.data()?.callId === callId) transaction.delete(db.collection("callLocks").doc(String(invitation.calleeId)));
       const inboxStatus = decision.status === "missed" || decision.status === "declined"
         ? decision.status
         : "missed";
@@ -1058,6 +1108,10 @@ export async function finishDeferredCallInvitation(
       if (!data || data.fromId !== invitation.caller.id || data.toId !== invitation.calleeId) {
         return { changed: false, sendMissed: false };
       }
+      const [callerLock, calleeLock] = await Promise.all([
+        transaction.get(db.collection("callLocks").doc(String(invitation.caller.id))),
+        transaction.get(db.collection("callLocks").doc(String(invitation.calleeId))),
+      ]);
       // A timeout/caller-close can race a callee acceptance transaction. The
       // invitation is already answered in that race: record only endedAt,
       // leave status=answered, and never create a false missed-call inbox item.
@@ -1079,6 +1133,8 @@ export async function finishDeferredCallInvitation(
         const inboxRef = missedRef(db, invitation.calleeId, invitation.callId);
         const inboxSnapshot = await transaction.get(inboxRef);
         transaction.update(ref, durableTerminalUpdate(status, new Date()));
+        if (callerLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.caller.id)));
+        if (calleeLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.calleeId)));
         if (!inboxSnapshot.exists) {
           transaction.create(inboxRef, missedCallPayload(invitation, status));
         } else {
@@ -1086,6 +1142,8 @@ export async function finishDeferredCallInvitation(
         }
       } else {
         transaction.update(ref, durableTerminalUpdate(status, new Date()));
+        if (callerLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.caller.id)));
+        if (calleeLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.calleeId)));
       }
       return { changed: true, sendMissed: status === "declined" || status === "missed" };
     });
@@ -1136,9 +1194,8 @@ export async function finishDeferredCallInvitation(
 export type DeferredCallWatcherStatus = "declined" | "missed" | "ended";
 
 /**
- * Watches one owner-instance invitation document. This is deliberately
- * per-call rather than a process-wide query: HTTP declines can be handled by
- * another API instance, while the owner still needs prompt WS cleanup.
+ * Compatibility watcher for older consumers. New signalling uses participant
+ * subscriptions, so an HTTP decline on another replica is delivered normally.
  */
 export async function watchDeferredCallInvitation(
   callId: string,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseServiceAccount, selectServiceAccount } from "./firebase-service-account.mjs";
+import { parseServiceAccount, selectServiceAccount, safeJsonError } from "./firebase-service-account.mjs";
 
 const fixture = { project_id: "test-project", client_email: "test@example.invalid", private_key: "test\\nkey\\n" };
 for (const [name, raw] of [
@@ -25,6 +25,7 @@ for (const [name, raw] of [
 }
 test("selects documented keys and spelling alias, skipping empty values", () => {
   assert.equal(selectServiceAccount({ FIREBASE_SERVICE_ACCOUNT: "", FIBERASE_SERVICE_ACCOUNT: "alias" }), "alias");
+  assert.equal(selectServiceAccount({ FIREBACE_SERVICE_ACCOUNT: "replacement" }), "replacement");
   assert.equal(selectServiceAccount({ FIREBASE_SERVICE_ACCOUNT: "first", FIREBASE_SERVICE_ACCOUNT_JSON: "second" }), "first");
 });
 test("rejects malformed Base64, invalid UTF-8, excessive nesting and oversized input safely", () => {
@@ -53,4 +54,34 @@ test("rejects invalid/missing fields without echoing input", () => {
     assert.ok(result.error);
     assert.ok(!result.error.includes("sensitive"));
   }
+});
+
+test("standard Google PEM JSON and pasted LF/CRLF variants normalize equally", () => {
+  const pem = "-----BEGIN PRIVATE KEY-----\nTEST_ONLY_NOT_A_KEY\n-----END PRIVATE KEY-----\n";
+  const standard = JSON.stringify({ ...fixture, type: "service_account", private_key: pem }, null, 2);
+  for (const source of [
+    standard,
+    standard.replace(/\\n/g, "\n"),
+    standard.replace(/\\n/g, "\r\n"),
+    standard.replace(/\\n/g, "\\\n"),
+    standard.replace(/\\n/g, "\\\r\n"),
+  ]) {
+    const parsed = parseServiceAccount(source);
+    assert.equal(parsed.error, null);
+    assert.equal(parsed.account.private_key, pem);
+  }
+});
+
+test("safe diagnostics never include input fragments or raw exception messages", () => {
+  for (const source of ["SECRET_NOT_JSON", '{"private_key":"SECRET_MATERIAL",}']) {
+    const result = parseServiceAccount(source);
+    assert.equal(result.account, null);
+    assert.ok(result.diagnostic.startsWith("JSON_"));
+    assert.ok(!JSON.stringify(result).includes("SECRET"));
+  }
+  assert.equal(
+    safeJsonError(new SyntaxError("Bad control character in string literal in JSON at position 12 (line 2 column 3)")),
+    "JSON_CONTROL_CHARACTER at position 12 (line 2 column 3)",
+  );
+  assert.equal(safeJsonError(new SyntaxError('Unexpected token \'S\', "SECRET_KEY" is not valid JSON')), "JSON_UNEXPECTED_TOKEN");
 });

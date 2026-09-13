@@ -16,6 +16,20 @@ service cloud.firestore {
         && (resource.data.fromId == request.auth.token.userId
           || resource.data.toId == request.auth.token.userId);
       allow create, update, delete: if false;
+
+      // SDP, ICE and renegotiation are server relays. Browsers may read only
+      // their own invitation and never write signalling state directly.
+      match /events/{eventId} {
+        allow get, list: if hasLiveServerSession()
+          && (get(/databases/$(database)/documents/callInvites/$(callId)).data.fromId == request.auth.token.userId
+            || get(/databases/$(database)/documents/callInvites/$(callId)).data.toId == request.auth.token.userId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Participant occupancy locks are Admin-only transaction records.
+    match /callLocks/{userId} {
+      allow read, write: if false;
     }
 
     // Firebase Auth UID is String(PostgreSQL user id). Device-token documents

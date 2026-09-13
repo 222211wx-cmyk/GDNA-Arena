@@ -16,7 +16,7 @@ function decodeBase64Json(input) {
 }
 
 export function selectServiceAccount(env) {
-  for (const key of ["FIREBASE_SERVICE_ACCOUNT", "FIREBASE_SERVICE_ACCOUNT_JSON", "FIBERASE_SERVICE_ACCOUNT"]) {
+  for (const key of ["FIREBASE_SERVICE_ACCOUNT", "FIREBASE_SERVICE_ACCOUNT_JSON", "FIREBACE_SERVICE_ACCOUNT", "FIBERASE_SERVICE_ACCOUNT"]) {
     if (typeof env[key] === "string" && env[key].trim()) return env[key];
   }
   return "";
@@ -27,8 +27,12 @@ function escapeStringLineBreaks(input) {
   let escaped = false;
   let result = "";
   for (const char of input) {
-    if (quoted && !escaped && (char === "\n" || char === "\r" || char === "\t")) {
+    if (quoted && (char === "\n" || char === "\r" || char === "\t")) {
+      // A pasted backslash followed by a literal line break is not a JSON
+      // escape. Replace that broken escape with the JSON control escape.
+      if (escaped) result = result.slice(0, -1);
       result += JSON.stringify(char).slice(1, -1);
+      escaped = false;
       continue;
     }
     result += char;
@@ -37,6 +41,25 @@ function escapeStringLineBreaks(input) {
     else if (char === '"') quoted = !quoted;
   }
   return result;
+}
+
+// JSON.parse can quote the input in SyntaxError.message. Never return that
+// message: only fixed categories and numeric coordinates may leave the parser.
+export function safeJsonError(error) {
+  if (!(error instanceof SyntaxError)) return "JSON_PARSE_FAILED";
+  const message = error.message;
+  const category = /^Bad control character/.test(message) ? "JSON_CONTROL_CHARACTER" :
+    /^Bad escaped character/.test(message) ? "JSON_INVALID_ESCAPE" :
+    /^Unterminated string/.test(message) ? "JSON_UNTERMINATED_STRING" :
+    /^Unexpected end/.test(message) ? "JSON_UNEXPECTED_END" :
+    /^Unexpected token/.test(message) ? "JSON_UNEXPECTED_TOKEN" :
+    /^Unexpected non-whitespace character/.test(message) ? "JSON_TRAILING_CONTENT" :
+    /^(Expected property name|Expected double-quoted property name)/.test(message) ? "JSON_PROPERTY_NAME_EXPECTED" :
+    "JSON_SYNTAX_ERROR";
+  const position = message.match(/\bat position (\d+)(?: \(line (\d+) column (\d+)\))?$/);
+  return position
+    ? `${category} at position ${position[1]}${position[2] ? ` (line ${position[2]} column ${position[3]})` : ""}`
+    : category;
 }
 
 export function parseServiceAccount(raw) {
@@ -48,6 +71,7 @@ export function parseServiceAccount(raw) {
   }
   let value = raw;
   let decodedBase64 = false;
+  let diagnostic = null;
   try {
     for (let depth = 0; typeof value === "string" && depth < 5; depth++) {
       const cleaned = value.trim().replace(/^\uFEFF/, "");
@@ -57,7 +81,8 @@ export function parseServiceAccount(raw) {
       }
       try {
         value = JSON.parse(escapeStringLineBreaks(cleaned));
-      } catch {
+      } catch (error) {
+        diagnostic = safeJsonError(error);
         if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
           value = cleaned.slice(1, -1);
           continue;
@@ -84,11 +109,15 @@ export function parseServiceAccount(raw) {
     return {
       account: {
         ...value,
-        private_key: value.private_key.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\r\n/g, "\n"),
+        private_key: value.private_key.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\r\n?/g, "\n"),
       },
       error: null,
     };
   } catch {
-    return { account: null, error: "Firebase service account is not valid JSON or Base64-encoded JSON" };
+    return {
+      account: null,
+      error: "Firebase service account is not valid JSON or Base64-encoded JSON",
+      diagnostic,
+    };
   }
 }

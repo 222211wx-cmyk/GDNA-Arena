@@ -51,7 +51,7 @@ router.get("/rtc/preflight-token", (req, res): void => {
   }
 });
 
-router.get("/rtc/agora-token", (req, res): void => {
+router.get("/rtc/agora-token", async (req, res): Promise<void> => {
   if (!req.session.userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
@@ -67,7 +67,7 @@ router.get("/rtc/agora-token", (req, res): void => {
 
   // Participant authorization: tokens are only issued to one of the two
   // recorded participants of an active call — never for arbitrary channels.
-  if (!isCallParticipant(channel, req.session.userId)) {
+  if (!await isCallParticipant(channel, req.session.userId)) {
     res.status(403).json({ error: "Not a participant of this call" });
     return;
   }

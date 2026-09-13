@@ -51,6 +51,10 @@ import {
   shouldClearTerminalCall,
   type PendingNotificationCallAction,
 } from "@/lib/call-notification-action";
+import {
+  rememberDurableCallSignal,
+  rememberRemoteIceCandidate,
+} from "@/lib/call-signal-dedupe";
 
 // Kept only for an unreachable legacy SDK helper below. Call setup never
 // invokes this function; authenticated calls fetch TURN through
@@ -181,6 +185,10 @@ export function useCall(user: { id: number; username: string } | null) {
   const reconnectAttemptRef = useRef(0);
   const wasConnectedRef = useRef(false);
   const identityGenerationRef = useRef(0);
+  // sessionStorage is scoped to one browser tab, unlike localStorage. That
+  // gives each tab a stable reconnect identity without letting two tabs
+  // compete for the server's selected callee device.
+  const signalingDeviceRef = useRef<{ userId: number; deviceId: string } | null>(null);
   const preflightClientRef = useRef<IAgoraRTCClient | null>(null);
   const mediaConnectedRef = useRef(false);
   const mediaHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -218,6 +226,14 @@ export function useCall(user: { id: number; username: string } | null) {
   // Mirror of the call the user is currently in or being offered — WS handlers
   // use this ref to IGNORE call events whose callId does not belong to us.
   const currentCallIdRef = useRef<string | null>(null);
+  // These are deliberately local browser refs. They protect this tab from
+  // replay after reconnect; authoritative call state remains server-owned.
+  const currentCallPeerRef = useRef<string | null>(null);
+  const seenCallSignalsRef = useRef(new Map<string, Set<string>>());
+  const seenRemoteIceRef = useRef(new Map<string, Set<string>>());
+  const applyingRemoteAnswerRef = useRef(new Set<string>());
+  const appliedRenegotiationOfferRef = useRef(new Map<string, string>());
+  const appliedRenegotiationAnswerRef = useRef(new Map<string, string>());
   const callSetupWaitersRef = useRef(new Map<string, {
     resolve: () => void;
     reject: (error: Error) => void;
@@ -341,6 +357,47 @@ export function useCall(user: { id: number; username: string } | null) {
     }
   }, []);
 
+  const signalingDeviceIdFor = useCallback((userId: number) => {
+    const current = signalingDeviceRef.current;
+    if (current?.userId === userId) return current.deviceId;
+    const key = `gdna:call-signaling-device:${userId}`;
+    let deviceId: string | null = null;
+    try {
+      const stored = window.sessionStorage.getItem(key);
+      if (stored && /^[A-Za-z0-9_-]{16,128}$/.test(stored)) deviceId = stored;
+      if (!deviceId) {
+        deviceId = `calltab_${crypto.randomUUID().replace(/-/g, "")}`;
+        window.sessionStorage.setItem(key, deviceId);
+      }
+    } catch {
+      // Session storage can be unavailable in a hardened browser. Keep a
+      // tab-local identity for this lifecycle rather than sharing one.
+      deviceId = `calltab_${crypto.randomUUID().replace(/-/g, "")}`;
+    }
+    signalingDeviceRef.current = { userId, deviceId };
+    return deviceId;
+  }, []);
+
+  const resumeCurrentCall = useCallback(() => {
+    const callId = currentCallIdRef.current;
+    if (callId && registeredSocketRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+      // This is intentionally the only action reconnect performs for an
+      // incoming ring: it never requests devices or answers on the user's
+      // behalf. The server returns the canonical state/signal transcript.
+      sendWS({ type: "call-resume", callId });
+    }
+  }, [sendWS]);
+
+  const flushPendingCallIce = useCallback(() => {
+    const callId = currentCallIdRef.current;
+    const peer = currentCallPeerRef.current;
+    if (!callId || !peer || !callSignalingReadyRef.current.has(callId) ||
+      !registeredSocketRef.current || wsRef.current?.readyState !== WebSocket.OPEN) return;
+    for (const candidate of pendingCallIceRef.current.splice(0)) {
+      sendWS({ type: "ice-candidate", to: peer, callId, candidate });
+    }
+  }, [sendWS]);
+
   const flushCallResumes = useCallback(() => {
     const now = Date.now();
     for (const [callId, pending] of pendingCallResumesRef.current) {
@@ -446,7 +503,9 @@ export function useCall(user: { id: number; username: string } | null) {
     const timeout = setTimeout(() => {
       callSetupWaitersRef.current.delete(callId);
       reject(new Error("تعذّر تأكيد المكالمة الآمنة من الخادم"));
-    }, 10_000);
+    // A caller keeps its already granted media through a short signaling
+    // restart. The server remains authoritative for the actual ring timeout.
+    }, RING_TIMEOUT_MS + 5_000);
     callSetupWaitersRef.current.set(callId, { resolve, reject, timeout });
   }), []);
 
@@ -703,7 +762,8 @@ export function useCall(user: { id: number; username: string } | null) {
     };
     pc.onicecandidate = event => {
       if (event.candidate) {
-        if (callSignalingReadyRef.current.has(callId)) {
+        if (callSignalingReadyRef.current.has(callId) &&
+          registeredSocketRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
           sendWS({ type: "ice-candidate", to: peer, callId, candidate: event.candidate });
         } else {
           pendingCallIceRef.current.push(event.candidate);
@@ -826,6 +886,10 @@ export function useCall(user: { id: number; username: string } | null) {
     pendingCallIceRef.current = [];
     pendingRemoteIceRef.current = [];
     callSignalingReadyRef.current.clear();
+    seenRemoteIceRef.current.clear();
+    applyingRemoteAnswerRef.current.clear();
+    appliedRenegotiationOfferRef.current.clear();
+    appliedRenegotiationAnswerRef.current.clear();
     mediaSetupCallRef.current = null;
     if (client) { try { await client.leave(); } catch { /* already left */ } }
   }, [setActualMediaConnected]);
@@ -1172,6 +1236,7 @@ export function useCall(user: { id: number; username: string } | null) {
     }
 
     const expectedUserId = user.id;
+    const signalingDeviceId = signalingDeviceIdFor(user.id);
 
     const clearReconnect = () => {
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
@@ -1200,7 +1265,12 @@ export function useCall(user: { id: number; username: string } | null) {
 
       ws.onopen = () => {
         if (!isCurrent(ws)) { ws.close(); return; }
-        ws.send(JSON.stringify({ type: "register", userId: user.id, username: user.username }));
+        ws.send(JSON.stringify({
+          type: "register",
+          userId: user.id,
+          username: user.username,
+          deviceId: signalingDeviceId,
+        }));
         pingRef.current = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" })); }, 25000);
       };
 
@@ -1208,6 +1278,10 @@ export function useCall(user: { id: number; username: string } | null) {
         if (!isCurrent(ws)) return;
         let msg: any;
         try { msg = JSON.parse(e.data as string); } catch { return; }
+        // Firestore-backed signaling may replay frames after a reconnect.
+        // signalId is optional for compatibility, but authoritative whenever
+        // supplied: never let the same durable signal transition UI twice.
+        if (!rememberDurableCallSignal(seenCallSignalsRef.current, msg.callId, msg.signalId)) return;
 
         if (msg.type === "registered") {
           // The server derives this value from the session. A mismatch means
@@ -1219,7 +1293,11 @@ export function useCall(user: { id: number; username: string } | null) {
           }
           setConnected(true);
           registeredSocketRef.current = true;
+          // This is deliberately inert for a ringing recipient: resuming
+          // fetches canonical state only and never requests media/answers.
+          resumeCurrentCall();
           flushCallResumes();
+          flushPendingCallIce();
           reconnectAttemptRef.current = 0;
           setRealtimeConnected();
           window.dispatchEvent(new Event("gdna:realtime-connected"));
@@ -1266,6 +1344,7 @@ export function useCall(user: { id: number; username: string } | null) {
               return;
             }
             currentCallIdRef.current = msg.callId;
+            currentCallPeerRef.current = msg.from;
             callGenerationRef.current += 1;
             callDirectionRef.current = "incoming";
             callVideoRef.current = Boolean(msg.video);
@@ -1322,16 +1401,24 @@ export function useCall(user: { id: number; username: string } | null) {
             }, 1_500);
             return;
           }
-          clearRingTimer();
-          setCallPhase("accepted");
           if (callDirectionRef.current === "outgoing") {
+            const pc = callPcRef.current;
+            // Replayed acceptance cannot regress an active call to accepted or
+            // submit the same SDP answer a second time.
+            if ((deferred && mediaSetupCallRef.current === msg.callId) ||
+              (!deferred && (applyingRemoteAnswerRef.current.has(msg.callId) || !!pc?.remoteDescription))) {
+              return;
+            }
+            clearRingTimer();
+            setCallPhase("accepted");
             if (deferred) {
               void beginCallerWebRtc(msg.callId, msg.from, callVideoRef.current);
-            } else if (callPcRef.current && isRtcDescription(msg.answer, "answer")) {
+            } else if (pc && isRtcDescription(msg.answer, "answer")) {
+              applyingRemoteAnswerRef.current.add(msg.callId);
               try {
-                await callPcRef.current.setRemoteDescription(msg.answer);
+                await pc.setRemoteDescription(msg.answer);
                 for (const candidate of pendingRemoteIceRef.current.splice(0)) {
-                  try { await callPcRef.current.addIceCandidate(candidate); } catch { /* stale candidate */ }
+                  try { await pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
                 }
               } catch {
                 showCallError("تعذّر إكمال اتصال WebRTC", 12_000);
@@ -1349,6 +1436,8 @@ export function useCall(user: { id: number; username: string } | null) {
                   setActivePeer(null);
                   setActiveCallId(null);
                 }, 1_500);
+              } finally {
+                applyingRemoteAnswerRef.current.delete(msg.callId);
               }
             } else {
               showCallError("تعذّر إكمال اتصال WebRTC", 12_000);
@@ -1377,13 +1466,22 @@ export function useCall(user: { id: number; username: string } | null) {
         }
 
         if (msg.type === "call-webrtc-answer" && msg.callId === currentCallIdRef.current && msg.answer && callPcRef.current) {
-          await callPcRef.current.setRemoteDescription(msg.answer);
-          for (const candidate of pendingRemoteIceRef.current.splice(0)) {
-            try { await callPcRef.current.addIceCandidate(candidate); } catch { /* stale candidate */ }
+          const pc = callPcRef.current;
+          if (applyingRemoteAnswerRef.current.has(msg.callId) || pc.remoteDescription ||
+            pc.signalingState !== "have-local-offer") return;
+          applyingRemoteAnswerRef.current.add(msg.callId);
+          try {
+            await pc.setRemoteDescription(msg.answer);
+            for (const candidate of pendingRemoteIceRef.current.splice(0)) {
+              try { await pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
+            }
+          } finally {
+            applyingRemoteAnswerRef.current.delete(msg.callId);
           }
         }
 
         if (msg.type === "ice-candidate" && msg.callId === currentCallIdRef.current) {
+          if (!rememberRemoteIceCandidate(seenRemoteIceRef.current, msg.callId, msg.candidate)) return;
           if (callPcRef.current?.remoteDescription) {
             try { await callPcRef.current.addIceCandidate(msg.candidate); } catch { /* stale candidate */ }
           } else {
@@ -1402,16 +1500,23 @@ export function useCall(user: { id: number; username: string } | null) {
           const pc = callPcRef.current;
           const config = callRtcConfigRef.current;
           if (!config) return;
+          if (!isRtcDescription(msg.offer, "offer") ||
+            appliedRenegotiationOfferRef.current.get(msg.callId) === msg.offer.sdp) return;
+          appliedRenegotiationOfferRef.current.set(msg.callId, msg.offer.sdp);
           pc.setConfiguration({ iceServers: config.iceServers, iceTransportPolicy: "relay" });
-          await pc.setRemoteDescription(msg.offer);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          sendWS({
-            type: "call-renegotiate-answer",
-            callId: msg.callId,
-            answer: pc.localDescription,
-            transport: { provider: "webrtc", version: 1 },
-          });
+          try {
+            await pc.setRemoteDescription(msg.offer);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            sendWS({
+              type: "call-renegotiate-answer",
+              callId: msg.callId,
+              answer: pc.localDescription,
+              transport: { provider: "webrtc", version: 1 },
+            });
+          } catch {
+            appliedRenegotiationOfferRef.current.delete(msg.callId);
+          }
         }
 
         if (
@@ -1422,7 +1527,16 @@ export function useCall(user: { id: number; username: string } | null) {
           callProviderRef.current === "webrtc" &&
           callPcRef.current
         ) {
-          await callPcRef.current.setRemoteDescription(msg.answer);
+          const pc = callPcRef.current;
+          if (!isRtcDescription(msg.answer, "answer") ||
+            appliedRenegotiationAnswerRef.current.get(msg.callId) === msg.answer.sdp ||
+            pc.signalingState !== "have-local-offer") return;
+          appliedRenegotiationAnswerRef.current.set(msg.callId, msg.answer.sdp);
+          try {
+            await pc.setRemoteDescription(msg.answer);
+          } catch {
+            appliedRenegotiationAnswerRef.current.delete(msg.callId);
+          }
         }
 
         // ── Call rejected / ended — only for OUR current call ──────────────
@@ -1473,13 +1587,15 @@ export function useCall(user: { id: number; username: string } | null) {
           // Callee side safety: if a block denial races an incoming banner, clear it.
           setIncomingCall(null);
           showCallError(
-            msg.code === "MEDIA_PROTOCOL_MISMATCH"
+            msg.code === "CALL_SIGNALING_UNAVAILABLE"
+              ? "إشارات المكالمة غير متاحة حالياً. لم يتم بدء مسار بديل — أعد المحاولة بعد استعادة الاتصال."
+              : msg.code === "MEDIA_PROTOCOL_MISMATCH"
               ? "إصدار وسائط المكالمة غير متوافق — حدّث الصفحة وحاول مجدداً"
             : msg.type === "call-busy"
               ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
               : msg.type === "call-blocked"
                 ? "🚫 لا يمكن إجراء هذه المكالمة — التواصل بينكما محجوب"
-                : "📴 المواطن غير متصل بالإمبراطورية حالياً — راسله وسيصله إشعار");
+                : "تعذّر إكمال المكالمة حالياً — حاول مجدداً بعد لحظات.");
           void leaveAgora();
           setCallStatus("ended");
           setTimeout(() => {
@@ -1529,24 +1645,16 @@ export function useCall(user: { id: number; username: string } | null) {
       };
 
       ws.onclose = () => {
-        registeredSocketRef.current = false;
         if (!isCurrent(ws)) return;
+        registeredSocketRef.current = false;
         wsRef.current = null;
         setConnected(false);
         setRealtimeConnecting();
         window.dispatchEvent(new Event("gdna:realtime-disconnected"));
         if (pingRef.current) clearInterval(pingRef.current);
-        rejectPendingCallSetups("انقطع اتصال المكالمة بالخادم");
-        if (currentCallIdRef.current) {
-          clearRingTimer();
-          setActualMediaConnected(false);
-          currentCallIdRef.current = null;
-          setIncomingCall(null);
-          setCallStatus("ended");
-          setActivePeer(null);
-          setActiveCallId(null);
-          void leaveAgora();
-        }
+        // The WebSocket is only signaling transport. Do not release local
+        // media or dismiss caller/callee state for a transient replica restart.
+        // Registration on the next socket sends call-resume for this exact id.
         scheduleReconnect();
       };
 
@@ -1566,7 +1674,6 @@ export function useCall(user: { id: number; username: string } | null) {
     const onOffline = () => {
       clearReconnect();
       setRealtimeConnecting();
-      setActualMediaConnected(false);
       wsRef.current?.close();
     };
     const onVisibilityChange = () => {
@@ -1618,7 +1725,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setConnectionTest("idle");
       setCallError(null);
     };
-  }, [user?.id, user?.username, isOnline, answerWebRtcOffer, beginCallerWebRtc, leaveAgora, rejectPendingCallSetups, settleCallReady, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting]);
+  }, [user?.id, user?.username, isOnline, answerWebRtcOffer, beginCallerWebRtc, flushPendingCallIce, leaveAgora, rejectPendingCallSetups, resumeCurrentCall, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting, settleCallReady, signalingDeviceIdFor]);
 
   // A route change or logout must not leave a microphone/camera LED on.
   useEffect(() => () => {
@@ -1661,6 +1768,7 @@ export function useCall(user: { id: number; username: string } | null) {
     let callStateStarted = false;
     try {
       currentCallIdRef.current = callId;
+      currentCallPeerRef.current = targetUsername;
       callGeneration = ++callGenerationRef.current;
       callStateStarted = true;
       callDirectionRef.current = "outgoing";

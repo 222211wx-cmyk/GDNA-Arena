@@ -1,3 +1,16 @@
+# Firestore call signalling
+
+`callInvites` is the authoritative server-written call document. It contains
+both participant ids/names, the caller's hashed HTTP-session and stable device
+binding, answerer ownership, bounded sequenced relay events, SDP state and
+expiry. `callLocks/{userId}` is written/deleted in the same Admin Firestore
+transaction as call creation, answer, cancellation and expiry, so it must not
+be opened to clients.
+
+Deploy `firestore.rules` and `firestore.indexes.json` before enabling the API
+call path. The API requires a configured Firebase Admin service account and
+matching web Firebase configuration; without it it returns
+`CALL_SIGNALING_UNAVAILABLE` and does not fall back to process memory.
 # Web call invitations: Firebase setup
 
 This integration is **web-only**. It uses Firestore for durable call invitations
@@ -19,7 +32,8 @@ manager (never commit their contents):
   invalid UTF-8 and excessive nesting are rejected. Base64 is not encryption
   and cannot fix invalid credentials or missing permissions.
   Parse errors never log input or private keys.
-  Parse/Admin initialization failures leave in-app WebSocket ringing available.
+Parse/Admin initialization failures reject call signalling with
+`CALL_SIGNALING_UNAVAILABLE`; they never fall back to in-memory ringing.
 - `FIREBASE_WEB_CONFIG`: public Firebase web config as JSON, containing
   `apiKey`, `authDomain`, `projectId`, `messagingSenderId`, and `appId`.
 - `FIREBASE_VAPID_PUBLIC_KEY`: Web Push VAPID public key (optional; without it,
