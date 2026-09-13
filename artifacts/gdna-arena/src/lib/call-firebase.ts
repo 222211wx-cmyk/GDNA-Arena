@@ -85,6 +85,20 @@ interface PushConfig {
   vapidPublicKey?: string;
 }
 
+type FirebaseIdentity = {
+  projectId?: unknown;
+  appId?: unknown;
+  messagingSenderId?: unknown;
+};
+
+function matchesFirebaseIdentity(left: FirebaseIdentity, right: FirebaseIdentity): boolean {
+  return (["projectId", "appId", "messagingSenderId"] as const).every(key =>
+    typeof left[key] === "string" &&
+    left[key].trim() !== "" &&
+    left[key] === right[key],
+  );
+}
+
 export function resolvePushCapability(
   serverPushEnabled: boolean | undefined,
   vapidPublicKey: string | undefined,
@@ -153,7 +167,8 @@ export async function createCallFirebase(
     import("firebase/auth"),
     import("firebase/firestore"),
   ]);
-  if (app.options.projectId !== config.firebase.projectId || firebaseConfig.projectId !== app.options.projectId) {
+  if (!matchesFirebaseIdentity(config.firebase, app.options) ||
+    !matchesFirebaseIdentity(config.firebase, firebaseConfig)) {
     throw new Error("Firebase web configuration does not match the configured call project");
   }
   const messaging = await messagingReady;
@@ -266,7 +281,28 @@ export async function createCallFirebase(
       // it makes background handler initialization synchronous on a cold start.
       serviceWorkerUrl.searchParams.set("firebaseConfig", JSON.stringify(firebaseConfig));
       serviceWorkerUrl.searchParams.set("vapidPublicKey", config.vapidPublicKey ?? "");
-      const registration = await navigator.serviceWorker.register(serviceWorkerUrl.toString());
+      // The config query is part of the worker script URL, so a replacement
+      // Firebase project produces a new worker script URL and replaces an old
+      // registration instead of reusing its cached project config. Disable
+      // the HTTP cache and force the update before asking Firebase for a token
+      // so getToken cannot bind a new token to a stale worker.
+      const registrationUrl = serviceWorkerUrl.toString();
+      let registration = await navigator.serviceWorker.register(registrationUrl, {
+        updateViaCache: "none",
+      });
+      if (typeof registration.update === "function") await registration.update();
+      // `update()` may leave an old active worker in place until the next
+      // navigation. Do not mint a replacement-project token through that
+      // worker; remove the stale registration and install the config-bound
+      // script again when the active script URL is still different.
+      if (registration.active?.scriptURL && registration.active.scriptURL !== registrationUrl &&
+        typeof registration.unregister === "function") {
+        await registration.unregister();
+        registration = await navigator.serviceWorker.register(registrationUrl, {
+          updateViaCache: "none",
+        });
+        if (typeof registration.update === "function") await registration.update();
+      }
       let token = await getToken(messaging, {
         vapidKey: config.vapidPublicKey,
         serviceWorkerRegistration: registration,

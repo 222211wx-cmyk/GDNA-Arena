@@ -1,5 +1,20 @@
 // Shared by the API and diagnostics. Never include input or parser exceptions
 // in errors: JSON.parse messages can contain private-key fragments.
+const MAX_ACCOUNT_BYTES = 128 * 1024;
+
+function decodeBase64Json(input) {
+  // Buffer's decoder silently ignores invalid characters. Require canonical
+  // standard Base64 (optional padding / line wrapping) before decoding.
+  const encoded = input.replace(/[ \t\r\n]/g, "");
+  if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) ||
+    encoded.length % 4 === 1 || (encoded.includes("=") && encoded.length % 4 !== 0)) return null;
+  const bytes = Buffer.from(encoded, "base64");
+  if (bytes.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, "")) return null;
+  const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
+  // Only unwrap JSON, not arbitrary strings or recursively encoded payloads.
+  return decoded.startsWith("{") || decoded.startsWith('"') || decoded.startsWith("'") ? decoded : null;
+}
+
 export function selectServiceAccount(env) {
   for (const key of ["FIREBASE_SERVICE_ACCOUNT", "FIREBASE_SERVICE_ACCOUNT_JSON", "FIBERASE_SERVICE_ACCOUNT"]) {
     if (typeof env[key] === "string" && env[key].trim()) return env[key];
@@ -28,7 +43,11 @@ export function parseServiceAccount(raw) {
   if (typeof raw !== "string" || !raw.trim()) {
     return { account: null, error: "Firebase service account is not configured" };
   }
+  if (Buffer.byteLength(raw, "utf8") > MAX_ACCOUNT_BYTES) {
+    return { account: null, error: "Firebase service account exceeds the size limit" };
+  }
   let value = raw;
+  let decodedBase64 = false;
   try {
     for (let depth = 0; typeof value === "string" && depth < 5; depth++) {
       const cleaned = value.trim().replace(/^\uFEFF/, "");
@@ -42,6 +61,14 @@ export function parseServiceAccount(raw) {
         if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
           value = cleaned.slice(1, -1);
           continue;
+        }
+        if (!decodedBase64) {
+          const decoded = decodeBase64Json(cleaned);
+          if (decoded !== null) {
+            decodedBase64 = true;
+            value = decoded;
+            continue;
+          }
         }
         throw new Error("invalid-json");
       }
@@ -62,6 +89,6 @@ export function parseServiceAccount(raw) {
       error: null,
     };
   } catch {
-    return { account: null, error: "Firebase service account is not valid JSON" };
+    return { account: null, error: "Firebase service account is not valid JSON or Base64-encoded JSON" };
   }
 }

@@ -3,13 +3,25 @@ import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-function workerHarness() {
+const replacementFirebaseConfig = {
+  apiKey: "replacement-test-api-key",
+  authDomain: "replacement-project.test",
+  projectId: "replacement-project",
+  storageBucket: "replacement-project.test",
+  messagingSenderId: "987654321",
+  appId: "1:987654321:web:replacement",
+};
+
+function workerHarness(options: { query?: string } = {}) {
   const showNotification = vi.fn();
   const getNotifications = vi.fn().mockResolvedValue([]);
   const openWindow = vi.fn().mockResolvedValue(undefined);
   const fetch = vi.fn();
   const initializeApp = vi.fn();
   const importScripts = vi.fn();
+  const query = options.query === undefined
+    ? `?firebaseConfig=${encodeURIComponent(JSON.stringify(replacementFirebaseConfig))}`
+    : options.query;
   let background: (payload: {
     notification?: { title?: string; body?: string };
     data?: Record<string, string>;
@@ -28,6 +40,7 @@ function workerHarness() {
       setTimeout,
       clearTimeout,
       self: {
+        location: { href: `https://example.test/firebase-messaging-sw.js${query}` },
         addEventListener: (type: string, handler: typeof notificationClick) => {
           if (type === "notificationclick") notificationClick = handler;
         },
@@ -57,10 +70,36 @@ async function flushWorkerPromises() {
 }
 
 describe("requested Firebase background worker", () => {
-  it("initializes the specified project with compat 10.7.0", () => {
+  it("initializes the replacement project from the worker URL with compat 10.7.0", () => {
     const worker = workerHarness();
-    expect(worker.initializeApp).toHaveBeenCalledWith(expect.objectContaining({ projectId: "helixly-b7653" }));
+    expect(worker.initializeApp).toHaveBeenCalledWith(replacementFirebaseConfig);
     expect(worker.importScripts).toHaveBeenCalledWith("https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js");
+  });
+
+  it("keeps notification clicks available when the Firebase config is missing", async () => {
+    const worker = workerHarness({ query: "" });
+    expect(worker.initializeApp).not.toHaveBeenCalled();
+    expect(worker.importScripts).not.toHaveBeenCalled();
+
+    let waited: Promise<unknown> | undefined;
+    worker.notificationClick({
+      notification: { data: {}, close: vi.fn() },
+      waitUntil: promise => { waited = promise; },
+    });
+    await waited;
+    expect(worker.openWindow).toHaveBeenCalledWith("https://example.test/messages");
+  });
+
+  it("skips messaging when the Firebase config is malformed or incomplete", () => {
+    const malformed = workerHarness({ query: "?firebaseConfig=not-json" });
+    expect(malformed.initializeApp).not.toHaveBeenCalled();
+    expect(malformed.importScripts).not.toHaveBeenCalled();
+
+    const incomplete = workerHarness({
+      query: `?firebaseConfig=${encodeURIComponent(JSON.stringify({ ...replacementFirebaseConfig, appId: "" }))}`,
+    });
+    expect(incomplete.initializeApp).not.toHaveBeenCalled();
+    expect(incomplete.importScripts).not.toHaveBeenCalled();
   });
 
   it("shows supplied notification content", () => {

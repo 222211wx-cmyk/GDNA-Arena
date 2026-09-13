@@ -30,6 +30,12 @@ if (!serviceAccount) {
       console.error(JSON.stringify({ fcm: "dry-run-failed", delivered: false }));
       process.exitCode = 1;
     }
+    // Useful while replacement web configuration/rules are still pending:
+    // validate the supplied server credential without writing any documents.
+    if (process.argv.includes("--fcm-only")) {
+      await app.delete().catch(() => {});
+      process.exit(process.exitCode ?? 0);
+    }
     const db = getFirestore(app);
     const callId = `probe-${randomUUID().replaceAll("-", "")}`;
     const ref = db.collection("callInvites").doc(callId);

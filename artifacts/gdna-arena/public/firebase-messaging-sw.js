@@ -11,17 +11,59 @@ if (typeof self.addEventListener === "function") {
   });
 }
 
-importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
-firebase.initializeApp({
-  apiKey: "AIzaSyDgro5MZqUTSrOzgJPRlEgve2j-88TDnFQ",
-  authDomain: "helixly-b7653.firebaseapp.com",
-  projectId: "helixly-b7653",
-  storageBucket: "helixly-b7653.firebasestorage.app",
-  messagingSenderId: "630195919424",
-  appId: "1:630195919424:web:1693e46da2370942115da5"
-});
-const messaging = firebase.messaging();
+/*
+ * The worker URL is registered with the current public Firebase web config as
+ * `firebaseConfig`.  Never keep a project config in this static asset: an old
+ * worker can outlive the page that installed it and would otherwise continue
+ * minting tokens for the retired Firebase project.
+ *
+ * Keep this validation intentionally strict.  A worker with no (or malformed)
+ * config still owns notification clicks, but must not initialize Firebase or
+ * create a messaging client for an unknown project.
+ */
+function readFirebaseConfig() {
+  const location = self.location;
+  if (!location || typeof location.href !== "string" || !location.href) return null;
+
+  let raw;
+  try {
+    raw = new URL(location.href).searchParams.get("firebaseConfig");
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+  const requiredKeys = ["apiKey", "authDomain", "projectId", "messagingSenderId", "appId"];
+  if (!requiredKeys.every(key => typeof parsed[key] === "string" && parsed[key].trim())) return null;
+  return parsed;
+}
+
+function initializeMessaging(config) {
+  if (!config) return null;
+  try {
+    importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
+    importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
+    if (typeof firebase === "undefined" ||
+      typeof firebase.initializeApp !== "function" ||
+      typeof firebase.messaging !== "function") return null;
+    firebase.initializeApp(config);
+    return firebase.messaging();
+  } catch {
+    // Firebase is optional for in-app WebSocket calls. Click handling below is
+    // deliberately independent and remains available when setup fails.
+    return null;
+  }
+}
+
+const messaging = initializeMessaging(readFirebaseConfig());
 
 const CALL_TTL_MS = 30_000;
 const INCOMING_CALL_TAG = "gdna-incoming-call";
@@ -384,4 +426,6 @@ function handleNotificationClick(event) {
   return focusOrOpen(appRoute(callId));
 }
 
-messaging.onBackgroundMessage((payload) => handleBackgroundMessage(payload));
+if (messaging && typeof messaging.onBackgroundMessage === "function") {
+  messaging.onBackgroundMessage((payload) => handleBackgroundMessage(payload));
+}

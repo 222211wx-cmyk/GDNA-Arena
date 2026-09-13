@@ -37,7 +37,10 @@ export const getMessagingIfSupported = () => messaging;
 export function getToken(messaging, options = {}) {
   return firebaseGetToken(messaging, {
     ...options,
-    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+    // Call-push config is server-owned and follows the active Firebase
+    // project. Keep the environment value only as a local fallback; never
+    // overwrite a replacement project's VAPID key with a stale build value.
+    vapidKey: options.vapidKey ?? import.meta.env.VITE_FIREBASE_VAPID_KEY,
   });
 }
 

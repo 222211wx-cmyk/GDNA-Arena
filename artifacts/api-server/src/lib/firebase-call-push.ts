@@ -166,7 +166,12 @@ function adminConfigurationProblem(): string | null {
 }
 
 function clientConfigurationProblem(): string | null {
-  if (!asPublicConfig()) return "Firebase web configuration is not configured";
+  const config = asPublicConfig();
+  if (!config) return "Firebase web configuration is not configured";
+  const account = readServiceAccount();
+  if (account && account.project_id !== config.projectId) {
+    return "Firebase service account and web configuration belong to different projects";
+  }
   return null;
 }
 
@@ -264,6 +269,7 @@ async function deviceTokens(
   const cutoff = Date.now() - FOCUS_FRESH_MS;
   return snapshot.docs.flatMap(doc => {
     const value = doc.data();
+    if (value.configurationId !== pushConfigurationId()) return [];
     if (typeof value.token !== "string" || value.token.length < 20 || value.token.length > 4096) return [];
     const focusAt = dateValue(value.focusUpdatedAt, new Date(0)).getTime();
     const focused = value.focused === true && focusAt >= cutoff;
@@ -294,13 +300,15 @@ async function sendPush(
     await Promise.all(response.responses.map(async (result, index) => {
       const code = result.error?.code;
       if (!result.success && (code === "messaging/registration-token-not-registered" ||
-        code === "messaging/invalid-registration-token")) {
+        code === "messaging/invalid-registration-token" || code === "messaging/mismatched-credential")) {
         await devices[index].ref.delete().catch(() => {});
       }
+      if (!result.success) console.warn("[Firebase] A background notification was not delivered");
     }));
   } catch {
     // Push delivery is intentionally isolated from call-state persistence. Never
     // log an FCM token or let a provider outage crash WebSocket signaling.
+    console.warn("[Firebase] Background notification delivery failed");
   }
 }
 
@@ -355,6 +363,14 @@ function validInstallationId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(value);
 }
 
+function pushConfigurationId(): string {
+  const config = asPublicConfig();
+  return createHash("sha256").update(JSON.stringify([
+    config?.projectId, config?.appId, config?.messagingSenderId,
+    process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim(),
+  ])).digest("hex");
+}
+
 export async function registerCallPushDevice(
   userId: number,
   sessionId: string,
@@ -369,6 +385,7 @@ export async function registerCallPushDevice(
     const now = new Date();
     await userRef(db, userId).collection("devices").doc(input.installationId).set({
       token: input.token,
+      configurationId: pushConfigurationId(),
       focused: input.focused,
       focusUpdatedAt: now,
       sessionTag: sessionTag(sessionId),

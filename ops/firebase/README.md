@@ -13,8 +13,12 @@ manager (never commit their contents):
 - `FIREBASE_SERVICE_ACCOUNT`: preferred Firebase service-account JSON.
   Legacy `FIREBASE_SERVICE_ACCOUNT_JSON` and the existing spelling
   `FIBERASE_SERVICE_ACCOUNT` are supported aliases, in that order.
-  The shared parser accepts raw/quoted/double-stringified JSON and normalizes
-  escaped private-key newlines. Parse errors never log input or private keys.
+  The shared parser accepts raw/quoted/double-stringified JSON or standard
+  Base64-encoded JSON (optional padding and line wrapping), and normalizes
+  escaped private-key newlines. Input is bounded to 128 KiB; invalid encoding,
+  invalid UTF-8 and excessive nesting are rejected. Base64 is not encryption
+  and cannot fix invalid credentials or missing permissions.
+  Parse errors never log input or private keys.
   Parse/Admin initialization failures leave in-app WebSocket ringing available.
 - `FIREBASE_WEB_CONFIG`: public Firebase web config as JSON, containing
   `apiKey`, `authDomain`, `projectId`, `messagingSenderId`, and `appId`.
@@ -24,6 +28,27 @@ manager (never commit their contents):
 - `VITE_FIREBASE_VAPID_KEY`: the same public VAPID key for the browser's
   token request. The Vite Firebase web configuration must target the same
   project as the service account.
+
+### Replacing a Firebase project
+
+Preserve the newly supplied service-account secret. Replace the server public
+web config and all browser `VITE_FIREBASE_*` config fields together, and replace
+both public VAPID settings with the new project's web-push public key. The
+server rejects service-account/web-project mismatches. Restart the API and
+rebuild the web client after updating settings; do not rely on an old browser
+bundle. The messaging worker receives public configuration from its registration
+URL rather than embedding a fixed project.
+
+Device registrations are scoped to the server's project, app, sender and VAPID
+configuration. Older unscoped or mismatched records are ignored; citizens must
+reopen the updated app to register their device again. Do not copy tokens from
+the deleted project. Apply the included rules and indexes to the replacement
+project and configure its authorized web domains.
+
+Run `node scripts/firebase-call-push-probe.mjs --fcm-only` from the API directory
+to validate FCM send authorization without delivery or Firestore writes. The
+normal probe additionally creates, reads and deletes a diagnostic invitation and
+checks the expiry index. Neither mode proves browser receipt or end-to-end media.
 
 The service account and exact public web config are required for the durable
 Firestore integration. `GET /api/call-push/config` reports `enabled: false`
