@@ -3,11 +3,9 @@
  *
  * Key facts from the backend:
  * - CURRENT_TERMS_VERSION = "finance-terms-2025-01" (server-authoritative — fetched via GET /finance/wallet)
- * - Finance mode is server-authoritative; clients fail closed while config is unavailable.
- *   POST /finance/payouts returns 409 in simulation — UI must never show it as a valid payout action.
+ * - Finance mode is permanently simulation-only; no automated payout action is exposed.
  * - Real simulation flow: POST /finance/simulation/payments, POST /finance/simulation/refunds.
  * - Manual payout: PUT /finance/beneficiaries/:id/payout-details → POST /finance/manual-payouts.
- * - POST /finance/connect/refresh returns { beneficiary, url, simulated }.
  * - GET /finance/wallet returns { coinBalance, fiat, entries, beneficiary, beneficiaries, wallets }.
  * - POST /finance/beneficiaries/accept-terms needs { accepted: true, ownerType|entityType, displayName|legalName, country (2-letter ISO), termsVersion }.
  * - All mutations block when offline (assertNetworkOnline is called inside api helpers).
@@ -56,12 +54,11 @@ export interface Beneficiary {
   termsAccepted: boolean;
   termsVersion: string | null;
   termsAcceptedAt: string | null;
-  stripeAccountId: string | null;
   country: string | null;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
   canPayout: boolean;
-  /** Morocco: false until Stripe + Bank Al-Maghrib confirmed */
+  /** Morocco: false until platform eligibility review is complete. */
   eligibilityConfirmed: boolean;
   requirementsDue: string[];
   requirements: string[];
@@ -92,22 +89,6 @@ export interface AcceptTermsBody {
 
 export interface AcceptTermsResult {
   beneficiary: Beneficiary;
-}
-
-export interface OnboardingBody {
-  beneficiaryId?: string;
-}
-
-export interface OnboardingResult {
-  url: string;
-  simulated?: boolean;
-  message?: string;
-}
-
-export interface RefreshResult {
-  beneficiary: Beneficiary;
-  url: string | null;
-  simulated?: boolean;
 }
 
 export interface SimulationPaymentBody {
@@ -209,8 +190,6 @@ export interface FinanceTerms {
   currentVersion: string;
   termsVersion:string;
   simulation:boolean;
-  moneyMovementEnabled:boolean;
-  operatingMode:'simulation'|'live';
   /** Human-readable label for display, if provided by server. */
   label?: string;
   /** ISO date when this version became effective, if provided. */
@@ -291,28 +270,6 @@ export function useAcceptTerms() {
     mutationFn: (body: AcceptTermsBody) =>
       apiPost<AcceptTermsResult>('/finance/beneficiaries/accept-terms', body),
     onSuccess: (_data, _vars, _ctx) => {
-      void queryClient.invalidateQueries({ queryKey: ['finance'] });
-    },
-  });
-}
-
-export function useStartOnboarding() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (body: OnboardingBody) =>
-      apiPost<OnboardingResult>('/finance/connect/onboarding', body),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['finance'] });
-    },
-  });
-}
-
-export function useRefreshOnboarding() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (body?: { beneficiaryId?: string }) =>
-      apiPost<RefreshResult>('/finance/connect/refresh', body),
-    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['finance'] });
     },
   });

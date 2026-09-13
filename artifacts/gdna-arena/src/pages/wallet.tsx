@@ -18,7 +18,7 @@ import { isArabic, techT } from "@/i18n/tech-surfaces-copy";
 import { formatSurfaceNumber, localeForSurfaceB } from "@/i18n/locale-surfaces-b-copy";
 import type { Lang } from "@/contexts/LangContext";
 import {
-  useWalletData, useFinanceMode,
+  useWalletData,
   type LedgerEntry, type Beneficiary,
 } from "@/hooks/use-finance";
 
@@ -46,10 +46,8 @@ function fmtTimestamp(ts: string, lang: Lang): string {
 
 // ── Simulation banner ───────────────────────────────────────────────────────────
 function SimulationBanner() {
-  const {simulation}=useFinanceMode();
   const { lang } = useLang();
   const t = (text: string) => financeT(lang, text);
-  if (!simulation) return null;
   return (
     <div
       className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
@@ -59,7 +57,7 @@ function SimulationBanner() {
       <div className="text-sm">
         <p className="font-medium text-foreground">{t("Test / Simulation Mode")}</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {t("All balances and payouts shown here are simulated. No real money is moved. Fiat settlement runs against Stripe test accounts only.")}
+          {t("All balances and payouts shown here are simulated. No real money is moved.")}
         </p>
       </div>
     </div>
@@ -80,7 +78,7 @@ function StatusBadge({ status }: { status: string }) {
 function BeneficiaryCard({ b }: { b: Beneficiary }) {
   const { lang } = useLang();
   const t = (text: string) => financeT(lang, text);
-  const canPayout = b.canPayout && b.chargesEnabled && b.payoutsEnabled;
+  const accountActive = b.termsAccepted && b.status !== "restricted";
   return (
     <div className="rounded-lg border border-border/50 bg-card/30 p-4 space-y-3" data-testid={`card-beneficiary-${b.id}`}>
       <div className="flex items-start justify-between gap-2">
@@ -93,25 +91,17 @@ function BeneficiaryCard({ b }: { b: Beneficiary }) {
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {canPayout
+          {accountActive
             ? <ShieldCheck className="w-4 h-4 text-green-500" />
             : <ShieldAlert className="w-4 h-4 text-orange-400" />}
-          <span className={`text-xs font-medium ${canPayout ? "text-green-500" : "text-orange-400"}`}>
-            {t(canPayout ? "Active" : "Restricted")}
+          <span className={`text-xs font-medium ${accountActive ? "text-green-500" : "text-orange-400"}`}>
+            {t(accountActive ? "Active" : "Restricted")}
           </span>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <span className={`w-2 h-2 rounded-full ${b.chargesEnabled ? "bg-green-500" : "bg-muted-foreground/40"}`} />
-          {t("Charges")} {t(b.chargesEnabled ? "enabled" : "disabled")}
-        </div>
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <span className={`w-2 h-2 rounded-full ${b.payoutsEnabled ? "bg-green-500" : "bg-muted-foreground/40"}`} />
-          {t("Payouts")} {t(b.payoutsEnabled ? "enabled" : "disabled")}
-        </div>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         {b.termsAccepted && (
-          <div className="col-span-2 flex items-center gap-1.5 text-muted-foreground">
+          <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-3 h-3 text-green-500" />
             {t("Terms accepted")}{b.termsVersion ? ` (${b.termsVersion})` : ""}
           </div>
@@ -132,7 +122,7 @@ function BeneficiaryCard({ b }: { b: Beneficiary }) {
       )}
       <Link href="/finance/onboarding">
         <Button size="sm" variant="outline" className="w-full mt-1" data-testid={`button-manage-beneficiary-${b.id}`}>
-          {t(b.canPayout ? "Manage account" : "Complete setup")} <ChevronRight className="w-3 h-3 ml-1" />
+           {t(accountActive ? "Manage account" : "Complete setup")} <ChevronRight className="w-3 h-3 ml-1" />
         </Button>
       </Link>
     </div>
@@ -241,7 +231,7 @@ export default function Wallet() {
   const fiat = data?.fiat ?? null;
   const entries = data?.entries ?? [];
   const beneficiaries = data?.beneficiaries ?? [];
-  const canAnyPayout = beneficiaries.some((b) => b.canPayout);
+  const canAnyPayout = beneficiaries.some((b) => b.ownerType === "event" || b.ownerType === "company");
 
   return (
     <div dir={isArabic(lang) ? "rtl" : "ltr"} className="min-h-[calc(100dvh-4rem)] max-w-3xl mx-auto px-4 py-6 md:py-8 space-y-6">
@@ -396,7 +386,7 @@ export default function Wallet() {
                     <div>
                        <p className="font-semibold text-foreground">{t("No fiat account yet")}</p>
                       <p className="text-sm text-muted-foreground mt-1">
-                         {t("Complete beneficiary onboarding to simulate payouts through Stripe test mode.")}
+                         {t("Register a beneficiary to use the simulated ledger and manual payout requests.")}
                       </p>
                     </div>
                     <Link href="/finance/onboarding">

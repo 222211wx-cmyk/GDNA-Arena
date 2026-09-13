@@ -8,9 +8,6 @@ import { pool } from "@workspace/db";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { WebhookHandlers } from "./webhookHandlers";
-import { processStripeEvent } from "./lib/finance-events";
-import { FINANCE_SIMULATION_MODE, stripeWebhookEnabled } from "./lib/finance-simulation";
 import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
 
 const app: Express = express();
@@ -26,33 +23,6 @@ app.use(
     crossOriginResourcePolicy: { policy: "cross-origin" }, // allow media/images to the app
   }),
 );
-
-// Stripe signs the exact raw bytes. This must precede every JSON body parser.
-app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res): Promise<void> => {
-  // This guard is deliberately before signature handling or StripeSync access:
-  // default simulation deployments must never request Stripe credentials.
-  if (!stripeWebhookEnabled(FINANCE_SIMULATION_MODE)) {
-    res.status(503).json({ error: "Stripe webhook disabled in finance simulation mode", simulation: true });
-    return;
-  }
-  const signature = req.headers["stripe-signature"];
-  if (!signature || Array.isArray(signature) || !Buffer.isBuffer(req.body)) {
-    res.status(400).json({ error: "Invalid Stripe webhook" });
-    return;
-  }
-  try {
-    await WebhookHandlers.processWebhook(req.body, signature);
-    // Sync only returns after signature verification.
-    const event = JSON.parse(req.body.toString("utf8")) as { id?: string; type?: string; data?: { object?: { metadata?: Record<string, string>; id?: string; status?: string } } };
-    if (event.id && event.type) {
-      await processStripeEvent(event as { id: string; type: string; data: { object: any } });
-    }
-    res.status(200).json({ received: true });
-  } catch (error) {
-    logger.warn({ err: error }, "Stripe webhook rejected");
-    res.status(400).json({ error: "Webhook processing error" });
-  }
-});
 
 app.use(
   pinoHttp({

@@ -5,12 +5,11 @@
  * - CURRENT_TERMS_VERSION = "finance-terms-2025-01" (returned in wallet response / accept-terms 400 body)
  * - FINANCE_SIMULATION_MODE is always true in the current deployment.
  *   POST /finance/payouts → 409 in simulation. UI never presents it.
- * - Simulation payout = POST /finance/manual-payouts (manual, monthly, provider: redotpay_manual).
+ * - Manual payout requests are not available in simulation mode.
  *   Requires PUT /finance/beneficiaries/:id/payout-details first.
- * - POST /finance/connect/refresh returns { beneficiary, url, simulated }.
  * - Wallet response: { coinBalance, fiat, entries, beneficiary, beneficiaries }.
  * - beneficiary stub when none registered: { status: 'none' }.
- * - Morocco: eligibilityConfirmed = false until Stripe + Bank Al-Maghrib confirm.
+ * - Morocco: eligibilityConfirmed = false until platform eligibility review.
  */
 import React, { useState, useCallback } from 'react';
 import {
@@ -22,7 +21,6 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
-  Linking,
   Modal,
   TextInput,
 } from 'react-native';
@@ -45,11 +43,9 @@ import {
   useWallet,
   useInvoices,
   useManualPayouts,
-  useRefreshOnboarding,
   useRequestManualPayout,
   useSavePayoutDetails,
   useSimulatePayment,
-  useFinanceTerms,
   isRealBeneficiary,
   type WalletEntry,
   type Invoice,
@@ -462,10 +458,7 @@ export default function FinanceScreen() {
   const walletQuery = useWallet(user?.id);
   const invoicesQuery = useInvoices(user?.id);
   const manualPayoutsQuery = useManualPayouts(user?.id);
-  const termsQuery=useFinanceTerms();
-  const moneyMovementEnabled=termsQuery.data?.moneyMovementEnabled===true&&termsQuery.data.operatingMode==='live';
-  const simulation=!moneyMovementEnabled;
-  const refreshOnboarding = useRefreshOnboarding();
+  const simulation = true;
   const requestManualPayout = useRequestManualPayout();
 
   const wallet = walletQuery.data;
@@ -480,10 +473,9 @@ export default function FinanceScreen() {
   const bStatus = beneficiary?.status ?? 'none';
   const isMorocco = (beneficiary?.country ?? '').toUpperCase() === 'MA';
   const moroccoRestricted = isMorocco && !beneficiary?.eligibilityConfirmed;
-  // In simulation mode: canPayout is always false from the server (eligibilityConfirmed = false).
-  // We surface the manual payout request flow for event/company beneficiaries.
-  const canManualPayout = moneyMovementEnabled &&
-    !!beneficiary
+  // Manual payout requests stay disabled in simulation, matching the server's
+  // no-money-movement contract. Account detail editing remains a separate flow.
+  const canManualPayout = !simulation && !!beneficiary
     && ['event', 'company'].includes(beneficiary.ownerType ?? '')
     && (bStatus === 'enabled' || bStatus === 'pending' || bStatus === 'onboarding');
 
@@ -500,23 +492,11 @@ export default function FinanceScreen() {
     setRefreshing(false);
   }, [walletQuery, invoicesQuery, manualPayoutsQuery]);
 
-  const handleResumeOnboarding = useCallback(async () => {
-    if (!isOnline) { Alert.alert('Offline', 'You must be connected to resume onboarding.'); return; }
-    try {
-      const result = await refreshOnboarding.mutateAsync(
-        beneficiary?.id ? { beneficiaryId: beneficiary.id } : undefined,
-      );
-      if (result.url) {
-        await Linking.openURL(result.url);
-      } else {
-        Alert.alert('Status updated', 'Your Connect account status has been refreshed.');
-      }
-    } catch (err) {
-      Alert.alert('Could not resume', err instanceof Error ? err.message : 'Please try again.');
-    }
-  }, [isOnline, refreshOnboarding, beneficiary]);
-
   const handleManualPayout = useCallback(() => {
+    if (simulation) {
+      Alert.alert('Simulation mode', 'Manual payout requests are disabled in Simulation Mode.');
+      return;
+    }
     if (!isOnline) { Alert.alert('Offline', 'Reconnect to request a payout.'); return; }
     if (!beneficiary?.id) return;
     const currency = wallet?.fiat.currency ?? 'usd';
@@ -546,7 +526,7 @@ export default function FinanceScreen() {
         },
       ],
     );
-  }, [isOnline, beneficiary, wallet, requestManualPayout]);
+  }, [simulation, isOnline, beneficiary, wallet, requestManualPayout]);
 
   function beneficiaryStatusLabel(): string {
     if (moroccoRestricted) return 'ELIGIBILITY PENDING';
@@ -615,7 +595,7 @@ export default function FinanceScreen() {
         >
           <Ionicons name="flask-outline" size={16} color={colors.chart1} />
           <Typography variant="muted" style={{ flex: 1, fontSize: 12 }}>
-            Test ledger mode is active. No Stripe account is created and no real payment, transfer, payout, or RedotPay obligation is available.
+             Test ledger mode is active. No real payment or transfer is made. Manual payout requests are disabled in Simulation Mode.
           </Typography>
         </View>}
 
@@ -698,11 +678,6 @@ export default function FinanceScreen() {
                       {beneficiary.displayName}
                     </Typography>
                   )}
-                  {beneficiary?.stripeAccountId && (
-                    <Typography variant="muted" style={{ fontSize: 11, marginTop: 1 }}>
-                      {beneficiary.stripeAccountId}
-                    </Typography>
-                  )}
                 </View>
                 <Badge
                   style={{ backgroundColor: beneficiaryStatusColor() + '22', borderColor: beneficiaryStatusColor() + '55' }}
@@ -741,22 +716,6 @@ export default function FinanceScreen() {
                 </View>
               )}
 
-              {(bStatus === 'pending' || bStatus === 'onboarding' || bStatus === 'requirements_due' || bStatus === 'restricted') && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={handleResumeOnboarding}
-                  loading={refreshOnboarding.isPending}
-                  disabled={!isOnline}
-                  style={{ marginTop: 12 }}
-                  testID="resume-onboarding-btn"
-                >
-                  <Text style={{ color: colors.foreground, fontFamily: nativeTheme.fonts.medium, fontSize: 13 }}>
-                    Resume / refresh Stripe verification
-                  </Text>
-                </Button>
-              )}
-
               {bStatus === 'none' && (
                 <Button
                   size="sm"
@@ -782,7 +741,7 @@ export default function FinanceScreen() {
               )}
             </Card>
 
-            {/* ── Manual payout (for event/company beneficiaries, replaces /finance/payouts which returns 409 in simulation) ── */}
+            {/* ── Manual payout (enabled only outside simulation mode) ── */}
             {canManualPayout && (
               <>
                 <SectionHeader title="MONTHLY PAYOUT REQUEST" />
@@ -790,7 +749,7 @@ export default function FinanceScreen() {
                   <View style={[s.infoBox, { backgroundColor: colors.chart1 + '15', borderColor: colors.chart1 + '40', marginBottom: 12 }]}>
                     <Ionicons name="information-circle-outline" size={14} color={colors.chart1} />
                     <Typography variant="muted" style={{ flex: 1, fontSize: 12 }}>
-                      Automated Stripe payouts are disabled in simulation mode. Submit a monthly manual payout request; the platform processes your 70% net share via {beneficiary?.country === 'MA' ? 'manual transfer' : 'redotpay_manual'}.
+                       Automated payouts are disabled in simulation mode. Submit a monthly manual payout request; the platform reviews your 70% net share via {beneficiary?.country === 'MA' ? 'manual transfer' : 'manual processing'}.
                     </Typography>
                   </View>
                   <Button

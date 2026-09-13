@@ -1,10 +1,9 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
-import { getUncachableStripeClient } from "../stripeClient";
 import { CURRENT_TERMS_VERSION, requireAdmin, splitNet7030 } from "../lib/finance-ledger";
 import { reconcileFinance } from "../jobs/finance-reconciliation";
-import { FINANCE_MONEY_MOVEMENT_ENABLED, FINANCE_SIMULATION_MODE, simulatePayment, simulateRefund } from "../lib/finance-simulation";
+import { FINANCE_SIMULATION_MODE, simulatePayment, simulateRefund } from "../lib/finance-simulation";
 import { encryptPayoutDetails, maskAccount } from "../lib/payout-crypto";
 
 const router: IRouter = Router();
@@ -25,11 +24,13 @@ async function beneficiaryView(userId: number, beneficiaryId?: string) {
     WHERE b.owner_user_id=$1 ${beneficiaryId ? "AND b.id=$2" : ""} ORDER BY b.created_at DESC`, beneficiaryId ? [userId, beneficiaryId] : [userId]);
   return result.rows.map((b) => {
     const requirements = Array.isArray(b.requirements) ? b.requirements : [];
-    const confirmed = b.status === "enabled" && Boolean(b.stripe_account_id);
-    return { id: b.id, status: b.status, ownerType: b.ownerType, displayName: b.displayName, termsAccepted: b.termsVersion === CURRENT_TERMS_VERSION,
-      termsVersion: b.termsVersion ?? null, termsAcceptedAt: b.termsAcceptedAt ?? null, stripeAccountId: b.stripe_account_id ?? null,
-      country: b.country ?? null, chargesEnabled: confirmed, payoutsEnabled: confirmed, requirementsDue: requirements, requirements,
-      canPayout: confirmed, eligibilityConfirmed: confirmed, restrictionReason: confirmed ? null : "Stripe payout capability has not been confirmed" };
+    // Keep the established response shape for existing clients, but never
+    // expose or use a historical external-account identifier.
+    const status = b.status === "disabled" ? "disabled" : "pending";
+    return { id: b.id, status, ownerType: b.ownerType, displayName: b.displayName, termsAccepted: b.termsVersion === CURRENT_TERMS_VERSION,
+      termsVersion: b.termsVersion ?? null, termsAcceptedAt: b.termsAcceptedAt ?? null,
+      country: b.country ?? null, chargesEnabled: false, payoutsEnabled: false, requirementsDue: requirements, requirements,
+      canPayout: false, eligibilityConfirmed: false, restrictionReason: "Finance is simulation-only; external payouts are disabled" };
   });
 }
 async function admin(req: any, res: any): Promise<number | null> {
@@ -53,9 +54,9 @@ router.get("/finance/terms", async (_req, res): Promise<void> => {
   res.json({
     currentVersion: CURRENT_TERMS_VERSION,
     termsVersion: CURRENT_TERMS_VERSION,
-    simulation: FINANCE_SIMULATION_MODE,
-    moneyMovementEnabled: FINANCE_MONEY_MOVEMENT_ENABLED,
-    operatingMode: FINANCE_MONEY_MOVEMENT_ENABLED ? "live" : "simulation",
+    simulation: true,
+    moneyMovementEnabled: false,
+    operatingMode: "simulation",
   });
 });
 router.post("/finance/beneficiaries/accept-terms", async (req, res): Promise<void> => {
@@ -86,68 +87,53 @@ router.post("/finance/connect/onboarding", async (req, res): Promise<void> => {
   if (!beneficiary || beneficiary.type === "infrastructure_cost_center") { res.status(400).json({ error: "Invalid beneficiary" }); return; }
   const accepted = await pool.query("SELECT id FROM terms_acceptances WHERE beneficiary_id=$1 AND terms_version=$2", [beneficiaryId, CURRENT_TERMS_VERSION]);
   if (!accepted.rows[0]) { res.status(409).json({ error: "Current terms must be accepted before onboarding", termsVersion: CURRENT_TERMS_VERSION }); return; }
-  if (FINANCE_SIMULATION_MODE) { await pool.query("UPDATE beneficiaries SET status='pending' WHERE id=$1",[beneficiaryId]); res.json({ url:`/finance/simulated-connect?beneficiaryId=${encodeURIComponent(beneficiaryId)}`,simulated:true,message:"Simulation only — no Stripe account was created" }); return; }
-  const stripe = await getUncachableStripeClient();
-  let accountId = beneficiary.stripe_account_id;
-  if (!accountId) {
-    const account = await stripe.accounts.create({ type: "express", country: beneficiary.country ?? undefined, capabilities: { transfers: { requested: true } }, metadata: { beneficiaryId } }, { idempotencyKey: `beneficiary-account:${beneficiaryId}` });
-    accountId = account.id; await pool.query("UPDATE beneficiaries SET stripe_account_id=$1,status='onboarding' WHERE id=$2", [accountId, beneficiaryId]);
-  }
-  const link = await stripe.accountLinks.create({ account: accountId, refresh_url: `${req.protocol}://${req.get("host")}/finance/connect/refresh`, return_url: `${req.protocol}://${req.get("host")}/finance/connect/refresh`, type: "account_onboarding" });
-  res.json({ url: link.url });
+  await pool.query("UPDATE beneficiaries SET status='pending' WHERE id=$1", [beneficiaryId]);
+  // Preserve the response shape used by existing clients while making the
+  // retired onboarding action an explicit no-op.
+  res.json({
+    url: `/finance/simulated-connect?beneficiaryId=${encodeURIComponent(beneficiaryId)}`,
+    simulated: true,
+    disabled: true,
+    code: "FINANCE_SIMULATION_ONLY",
+    message: "Finance is simulation-only; no external account was created",
+  });
 });
 router.post("/finance/connect/refresh", async (req, res): Promise<void> => {
   const id = user(req); let beneficiaryId = req.body?.beneficiaryId;
   if (!id) { res.status(401).json({ error: "Not authenticated" }); return; }
   if (typeof beneficiaryId !== "string") beneficiaryId = (await beneficiaryView(id))[0]?.id;
   if (!beneficiaryId) { res.status(404).json({ error: "Beneficiary not found" }); return; }
-  if (FINANCE_SIMULATION_MODE) { res.json({ beneficiary:(await beneficiaryView(id,beneficiaryId))[0],url:`/finance/simulated-connect?beneficiaryId=${encodeURIComponent(beneficiaryId)}`,simulated:true }); return; }
-  const beneficiary = await ownedBeneficiary(id, beneficiaryId); if (!beneficiary?.stripe_account_id) { res.status(404).json({ error: "Connected account not found" }); return; }
-  const stripe = await getUncachableStripeClient();
-  const account = await stripe.accounts.retrieve(beneficiary.stripe_account_id);
-  await pool.query("UPDATE beneficiaries SET status=$1 WHERE id=$2", [account.payouts_enabled ? "enabled" : "requirements_due", beneficiaryId]);
-  res.json({ beneficiary: (await beneficiaryView(id, beneficiaryId))[0], url: account.payouts_enabled ? null : (await stripe.accountLinks.create({ account: beneficiary.stripe_account_id, refresh_url: `${req.protocol}://${req.get("host")}/finance/connect/refresh`, return_url: `${req.protocol}://${req.get("host")}/finance/connect/refresh`, type: "account_onboarding" })).url });
+  const beneficiary = await ownedBeneficiary(id, beneficiaryId);
+  if (!beneficiary) { res.status(404).json({ error: "Beneficiary not found" }); return; }
+  res.json({
+    beneficiary: (await beneficiaryView(id, beneficiaryId))[0],
+    url: null,
+    simulated: true,
+    disabled: true,
+    code: "FINANCE_SIMULATION_ONLY",
+  });
 });
 router.post("/finance/checkout", async (req, res): Promise<void> => {
-  const id = user(req); const { beneficiaryId, amountMinor, currency: c, description } = req.body ?? {};
+  const id = user(req);
   if (!id) { res.status(401).json({ error: "Not authenticated" }); return; }
-  if (typeof beneficiaryId !== "string" || !money(amountMinor) || !currency(c) || typeof description !== "string" || !description.trim()) { res.status(400).json({ error: "Invalid checkout" }); return; }
-  const beneficiary = await pool.query("SELECT id,status FROM beneficiaries WHERE id=$1", [beneficiaryId]);
-  if (!beneficiary.rows[0] || beneficiary.rows[0].status === "disabled") { res.status(404).json({ error: "Beneficiary unavailable" }); return; }
-  const paymentRef = crypto.randomUUID();
-  if (FINANCE_SIMULATION_MODE) {
-    const key=typeof req.body?.idempotencyKey==="string" ? req.body.idempotencyKey : `simulation-checkout:${paymentRef}`;
-    const result=await simulatePayment({userId:id,beneficiaryId,amountMinor,currency:c,idempotencyKey:key,description});
-    res.status(201).json({paymentRef:`simulation:${key}`,simulated:true,...result}); return;
-  }
-  const intent = await (await getUncachableStripeClient()).paymentIntents.create({
-    amount: amountMinor, currency: c, description: description.slice(0, 500), metadata: { paymentRef, beneficiaryId, payerUserId: String(id) },
-  }, { idempotencyKey: `checkout:${paymentRef}` });
-  await pool.query("INSERT INTO stripe_references (id,entity_type,entity_id,stripe_id,kind) VALUES ($1,'payment',$2,$3,'payment_intent')", [crypto.randomUUID(), paymentRef, intent.id]);
-  // client_secret is a Stripe payment credential, returned only to this authenticated caller and never persisted.
-  res.status(201).json({ paymentRef, clientSecret: intent.client_secret });
+  res.status(410).json({
+    error: "Checkout is disabled; use the simulation payment endpoint",
+    code: "FINANCE_SIMULATION_ONLY",
+    disabled: true,
+    simulation: true,
+    moneyMovementEnabled: false,
+  });
 });
 router.post("/finance/payouts", async (req, res): Promise<void> => {
-  const id = user(req); const { beneficiaryId, amountMinor, currency: c } = req.body ?? {};
+  const id = user(req);
   if (!id) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const verification=await pool.query("SELECT status,name_matches FROM royal_verifications WHERE user_id=$1",[id]);
-  if(verification.rows[0]?.status!=="verified"||verification.rows[0]?.name_matches!==true){res.status(409).json({error:"Royal account verification and matching bank-holder name are required. Earnings remain frozen."});return;}
-  if (FINANCE_SIMULATION_MODE) { res.status(409).json({error:"Operational payouts are disabled in simulation mode; test allocations cannot be paid.",simulated:true}); return; }
-  if (typeof beneficiaryId !== "string" || !money(amountMinor) || !currency(c)) { res.status(400).json({ error: "Invalid payout" }); return; }
-  const beneficiary = await ownedBeneficiary(id, beneficiaryId); if (!beneficiary?.stripe_account_id) { res.status(409).json({ error: "Complete Connect onboarding first" }); return; }
-  const stripe = await getUncachableStripeClient(); const account = await stripe.accounts.retrieve(beneficiary.stripe_account_id);
-  if (!account.payouts_enabled || account.capabilities?.transfers !== "active") { res.status(409).json({ error: "Stripe has not enabled payouts for this account" }); return; }
-  const client = await pool.connect(); const requestId = crypto.randomUUID();
-  try {
-    await client.query("BEGIN"); const wallet = await client.query(`SELECT w.* FROM wallets w JOIN finance_entities e ON e.id=w.entity_id WHERE e.user_id=$1 AND w.asset='fiat' AND w.currency=$2 FOR UPDATE`, [id, c]);
-    if (!wallet.rows[0] || Number(wallet.rows[0].available_minor) < amountMinor) { await client.query("ROLLBACK"); res.status(400).json({ error: "Insufficient available fiat balance" }); return; }
-    await client.query("UPDATE wallets SET available_minor=available_minor-$1,reserved_minor=reserved_minor+$1 WHERE id=$2", [amountMinor, wallet.rows[0].id]);
-    await client.query("INSERT INTO payout_requests (id,beneficiary_id,wallet_id,amount_minor,currency,status,idempotency_key) VALUES ($1,$2,$3,$4,$5,'reserved',$6)", [requestId, beneficiaryId, wallet.rows[0].id, amountMinor, c, `payout:${requestId}`]);
-    await client.query("COMMIT");
-    try { const payout = await stripe.payouts.create({ amount: amountMinor, currency: c }, { stripeAccount: beneficiary.stripe_account_id, idempotencyKey: `payout:${requestId}` }); await pool.query("UPDATE payout_requests SET status='submitted',stripe_payout_id=$1,updated_at=now() WHERE id=$2", [payout.id, requestId]); }
-    catch (error) { await pool.query("UPDATE wallets SET available_minor=available_minor+$1,reserved_minor=reserved_minor-$1 WHERE id=$2", [amountMinor, wallet.rows[0].id]); await pool.query("UPDATE payout_requests SET status='failed',failure_reason=$1,updated_at=now() WHERE id=$2", [error instanceof Error ? error.message.slice(0, 500) : "Stripe payout failed", requestId]); throw error; }
-    res.status(201).json({ payoutRequestId: requestId, status: "submitted" });
-  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); req.log.error({ err: error }, "Payout failed"); res.status(502).json({ error: "Payout could not be submitted" }); } finally { client.release(); }
+  res.status(409).json({
+    error: "Operational payouts are disabled; submit a manual payout request",
+    code: "FINANCE_SIMULATION_ONLY",
+    disabled: true,
+    simulated: true,
+    moneyMovementEnabled: false,
+  });
 });
 router.post("/finance/simulation/payments", async(req,res):Promise<void>=>{
   const id=user(req); if(!id){res.status(401).json({error:"Not authenticated"});return;}
@@ -178,7 +164,7 @@ router.post("/finance/manual-payouts",async(req,res):Promise<void>=>{
   const verification=await pool.query("SELECT status,name_matches FROM royal_verifications WHERE user_id=$1",[id]);
   if(verification.rows[0]?.status!=="verified"||verification.rows[0]?.name_matches!==true){res.status(409).json({error:"Royal account verification and matching bank-holder name are required. Earnings remain frozen."});return;}
   if(typeof beneficiaryId!=="string"||typeof period!=="string"||!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(period)||!currency(c)){res.status(400).json({error:"Invalid monthly payout request"});return;}
-  if(FINANCE_SIMULATION_MODE){res.status(409).json({error:"Test allocations cannot be paid via RedotPay. Enable live finance only after production approval.",simulated:true});return;}
+   if(FINANCE_SIMULATION_MODE){res.status(409).json({error:"Manual payout requests are disabled in finance simulation mode.",simulated:true,code:"FINANCE_SIMULATION_ONLY"});return;}
   const client=await pool.connect(); try { await client.query("BEGIN");
   // Serializes every period for this beneficiary/currency so concurrent requests
   // can only reserve the balance once.
@@ -205,7 +191,7 @@ router.get("/finance/admin/manual-payouts",async(req,res):Promise<void>=>{
 });
 router.patch("/finance/admin/manual-payouts/:id",async(req,res):Promise<void>=>{
   const adminId=await admin(req,res);if(!adminId)return;const status=req.body?.status,note=typeof req.body?.note==="string"?req.body.note.slice(0,500):null;
-  if(FINANCE_SIMULATION_MODE){res.status(409).json({error:"Manual payout approval/payment is disabled in finance simulation mode.",simulated:true});return;}
+  if(FINANCE_SIMULATION_MODE){res.status(409).json({error:"Manual payout approval and payment are disabled in finance simulation mode.",simulated:true,code:"FINANCE_SIMULATION_ONLY"});return;}
   const from:Record<string,string[]>={approved:["pending"],rejected:["pending"],paid:["approved"]};if(!from[status]){res.status(400).json({error:"Invalid status"});return;}
   const r=await pool.query("UPDATE manual_payout_requests SET status=$1,reviewed_by_user_id=$2,review_note=$3,updated_at=now() WHERE id=$4 AND status=ANY($5) AND ($1='rejected' OR operational_verified=true) RETURNING *",[status,adminId,note,String(req.params.id),from[status]]);
   if(!r.rows[0]){res.status(409).json({error:"Invalid or already-applied transition"});return;}await pool.query("INSERT INTO admin_audit_events (id,admin_user_id,action,target_ref,metadata) VALUES ($1,$2,$3,$4,$5::jsonb)",[crypto.randomUUID(),adminId,`manual_payout_${status}`,String(req.params.id),JSON.stringify({note})]);

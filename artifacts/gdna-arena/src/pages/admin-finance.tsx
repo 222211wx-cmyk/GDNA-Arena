@@ -18,7 +18,6 @@ import { adminText, localeFor } from "@/i18n/community-admin-surfaces-copy";
 import {
   useAdminDashboard, useAdminManualPayouts,
   postReconcile, patchAdminManualPayout,
-  useFinanceMode,
   type AdminDashboard, type ManualPayoutRequest,
 } from "@/hooks/use-finance";
 
@@ -159,7 +158,9 @@ function ManualPayoutRow({
             </div>
           ) : (
             <p className="text-xs text-muted-foreground pt-1">
-               {at("No transitions", { status: at(payout.status) })}
+               {actionsEnabled
+                 ? at("No transitions", { status: at(payout.status) })
+                 : t("Manual payout review actions are disabled in Simulation Mode.")}
             </p>
           )}
         </div>
@@ -233,7 +234,7 @@ export default function AdminFinance() {
   const t = (text: string) => financeT(lang, text);
   const at = (text: Parameters<typeof adminText>[1], values?: Record<string, string | number>) => adminText(lang, text, values);
   const locale = localeFor(lang);
-  const {simulation:SIMULATION_MODE,moneyMovementEnabled}=useFinanceMode();
+  const SIMULATION_MODE = true;
   const { isOnline } = useConnectivity();
   const { toast } = useToast();
   const { state, refetch } = useAdminDashboard();
@@ -419,7 +420,7 @@ export default function AdminFinance() {
                     key={p.id}
                     payout={p}
                     isOnline={isOnline}
-                     actionsEnabled={moneyMovementEnabled}
+                     actionsEnabled={!SIMULATION_MODE}
                     onUpdated={refetchPayouts}
                   />
                 ))}

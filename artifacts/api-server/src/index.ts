@@ -19,10 +19,8 @@ import { startCouncilReportJob } from "./jobs/council-report.js";
 import { ensureMissionsTables, startSovereignMissionsJob } from "./jobs/sovereign-missions.js";
 import { startEventLiveAlertJob } from "./jobs/event-live-alert.js";
 import { getAgoraConfigStatus } from "./lib/agora-config.js";
-import { runMigrations } from "stripe-replit-sync";
-import { getStripeSync } from "./stripeClient";
 import { startFinanceReconciliationJob } from "./jobs/finance-reconciliation";
-import { FINANCE_MONEY_MOVEMENT_ENABLED, FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
+import { FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -32,22 +30,6 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 logger.info(getAgoraConfigStatus(), "Agora environment configuration loaded from process.env");
 logger.info({ financeSimulationMode: FINANCE_SIMULATION_MODE }, "Finance operating mode selected");
 
-async function initStripe(): Promise<void> {
-  if (!FINANCE_MONEY_MOVEMENT_ENABLED) { logger.info("Stripe initialization skipped: money movement readiness lock is closed"); return; }
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for Stripe");
-  try {
-    await runMigrations({ databaseUrl });
-    const sync = await getStripeSync();
-    const domain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim() ?? process.env.REPLIT_DEV_DOMAIN;
-    if (domain) await sync.findOrCreateManagedWebhook(`https://${domain}/api/stripe/webhook`);
-    await sync.syncBackfill();
-    logger.info("Stripe schema, webhook, and backfill initialized");
-  } catch (error) {
-    if (process.env.NODE_ENV === "production") throw error;
-    logger.warn({ err: error }, "Stripe integration temporarily unavailable in development");
-  }
-}
 async function migrateApplicationDatabase(): Promise<void> {
   // Replit applies the development-to-production schema diff before starting
   // an artifact deployment. Re-running Drizzle migrations during production
@@ -58,8 +40,8 @@ async function migrateApplicationDatabase(): Promise<void> {
     return;
   }
 
-  // Development still applies application migrations locally. StripeSync
-  // migrations remain owned by initStripe when live money movement is enabled.
+  // Development applies the application migrations locally. Finance tables
+  // remain part of the application schema and are never provider-managed.
   const candidates = [
     path.resolve(process.cwd(), "../../lib/db/drizzle"),
     path.resolve(process.cwd(), "lib/db/drizzle"),
@@ -1415,9 +1397,8 @@ async function autoSeedTestUsers() {
   } catch (e) { console.warn("[SEED] warn:", e); }
 }
 
-// Apply public/finance migrations before optional Stripe initialization.
+// Apply public and finance migrations before starting the application.
 migrateApplicationDatabase()
-  .then(() => initStripe())
   .then(() => ensureTables())
   .then(() => ensureNeuralTables())
   .then(() => ensureGenomeTables())

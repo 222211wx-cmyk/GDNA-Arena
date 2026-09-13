@@ -3,17 +3,19 @@ import { pool } from "@workspace/db";
 import { postJournal, reverseJournal, splitNet7030 } from "./finance-ledger";
 import { systemWallets } from "./finance-events";
 
-export function financeOperatingMode(env:Partial<Record<"FINANCE_LIVE_MODE"|"FINANCE_STRIPE_CONNECT_READY",string|undefined>>) {
-  const liveAcknowledged=env.FINANCE_LIVE_MODE==="I_UNDERSTAND_REAL_MONEY_WILL_MOVE";
-  const stripeConnectReady=env.FINANCE_STRIPE_CONNECT_READY==="I_HAVE_TESTED_STRIPE_CONNECT_END_TO_END";
-  const moneyMovementEnabled=liveAcknowledged&&stripeConnectReady;
-  return {simulation:!moneyMovementEnabled,moneyMovementEnabled,operatingMode:moneyMovementEnabled ? "live" as const : "simulation" as const};
+/**
+ * Finance is deliberately simulation-only.
+ *
+ * This is a code-level invariant rather than an environment-controlled mode:
+ * no deployment flag can turn on remote money movement accidentally.
+ */
+export function financeOperatingMode() {
+  return { simulation: true, moneyMovementEnabled: false, operatingMode: "simulation" as const };
 }
-const OPERATING_MODE=financeOperatingMode(process.env);
-export const FINANCE_SIMULATION_MODE=OPERATING_MODE.simulation;
-export const FINANCE_STRIPE_CONNECT_READY=process.env.FINANCE_STRIPE_CONNECT_READY==="I_HAVE_TESTED_STRIPE_CONNECT_END_TO_END";
-export const FINANCE_MONEY_MOVEMENT_ENABLED=!FINANCE_SIMULATION_MODE&&FINANCE_STRIPE_CONNECT_READY;
-export function stripeWebhookEnabled(simulationMode = FINANCE_SIMULATION_MODE): boolean { return !simulationMode; }
+
+export const FINANCE_SIMULATION_MODE = true;
+export const FINANCE_MONEY_MOVEMENT_ENABLED = false;
+
 export function simulationRefundNeeded(status:string,amountMinor:number,refundedMinor:number):boolean {
   return status==="simulated" && refundedMinor<amountMinor;
 }

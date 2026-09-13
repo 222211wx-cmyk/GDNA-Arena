@@ -1,26 +1,10 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { apiPath } from "@/lib/network";
 
 // ── Constants aligned to backend (finance-ledger.ts) ────────────────────────────
 export const CURRENT_TERMS_VERSION = "finance-terms-2025-01";
 export const PLATFORM_BPS = 3000; // 30%
 export const BENEFICIARY_BPS = 7000; // 70%
-
-export interface FinanceTermsConfig {
-  currentVersion:string; termsVersion:string; simulation:boolean;
-  moneyMovementEnabled:boolean; operatingMode:"simulation"|"live";
-}
-/** Server-authoritative and fail-closed while loading or on error. */
-export function useFinanceMode() {
-  const [config,setConfig]=useState<FinanceTermsConfig|null>(null);
-  const [error,setError]=useState(false);
-  useEffect(()=>{let active=true;fetch(apiPath("/api/finance/terms"),{credentials:"include"})
-    .then(async r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json() as Promise<FinanceTermsConfig>;})
-    .then(value=>{if(active)setConfig(value);}).catch(()=>{if(active)setError(true);});
-    return()=>{active=false;};},[]);
-  const moneyMovementEnabled=config?.moneyMovementEnabled===true&&config.operatingMode==="live";
-  return {config,loading:!config&&!error,error,simulation:!moneyMovementEnabled,moneyMovementEnabled};
-}
 
 // ── Type definitions ────────────────────────────────────────────────────────────
 
@@ -52,7 +36,6 @@ export interface Beneficiary {
   termsAccepted: boolean;
   termsVersion: string | null;
   termsAcceptedAt: string | null;
-  stripeAccountId: string | null;
   country: string | null;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
@@ -224,36 +207,6 @@ export async function postAcceptTerms(body: {
   });
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as { beneficiary: Beneficiary };
-}
-
-export async function postOnboarding(beneficiaryId: string): Promise<{
-  url: string;
-  simulated: boolean;
-  message?: string;
-}> {
-  const res = await fetch(apiPath("/api/finance/connect/onboarding"), {
-    method: "POST", credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ beneficiaryId }),
-  });
-  if (!res.ok) throw new Error(await readError(res));
-  const j = (await res.json()) as { url?: string; simulated?: boolean; message?: string };
-  if (!j.url) throw new Error("No onboarding URL returned");
-  return { url: j.url, simulated: j.simulated === true, message: j.message };
-}
-
-export async function postRefresh(beneficiaryId: string): Promise<{
-  beneficiary?: Beneficiary;
-  url: string | null;
-  simulated?: boolean;
-}> {
-  const res = await fetch(apiPath("/api/finance/connect/refresh"), {
-    method: "POST", credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ beneficiaryId }),
-  });
-  if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as { beneficiary?: Beneficiary; url: string | null; simulated?: boolean };
 }
 
 /** POST /api/finance/simulation/payments — persisted server-side. */

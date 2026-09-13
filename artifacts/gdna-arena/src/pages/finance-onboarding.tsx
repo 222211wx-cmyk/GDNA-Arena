@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight, ChevronLeft, AlertCircle, CheckCircle2,
-  WifiOff, Loader2, ExternalLink, RefreshCw, ShieldCheck,
+  WifiOff, Loader2,
   Building2, User, Briefcase, FlaskConical, Calculator,
   Landmark, Send, Eye, EyeOff,
 } from "lucide-react";
@@ -20,15 +20,15 @@ import { useLang } from "@/contexts/LangContext";
 import { financeLocale, onboardingT } from "@/i18n/finance-onboarding-copy";
 import {
   useWalletData, useManualPayouts,
-  postAcceptTerms, postOnboarding, postRefresh,
+  postAcceptTerms,
   postSimulatePayment, postSimulateRefund,
   putPayoutDetails, postManualPayout,
   splitNet7030, newIdempotencyKey,
-  CURRENT_TERMS_VERSION, useFinanceMode,
-  type Beneficiary, type SimulationPayment, type PayoutDetails, type ManualPayoutRequest,
+  CURRENT_TERMS_VERSION,
+  type Beneficiary, type SimulationPayment, type ManualPayoutRequest,
 } from "@/hooks/use-finance";
 
-type Step = "owner-type" | "details" | "terms" | "stripe" | "complete";
+type Step = "owner-type" | "details" | "terms" | "complete";
 
 interface FormState {
   ownerType: string;
@@ -63,7 +63,6 @@ function StepIndicator({ current }: { current: Step }) {
     { key: "owner-type" as Step, label: t("accountType") },
     { key: "details" as Step, label: t("details") },
     { key: "terms" as Step, label: t("terms") },
-    { key: "stripe" as Step, label: t("connect") },
   ];
   const currentIdx = steps.findIndex((s) => s.key === current);
   return (
@@ -92,19 +91,17 @@ function StepIndicator({ current }: { current: Step }) {
 }
 
 // ── Existing beneficiary panel ─────────────────────────────────────────────────
-function ExistingBeneficiaryPanel({ b, onRefresh, isRefreshing }: {
-  b: Beneficiary; onRefresh: () => void; isRefreshing: boolean;
-}) {
+function ExistingBeneficiaryPanel({ b }: { b: Beneficiary }) {
   const { lang } = useLang();
   const t = (key: Parameters<typeof onboardingT>[1], values?: Record<string, string | number>) => onboardingT(lang, key, values);
   const ownerLabel = t(b.ownerType === "citizen" ? "citizen" : b.ownerType === "event" ? "event" : "company");
-  const canPayout = b.canPayout && b.chargesEnabled && b.payoutsEnabled;
+  const accountActive = b.termsAccepted && b.status !== "restricted";
   return (
     <Card className="bg-card/50 border-border/50">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">{t("payoutAccount")}</CardTitle>
-          <Badge variant={canPayout ? "default" : "secondary"}>{t(canPayout ? "active" : "incomplete")}</Badge>
+          <Badge variant={accountActive ? "default" : "secondary"}>{t(accountActive ? "active" : "incomplete")}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -120,31 +117,7 @@ function ExistingBeneficiaryPanel({ b, onRefresh, isRefreshing }: {
           </div>
         </div>
         <Separator />
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${b.chargesEnabled ? "bg-green-500" : "bg-muted-foreground/30"}`} />
-            <span className="text-muted-foreground">{t("charges")} {t(b.chargesEnabled ? "enabled" : "disabled")}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${b.payoutsEnabled ? "bg-green-500" : "bg-muted-foreground/30"}`} />
-            <span className="text-muted-foreground">{t("payouts")} {t(b.payoutsEnabled ? "enabled" : "disabled")}</span>
-          </div>
-        </div>
-        {b.requirementsDue.length > 0 && (
-          <div className="rounded-md bg-orange-500/10 border border-orange-500/30 px-3 py-2 space-y-1">
-            <p className="text-xs font-medium text-orange-400">{t("requirementsDue")}</p>
-            {b.requirementsDue.map((r) => <p key={r} className="text-xs text-orange-300/80">{r}</p>)}
-          </div>
-        )}
-        {b.restrictionReason && (
-          <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
-            <p className="text-xs font-medium text-destructive">{t("restriction")}</p>
-            <p className="text-xs text-destructive/80 mt-0.5">{b.restrictionReason}</p>
-          </div>
-        )}
-        <Button variant="outline" className="w-full" onClick={onRefresh} disabled={isRefreshing} data-testid="button-refresh-onboarding">
-          {isRefreshing ? <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("refreshing")}</> : <><RefreshCw className="w-4 h-4 me-2" />{t("resumeStripe")}</>}
-        </Button>
+        <p className="text-xs text-muted-foreground">{t("simulationAccountDescription")}</p>
       </CardContent>
     </Card>
   );
@@ -321,7 +294,7 @@ function SplitSimulationPanel({ beneficiary }: { beneficiary: Beneficiary | null
 
 // ── Bank details + monthly RedotPay request panel ──────────────────────────────
 // Only for event/company beneficiaries.
-function PayoutRailsPanel({ beneficiary, requestsEnabled }: { beneficiary: Beneficiary; requestsEnabled:boolean }) {
+function PayoutRailsPanel({ beneficiary, requestsEnabled }: { beneficiary: Beneficiary; requestsEnabled: boolean }) {
   const { lang } = useLang();
   const t = (key: Parameters<typeof onboardingT>[1], values?: Record<string, string | number>) => onboardingT(lang, key, values);
   const locale = financeLocale(lang);
@@ -486,7 +459,7 @@ function PayoutRailsPanel({ beneficiary, requestsEnabled }: { beneficiary: Benef
 
         <Separator />
 
-        {/* Monthly RedotPay request section */}
+        {/* Monthly manual payout request section */}
         {requestsEnabled ? <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs uppercase tracking-widest text-muted-foreground">{t("monthlyRequest")}</p>
@@ -573,7 +546,7 @@ export default function FinanceOnboarding() {
   const { isOnline } = useConnectivity();
   const { toast } = useToast();
   const { state: walletState, refetch: refetchWallet } = useWalletData();
-  const {simulation:SIMULATION_MODE}=useFinanceMode();
+  const SIMULATION_MODE = true;
 
   const [step, setStep] = useState<Step>("owner-type");
   const [form, setForm] = useState<FormState>({
@@ -582,7 +555,6 @@ export default function FinanceOnboarding() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [beneficiary, setBeneficiary] = useState<Beneficiary | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => { if (user) refetchWallet(); }, [user, refetchWallet]);
 
@@ -605,31 +577,6 @@ export default function FinanceOnboarding() {
     );
   }
 
-  // ── Refresh handler ──────────────────────────────────────────────────────────
-  async function handleRefresh(b: Beneficiary) {
-    setError("");
-    setIsRefreshing(true);
-    try {
-      const result = await postRefresh(b.id);
-      if (result.simulated) {
-        await refetchWallet();
-        toast({
-          title: t("connectRefreshed"),
-          description: t("noStripeCreated"),
-        });
-      } else if (result.url) {
-        window.location.href = result.url;
-      } else {
-        await refetchWallet();
-        toast({ title: t("accountUpToDate"), description: t("payoutsEnabled") });
-      }
-    } catch (e) {
-      setError(t("refreshFailed"));
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
-
   // ── Step handlers ────────────────────────────────────────────────────────────
   async function handleAcceptTerms() {
     if (!isOnline) return;
@@ -644,57 +591,9 @@ export default function FinanceOnboarding() {
         accepted: true,
       });
       setBeneficiary(result.beneficiary);
-      setStep("stripe");
-    } catch (e) {
-      setError(t("saveRetry"));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  // Redirect only when live mode returns a real Stripe-hosted URL.
-  async function handleOpenStripe() {
-    if (!isOnline || !beneficiary) return;
-    setError("");
-    setSubmitting(true);
-    try {
-      const result = await postOnboarding(beneficiary.id);
-      if (result.simulated) {
-        toast({
-          title: t("stripeSimulated"),
-          description: t("noStripeMoneyCreated"),
-        });
-        setStep("complete");
-      } else {
-        window.location.href = result.url;
-      }
-    } catch (e) {
-      setError(t("stripeStartFailed"));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  // Mock Connect: calls the real onboarding endpoint and, if FINANCE_SIMULATION_MODE
-  // is on, the server returns a Stripe test-mode link. For in-app testing we skip
-  // the redirect and mark Connect as locally complete so testers can exercise the
-  // simulation and payout-rails panels.
-  async function handleMockConnect() {
-    if (!isOnline || !beneficiary) return;
-    setError("");
-    setSubmitting(true);
-    try {
-      const result = await postOnboarding(beneficiary.id);
-      if (!result.simulated) {
-        throw new Error(t("serverNotSimulation"));
-      }
-      toast({
-        title: t("stripeSimulated"),
-        description: t("noStripeMoneyCreated"),
-      });
       setStep("complete");
     } catch (e) {
-      setError(e instanceof Error && e.message === t("serverNotSimulation") ? e.message : t("stripeSimulationFailed"));
+      setError(t("saveRetry"));
     } finally {
       setSubmitting(false);
     }
@@ -854,70 +753,6 @@ export default function FinanceOnboarding() {
     );
   }
 
-  function StepStripe() {
-    return (
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">{t("stripeOnboarding")}</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {t("stripeDescription")}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border/50 bg-card/30 p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ShieldCheck className="w-4 h-4 text-green-500 shrink-0" />
-            {t("stripeSecurity")}
-          </div>
-          <Separator />
-          <div className="grid gap-1.5 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /><span>{t("termsAccepted", { version: CURRENT_TERMS_VERSION })}</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /><span>{t("accountTypeValue", { type: t(form.ownerType === "citizen" ? "citizen" : form.ownerType === "event" ? "event" : "company") })}</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /><span>{t("displayName")}: <span className="font-medium">{form.displayName}</span></span></div>
-          </div>
-        </div>
-        {error && (
-          <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2">
-            <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-            <p className="text-sm text-destructive">{error}</p>
-          </div>
-        )}
-        <Button
-          className="w-full" disabled={submitting || !isOnline || !beneficiary}
-          onClick={handleOpenStripe} data-testid="button-open-stripe"
-        >
-          {submitting ? <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("openingStripe")}</>
-            : !isOnline ? <><WifiOff className="w-4 h-4 me-2" />{t("offline")}</>
-            : <>{t("openStripe")} <ExternalLink className="w-4 h-4 ms-2" /></>}
-        </Button>
-        <p className="text-xs text-muted-foreground text-center">
-          {t("stripeRedirect")}
-        </p>
-
-        {SIMULATION_MODE && (
-          <>
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-xs text-muted-foreground uppercase tracking-widest">{t("or")}</span>
-              <Separator className="flex-1" />
-            </div>
-            <Button
-              variant="outline" className="w-full"
-              onClick={handleMockConnect}
-              disabled={submitting || !isOnline || !beneficiary}
-              data-testid="button-mock-connect"
-            >
-              <FlaskConical className="w-4 h-4 me-2" />
-              {t("skipRedirect")}
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              {t("skipDescription")}
-            </p>
-          </>
-        )}
-      </div>
-    );
-  }
-
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-[calc(100dvh-4rem)] max-w-2xl mx-auto px-4 py-6 md:py-8 space-y-6" dir={lang === "ar" ? "rtl" : "ltr"}>
@@ -956,10 +791,10 @@ export default function FinanceOnboarding() {
           </div>
           {existingBeneficiaries.map((b) => (
             <div key={b.id} className="space-y-4">
-              <ExistingBeneficiaryPanel b={b} onRefresh={() => handleRefresh(b)} isRefreshing={isRefreshing} />
-              {(b.ownerType === "event" || b.ownerType === "company") && (
-                <PayoutRailsPanel beneficiary={b} requestsEnabled={!SIMULATION_MODE} />
-              )}
+               <ExistingBeneficiaryPanel b={b} />
+               {(b.ownerType === "event" || b.ownerType === "company") && (
+               <PayoutRailsPanel beneficiary={b} requestsEnabled={!SIMULATION_MODE} />
+               )}
             </div>
           ))}
           {SIMULATION_MODE && <SplitSimulationPanel beneficiary={existingBeneficiaries[0] ?? null} />}
@@ -990,7 +825,6 @@ export default function FinanceOnboarding() {
                 {step === "owner-type" && <StepOwnerType />}
                 {step === "details"    && <StepDetails />}
                 {step === "terms"      && <StepTerms />}
-                {step === "stripe"     && <StepStripe />}
                 {step === "complete"   && (
                   <div className="space-y-6 py-2">
                     <div className="text-center space-y-3">
@@ -1001,9 +835,9 @@ export default function FinanceOnboarding() {
                       </p>
                     </div>
                     {SIMULATION_MODE && <SplitSimulationPanel beneficiary={beneficiary} />}
-                    {beneficiary && (beneficiary.ownerType === "event" || beneficiary.ownerType === "company") && (
-                       <PayoutRailsPanel beneficiary={beneficiary} requestsEnabled={!SIMULATION_MODE} />
-                    )}
+                     {beneficiary && (beneficiary.ownerType === "event" || beneficiary.ownerType === "company") && (
+                        <PayoutRailsPanel beneficiary={beneficiary} requestsEnabled={!SIMULATION_MODE} />
+                     )}
                     <Button className="w-full" onClick={() => setLocation("/wallet")} data-testid="button-go-to-wallet">
                       {t("goWallet")}
                     </Button>
