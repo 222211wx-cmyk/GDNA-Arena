@@ -5,6 +5,7 @@ import {
   markMissedCallsSeen as markSeen,
   type FirebaseStatus,
   type MissedCall,
+  PUSH_LOGOUT_EVENT,
 } from "@/lib/call-firebase";
 
 export function useCallPush(
@@ -23,12 +24,26 @@ export function useCallPush(
   const [missedCallsLoading, setMissedCallsLoading] = useState(false);
   const [missedCallsError, setMissedCallsError] = useState(false);
   const firebaseRef = useRef<Awaited<ReturnType<typeof createCallFirebase>> | null>(null);
-  const pushCleanupRef = useRef<(() => Promise<void>) | null>(null);
+  const pushCleanupRef = useRef<((revoke?: boolean) => Promise<void>) | null>(null);
   const sessionGenerationRef = useRef(0);
   const resumeRef = useRef(resumeCall);
   const terminalRef = useRef(terminalCall);
   resumeRef.current = resumeCall;
   terminalRef.current = terminalCall;
+
+  useEffect(() => {
+    const handleLogout = () => {
+      // Logout is the only client lifecycle event that revokes a device. A
+      // regular component/tab teardown intentionally leaves the registration
+      // alive so background FCM remains available after a reload.
+      const cleanup = pushCleanupRef.current;
+      pushCleanupRef.current = null;
+      sessionGenerationRef.current += 1;
+      void cleanup?.(true);
+    };
+    window.addEventListener(PUSH_LOGOUT_EVENT, handleLogout);
+    return () => window.removeEventListener(PUSH_LOGOUT_EVENT, handleLogout);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +132,8 @@ export function useCallPush(
       if (!cancelled) {
         setFirebaseStatus("error");
         setFirebaseError(error instanceof Error ? error.message : "Firebase call notifications failed");
+        setPushEnabled(false);
+        setPushReason(error instanceof Error ? error.message : "Background notifications could not start");
         setMissedCallsError(true);
         setMissedCallsLoading(false);
       }

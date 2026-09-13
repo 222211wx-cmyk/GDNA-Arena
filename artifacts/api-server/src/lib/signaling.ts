@@ -9,19 +9,26 @@ import type { RequestHandler } from "express";
 import { pool } from "@workspace/db";
 import { requireReadyCallMediaProvider } from "./turn-config";
 import { reserveDeferredAnsweringSocket } from "./deferred-call-policy";
+import { appendBoundedIce } from "./ice-buffer";
 import {
+  acceptDirectCallInvitation,
   acceptDeferredCallInvitation,
   CallPushError,
+  createDirectCallInvitation,
   createDeferredCallInvitation,
   declineDeferredCallInvitation,
   durableTerminalStatus,
+  finishDirectCallInvitation,
   finishDeferredCallInvitation,
   getCallPushStatus,
   isFirebaseCallPushConfigured,
+  resumeDirectCallInvitation,
+  watchDirectCallInvitation,
   watchDeferredCallInvitation,
   type DeferredCallDeclineResult,
   type DeferredCallInvitation,
   type DeferredCallWatcherStatus,
+  type DirectCallInvitation,
 } from "./firebase-call-push";
 
 // ── WebRTC type stubs (browser DOM types not present in Node tsconfig) ────────
@@ -80,7 +87,10 @@ interface ActiveCall {
   callerSocket: WebSocket; calleeSocket: WebSocket | null; startedAt: Date;
   transport: CallTransport; ringTimer: NodeJS.Timeout;
   deferredMedia: boolean; firebasePersisted: boolean; status: "ringing" | "accepting" | "accepted"; callerAvatar: string | null;
-  type: "video" | "voice"; expiresAt?: Date; firebaseWatcher?: () => void; terminalEventSent?: boolean;
+  type: "video" | "voice"; expiresAt?: Date; firebaseWatcher?: () => void; directWatcher?: () => void; terminalEventSent?: boolean;
+  directOffer?: RTCSessionDescriptionInit | null; directE2e?: E2eCallEnvelope;
+  callerIceCandidates: RTCIceCandidateInit[];
+  calleeIceCandidates: Array<{ socket: WebSocket; candidate: RTCIceCandidateInit }>;
 }
 const activeCalls = new Map<string, ActiveCall>();
 // Firebase-disabled development deployments still need retry-safe HTTP
@@ -91,8 +101,10 @@ const localTerminalCalls = new Map<string, DeferredCallDeclineResult>();
 interface PendingDirectOffer {
   callerId: number | null;
   callerSocket: WebSocket;
+  callee: string;
   canceled: boolean;
   expiryTimer: NodeJS.Timeout | null;
+  iceCandidates: RTCIceCandidateInit[];
 }
 const pendingDirectOffers = new Map<string, PendingDirectOffer>();
 const MAX_PENDING_DIRECT_OFFERS = 10_000;
@@ -102,14 +114,17 @@ function beginPendingDirectOffer(
   callId: string,
   callerId: number | null,
   callerSocket: WebSocket,
+  callee: string,
 ): PendingDirectOffer | null {
   if (activeCalls.has(callId) || pendingDirectOffers.has(callId) ||
       pendingDirectOffers.size >= MAX_PENDING_DIRECT_OFFERS) return null;
   const pending: PendingDirectOffer = {
     callerId,
     callerSocket,
+    callee: callee.toLowerCase(),
     canceled: false,
     expiryTimer: null,
+    iceCandidates: [],
   };
   pendingDirectOffers.set(callId, pending);
   pending.expiryTimer = setTimeout(() => {
@@ -137,6 +152,50 @@ function finishPendingDirectOffer(callId: string, pending: PendingDirectOffer): 
   if (pendingDirectOffers.get(callId) === pending) pendingDirectOffers.delete(callId);
 }
 
+function bufferIceCandidate(
+  buffer: RTCIceCandidateInit[],
+  candidate: RTCIceCandidateInit,
+): void {
+  if (buffer.some(existing =>
+    existing.candidate === candidate.candidate &&
+    existing.sdpMid === candidate.sdpMid &&
+    existing.sdpMLineIndex === candidate.sdpMLineIndex)) return;
+  appendBoundedIce(buffer, candidate);
+}
+
+function validIceCandidate(candidate: RTCIceCandidateInit | undefined): candidate is RTCIceCandidateInit {
+  return !!candidate &&
+    typeof candidate.candidate === "string" &&
+    candidate.candidate.length <= 4_096;
+}
+
+function replayCallerIce(callId: string, call: ActiveCall, calleeSocket: WebSocket): void {
+  for (const candidate of call.callerIceCandidates) {
+    send(calleeSocket, {
+      type: "ice-candidate",
+      from: call.caller,
+      callId,
+      candidate,
+    });
+  }
+}
+
+function replayCalleeIce(callId: string, call: ActiveCall, calleeSocket: WebSocket): void {
+  for (const item of call.calleeIceCandidates) {
+    if (item.socket === calleeSocket) {
+      send(call.callerSocket, {
+        type: "ice-candidate",
+        from: call.callee,
+        callId,
+        candidate: item.candidate,
+      });
+    }
+  }
+  // A single answer wins. Candidates from other pre-answer tabs must not leak
+  // into the selected device's negotiated peer connection.
+  call.calleeIceCandidates = [];
+}
+
 function cancelPendingDirectOffer(
   callId: string,
   callerId: number | null,
@@ -160,6 +219,9 @@ function disposeCallWatcher(call: ActiveCall): void {
   const watcher = call.firebaseWatcher;
   call.firebaseWatcher = undefined;
   watcher?.();
+  const directWatcher = call.directWatcher;
+  call.directWatcher = undefined;
+  directWatcher?.();
 }
 
 function deferredInvitation(callId: string, call: ActiveCall): DeferredCallInvitation | null {
@@ -169,6 +231,24 @@ function deferredInvitation(callId: string, call: ActiveCall): DeferredCallInvit
     caller: { id: call.callerId, name: call.caller, avatar: call.callerAvatar },
     calleeId: call.calleeId,
     type: call.type,
+    createdAt: call.startedAt,
+    expiresAt: call.expiresAt,
+  };
+}
+
+function directInvitation(callId: string, call: ActiveCall): DirectCallInvitation | null {
+  if (call.deferredMedia || !call.firebasePersisted ||
+      call.callerId === null || call.calleeId === null ||
+      !call.transport || call.transport.provider !== "webrtc" ||
+      !call.directOffer) return null;
+  return {
+    callId,
+    caller: { id: call.callerId, name: call.caller, avatar: call.callerAvatar },
+    calleeId: call.calleeId,
+    type: call.type,
+    offer: call.directOffer as unknown as Record<string, unknown>,
+    transport: call.transport,
+    e2e: call.directE2e as unknown as Record<string, unknown> | undefined,
     createdAt: call.startedAt,
     expiresAt: call.expiresAt,
   };
@@ -191,6 +271,11 @@ function persistDeferredTerminal(callId: string, call: ActiveCall, status: "decl
     });
     void persistLegacyDeferredMissedCall(callId, call);
   }
+}
+
+function persistDirectTerminal(callId: string, call: ActiveCall, status: "declined" | "missed" | "ended"): void {
+  const invitation = directInvitation(callId, call);
+  if (invitation) void finishDirectCallInvitation(invitation, status).catch(() => {});
 }
 
 function persistLegacyDeferredMissedCall(callId: string, call: ActiveCall): Promise<void> {
@@ -380,6 +465,33 @@ function callEnvelopeMatchesDevices(
   return registered.length === offered.length && registered.every((value, index) => value === offered[index]);
 }
 
+async function currentCallEnvelopeMatches(
+  calleeId: number,
+  envelope: E2eCallEnvelope | undefined,
+): Promise<boolean> {
+  if (!pool) return false;
+  const rows = await pool.query<{ device_id: string; fingerprint: string }>(
+    `SELECT device_id, fingerprint
+       FROM dm_user_e2ee_keys
+      WHERE user_id=$1 AND updated_at >= now() - interval '90 days'`,
+    [calleeId],
+  );
+  return callEnvelopeMatchesDevices(rows.rows, envelope);
+}
+
+async function currentCallBlocked(callerId: number, calleeId: number): Promise<boolean> {
+  if (!pool) return true;
+  const result = await pool.query(
+    `SELECT 1
+       FROM citizen_blocks
+      WHERE (blocker_id=$1 AND blocked_id=$2)
+         OR (blocker_id=$2 AND blocked_id=$1)
+      LIMIT 1`,
+    [callerId, calleeId],
+  );
+  return result.rows.length > 0;
+}
+
 function safeCallerAvatar(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const avatar = value.trim();
@@ -494,6 +606,44 @@ function watchDurableInvitation(callId: string, call: ActiveCall): void {
   }).catch(() => {});
 }
 
+function watchDirectInvitation(callId: string, call: ActiveCall): void {
+  if (call.deferredMedia || !call.firebasePersisted) return;
+  void watchDirectCallInvitation(callId, event => {
+    if (activeCalls.get(callId) !== call || call.terminalEventSent) return;
+    if (event.kind === "answered") {
+      if (call.status !== "ringing" && call.status !== "accepting") return;
+      call.status = "accepted";
+      clearTimeout(call.ringTimer);
+      setUserInCall(call.callee, true);
+      setUserInCall(call.caller, true);
+      for (const device of clientsForUsername(call.callee)) {
+        if (device.ws !== call.calleeSocket) {
+          send(device.ws, { type: "call-ended", by: call.callee, callId });
+        }
+      }
+      send(call.callerSocket, {
+        type: "call-accepted",
+        from: call.callee,
+        callId,
+        answer: event.answer,
+        transport: call.transport,
+      });
+      if (call.calleeSocket) {
+        replayCallerIce(callId, call, call.calleeSocket);
+        replayCalleeIce(callId, call, call.calleeSocket);
+      }
+      return;
+    }
+    handleDurableCallTerminal(callId, event.status);
+  }).then(stop => {
+    if (activeCalls.get(callId) !== call || call.deferredMedia) {
+      stop();
+      return;
+    }
+    call.directWatcher = stop;
+  }).catch(() => {});
+}
+
 /**
  * Authenticated HTTP and WebSocket callee rejection share this path. The
  * Firestore transaction runs before in-memory cleanup/broadcast, then every
@@ -504,7 +654,7 @@ export async function declineCallForUser(
   userId: number,
 ): Promise<DeferredCallDeclineResult> {
   const call = activeCalls.get(callId);
-  if (call && (!call.deferredMedia || call.calleeId !== userId)) {
+  if (call && (!(call.deferredMedia || call.firebasePersisted) || call.calleeId !== userId)) {
     return { callId, outcome: "not-callee", changed: false, calleeId: call.calleeId ?? undefined };
   }
   if (call && call.status !== "ringing") {
@@ -877,6 +1027,8 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               callerAvatar,
               type: invitation.type,
               expiresAt: invitation.expiresAt,
+              callerIceCandidates: [],
+              calleeIceCandidates: [],
             };
             activeCalls.set(msg.callId, activeCall);
             watchDurableInvitation(msg.callId, activeCall);
@@ -909,7 +1061,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           }
           return;
         }
-        const pending = beginPendingDirectOffer(msg.callId, self.userId, ws);
+        const pending = beginPendingDirectOffer(msg.callId, self.userId, ws, msg.to);
         if (!pending) {
           send(ws, {
             type: "call-unavailable",
@@ -955,37 +1107,150 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
               return;
             }
 
-            const callType = msg.video ? "video" : "audio";
-            if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
-            await pool!.query(
-              `INSERT INTO call_history
-                 (caller_id, caller_username, callee_id, callee_username, call_type, status, duration_sec)
-               VALUES ($1, $2, $3, $4, $5, 'missed', 0)`,
-              [self.userId, self.username, callee.id, callee.username, callType],
-            );
+             if (self.userId === null) {
+               send(ws, { type: "call-unavailable", to: callee.username, callId: msg.callId });
+               return;
+             }
 
-            if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
-            if (callee.notifications) {
-              await pool!.query(
-                `INSERT INTO notifications
-                   (user_id, type, title, body, icon, link_path, source_ref)
-                 VALUES ($1, 'missed_call', $2, $3, '📞', '/messages', $4)
-                 ON CONFLICT (user_id, source_ref) WHERE source_ref IS NOT NULL DO NOTHING`,
-                [
-                  callee.id,
-                  "مكالمة فائتة · Missed call",
-                  `@${self.username} حاول الاتصال بك عبر ${msg.video ? "الفيديو" : "الصوت"}`,
-                  `missed_call:${msg.callId}`,
-                ],
-              );
-            }
+             const firebaseStatus = await getCallPushStatus();
+             const directProvider = authoritativeProvider === "webrtc" &&
+               validDescription(msg.offer, "offer");
+             if (firebaseStatus.enabled && directProvider) {
+               // Device fingerprints are checked for durable offline calls
+               // exactly as they are for an online direct offer. A resumed
+               // browser may not answer with a stale E2E device set.
+               const keyClient = await pool!.connect();
+               try {
+                 await keyClient.query("BEGIN");
+                 await keyClient.query("SELECT pg_advisory_xact_lock(47201, 1)");
+                 const keyRows = await keyClient.query<{ device_id: string; fingerprint: string }>(
+                   `SELECT device_id, fingerprint
+                      FROM dm_user_e2ee_keys
+                     WHERE user_id=$1 AND updated_at >= now() - interval '90 days'`,
+                   [callee.id],
+                 );
+                 if (!callEnvelopeMatchesDevices(keyRows.rows, msg.e2e)) {
+                   await keyClient.query("ROLLBACK");
+                   send(ws, {
+                     type: "call-unavailable",
+                     to: callee.username,
+                     callId: msg.callId,
+                     reason: "secure-device-keys-changed",
+                   });
+                   return;
+                 }
+                 await keyClient.query("COMMIT");
+               } catch {
+                 await keyClient.query("ROLLBACK").catch(() => {});
+                 send(ws, { type: "call-unavailable", to: callee.username, callId: msg.callId });
+                 return;
+               } finally {
+                 keyClient.release();
+               }
+               const createdAt = new Date();
+               const callerAvatar = await persistedCallerAvatar(self.userId);
+               const localInvitation: DirectCallInvitation = {
+                 callId: msg.callId,
+                 caller: { id: self.userId, name: self.username, avatar: callerAvatar },
+                 calleeId: callee.id,
+                 type: msg.video ? "video" : "voice",
+                 offer: msg.offer as unknown as Record<string, unknown>,
+                 transport: { provider: "webrtc", version: 1 },
+                 e2e: msg.e2e as unknown as Record<string, unknown> | undefined,
+                 createdAt,
+                 expiresAt: new Date(createdAt.getTime() + 30_000),
+               };
+               if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
+               const invitation = await createDirectCallInvitation(localInvitation);
+               if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) {
+                 await finishDirectCallInvitation(localInvitation, "missed").catch(() => {});
+                 return;
+               }
+               const ringTimer = setTimeout(() => {
+                 const ringing = activeCalls.get(msg.callId);
+                 if (!ringing || ringing.status !== "ringing") return;
+                 activeCalls.delete(msg.callId);
+                 disposeCallWatcher(ringing);
+                 persistDirectTerminal(msg.callId, ringing, "missed");
+                 setUserInCall(ringing.caller, false);
+                 setUserInCall(ringing.callee, false);
+                 const event = {
+                   type: "call-ended",
+                   by: "timeout",
+                   callId: msg.callId,
+                   code: "RING_TIMEOUT",
+                   reason: "Call was not answered within 30 seconds",
+                 };
+                 send(ringing.callerSocket, event);
+               }, Math.max(1, invitation.expiresAt!.getTime() - Date.now()));
+               ringTimer.unref?.();
+               localTerminalCalls.delete(msg.callId);
+               const activeCall: ActiveCall = {
+                 caller: self.username,
+                 callee: callee.username.toLowerCase(),
+                 callerId: self.userId,
+                 calleeId: callee.id,
+                 callerSocket: self.ws,
+                 calleeSocket: null,
+                 startedAt: invitation.createdAt!,
+                 transport: { provider: "webrtc", version: 1 },
+                 ringTimer,
+                 deferredMedia: false,
+                 firebasePersisted: true,
+                 status: "ringing",
+                 callerAvatar,
+                 type: invitation.type,
+                 expiresAt: invitation.expiresAt,
+                 directOffer: msg.offer,
+                 directE2e: msg.e2e,
+                  callerIceCandidates: pending.iceCandidates,
+                  calleeIceCandidates: [],
+               };
+               activeCalls.set(msg.callId, activeCall);
+               watchDirectInvitation(msg.callId, activeCall);
+               setUserInCall(self.username, true);
+               // The callee is offline; only the FCM wake-up is sent. This
+               // avoids claiming an in-app delivery that never happened.
+               send(ws, {
+                 type: "call-ready",
+                 callId: msg.callId,
+                 expiresAt: invitation.expiresAt!.toISOString(),
+               });
+               return;
+             }
 
-            send(ws, {
-              type: "call-unavailable",
-              to: callee.username,
-              callId: msg.callId,
-              missedLogged: true,
-            });
+             // Firebase or direct WebRTC readiness is absent: retain the
+             // established missed-call path rather than claiming durable
+             // resume. The caller's media path is otherwise untouched.
+             const callType = msg.video ? "video" : "audio";
+             if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
+             await pool!.query(
+               `INSERT INTO call_history
+                  (caller_id, caller_username, callee_id, callee_username, call_type, status, duration_sec)
+                VALUES ($1, $2, $3, $4, $5, 'missed', 0)`,
+               [self.userId, self.username, callee.id, callee.username, callType],
+             );
+             if (!pendingDirectOfferIsLive(msg.callId, pending, ws)) return;
+             if (callee.notifications) {
+               await pool!.query(
+                 `INSERT INTO notifications
+                    (user_id, type, title, body, icon, link_path, source_ref)
+                  VALUES ($1, 'missed_call', $2, $3, '📞', '/messages', $4)
+                  ON CONFLICT (user_id, source_ref) WHERE source_ref IS NOT NULL DO NOTHING`,
+                 [
+                   callee.id,
+                   "مكالمة فائتة · Missed call",
+                   `@${self.username} حاول الاتصال بك عبر ${msg.video ? "الفيديو" : "الصوت"}`,
+                   `missed_call:${msg.callId}`,
+                 ],
+               );
+             }
+             send(ws, {
+               type: "call-unavailable",
+               to: callee.username,
+               callId: msg.callId,
+               missedLogged: true,
+             });
           } catch {
             send(ws, { type: "call-unavailable", to: msg.to, callId: msg.callId });
           }
@@ -1062,6 +1327,8 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
                transport: { provider: authoritativeProvider, version: 1 }, ringTimer,
                 deferredMedia: false, firebasePersisted: false, status: "ringing", callerAvatar: null,
                 type: msg.video ? "video" : "voice",
+                callerIceCandidates: pending.iceCandidates,
+                calleeIceCandidates: [],
             });
             // Reserve both participants while the call is ringing. Without this,
             // either side could create a second offer before the first answer.
@@ -1109,7 +1376,20 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       // It can never replace an already selected answering device.
       if (msg.type === "call-resume") {
         const call = activeCalls.get(msg.callId);
-        if (!call || !call.deferredMedia || call.status !== "ringing" || call.calleeId !== self.userId) return;
+        if (!call || call.status !== "ringing" || call.calleeId !== self.userId) {
+          // A durable record alone cannot route post-answer signaling to a
+          // caller socket owned by another replica. Fail explicitly rather
+          // than showing an invitation that can never complete.
+          if (!call && isFirebaseCallPushConfigured()) {
+            send(ws, {
+              type: "call-unavailable",
+              callId: msg.callId,
+              code: "CALL_RESUME_OWNER_UNAVAILABLE",
+              reason: "Call resume is unavailable on this server instance",
+            });
+          }
+          return;
+        }
         try {
           if (!await sessionIsActive(sessionId, sessionUserId)) {
             send(ws, { type: "session-ended" });
@@ -1118,6 +1398,64 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           }
         } catch {
           send(ws, { type: "error", message: "Session validation failed" });
+          return;
+        }
+        if (!call.deferredMedia) {
+          if (userIsInCall(self.username)) {
+            send(ws, { type: "call-busy", callId: msg.callId });
+            return;
+          }
+          let durableOffer: Awaited<ReturnType<typeof resumeDirectCallInvitation>>;
+          try {
+            durableOffer = await resumeDirectCallInvitation(msg.callId, self.userId!);
+            if (!durableOffer) {
+              send(ws, {
+                type: "call-ended",
+                by: "server",
+                callId: msg.callId,
+                code: "INVITATION_NO_LONGER_RINGING",
+              });
+              return;
+            }
+            call.directOffer = durableOffer.offer as unknown as RTCSessionDescriptionInit | null;
+            call.directE2e = durableOffer.e2e as unknown as E2eCallEnvelope | undefined;
+            if (await currentCallBlocked(call.callerId!, self.userId!)) {
+              send(ws, {
+                type: "call-blocked",
+                callId: msg.callId,
+              });
+              return;
+            }
+            if (!await currentCallEnvelopeMatches(self.userId!, call.directE2e)) {
+              send(ws, {
+                type: "call-unavailable",
+                callId: msg.callId,
+                code: "SECURE_DEVICE_KEYS_CHANGED",
+                reason: "Secure device keys changed; call cannot resume",
+              });
+              return;
+            }
+          } catch {
+            send(ws, { type: "call-unavailable", callId: msg.callId });
+            return;
+          }
+          const resumedOffer = call.directOffer;
+          const resumedE2e = call.directE2e;
+          send(ws, {
+            type: "call-resumed",
+            callId: msg.callId,
+            from: call.caller,
+            callerId: call.callerId,
+            callerName: call.caller,
+            callerAvatar: call.callerAvatar,
+            deferredMedia: false,
+            offer: resumedOffer,
+            expiresAt: call.expiresAt?.toISOString(),
+            video: call.type === "video",
+            transport: call.transport,
+            e2e: resumedE2e,
+          });
+          replayCallerIce(msg.callId, call, ws);
           return;
         }
         // Resume authorizes delivery of a durable invitation after a push or
@@ -1131,9 +1469,11 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           callerName: call.caller,
           callerAvatar: call.callerAvatar,
           deferredMedia: true,
+          offer: null,
           expiresAt: call.expiresAt?.toISOString(),
           video: call.type === "video",
           transport: call.transport,
+          e2e: call.directE2e,
         });
         return;
       }
@@ -1141,6 +1481,108 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       // ── CALL ANSWER ───────────────────────────────────────────────────────
       if (msg.type === "call-answer") {
         const call = activeCalls.get(msg.callId);
+        if (call && !call.deferredMedia) {
+          if (call.status !== "ringing" || call.calleeId !== self.userId ||
+              call.caller !== msg.to.toLowerCase() ||
+              call.calleeSocket !== null ||
+              !transportMatches(msg.transport, call.transport.provider) ||
+              !validDescription(msg.answer, "answer")) return;
+          if (userIsInCall(self.username)) {
+            send(ws, { type: "call-busy", callId: msg.callId });
+            return;
+          }
+          // Reserve the answering socket before any await. A second tab can
+          // resume the invitation, but only the first explicit answer may
+          // contend for the Firestore transition.
+          call.calleeSocket = ws;
+          call.status = "accepting";
+          try {
+            if (await currentCallBlocked(call.callerId!, self.userId!)) {
+              call.calleeSocket = null;
+              call.status = "ringing";
+              send(ws, { type: "call-blocked", callId: msg.callId });
+              return;
+            }
+            if (!await currentCallEnvelopeMatches(self.userId!, call.directE2e)) {
+              call.calleeSocket = null;
+              call.status = "ringing";
+              send(ws, {
+                type: "call-unavailable",
+                callId: msg.callId,
+                code: "SECURE_DEVICE_KEYS_CHANGED",
+                reason: "Secure device keys changed; call cannot resume",
+              });
+              return;
+            }
+          } catch {
+            call.calleeSocket = null;
+            call.status = "ringing";
+            send(ws, { type: "call-unavailable", callId: msg.callId });
+            return;
+          }
+          let accepted: Awaited<ReturnType<typeof acceptDirectCallInvitation>>;
+          try {
+            accepted = await acceptDirectCallInvitation(
+              msg.callId,
+              self.userId!,
+              msg.answer as unknown as Record<string, unknown>,
+            );
+          } catch {
+            if (activeCalls.get(msg.callId) !== call) return;
+            call.calleeSocket = null;
+            call.status = "ringing";
+            send(ws, {
+              type: "call-unavailable",
+              callId: msg.callId,
+              code: "FIREBASE_OPERATION_FAILED",
+              reason: "Firebase invitation acceptance failed",
+            });
+            return;
+          }
+          // Caller cancellation/expiry can win while the Firestore
+          // transaction is in flight. Never emit a late acceptance.
+          if (activeCalls.get(msg.callId) !== call || call.status !== "accepting") return;
+          if (!accepted) {
+            activeCalls.delete(msg.callId);
+            disposeCallWatcher(call);
+            clearTimeout(call.ringTimer);
+            setUserInCall(call.caller, false);
+            setUserInCall(call.callee, false);
+            send(ws, {
+              type: "call-ended",
+              by: "server",
+              callId: msg.callId,
+              code: "INVITATION_NO_LONGER_RINGING",
+            });
+            send(call.callerSocket, {
+              type: "call-ended",
+              by: "server",
+              callId: msg.callId,
+              code: "INVITATION_NO_LONGER_RINGING",
+            });
+            return;
+          }
+          clearTimeout(call.ringTimer);
+          call.calleeSocket = ws;
+          call.status = "accepted";
+          setUserInCall(self.username, true);
+          setUserInCall(call.caller, true);
+          for (const device of clientsForUsername(self.username)) {
+            if (device.ws !== ws) {
+              send(device.ws, { type: "call-ended", by: self.username, callId: msg.callId });
+            }
+          }
+          send(call.callerSocket, {
+            type: "call-accepted",
+            from: self.username,
+            callId: msg.callId,
+            answer: msg.answer,
+            transport: call.transport,
+          });
+          replayCallerIce(msg.callId, call, ws);
+          replayCalleeIce(msg.callId, call, ws);
+          return;
+        }
         if (call?.deferredMedia) {
           if (call.status !== "ringing" || call.calleeId !== self.userId ||
               call.caller !== msg.to.toLowerCase() ||
@@ -1302,15 +1744,45 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       // ── ICE CANDIDATE ─────────────────────────────────────────────────────
       if (msg.type === "ice-candidate") {
         const call = activeCalls.get(msg.callId);
-        if (!call || call.transport.provider !== "webrtc" ||
-            (call.deferredMedia && call.status !== "accepted") ||
-            !msg.candidate || typeof msg.candidate.candidate !== "string" ||
-            msg.candidate.candidate.length > 4_096) return;
+        if (!validIceCandidate(msg.candidate)) return;
+        if (!call) {
+          // ICE can arrive while the initial direct offer is still being
+          // persisted/authorized. Keep it with the authenticated caller
+          // instead of dropping it before activeCalls is installed.
+          const pending = pendingDirectOffers.get(msg.callId);
+          if (pending && pending.callerId === self.userId &&
+              pending.callerSocket === ws &&
+              pending.callee === msg.to.toLowerCase()) {
+            bufferIceCandidate(pending.iceCandidates, msg.candidate);
+          }
+          return;
+        }
+        if (call.transport.provider !== "webrtc" ||
+            (call.deferredMedia && call.status !== "accepted")) return;
         if (call.callerId === self.userId && call.callerSocket === ws &&
-            call.callee === msg.to.toLowerCase() && call.calleeSocket) {
-          send(call.calleeSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
-        } else if (call.calleeId === self.userId && call.calleeSocket === ws && call.caller === msg.to.toLowerCase()) {
-          send(call.callerSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+            call.callee === msg.to.toLowerCase()) {
+          if (call.calleeSocket) {
+            send(call.calleeSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+          } else if (!call.deferredMedia) {
+            bufferIceCandidate(call.callerIceCandidates, msg.candidate);
+          }
+        } else if (call.calleeId === self.userId && call.caller === msg.to.toLowerCase()) {
+          if (call.calleeSocket === ws) {
+            send(call.callerSocket, { type: "ice-candidate", from: self.username, callId: msg.callId, candidate: msg.candidate });
+          } else if (!call.deferredMedia && call.status === "ringing" && !call.calleeSocket) {
+            // A resumed tab may gather ICE before its explicit answer binds
+            // the socket. Keep only candidates from that authenticated tab;
+            // another tab cannot win by sending ICE first.
+            if (call.calleeIceCandidates.every(item => item.socket === ws)) {
+              const duplicate = call.calleeIceCandidates.some(item =>
+                item.candidate.candidate === msg.candidate.candidate &&
+                item.candidate.sdpMid === msg.candidate.sdpMid &&
+                item.candidate.sdpMLineIndex === msg.candidate.sdpMLineIndex);
+              if (!duplicate) {
+                appendBoundedIce(call.calleeIceCandidates, { socket: ws, candidate: msg.candidate });
+              }
+            }
+          }
         }
         return;
       }
@@ -1353,6 +1825,12 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             call,
             durableTerminalStatus(call.status, call.callerId === self.userId),
           );
+        } else if (call.firebasePersisted) {
+          persistDirectTerminal(
+            msg.callId,
+            call,
+            durableTerminalStatus(call.status, call.callerId === self.userId),
+          );
         }
         const peerName = call.caller === self.username ? call.callee : call.caller;
         setUserInCall(self.username, false);
@@ -1391,6 +1869,12 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         clearTimeout(call.ringTimer);
         if (call.deferredMedia) {
           persistDeferredTerminal(
+            msg.callId,
+            call,
+            durableTerminalStatus(call.status, call.callerId === self.userId),
+          );
+        } else if (call.firebasePersisted) {
+          persistDirectTerminal(
             msg.callId,
             call,
             durableTerminalStatus(call.status, call.callerId === self.userId),
@@ -1472,6 +1956,12 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         clearTimeout(call.ringTimer);
         if (call.deferredMedia) {
           persistDeferredTerminal(
+            callId,
+            call,
+            durableTerminalStatus(call.status, call.callerSocket === ws),
+          );
+        } else if (call.firebasePersisted) {
+          persistDirectTerminal(
             callId,
             call,
             durableTerminalStatus(call.status, call.callerSocket === ws),

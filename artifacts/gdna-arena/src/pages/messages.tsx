@@ -20,7 +20,10 @@ export default function MessagesPage() {
   const st  = SOCIAL_T[lang] ?? SOCIAL_T.en;
   const rt  = getReserveCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
-  const requestedRoom = new URLSearchParams(search).get("room");
+  // FCM message clicks use the explicit roomId contract. Keep the existing
+  // `room` alias for internal links created before background messaging.
+  const params = new URLSearchParams(search);
+  const requestedRoom = params.get("roomId") ?? params.get("room");
   const parsedRoomId = requestedRoom === null ? Number.NaN : Number(requestedRoom);
   const initialRoomId = Number.isSafeInteger(parsedRoomId) && parsedRoomId > 0 ? parsedRoomId : null;
   const hasInvalidRoomParam = requestedRoom !== null && initialRoomId === null;

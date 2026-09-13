@@ -15,6 +15,7 @@ import {
 import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
 import { broadcastMessageToRoom, broadcastRoomEvent } from "../lib/signaling";
+import { notifyMessageRecipients } from "../lib/message-push";
 import {
   SendArenaWithdrawRequestBody,
   SendArenaWithdrawRequestResponse,
@@ -786,6 +787,8 @@ router.post("/messages/arena-withdraw", async (req, res): Promise<void> => {
 
     void broadcastMessageToRoom(roomId, insertedMessage.rows[0]).catch(error =>
       req.log.error({ error, roomId }, "Arena withdrawal message realtime broadcast failed"));
+     void notifyMessageRecipients(roomId, userId, insertedMessage.rows[0].id, me.username).catch(error =>
+       req.log.error({ error, roomId }, "Arena withdrawal background message notification failed"));
 
     res.status(201).json(SendArenaWithdrawRequestResponse.parse({
       ok: true,
@@ -1129,6 +1132,8 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   // must not turn a saved message into a failed send; REST recovery remains.
   void broadcastMessageToRoom(roomId, msg).catch(error =>
     req.log.error({ error, roomId }, "Chat realtime broadcast failed"));
+   void notifyMessageRecipients(roomId, userId, msg.id, me.username).catch(error =>
+     req.log.error({ error, roomId }, "Chat background message notification failed"));
   res.status(201).json({
     message: {
       ...msg,

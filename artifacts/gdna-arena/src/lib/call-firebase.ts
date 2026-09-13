@@ -1,6 +1,8 @@
 import { apiPath } from "./network";
 
 export type FirebaseStatus = "loading" | "disabled" | "ready" | "error";
+/** Emitted only after the Arena session has actually logged out. */
+export const PUSH_LOGOUT_EVENT = "gdna:auth-logout";
 export interface MissedCall {
   id: string;
   caller: { id: number; name: string; avatar?: string | null };
@@ -97,6 +99,41 @@ function matchesFirebaseIdentity(left: FirebaseIdentity, right: FirebaseIdentity
     left[key].trim() !== "" &&
     left[key] === right[key],
   );
+}
+
+export const PUSH_INSTALLATION_STORAGE_KEY = "gdna-fcm-installation-id";
+
+export function pushInstallationId(): string {
+  let storage: Storage | null = null;
+  try {
+    storage = typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    // Storage may be unavailable in private browsing or an embedded document.
+  }
+  let existing: string | null = null;
+  try {
+    existing = storage?.getItem(PUSH_INSTALLATION_STORAGE_KEY) ?? null;
+  } catch {
+    // Storage may reject reads as well as writes in private browsing.
+  }
+  if (typeof existing === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(existing)) {
+    return existing;
+  }
+  const generated = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `gdna-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  try {
+    storage?.setItem(PUSH_INSTALLATION_STORAGE_KEY, generated);
+  } catch {
+    // Private browsing can expose a storage object that rejects writes. The
+    // registration still works for this session; it simply cannot be reused.
+  }
+  return generated;
+}
+
+/** Unmounts are not revocation; only an explicit authenticated logout is. */
+export function shouldRevokePushRegistration(revoke = false): boolean {
+  return revoke === true;
 }
 
 export function resolvePushCapability(
@@ -307,7 +344,10 @@ export async function createCallFirebase(
         vapidKey: config.vapidPublicKey,
         serviceWorkerRegistration: registration,
       });
-      const installationId = crypto.randomUUID();
+      // Keep one browser installation stable across reloads. This avoids
+      // leaking a new Firestore device row every time a tab mounts while still
+      // allowing the server to revoke it on a real logout/session revocation.
+      const installationId = pushInstallationId();
       const registerToken = async () => json("/api/call-push/devices", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, installationId, focused: document.visibilityState === "visible" }),
@@ -333,6 +373,20 @@ export async function createCallFirebase(
       };
       document.addEventListener("visibilitychange", updateFocus);
       const stopMessage = onMessage(messaging, payload => {
+        if (payload.data?.type === "NEW_MESSAGE" || payload.data?.event === "NEW_MESSAGE") {
+          // A focused tab already owns the private message UI. Ask the
+          // messenger to refresh its authoritative room state instead of
+          // duplicating private content in a second foreground notification.
+          const roomId = payload.data.roomId;
+          const messageId = payload.data.messageId;
+          window.dispatchEvent(new CustomEvent("gdna:chat-push", {
+            detail: {
+              roomId: typeof roomId === "string" ? roomId : undefined,
+              messageId: typeof messageId === "string" ? messageId : undefined,
+            },
+          }));
+          return;
+        }
         const callId = payload.data?.callId || payload.data?.roomId;
         if (!callId) return;
         const fromName = payload.data?.fromName || payload.data?.callerName;
@@ -350,14 +404,20 @@ export async function createCallFirebase(
       });
       return {
         permission,
-        cleanup: async () => {
+        cleanup: async (revoke = false) => {
           document.removeEventListener("visibilitychange", updateFocus);
           stopMessage();
-          await json("/api/call-push/devices", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ installationId }),
-          }).catch(() => {});
+          // A tab closing, route change, HMR remount, or account hook
+          // re-render must not unregister a still-valid browser token. The
+          // authenticated logout path emits PUSH_LOGOUT_EVENT and passes
+          // revoke=true; the API also revokes session-bound devices server-side.
+          if (shouldRevokePushRegistration(revoke)) {
+            await json("/api/call-push/devices", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ installationId }),
+            }).catch(() => {});
+          }
         },
       };
     },

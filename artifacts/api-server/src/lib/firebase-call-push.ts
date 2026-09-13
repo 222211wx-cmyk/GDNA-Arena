@@ -3,6 +3,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
+import { pool as pgPool } from "@workspace/db";
 import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
 import { parseServiceAccount, selectServiceAccount } from "./firebase-service-account.mjs";
 
@@ -12,6 +13,7 @@ const SWEEP_PAGE_SIZE = 100;
 const SWEEP_MAX_PAGES = 5;
 const INCOMING_PUSH_TTL_SECONDS = 30;
 const MISSED_PUSH_TTL_SECONDS = 86_400;
+const MESSAGE_PUSH_TTL_SECONDS = 86_400;
 
 export function isValidCallId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -34,6 +36,34 @@ export interface DeferredCallInvitation {
   type: CallType;
   createdAt?: Date;
   expiresAt?: Date;
+}
+
+/**
+ * The normal browser call path carries its offer immediately.  This durable
+ * variant is only used when that direct offer has no online WebSocket
+ * recipient; it does not defer caller media or replace the configured media
+ * provider.
+ */
+export interface DirectCallInvitation extends DeferredCallInvitation {
+  offer: Record<string, unknown> | null;
+  transport: { provider: "agora" | "webrtc"; version: 1 };
+  e2e?: Record<string, unknown>;
+}
+
+export interface DirectCallResume {
+  callId: string;
+  caller: CallerIdentity;
+  calleeId: number;
+  type: CallType;
+  offer: Record<string, unknown> | null;
+  transport: { provider: "agora" | "webrtc"; version: 1 };
+  e2e?: Record<string, unknown>;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+export interface DirectCallAcceptance extends DirectCallResume {
+  answer: Record<string, unknown> | null;
 }
 
 export type DeferredCallDeclineOutcome =
@@ -131,6 +161,10 @@ export function durableTerminalUpdate(
 
 function sessionTag(sessionId: string): string {
   return createHash("sha256").update(sessionId).digest("hex");
+}
+
+export function shouldRevokeFirebaseRefreshTokens(sessionFilter?: string): boolean {
+  return !sessionFilter;
 }
 
 function asPublicConfig(): PublicFirebaseConfig | null {
@@ -260,6 +294,81 @@ function invitationPayload(invitation: DeferredCallInvitation) {
   };
 }
 
+function validStoredDescription(
+  value: unknown,
+  expectedType: "offer" | "answer",
+): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const description = value as Record<string, unknown>;
+  return description.type === expectedType &&
+    typeof description.sdp === "string" &&
+    description.sdp.length > 0 &&
+    description.sdp.length <= 256_000;
+}
+
+function directInvitationPayload(invitation: DirectCallInvitation) {
+  const createdAt = invitation.createdAt ?? new Date();
+  const maximumExpiry = new Date(createdAt.getTime() + DEFERRED_INVITATION_TTL_MS);
+  const requestedExpiry = invitation.expiresAt?.getTime();
+  const expiresAt = Number.isFinite(requestedExpiry)
+    ? new Date(Math.min(requestedExpiry as number, maximumExpiry.getTime()))
+    : maximumExpiry;
+  return {
+    fromId: invitation.caller.id,
+    fromName: invitation.caller.name,
+    toId: invitation.calleeId,
+    status: "ringing" as const,
+    type: invitation.type,
+    createdAt,
+    expiresAt,
+    fromAvatar: invitation.caller.avatar,
+    // This is a direct-SDP invitation, not the deferred-caller-media
+    // protocol. Keep the marker explicit for clients migrating from the old
+    // invitation shape.
+    deferredMedia: false,
+    offer: invitation.offer,
+    transport: invitation.transport,
+    e2e: invitation.e2e ?? null,
+  };
+}
+
+function directResumeFromRecord(
+  callId: string,
+  data: Record<string, unknown>,
+): DirectCallResume | null {
+  if (data.deferredMedia === true ||
+    typeof data.fromId !== "number" || !Number.isSafeInteger(data.fromId) ||
+    typeof data.fromName !== "string" ||
+    typeof data.toId !== "number" || !Number.isSafeInteger(data.toId) ||
+    (data.type !== "video" && data.type !== "voice") ||
+    !data.transport || typeof data.transport !== "object" ||
+    (data.transport as Record<string, unknown>).version !== 1 ||
+    ((data.transport as Record<string, unknown>).provider !== "webrtc" &&
+      (data.transport as Record<string, unknown>).provider !== "agora")) return null;
+  const transport = data.transport as { provider: "agora" | "webrtc"; version: 1 };
+  if (transport.provider === "webrtc" && !validStoredDescription(data.offer, "offer")) return null;
+  if (transport.provider === "agora" && data.offer !== null) return null;
+  const expiresAt = dateValue(data.expiresAt, new Date(0));
+  const createdAt = dateValue(data.createdAt, new Date(0));
+  return {
+    callId,
+    caller: {
+      id: data.fromId,
+      name: data.fromName,
+      avatar: typeof data.fromAvatar === "string" ? data.fromAvatar : null,
+    },
+    calleeId: data.toId,
+    type: data.type,
+    offer: data.offer as Record<string, unknown> | null,
+    transport,
+    e2e: data.e2e && typeof data.e2e === "object"
+      ? data.e2e as Record<string, unknown>
+      : undefined,
+    createdAt,
+    expiresAt,
+  };
+}
+
 async function deviceTokens(
   db: Firestore,
   userId: number,
@@ -267,14 +376,46 @@ async function deviceTokens(
 ): Promise<{ token: string; ref: FirebaseFirestore.DocumentReference }[]> {
   const snapshot = await userRef(db, userId).collection("devices").limit(DEVICE_BATCH_SIZE).get();
   const cutoff = Date.now() - FOCUS_FRESH_MS;
-  return snapshot.docs.flatMap(doc => {
+  const candidates = snapshot.docs.flatMap(doc => {
     const value = doc.data();
     if (value.configurationId !== pushConfigurationId()) return [];
     if (typeof value.token !== "string" || value.token.length < 20 || value.token.length > 4096) return [];
     const focusAt = dateValue(value.focusUpdatedAt, new Date(0)).getTime();
     const focused = value.focused === true && focusAt >= cutoff;
-    return includeFocused || !focused ? [{ token: value.token, ref: doc.ref }] : [];
+    if (!includeFocused && focused) return [];
+    if (typeof value.sessionTag !== "string" || !/^[a-f0-9]{64}$/.test(value.sessionTag)) return [];
+    return [{ token: value.token, ref: doc.ref, sessionTag: value.sessionTag }];
   });
+  if (!candidates.length) return [];
+  // Firestore's session mirror is required for Firebase rules, but the
+  // PostgreSQL session store is canonical for HTTP authentication. Keep only
+  // tokens bound to a currently-existing, unexpired PG session. The raw SID
+  // never leaves this server; only its one-way sessionTag is stored in
+  // Firestore and compared here.
+  const canonicalSessions = await pgPool.query<{ sid: string }>(
+    `SELECT sid
+       FROM user_sessions
+      WHERE (sess->>'userId')::int = $1
+        AND expire > NOW()`,
+    [userId],
+  );
+  const activeSessionTags = new Set(canonicalSessions.rows.map(row => sessionTag(row.sid)));
+  // A device token is usable only while the exact authenticated HTTP session
+  // that registered it remains active. This prevents a stale tab (including
+  // one that never ran its close/unregister path) from receiving private
+  // call/message pushes after expiry or logout.
+  const now = Date.now();
+  const validated = await Promise.all(candidates.map(async candidate => {
+    const session = await userRef(db, userId).collection("sessions").doc(candidate.sessionTag).get();
+    const value = session.data();
+    if (!session.exists || !isPushSessionActive(value, now) ||
+        !activeSessionTags.has(candidate.sessionTag)) {
+      await candidate.ref.delete().catch(() => {});
+      return null;
+    }
+    return { token: candidate.token, ref: candidate.ref };
+  }));
+  return validated.flatMap(device => device ? [device] : []);
 }
 
 async function sendPush(
@@ -371,6 +512,13 @@ function pushConfigurationId(): string {
   ])).digest("hex");
 }
 
+export function isPushSessionActive(value: unknown, now = Date.now()): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.revokedAt === null &&
+    dateValue(record.expiresAt, new Date(0)).getTime() > now;
+}
+
 export async function registerCallPushDevice(
   userId: number,
   sessionId: string,
@@ -393,6 +541,54 @@ export async function registerCallPushDevice(
     });
   } catch {
     throw new CallPushError("Firebase device registration failed");
+  }
+}
+
+/**
+ * Build the data-only message notification contract consumed by the browser
+ * service worker.  Message bodies are deliberately generic: the API never
+ * decrypts E2E content and must not put plaintext message content in FCM.
+ */
+export function newMessagePushPayload(input: {
+  roomId: number;
+  messageId: number;
+  fromName: string;
+}): Record<string, string> {
+  return {
+    type: "NEW_MESSAGE",
+    roomId: String(input.roomId),
+    messageId: String(input.messageId),
+    fromName: input.fromName,
+    title: "رسالة جديدة",
+    body: "لديك رسالة جديدة",
+    url: `/messages?roomId=${input.roomId}`,
+  };
+}
+
+/**
+ * FCM is an optional background transport.  Persistence and authenticated
+ * WebSocket delivery do not depend on it, so every configuration/provider
+ * failure is isolated here.  Device fanout and invalid-token cleanup remain
+ * on the same configuration-bound path as call notifications.
+ */
+export async function sendNewMessagePush(
+  userId: number,
+  input: { roomId: number; messageId: number; fromName: string },
+): Promise<void> {
+  try {
+    const services = await loadServices();
+    await sendPush(
+      services,
+      userId,
+      newMessagePushPayload(input),
+      undefined,
+      false,
+      MESSAGE_PUSH_TTL_SECONDS,
+    );
+  } catch {
+    // A message has already committed by the time this function is called.
+    // Never turn an FCM outage into a failed message or call request.
+    console.warn("[Firebase] Background message notification unavailable");
   }
 }
 
@@ -470,8 +666,167 @@ export async function createDeferredCallInvitation(invitation: DeferredCallInvit
       expiresAt: record.expiresAt.toISOString(),
       deferredMedia: "true",
     },
+    undefined,
+    true,
   );
   return { ...invitation, createdAt: record.createdAt, expiresAt: record.expiresAt };
+}
+
+/**
+ * Persist the normal direct-SDP offer for a recipient that has no WebSocket.
+ * The offer remains in Firestore so the resumed browser gets the exact SDP
+ * that the caller already used; caller media is not delayed or regenerated.
+ */
+export async function createDirectCallInvitation(invitation: DirectCallInvitation): Promise<DirectCallInvitation> {
+  if (!isValidCallId(invitation.callId)) throw new CallPushError("Invalid call ID");
+  const record = directInvitationPayload(invitation);
+  if (record.transport.provider === "webrtc" && !validStoredDescription(record.offer, "offer")) {
+    throw new CallPushError("Invalid direct call offer");
+  }
+  if (record.transport.provider === "agora" && record.offer !== null) {
+    throw new CallPushError("Invalid direct call offer");
+  }
+  const { db, messaging, auth } = await loadServices();
+  try {
+    await callRef(db, invitation.callId).create(record);
+  } catch {
+    throw new CallPushError("Firebase invitation creation failed");
+  }
+  // Do not put SDP in FCM: browser push has a small payload limit and the
+  // durable invitation is the authoritative source of the current offer.
+  void sendPush(
+    { db, messaging, auth },
+    invitation.calleeId,
+    {
+      type: "INCOMING_CALL",
+      callId: invitation.callId,
+      fromName: invitation.caller.name,
+      title: `مكالمة واردة من ${invitation.caller.name}`,
+      callerId: String(invitation.caller.id),
+      callerName: invitation.caller.name,
+      callerAvatar: invitation.caller.avatar ?? "",
+      roomId: invitation.callId,
+      expiresAt: record.expiresAt.toISOString(),
+      video: invitation.type === "video" ? "true" : "false",
+      transport: JSON.stringify(invitation.transport),
+      url: `/messages?callId=${encodeURIComponent(invitation.callId)}`,
+    },
+    undefined,
+    true,
+  );
+  return { ...invitation, createdAt: record.createdAt, expiresAt: record.expiresAt };
+}
+
+/**
+ * Read an unexpired direct invitation for the authenticated callee. A read
+ * never accepts the call; the browser must send an explicit answer afterward.
+ */
+export async function resumeDirectCallInvitation(
+  callId: string,
+  calleeId: number,
+): Promise<DirectCallResume | null> {
+  if (!isValidCallId(callId)) throw new CallPushError("Invalid call ID");
+  const { db } = await loadServices();
+  try {
+    const snapshot = await callRef(db, callId).get();
+    if (!snapshot.exists) return null;
+    const data = snapshot.data();
+    if (!data || data.toId !== calleeId || data.status !== "ringing") return null;
+    const invitation = directResumeFromRecord(callId, data);
+    if (!invitation || invitation.expiresAt.getTime() <= Date.now()) return null;
+    return invitation;
+  } catch {
+    throw new CallPushError("Firebase invitation retrieval failed");
+  }
+}
+
+/**
+ * Atomically accepts a direct invitation and stores the exact callee answer.
+ * Firestore arbitration preserves the same single-answer race guarantee as
+ * the in-process WebSocket path.
+ */
+export async function acceptDirectCallInvitation(
+  callId: string,
+  calleeId: number,
+  answer: Record<string, unknown> | null,
+): Promise<DirectCallAcceptance | null> {
+  if (!isValidCallId(callId)) throw new CallPushError("Invalid call ID");
+  const { db } = await loadServices();
+  try {
+    let accepted: DirectCallAcceptance | null = null;
+    await db.runTransaction(async transaction => {
+      const ref = callRef(db, callId);
+      const snapshot = await transaction.get(ref);
+      const data = snapshot.data();
+      if (!data || data.toId !== calleeId || data.status !== "ringing") return;
+      const invitation = directResumeFromRecord(callId, data);
+      if (!invitation || invitation.expiresAt.getTime() <= Date.now()) return;
+      if (invitation.transport.provider === "webrtc" && !validStoredDescription(answer, "answer")) return;
+      if (invitation.transport.provider === "agora" && answer !== null) return;
+      transaction.update(ref, {
+        status: "answered",
+        answeredAt: new Date(),
+        answer,
+      });
+      accepted = { ...invitation, answer };
+    });
+    return accepted;
+  } catch {
+    throw new CallPushError("Firebase invitation acceptance failed");
+  }
+}
+
+export type DirectCallWatcherEvent =
+  | { kind: "answered"; answer: Record<string, unknown> | null }
+  | { kind: "terminal"; status: "declined" | "missed" | "ended" };
+
+/**
+ * Owner-instance watcher for a direct invitation. It is intentionally scoped
+ * to the call owner; WebSocket routing still requires the caller socket in
+ * this process and is not presented as a cross-replica transport.
+ */
+export async function watchDirectCallInvitation(
+  callId: string,
+  onEvent: (event: DirectCallWatcherEvent) => void,
+): Promise<() => void> {
+  const { db } = await loadServices();
+  let disposed = false;
+  const unsubscribe = callRef(db, callId).onSnapshot(snapshot => {
+    if (disposed || !snapshot.exists) return;
+    const data = snapshot.data();
+    if (!data) return;
+    if (data.status === "declined" || data.status === "missed") {
+      onEvent({ kind: "terminal", status: data.status });
+      return;
+    }
+    if (data.status === "answered" && Object.hasOwn(data, "answer")) {
+      const answer = data.answer === null || typeof data.answer !== "object"
+        ? null
+        : data.answer as Record<string, unknown>;
+      onEvent({ kind: "answered", answer });
+      return;
+    }
+    if (data.status === "answered" && data.endedAt !== undefined && data.endedAt !== null) {
+      onEvent({ kind: "terminal", status: "ended" });
+    }
+  }, () => {
+    // The local WebSocket path remains authoritative if a transient listener
+    // failure occurs. No polling loop is created here.
+  });
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    unsubscribe();
+  };
+}
+
+export async function finishDirectCallInvitation(
+  invitation: DirectCallInvitation,
+  status: DeferredTerminalStatus,
+): Promise<boolean> {
+  // The direct and deferred invitation records share terminal-state semantics;
+  // only the pre-answer media contract differs.
+  return finishDeferredCallInvitation(invitation, status);
 }
 
 export async function acceptDeferredCallInvitation(callId: string, calleeId: number): Promise<boolean> {
@@ -927,8 +1282,11 @@ async function revokeFirebaseUser(
       const devices = await user.collection("devices")
         .where("sessionTag", "==", tag).limit(DEVICE_BATCH_SIZE).get();
       await Promise.all(devices.docs.map(doc => doc.ref.delete()));
+    } else if (shouldRevokeFirebaseRefreshTokens(sessionFilter)) {
+      // Refresh-token revocation is account-wide and must never be part of a
+      // single-session logout. It belongs only to explicit all-session flows.
+      await auth.revokeRefreshTokens(String(userId));
     }
-    await auth.revokeRefreshTokens(String(userId));
     return true;
   } catch {
     // Callers await this result and explicitly report pending cleanup rather

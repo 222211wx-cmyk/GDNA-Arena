@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { apiPath } from "@/lib/network";
+import { PUSH_LOGOUT_EVENT } from "@/lib/call-firebase";
 
 export interface AuthUser {
   id: number;
@@ -108,10 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // Hide every identity-bound surface immediately. The server response is
-    // still checked so callers never report a successful logout while the
-    // authenticated session remains alive.
-    const { controller } = beginAuthRequest(true);
+    // Do not clear identity-bound surfaces until the server confirms logout;
+    // callers must never report a successful logout while the session remains
+    // alive.
+    // Keep the user mounted until the server confirms the logout. This lets
+    // the push hook revoke the active FCM installation only for a real logout,
+    // rather than for an unmount caused by a failed request.
+    const { controller, generation } = beginAuthRequest(false);
     const res = await fetch(apiPath("/api/auth/logout"), {
       method: "POST",
       credentials: "include",
@@ -121,6 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json().catch(() => ({ error: "Logout failed" }));
       throw new Error(data.error ?? "Logout failed");
     }
+    if (generation !== authGenerationRef.current) return;
+    window.dispatchEvent(new Event(PUSH_LOGOUT_EVENT));
+    setUser(null);
   };
 
   return (

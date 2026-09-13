@@ -68,6 +68,7 @@ const messaging = initializeMessaging(readFirebaseConfig());
 const CALL_TTL_MS = 30_000;
 const INCOMING_CALL_TAG = "gdna-incoming-call";
 const MISSED_CALL_TAG = "gdna-missed-call";
+const NEW_MESSAGE_TAG = "gdna-new-message";
 const ICON_FILE = "icon.png";
 
 /*
@@ -119,6 +120,10 @@ function callType(value) {
   return text(value).toUpperCase().replace(/[-\s]/g, "_");
 }
 
+function isNewMessage(data) {
+  return callType(data.type || data.event) === "NEW_MESSAGE";
+}
+
 function isMissedCall(data) {
   const type = callType(data.type || data.event);
   return type === "MISSED_CALL" || type === "MISSED" || type === "CALL_MISSED" ||
@@ -151,6 +156,23 @@ function missedTagForCall(callId) {
   return callId ? MISSED_CALL_TAG + "-" + callId : MISSED_CALL_TAG;
 }
 
+function readRoomId(value) {
+  const raw = value && (value.roomId || value.room_id);
+  const roomId = typeof raw === "number" && Number.isSafeInteger(raw)
+    ? String(raw)
+    : text(raw);
+  // Room IDs are numeric API identifiers. Do not copy an arbitrary payload
+  // value into a route or a notification tag.
+  if (!/^[1-9]\d{0,15}$/.test(roomId)) return "";
+  const numeric = Number(roomId);
+  return Number.isSafeInteger(numeric) && numeric > 0 ? String(numeric) : "";
+}
+
+function readMessageId(value) {
+  const messageId = text(value && (value.messageId || value.message_id || value.id));
+  return /^[A-Za-z0-9_-]{1,128}$/.test(messageId) ? messageId : "";
+}
+
 function notificationCallData(data, callId, kind, expiresAt) {
   return {
     callId: callId || undefined,
@@ -161,6 +183,38 @@ function notificationCallData(data, callId, kind, expiresAt) {
     type: text(data.type || data.event),
     kind,
     expiresAt: expiresAt || undefined,
+  };
+}
+
+function messageUrl(data) {
+  const roomId = readRoomId(data);
+  // Always construct the route ourselves. The server currently includes
+  // `url` as a convenience, but accepting a payload URL directly would allow
+  // a compromised/malformed push to navigate a notification to another
+  // origin. The route is safe even when the optional room ID is malformed.
+  return appUrl("messages", roomId ? { roomId } : {});
+}
+
+function messageOptions(data) {
+  const roomId = readRoomId(data);
+  const messageId = readMessageId(data);
+  const fromName = text(data.fromName);
+  const title = text(data.title) || (fromName ? "رسالة جديدة من " + fromName : "رسالة جديدة");
+  const body = text(data.body) || "لديك رسالة جديدة";
+  const tagSuffix = roomId || messageId || "inbox";
+  return {
+    body,
+    icon: assetUrl(ICON_FILE),
+    tag: NEW_MESSAGE_TAG + "-" + tagSuffix,
+    data: {
+      kind: "message",
+      type: "NEW_MESSAGE",
+      roomId: roomId || undefined,
+      messageId: messageId || undefined,
+      fromName: fromName || undefined,
+      // Keep this value canonical and same-origin; never trust data.url.
+      url: messageUrl(data),
+    },
   };
 }
 
@@ -248,6 +302,15 @@ function showGenericNotification(data, payload) {
 
 function handleBackgroundMessage(payload) {
   const data = notificationData(payload);
+  // Messages have a deliberately separate path from call invitations. In
+  // particular, a roomId must never be interpreted as a callId and a message
+  // notification must never receive Answer/Decline actions.
+  if (isNewMessage(data)) {
+    return self.registration.showNotification(
+      text(data.title) || "رسالة جديدة",
+      messageOptions(data),
+    );
+  }
   const callId = readCallId(data);
   if (isTerminalCall(data)) {
     return callId ? closeCallNotifications(callId).catch(() => {}) : Promise.resolve();
@@ -386,6 +449,10 @@ function declineCall(callId) {
 function handleNotificationClick(event) {
   const notification = event.notification || {};
   const data = asObject(notification.data);
+  if (data.kind === "message" || isNewMessage(data)) {
+    if (typeof notification.close === "function") notification.close();
+    return focusOrOpen(messageUrl(data));
+  }
   const callId = readCallId(data);
   const action = text(event.action).toLowerCase();
   const answerAction = action === "answer" || action === "incominganswer";

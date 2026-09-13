@@ -148,12 +148,22 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     throw err;
   }
 
-  // Simple flow: register → logged in immediately, 30-day remembered session
+  // Simple flow: register → logged in immediately, 30-day remembered session.
+  // Regeneration can replace an already-authenticated session, so capture its
+  // owner before Express destroys the old session object. Never bind cleanup
+  // to the newly-created citizen.
   const previousSessionId = req.sessionID;
+  const previousSessionUserId = req.session.userId;
   await new Promise<void>((resolve, reject) =>
     req.session.regenerate((err) => (err ? reject(err) : resolve()))
   );
   disconnectSessionSockets(previousSessionId);
+  // Session rotation invalidates any push installation bound to the old
+  // session as well as its WebSocket. This is best effort and never delays a
+  // successful credential login when Firebase is unavailable.
+  if (previousSessionUserId) {
+    void revokeCallPushSession(previousSessionUserId, previousSessionId).catch(() => {});
+  }
   req.session.userId = user.id;
   req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
   req.log.info({ userId: user.id }, "User registered — logged in");
@@ -245,10 +255,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   // Regenerate the session ID after credential verification (anti session-fixation)
   const previousSessionId = req.sessionID;
+  const previousSessionUserId = req.session.userId;
   await new Promise<void>((resolve, reject) =>
     req.session.regenerate((err) => (err ? reject(err) : resolve()))
   );
   disconnectSessionSockets(previousSessionId);
+  if (previousSessionUserId) {
+    void revokeCallPushSession(previousSessionUserId, previousSessionId).catch(() => {});
+  }
   req.session.userId = user.id;
   // Remember me: 30-day secure token cookie, renewed on every visit (rolling)
   // → the citizen enters instantly, like YouTube, until they log out.

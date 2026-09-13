@@ -141,8 +141,10 @@ export function MissedCallsInbox({
         )}
 
         {/* Notification permission CTA — must fire on the user gesture. */}
-        {notificationPermission === "granted" ? (
+        {notificationPermission === "granted" && pushEnabled && firebaseStatus === "ready" ? (
           <p className="m-0 text-xs text-muted-foreground">{t.notifications_enabled}</p>
+        ) : notificationPermission === "granted" ? (
+          <p className="m-0 text-xs text-muted-foreground">{statusRow.message}</p>
         ) : notificationPermission === "denied" ? (
           <p className="m-0 text-xs text-muted-foreground">{t.notifications_denied}</p>
         ) : pushEnabled && notificationPermission !== "unsupported" && enableCallNotifications ? (

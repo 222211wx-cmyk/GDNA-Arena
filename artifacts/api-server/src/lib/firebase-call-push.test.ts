@@ -5,6 +5,9 @@ import {
   durableTerminalUpdate,
   evaluateDeferredCallDecline,
   firebaseReadiness,
+  isPushSessionActive,
+  newMessagePushPayload,
+  shouldRevokeFirebaseRefreshTokens,
 } from "./firebase-call-push.js";
 
 test("caller cancellation and timeout map a ringing invitation to canonical missed", () => {
@@ -59,4 +62,44 @@ test("decline is idempotent after expiry and terminal completion", () => {
     expiresAt: new Date("2026-01-01T00:00:00.000Z"),
   }, new Date("2026-01-01T00:00:31.000Z"));
   assert.deepEqual(repeated, { outcome: "finished", changed: false, status: "missed" });
+});
+
+test("message push payload is generic, addressable, and never includes plaintext", () => {
+  assert.deepEqual(newMessagePushPayload({
+    roomId: 42,
+    messageId: 99,
+    fromName: "alice",
+  }), {
+    type: "NEW_MESSAGE",
+    roomId: "42",
+    messageId: "99",
+    fromName: "alice",
+    title: "رسالة جديدة",
+    body: "لديك رسالة جديدة",
+    url: "/messages?roomId=42",
+  });
+});
+
+test("background fanout requires an unrevoked, unexpired registration session", () => {
+  const now = Date.parse("2026-01-01T00:00:00.000Z");
+  assert.equal(isPushSessionActive({
+    revokedAt: null,
+    expiresAt: new Date(now + 1_000),
+  }, now), true);
+  assert.equal(isPushSessionActive({
+    revokedAt: null,
+    expiresAt: new Date(now),
+  }, now), false);
+  assert.equal(isPushSessionActive({
+    revokedAt: new Date(now - 1_000),
+    expiresAt: new Date(now + 1_000),
+  }, now), false);
+  assert.equal(isPushSessionActive({
+    expiresAt: new Date(now + 1_000),
+  }, now), false);
+});
+
+test("refresh-token revocation is reserved for all-session cleanup", () => {
+  assert.equal(shouldRevokeFirebaseRefreshTokens(), true);
+  assert.equal(shouldRevokeFirebaseRefreshTokens("old-session-id"), false);
 });

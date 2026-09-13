@@ -9,6 +9,7 @@ import OpenAI from "openai";
 import bcrypt from "bcrypt";
 import { db, pool, dmRooms, dmRoomMembers, dmMessages, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { notifyMessageRecipients } from "../lib/message-push";
 
 const router: IRouter = Router();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -159,6 +160,7 @@ router.post("/stars/invite", async (req, res): Promise<void> => {
   const client = await pool.connect();
   let roomId: number;
   let created = false;
+  let createdMessageId: number | null = null;
   try {
     await client.query("BEGIN");
     await client.query(`SELECT pg_advisory_xact_lock(842001, $1)`, [userId]);
@@ -205,12 +207,14 @@ router.post("/stars/invite", async (req, res): Promise<void> => {
         `INSERT INTO dm_room_members (room_id, user_id, username) VALUES ($1, $2, $3), ($1, $4, $5)`,
         [roomId, userId, me.username, starUser.id, starUser.username],
       );
-      await client.query(
+      const welcomeMessage = await client.query<{ id: number }>(
         `INSERT INTO dm_messages (room_id, user_id, username, content, type)
-         VALUES ($1, $2, $3, $4, 'text')`,
+         VALUES ($1, $2, $3, $4, 'text')
+         RETURNING id`,
         [roomId, starUser.id, starUser.username,
          `👑 ${me.username}! ${star.fullName} here — honored to be hosted in your empire. Ask me anything.`],
       );
+      createdMessageId = welcomeMessage.rows[0]?.id ?? null;
       created = true;
     }
     await client.query("COMMIT");
@@ -221,6 +225,9 @@ router.post("/stars/invite", async (req, res): Promise<void> => {
     client.release();
   }
 
+  if (createdMessageId !== null) {
+    void notifyMessageRecipients(roomId, starUser.id, createdMessageId, starUser.username).catch(() => {});
+  }
   res.json({ success: true, roomId, star: { username: star.username, fullName: star.fullName }, created });
 });
 
@@ -298,9 +305,12 @@ Rules:
     if (replaceMessageId) {
       await db.update(dmMessages).set({ content: reply }).where(eq(dmMessages.id, replaceMessageId));
     } else {
-      await db.insert(dmMessages).values({
+      const [savedReply] = await db.insert(dmMessages).values({
         roomId, userId: starUserId, username: star.username, content: reply, type: "text",
-      });
+      }).returning({ id: dmMessages.id });
+      if (savedReply) {
+        void notifyMessageRecipients(roomId, starUserId, savedReply.id, star.username).catch(() => {});
+      }
     }
   } catch (err) {
     console.error("[STARS] AI reply failed:", err);

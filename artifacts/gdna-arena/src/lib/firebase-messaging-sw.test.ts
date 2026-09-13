@@ -118,6 +118,59 @@ describe("requested Firebase background worker", () => {
     });
   });
 
+  it("renders NEW_MESSAGE separately without call actions or private route data", async () => {
+    const worker = workerHarness();
+    worker.background({
+      data: {
+        type: "NEW_MESSAGE",
+        roomId: "42",
+        messageId: "message_7",
+        fromName: "Nour",
+        title: "رسالة جديدة",
+        body: "لديك رسالة جديدة",
+        url: "/messages?roomId=42",
+      },
+    });
+    await flushWorkerPromises();
+    expect(worker.showNotification).toHaveBeenCalledWith("رسالة جديدة", expect.objectContaining({
+      body: "لديك رسالة جديدة",
+      tag: "gdna-new-message-42",
+      data: {
+        kind: "message",
+        type: "NEW_MESSAGE",
+        roomId: "42",
+        messageId: "message_7",
+        fromName: "Nour",
+        url: "https://example.test/messages?roomId=42",
+      },
+    }));
+    const [, options] = worker.showNotification.mock.calls[0];
+    expect(options.actions).toBeUndefined();
+  });
+
+  it("opens the same-origin message room and ignores an untrusted payload URL", async () => {
+    const worker = workerHarness();
+    let waited: Promise<unknown> | undefined;
+    const close = vi.fn();
+    worker.notificationClick({
+      notification: {
+        data: {
+          kind: "message",
+          type: "NEW_MESSAGE",
+          roomId: "42",
+          url: "https://evil.example/messages?roomId=99",
+        },
+        close,
+      },
+      waitUntil: promise => { waited = promise; },
+    });
+    await waited;
+    expect(close).toHaveBeenCalled();
+    expect(worker.openWindow).toHaveBeenCalledWith(
+      "https://example.test/messages?roomId=42",
+    );
+  });
+
   it("renders canonical incoming calls with Arabic answer/decline actions", async () => {
     const worker = workerHarness();
     worker.background({

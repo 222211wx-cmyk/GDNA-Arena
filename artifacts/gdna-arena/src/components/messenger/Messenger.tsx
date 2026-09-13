@@ -18,7 +18,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
   PhoneCall, Video, Settings, Trash2, Copy, MoreVertical, BellOff, Search, Lock,
-  Camera, Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle,
+  Camera, Image as ImageIcon, Paperclip, Smile, Send, Plus, ArrowLeft, ArrowRight, Wifi, LoaderCircle, BellRing,
   ChevronRight, HandHeart, Ear, PartyPopper, CornerUpLeft, ClipboardPaste, ShieldOff, ContactRound,
   MapPin, Link2, Share2,
 } from "lucide-react";
@@ -101,6 +101,59 @@ function clockTime(iso: string, lang: string) {
   return new Date(iso).toLocaleTimeString(localeFor(lang), { hour: "2-digit", minute: "2-digit" });
 }
 
+function WebPushRow({
+  st,
+  status,
+  permission,
+  enabled,
+  reason,
+  onEnable,
+}: {
+  st: Record<string, string>;
+  status: FirebaseStatus;
+  permission: CallNotificationPermission;
+  enabled: boolean;
+  reason: string | null;
+  onEnable?: () => void | Promise<unknown>;
+}) {
+  const message = permission === "granted" && enabled && status === "ready"
+    ? (st.push_enabled ?? "Background notifications are enabled for messages and calls.")
+    : permission === "denied"
+      ? (st.push_denied ?? "Notifications are blocked in your browser settings.")
+      : status === "loading"
+        ? (st.push_loading ?? "Checking background notification setup…")
+        : enabled && permission !== "unsupported"
+          ? (st.push_hint ?? "Enable browser notifications to receive messages and calls when this tab is closed.")
+          : (reason ?? st.push_unavailable ?? "Background notifications are not configured.");
+
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3" data-testid="messenger-push-settings">
+      <div className="flex items-start gap-2">
+        <BellRing className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="m-0 text-[13px] font-semibold text-card-foreground">
+            {st.push_title ?? "Background notifications"}
+          </p>
+          <p className="mt-1 mb-0 text-[11px] text-muted-foreground">{message}</p>
+        </div>
+      </div>
+      {permission === "default" && enabled && onEnable && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-3 gap-1.5"
+          data-testid="button-enable-messenger-notifications"
+          onClick={() => { void Promise.resolve(onEnable()).catch(() => undefined); }}
+        >
+          <BellRing className="h-3.5 w-3.5" />
+          {st.enable_push ?? "Enable notifications"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ── Settings panel ────────────────────────────────────────────────────────────
 interface MsgSettings { notifications: boolean; readReceipts: boolean }
 
@@ -113,7 +166,7 @@ function ToggleRow({ label, value, onChange, disabled = false }: { label: string
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline, notificationPermission, firebaseStatus, pushEnabled, pushReason, enableCallNotifications }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
@@ -127,6 +180,11 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   inline?: boolean;
   isOnline: boolean;
   onOffline: () => void;
+  notificationPermission: CallNotificationPermission;
+  firebaseStatus: FirebaseStatus;
+  pushEnabled: boolean;
+  pushReason: string | null;
+  enableCallNotifications?: () => void | Promise<unknown>;
 }) {
   const [settings, setSettings] = useState<MsgSettings | null>(null);
   const [muted, setMuted] = useState(activeRoom?.muted ?? false);
@@ -246,6 +304,14 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
             <ToggleRow label={st.notif_pref ?? "Notifications"} value={settings.notifications}
               onChange={v => save({ notifications: v })} disabled={!isOnline} />
             <p className="mt-0.5 mb-1.5 mx-1 text-[10.5px] text-muted-foreground">{st.notif_hint ?? ""}</p>
+            <WebPushRow
+              st={st}
+              status={firebaseStatus}
+              permission={notificationPermission}
+              enabled={pushEnabled}
+              reason={pushReason}
+              onEnable={enableCallNotifications}
+            />
             <ToggleRow label={st.read_receipts ?? "Read receipts"} value={settings.readReceipts}
               onChange={v => save({ readReceipts: v })} disabled={!isOnline} />
             <p className="mt-0.5 mb-1.5 mx-1 text-[10.5px] text-muted-foreground">{st.receipts_hint ?? ""}</p>
@@ -1361,6 +1427,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       // loadRooms returns server-ordered list (newest first); just refresh.
       void loadRooms();
     };
+    const onPushMessage = (event: Event) => {
+      const rawRoomId = (event as CustomEvent<{ roomId?: string | number }>).detail?.roomId;
+      const roomId = typeof rawRoomId === "number" ? rawRoomId : Number(rawRoomId);
+      if (!Number.isSafeInteger(roomId) || roomId <= 0) return;
+      if (roomId === activeRoomIdRef.current) void loadMessages(roomId);
+      void loadRooms();
+    };
     const onReconnect = () => {
       void loadRooms();
       if (activeRoomIdRef.current !== null) void loadMessages(activeRoomIdRef.current);
@@ -1401,11 +1474,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       void loadRooms();
     };
     window.addEventListener("gdna:chat-message", onMessage);
+    window.addEventListener("gdna:chat-push", onPushMessage);
     window.addEventListener("gdna:chat-read", onRead);
     window.addEventListener("gdna:chat-message-deleted", onMessageDeleted);
     window.addEventListener("gdna:realtime-connected", onReconnect);
     return () => {
       window.removeEventListener("gdna:chat-message", onMessage);
+      window.removeEventListener("gdna:chat-push", onPushMessage);
       window.removeEventListener("gdna:chat-read", onRead);
       window.removeEventListener("gdna:chat-message-deleted", onMessageDeleted);
       window.removeEventListener("gdna:realtime-connected", onReconnect);
@@ -2345,6 +2420,11 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         {showSettings && (
           <SettingsPanel st={st} activeRoom={activeRoom} onClose={() => setShowSettings(false)}
             isOnline={isOnline} onOffline={blockOffline}
+            notificationPermission={callExtras.notificationPermission}
+            firebaseStatus={callExtras.firebaseStatus}
+            pushEnabled={callExtras.pushEnabled}
+            pushReason={callExtras.pushReason}
+            enableCallNotifications={callExtras.enableCallNotifications}
             currentUserId={user?.id}
             onMuteChanged={(roomId, muted) => {
               setRooms(prev => prev.map(r => r.id === roomId ? { ...r, muted } : r));
@@ -2841,6 +2921,11 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             showToast={setToast}
             isOnline={isOnline}
             onOffline={blockOffline}
+            notificationPermission={callExtras.notificationPermission}
+            firebaseStatus={callExtras.firebaseStatus}
+            pushEnabled={callExtras.pushEnabled}
+            pushReason={callExtras.pushReason}
+            enableCallNotifications={callExtras.enableCallNotifications}
           />
         )}
 
