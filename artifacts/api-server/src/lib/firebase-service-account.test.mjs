@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseServiceAccount, selectServiceAccount, safeJsonError } from "./firebase-service-account.mjs";
+import { parseServiceAccount, selectServiceAccount, safeJsonError, resolveServiceAccount } from "./firebase-service-account.mjs";
 
 const fixture = { project_id: "test-project", client_email: "test@example.invalid", private_key: "test\\nkey\\n" };
 for (const [name, raw] of [
@@ -84,4 +84,40 @@ test("safe diagnostics never include input fragments or raw exception messages",
     "JSON_CONTROL_CHARACTER at position 12 (line 2 column 3)",
   );
   assert.equal(safeJsonError(new SyntaxError('Unexpected token \'S\', "SECRET_KEY" is not valid JSON')), "JSON_UNEXPECTED_TOKEN");
+});
+
+test("strips matching surrounding quotes, BOM and whitespace", () => {
+  for (const quote of ["'", '"']) {
+    const result = parseServiceAccount(` \uFEFF${quote} \uFEFF${JSON.stringify(fixture)} ${quote} `);
+    assert.equal(result.error, null);
+    assert.equal(result.account.private_key, "test\nkey\n");
+  }
+});
+
+test("individual env credentials replace invalid or absent JSON, but not valid JSON", () => {
+  const env = {
+    FIREBASE_PROJECT_ID: "fallback-project",
+    FIREBASE_CLIENT_EMAIL: "fallback@example.invalid",
+    FIREBASE_PRIVATE_KEY: "'test\\nkey\\n'",
+  };
+  for (const raw of ["not-json-sensitive", undefined]) {
+    const result = resolveServiceAccount({ ...env, FIREBASE_SERVICE_ACCOUNT: raw });
+    assert.equal(result.source, "individual-env");
+    assert.equal(result.error, null);
+    assert.equal(result.account.private_key, "test\nkey\n");
+    assert.equal(result.account.project_id, "fallback-project");
+  }
+  const preferred = resolveServiceAccount({ ...env, FIREBASE_SERVICE_ACCOUNT: JSON.stringify(fixture) });
+  assert.equal(preferred.source, "service-account-json");
+  assert.equal(preferred.account.project_id, fixture.project_id);
+});
+
+test("incomplete fallback fails explicitly without revealing supplied credentials", () => {
+  const result = resolveServiceAccount({
+    FIREBASE_SERVICE_ACCOUNT: "sensitive-invalid",
+    FIREBASE_PROJECT_ID: "sensitive-project",
+  });
+  assert.equal(result.account, null);
+  assert.deepEqual(result.missingFallbackFields, ["FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"]);
+  assert.ok(!JSON.stringify(result).includes("sensitive"));
 });

@@ -2,17 +2,11 @@ import { randomUUID } from "node:crypto";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
-import { parseServiceAccount, selectServiceAccount } from "../src/lib/firebase-service-account.mjs";
+import { resolveServiceAccount } from "../src/lib/firebase-service-account.mjs";
 
-const raw = selectServiceAccount(process.env);
-if (!raw) {
-  console.log(JSON.stringify({ enabled: false, reason: "Firebase service account is not configured" }));
-  process.exit(0);
-}
-
-const { account: serviceAccount, error: parseError, diagnostic } = parseServiceAccount(raw);
+const { account: serviceAccount, error: parseError, diagnostic, source, missingFallbackFields } = resolveServiceAccount(process.env);
 if (!serviceAccount) {
-  console.log(JSON.stringify({ enabled: false, reason: parseError, diagnostic }));
+  console.log(JSON.stringify({ enabled: false, reason: parseError, diagnostic, source, missingFallbackFields }));
   process.exitCode = 1;
 } else {
   let app;

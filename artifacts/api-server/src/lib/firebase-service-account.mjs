@@ -22,6 +22,33 @@ export function selectServiceAccount(env) {
   return "";
 }
 
+export function resolveServiceAccount(env) {
+  const primary = parseServiceAccount(selectServiceAccount(env));
+  if (primary.account) return { ...primary, source: "service-account-json" };
+  const fields = {
+    project_id: env.FIREBASE_PROJECT_ID,
+    client_email: env.FIREBASE_CLIENT_EMAIL,
+    private_key: env.FIREBASE_PRIVATE_KEY,
+  };
+  const missing = Object.entries(fields)
+    .filter(([, value]) => typeof value !== "string" || !value.trim())
+    .map(([field]) => `FIREBASE_${field.toUpperCase()}`);
+  if (missing.length) {
+    return { ...primary, source: null, missingFallbackFields: missing };
+  }
+  let key = fields.private_key.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) ||
+      (key.startsWith("'") && key.endsWith("'"))) key = key.slice(1, -1);
+  // Keep the same validation and PEM newline normalization for both sources.
+  const fallback = parseServiceAccount(JSON.stringify({
+    type: "service_account",
+    project_id: fields.project_id.trim(),
+    client_email: fields.client_email.trim(),
+    private_key: key,
+  }));
+  return { ...fallback, source: fallback.account ? "individual-env" : null };
+}
+
 function escapeStringLineBreaks(input) {
   let quoted = false;
   let escaped = false;

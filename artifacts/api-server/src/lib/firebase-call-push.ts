@@ -5,7 +5,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
 import { pool as pgPool } from "@workspace/db";
 import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
-import { parseServiceAccount, selectServiceAccount } from "./firebase-service-account.mjs";
+import { resolveServiceAccount } from "./firebase-service-account.mjs";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -189,11 +189,11 @@ function asPublicConfig(): PublicFirebaseConfig | null {
 let lastAccountParseError: string | null = null;
 
 function readServiceAccount(): Record<string, unknown> | null {
-  return parseServiceAccount(selectServiceAccount(process.env)).account;
+  return resolveServiceAccount(process.env).account;
 }
 
 function adminConfigurationProblem(): string | null {
-  const { error, diagnostic } = parseServiceAccount(selectServiceAccount(process.env));
+  const { error, diagnostic } = resolveServiceAccount(process.env);
   if (error && error !== lastAccountParseError) console.error("[Firebase]", error, diagnostic ?? "");
   lastAccountParseError = error;
   return error;
