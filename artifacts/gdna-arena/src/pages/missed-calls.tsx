@@ -52,8 +52,8 @@ export default function MissedCallsPage() {
         lang={lang}
         missedCalls={call.missedCalls}
         missedCallCount={call.missedCallCount}
-        loading={call.firebaseStatus === "loading"}
-        error={call.firebaseStatus === "error"}
+        loading={call.missedCallsLoading}
+        error={call.missedCallsError}
         onRetry={call.refreshMissedCalls}
         markMissedCallsSeen={call.markMissedCallsSeen}
         firebaseStatus={call.firebaseStatus}

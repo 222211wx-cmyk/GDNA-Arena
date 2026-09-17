@@ -1,6 +1,9 @@
-import type { Firestore } from "firebase-admin/firestore";
 import { randomUUID } from "node:crypto";
-import { CallPushError, callSessionBinding, getAuthoritativeCallFirestore, isValidCallId } from "./firebase-call-push";
+import { CallPushError, callSessionBinding, getCallStateDb } from "./call-state-db";
+
+function isValidCallId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
 
 export type GroupParticipantStatus = "accepted" | "invited" | "rejected" | "left";
 export interface GroupParticipant {
@@ -24,7 +27,7 @@ export interface GroupCallRecord {
   endedAt?: Date;
 }
 
-function ref(db: Firestore, callId: string) {
+function ref(db: ReturnType<typeof getCallStateDb>, callId: string) {
   return db.collection("groupCallInvites").doc(callId);
 }
 function date(value: unknown): Date {
@@ -59,7 +62,7 @@ function canonical(callId: string, value: Record<string, unknown>): GroupCallRec
 }
 
 export async function createGroupCall(input: Omit<GroupCallRecord, "callId" | "channel" | "status" | "createdAt" | "transport">): Promise<GroupCallRecord> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   const callId = randomUUID();
   const channel = randomUUID();
   const createdAt = new Date();
@@ -73,19 +76,19 @@ export async function createGroupCall(input: Omit<GroupCallRecord, "callId" | "c
     });
     return record;
   } catch {
-    throw new CallPushError("Firebase group call creation failed");
+    throw new CallPushError("Call state group creation failed");
   }
 }
 
 export async function getGroupCall(callId: string): Promise<GroupCallRecord | null> {
   if (!isValidCallId(callId)) return null;
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   const snapshot = await ref(db, callId).get();
   return snapshot.exists && snapshot.data() ? canonical(callId, snapshot.data()!) : null;
 }
 
 export async function answerGroupCall(callId: string, userId: number, sessionId: string, deviceId: string): Promise<GroupCallRecord | null> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   let result: GroupCallRecord | null = null;
   await db.runTransaction(async transaction => {
     result = null;
@@ -103,7 +106,7 @@ export async function answerGroupCall(callId: string, userId: number, sessionId:
 }
 
 export async function rejectOrLeaveGroupCall(callId: string, userId: number, sessionId: string, deviceId: string, rejected: boolean): Promise<GroupCallRecord | null> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   let result: GroupCallRecord | null = null;
   await db.runTransaction(async transaction => {
     result = null;

@@ -105,6 +105,8 @@ export function parseMissedCall(id: string, value: unknown): MissedCall | null {
 interface PushConfig {
   enabled: boolean;
   reason?: string;
+  /** Durable call authority is independent from optional Firebase push. */
+  callAuthorityReady?: boolean;
   /** Firestore readiness is independent from browser push readiness. */
   pushEnabled?: boolean;
   pushReason?: string;
@@ -211,12 +213,18 @@ export async function createCallFirebase(
   onSnapshotError: (error: Error) => void,
 ) {
   const config = await json<PushConfig>("/api/call-push/config");
-  if (!config.enabled || !config.firebase) {
+  // FCM is an optional wake-up channel. When it is disabled, do not load the
+  // Firebase SDK (or create a Firebase session) at all: live calls resume over
+  // the authenticated websocket and missed calls come from the REST authority.
+  // In particular, this must not be confused with durable call authority
+  // readiness, which is reported separately by the config endpoint.
+  if (!config.enabled || !config.firebase || config.pushEnabled === false) {
+    const pushReason = config.pushReason ?? config.reason ?? "Background call notifications are optional";
     return {
       enabled: false as const,
-      reason: config.reason ?? "Call notifications are not configured",
+      reason: pushReason,
       pushEnabled: false,
-      pushReason: config.pushReason ?? config.reason ?? "Background call notifications are not configured",
+      pushReason,
     };
   }
 

@@ -6,11 +6,31 @@ import {
   evaluateDeferredCallDecline,
   firebaseReadiness,
   firebaseVapidPublicKey,
+  getAuthoritativeCallFirestore,
   isPushSessionActive,
   newMessagePushPayload,
   parseFcmSendRequest,
   shouldRevokeFirebaseRefreshTokens,
 } from "./firebase-call-push.js";
+
+test("call authority does not require Firebase credentials", async () => {
+  const oldEnabled = process.env.FCM_ENABLED;
+  const oldAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+  try {
+    process.env.FCM_ENABLED = "false";
+    process.env.FIREBASE_SERVICE_ACCOUNT = "{ malformed credential";
+    // The getter must resolve the Postgres call-state facade without trying to
+    // parse or initialize Firebase.
+    assert.ok(await getAuthoritativeCallFirestore());
+    process.env.FCM_ENABLED = "true";
+    assert.ok(await getAuthoritativeCallFirestore());
+  } finally {
+    if (oldEnabled === undefined) delete process.env.FCM_ENABLED;
+    else process.env.FCM_ENABLED = oldEnabled;
+    if (oldAccount === undefined) delete process.env.FIREBASE_SERVICE_ACCOUNT;
+    else process.env.FIREBASE_SERVICE_ACCOUNT = oldAccount;
+  }
+});
 
 test("caller cancellation and timeout map a ringing invitation to canonical missed", () => {
   assert.equal(durableTerminalStatus("ringing", true), "missed");

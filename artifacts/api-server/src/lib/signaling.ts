@@ -6,13 +6,24 @@ import { requireReadyCallMediaProvider } from "./turn-config";
 import {
   appendAuthoritativeSignal, answerAuthoritativeCall, createAuthoritativeCall,
   canControlDirectCallRecording, expireAuthoritativeCall, getAuthoritativeCall, isDurableCallParticipant, switchAuthoritativeCallProvider, terminateAuthoritativeCall,
-  type CallRecord, type CallTransport, type StoredDescription,
+  canonicalCallRecord, type CallRecord, type CallTransport, type StoredDescription,
 } from "./call-signal-store";
-import { CallPushError, callSessionBinding, declineDeferredCallInvitation, getAuthoritativeCallFirestore, type DeferredCallDeclineResult } from "./firebase-call-push";
+import { CallPushError, callSessionBinding, getCallStateDb } from "./call-state-db";
 import { canIssueGroupAgoraToken, getGroupCall } from "./group-call-store";
 
 interface RTCIceCandidateInit { candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null; }
 interface E2eCallEnvelope { devices: Record<string, { wrappedSecret: string; fingerprint: string }>; }
+interface DeferredCallDeclineResult {
+  callId: string;
+  outcome: "declined" | "expired" | "finished" | "not-found" | "not-callee";
+  changed: boolean;
+  status?: CallRecord["status"];
+  callerId?: number;
+  callerName?: string;
+  callerAvatar?: string | null;
+  calleeId?: number;
+  type?: "video" | "voice";
+}
 interface Client {
   ws: WebSocket; userId: number; sessionId: string; deviceId: string; username: string;
   liveId: string | null; stopCalls?: () => void;
@@ -144,7 +155,7 @@ function deliverCallSnapshot(client: Client, record: CallRecord) {
   }
 }
 async function subscribeCalls(client: Client): Promise<() => void> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   const delivered = new Set<string>();
   const eventStops = new Map<string, () => void>();
   const queues = new Map<string, Promise<void>>();
@@ -178,6 +189,7 @@ async function subscribeCalls(client: Client): Promise<() => void> {
     for (const event of events.docs) {
       if (closed || client.ws.readyState !== WebSocket.OPEN) return;
       const value = event.data();
+      if (!value) continue;
       if (value.toId !== client.userId || typeof value.signalId !== "string" || delivered.has(value.signalId)) continue;
       const senderOk = value.fromId === call.caller.id
         ? value.senderSessionTag === call.callerSessionTag && value.senderDeviceId === call.callerDeviceId
@@ -218,7 +230,7 @@ async function subscribeCalls(client: Client): Promise<() => void> {
       });
     }
   }, () => {
-    // Calls fail explicitly on an action when Firebase is unavailable. A failed
+    // Calls fail explicitly on an action when call state is unavailable. A failed
     // listener must not create a process-local signalling fallback.
   });
   return () => { closed = true; unsubscribe(); for (const stop of eventStops.values()) stop(); eventStops.clear(); };
@@ -230,14 +242,42 @@ export async function isCallParticipant(callId: string, userId: number): Promise
 
 export async function declineCallForUser(callId: string, userId: number): Promise<DeferredCallDeclineResult> {
   try {
-    const current = await getAuthoritativeCall(callId);
-    if (!current) return { callId, outcome: "not-found", changed: false };
-    if (current.callee.id !== userId) return { callId, outcome: "not-callee", changed: false, calleeId: current.callee.id };
-    // Keep the established Firestore missed-call transaction/FCM lifecycle.
-    // It writes the same callInvites document and now also releases callLocks.
-    return await declineDeferredCallInvitation(callId, userId);
+    const db = getCallStateDb();
+    return await db.runTransaction(async transaction => {
+      const ref = db.collection("callInvites").doc(callId);
+      const snapshot = await transaction.get(ref);
+      const data = snapshot.data();
+      if (!snapshot.exists || !data) return { callId, outcome: "not-found", changed: false };
+      const current = canonicalCallRecord(callId, data);
+      if (!current) return { callId, outcome: "not-found", changed: false };
+      const details = {
+        callerId: current.caller.id, callerName: current.caller.name, callerAvatar: current.caller.avatar,
+        calleeId: current.callee.id, type: current.type,
+      };
+      if (current.callee.id !== userId) return { callId, outcome: "not-callee", changed: false, ...details };
+      if (current.status !== "ringing" || current.endedAt) {
+        return { callId, outcome: "finished", changed: false, status: current.status, ...details };
+      }
+      const now = new Date();
+      const expired = current.expiresAt.getTime() <= now.getTime();
+      const status = expired ? "missed" : "declined";
+      transaction.update(ref, { status, endedAt: now, ...(expired ? { expiredAt: now } : {}) });
+      for (const participant of [current.caller.id, current.callee.id]) {
+        const lock = db.collection("callLocks").doc(String(participant));
+        const lockSnapshot = await transaction.get(lock);
+        if (lockSnapshot.data()?.callId === callId) transaction.delete(lock);
+      }
+      const inbox = db.collection("users").doc(String(current.callee.id)).collection("missedCalls").doc(callId);
+      const existingInbox = await transaction.get(inbox);
+      transaction.set(inbox, {
+        fromId: current.caller.id, fromName: current.caller.name, fromAvatar: current.caller.avatar,
+        type: current.type, time: now, seen: existingInbox.data()?.seen === true, caller: current.caller,
+        isSeen: existingInbox.data()?.isSeen === true, status,
+      }, { merge: true });
+      return { callId, outcome: expired ? "expired" : "declined", changed: true, status, ...details };
+    });
   } catch (error) {
-    throw error instanceof CallPushError ? error : new CallPushError("Firebase call status update failed");
+    throw error instanceof CallPushError ? error : new CallPushError("Call state status update failed");
   }
 }
 export function disconnectSessionSockets(sessionId: string) { for (const ws of [...(socketsBySessionId.get(sessionId) ?? [])]) { send(ws, { type: "session-ended" }); ws.close(4001, "Session ended"); } }
@@ -308,7 +348,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         } catch (error) {
           const code = error instanceof Error && error.message === "MEDIA_PROTOCOL_MISMATCH" ? "MEDIA_PROTOCOL_MISMATCH" :
             error instanceof CallPushError && error.message.includes("already in a call") ? "CALL_BUSY" : "CALL_SIGNALING_UNAVAILABLE";
-          send(ws, { type: code === "CALL_BUSY" ? "call-busy" : "call-unavailable", callId: msg.callId, to: msg.to, code, reason: code === "CALL_SIGNALING_UNAVAILABLE" ? "Authoritative Firebase call signalling is unavailable" : undefined });
+          send(ws, { type: code === "CALL_BUSY" ? "call-busy" : "call-unavailable", callId: msg.callId, to: msg.to, code, reason: code === "CALL_SIGNALING_UNAVAILABLE" ? "Authoritative call state is unavailable" : undefined });
         }
         return;
       }
@@ -358,7 +398,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           if (!recipientIds) return;
           // Controls are a consent transcript, never media. Persist before relay
           // so reconnecting clients can retrieve the authoritative call record.
-          const db = await getAuthoritativeCallFirestore();
+          const db = getCallStateDb();
           const collection = direct ? db.collection("callInvites").doc(msg.callId) : db.collection("groupCallInvites").doc(msg.callId);
           await collection.collection("recordingControls").doc(msg.requestId).set({
             type: "call-recording-control", callId: msg.callId, requestId: msg.requestId,

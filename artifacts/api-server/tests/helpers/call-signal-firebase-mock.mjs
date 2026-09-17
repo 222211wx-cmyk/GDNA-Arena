@@ -259,6 +259,14 @@ export async function getAuthoritativeCallFirestore() {
   return authoritativeDb;
 }
 
+// Compatibility bridge for the PostgreSQL authority contract regression suite.
+// The production store imports call-state-db directly; this adapter preserves
+// the suite's cross-replica transaction model without coupling it to Firebase.
+export function getCallStateDb() {
+  if (!authoritativeDb) throw new Error("Test call state database was not configured");
+  return authoritativeDb;
+}
+
 export class CallPushError extends Error {
   constructor(message) {
     super(message);

@@ -107,14 +107,12 @@ function WebPushRow({
   status,
   permission,
   enabled,
-  reason,
   onEnable,
 }: {
   st: Record<string, string>;
   status: FirebaseStatus;
   permission: CallNotificationPermission;
   enabled: boolean;
-  reason: string | null;
   onEnable?: () => void | Promise<unknown>;
 }) {
   const message = permission === "granted" && enabled && status === "ready"
@@ -125,7 +123,7 @@ function WebPushRow({
         ? (st.push_loading ?? "Checking background notification setup…")
         : enabled && permission !== "unsupported"
           ? (st.push_hint ?? "Enable browser notifications to receive messages and calls when this tab is closed.")
-          : (reason ?? st.push_unavailable ?? "Background notifications are not configured.");
+          : (st.push_unavailable ?? "Background notifications are optional and are not configured. In-app calls still work.");
 
   return (
     <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3" data-testid="messenger-push-settings">
@@ -167,7 +165,7 @@ function ToggleRow({ label, value, onChange, disabled = false }: { label: string
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline, notificationPermission, firebaseStatus, pushEnabled, pushReason, enableCallNotifications }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline, notificationPermission, firebaseStatus, pushEnabled, enableCallNotifications }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
@@ -184,7 +182,6 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   notificationPermission: CallNotificationPermission;
   firebaseStatus: FirebaseStatus;
   pushEnabled: boolean;
-  pushReason: string | null;
   enableCallNotifications?: () => void | Promise<unknown>;
 }) {
   const [settings, setSettings] = useState<MsgSettings | null>(null);
@@ -310,7 +307,6 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
               status={firebaseStatus}
               permission={notificationPermission}
               enabled={pushEnabled}
-              reason={pushReason}
               onEnable={enableCallNotifications}
             />
             <ToggleRow label={st.read_receipts ?? "Read receipts"} value={settings.readReceipts}
@@ -2433,7 +2429,6 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             notificationPermission={callExtras.notificationPermission}
             firebaseStatus={callExtras.firebaseStatus}
             pushEnabled={callExtras.pushEnabled}
-            pushReason={callExtras.pushReason}
             enableCallNotifications={callExtras.enableCallNotifications}
             currentUserId={user?.id}
             onMuteChanged={(roomId, muted) => {
@@ -2954,7 +2949,6 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             notificationPermission={callExtras.notificationPermission}
             firebaseStatus={callExtras.firebaseStatus}
             pushEnabled={callExtras.pushEnabled}
-            pushReason={callExtras.pushReason}
             enableCallNotifications={callExtras.enableCallNotifications}
           />
         )}

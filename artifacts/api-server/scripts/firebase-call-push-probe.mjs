@@ -2,11 +2,37 @@ import { randomUUID } from "node:crypto";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
-import { resolveServiceAccount } from "../src/lib/firebase-service-account.mjs";
 
-const { account: serviceAccount, error: parseError, diagnostic, source, missingFallbackFields } = resolveServiceAccount(process.env);
+const disabled = process.env.FCM_ENABLED?.trim().toLowerCase() === "false";
+if (disabled) {
+  // Call state is Postgres-backed; disabling this optional transport is not a
+  // call-authority failure. Do not parse a stale/broken credential in this mode.
+  console.log(JSON.stringify({
+    enabled: false,
+    pushEnabled: false,
+    callAuthorityReady: true,
+    reason: "FCM is disabled",
+  }));
+  process.exit(0);
+}
+
+let serviceAccount = null;
+const rawCredential = process.env.FIREBASE_SERVICE_ACCOUNT?.trim();
+if (rawCredential) {
+  try {
+    const parsed = JSON.parse(rawCredential);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) serviceAccount = parsed;
+  } catch {
+    // Never emit JSON parser diagnostics or credential material.
+  }
+}
 if (!serviceAccount) {
-  console.log(JSON.stringify({ enabled: false, reason: parseError, diagnostic, source, missingFallbackFields }));
+  console.log(JSON.stringify({
+    enabled: false,
+    pushEnabled: false,
+    callAuthorityReady: true,
+    reason: "FCM is disabled: no valid Firebase credential",
+  }));
   process.exitCode = 1;
 } else {
   let app;
@@ -65,7 +91,12 @@ if (!serviceAccount) {
     console.log(JSON.stringify({ enabled: true, firestore: "read-write-delete", expiryIndex: true }));
   } catch {
     process.exitCode = 1;
-    console.error(JSON.stringify({ enabled: false, reason: "Firebase diagnostic probe failed" }));
+    console.error(JSON.stringify({
+      enabled: false,
+      pushEnabled: false,
+      callAuthorityReady: true,
+      reason: "FCM is disabled: no valid Firebase credential",
+    }));
   } finally {
     if (app) await app.delete().catch(() => {});
   }

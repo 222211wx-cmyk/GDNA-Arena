@@ -210,8 +210,8 @@ app.use("/api", (req, _res, next) => {
 });
 app.use("/api", router);
 
-// Firestore invitations are durable, so expiration cannot depend on a process
-// timer surviving a restart. This remains a no-op until Firebase is configured.
+// Postgres call state is durable, so expiration cannot depend on a process
+// timer surviving a restart. FCM availability is unrelated to this sweep.
 startFirebaseCallExpirationSweep();
 
 export default app;

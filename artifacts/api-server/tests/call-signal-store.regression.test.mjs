@@ -8,6 +8,7 @@ import { build } from "esbuild";
 import {
   CallPushError,
   SharedFirestore,
+  getCallStateDb,
   setAuthoritativeFirestore,
 } from "./helpers/call-signal-firebase-mock.mjs";
 
@@ -15,7 +16,7 @@ const here = path.dirname(new URL(import.meta.url).pathname);
 const apiRoot = path.resolve(here, "..");
 const storeSource = path.join(apiRoot, "src/lib/call-signal-store.ts");
 const signalingSource = path.join(apiRoot, "src/lib/signaling.ts");
-const firebaseMock = path.join(here, "helpers/call-signal-firebase-mock.mjs");
+const callStateMock = path.join(here, "helpers/call-signal-firebase-mock.mjs");
 
 async function loadReplica(label) {
   const destination = path.join(await mkdtemp(path.join(os.tmpdir(), "call-signal-store-")), `${label}.mjs`);
@@ -27,10 +28,10 @@ async function loadReplica(label) {
     bundle: true,
     logLevel: "silent",
     plugins: [{
-      name: "test-firebase-call-push",
+      name: "test-call-state-db",
       setup(plugin) {
-        plugin.onResolve({ filter: /^\.\/firebase-call-push$/ }, (args) => {
-          if (args.importer === storeSource) return { path: firebaseMock, external: true };
+        plugin.onResolve({ filter: /^\.\/call-state-db$/ }, (args) => {
+          if (args.importer === storeSource) return { path: callStateMock, external: true };
           return undefined;
         });
       },
@@ -55,7 +56,7 @@ async function loadSignalingReplica(label) {
           contents: `${await readFile(args.path, "utf8")}\nexport { subscribeCalls };\n`,
           loader: "ts",
         }));
-        plugin.onResolve({ filter: /^\.\/firebase-call-push$/ }, () => ({ path: firebaseMock, external: true }));
+        plugin.onResolve({ filter: /^\.\/call-state-db$/ }, () => ({ path: callStateMock, external: true }));
         plugin.onResolve({ filter: /^@workspace\/db$/ }, () => ({ path: "db", namespace: "signaling-test" }));
         plugin.onResolve({ filter: /^\.\/turn-config$/ }, () => ({ path: "turn", namespace: "signaling-test" }));
         plugin.onResolve({ filter: /^ws$/ }, () => ({ path: "ws", namespace: "signaling-test" }));

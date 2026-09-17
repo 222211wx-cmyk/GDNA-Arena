@@ -64,6 +64,22 @@ export function useCallPush(
     setFirebaseStatus("loading");
     setFirebaseError(null);
     setMissedCallsLoading(true);
+    const loadMissedCallsFromAuthority = async () => {
+      try {
+        const missed = await fetchMissedCalls();
+        if (!cancelled) {
+          setMissedCalls(missed.items);
+          setMissedCallsError(false);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMissedCallsError(true);
+          setFirebaseError(error instanceof Error ? error.message : "Missed calls could not be loaded");
+        }
+      } finally {
+        if (!cancelled) setMissedCallsLoading(false);
+      }
+    };
     void createCallFirebase(
       (callId, _fromName) => resumeRef.current(callId),
       (callId, status) => terminalRef.current(callId, status),
@@ -84,11 +100,13 @@ export function useCallPush(
       if (cancelled) { if (firebase.enabled) await firebase.cleanup(); return; }
       firebaseRef.current = firebase;
       if (!firebase.enabled) {
+        // Push/Firebase being disabled is not a call failure. Missed-call
+        // history is durable REST data and remains available independently.
         setFirebaseStatus("disabled");
-        setFirebaseError(firebase.reason);
+        setFirebaseError(null);
         setPushEnabled(false);
         setPushReason(firebase.pushReason ?? firebase.reason);
-        setMissedCallsLoading(false);
+        await loadMissedCallsFromAuthority();
         return;
       }
       setPushEnabled(firebase.pushEnabled);
@@ -99,22 +117,8 @@ export function useCallPush(
         return;
       }
       setFirebaseStatus("ready");
-      try {
-        const missed = await fetchMissedCalls();
-        if (!cancelled) {
-          setMissedCalls(missed.items);
-          setMissedCallsError(false);
-          setMissedCallsLoading(false);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setFirebaseStatus("error");
-          setFirebaseError(error instanceof Error ? error.message : "Missed calls could not be loaded");
-          setMissedCallsError(true);
-          setMissedCallsLoading(false);
-        }
-        return;
-      }
+      // Firestore's missed-call snapshot is the optional live subscription and
+      // already supplied the initial list; avoid an identical REST request.
       // Permission prompts are only made by enableCallNotifications. A prior
       // grant, however, should restore this account's FCM registration.
       if (firebase.pushEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -128,14 +132,14 @@ export function useCallPush(
           setNotificationPermission(result.permission);
         }
       }
-    }).catch(error => {
+    }).catch(async error => {
       if (!cancelled) {
         setFirebaseStatus("error");
         setFirebaseError(error instanceof Error ? error.message : "Firebase call notifications failed");
         setPushEnabled(false);
         setPushReason(error instanceof Error ? error.message : "Background notifications could not start");
-        setMissedCallsError(true);
-        setMissedCallsLoading(false);
+        // A Firebase failure must not hide durable missed-call history.
+        await loadMissedCallsFromAuthority();
       }
     });
     return () => {

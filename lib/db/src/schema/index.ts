@@ -14,4 +14,5 @@ export { legendStoriesTable, legendArenaEventsTable } from "./legends";
 export * from "./social";
 export * from "./solidarity";
 export * from "./finance";
+export * from "./call-state";
 

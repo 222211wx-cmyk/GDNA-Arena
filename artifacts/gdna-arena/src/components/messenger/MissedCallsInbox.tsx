@@ -296,7 +296,7 @@ function firebaseStatusView(
     case "ready":
       return {
         tone: "info",
-        message: pushEnabled ? t.status_in_app_available : pushReason || t.status_background_not_configured,
+        message: pushEnabled ? t.status_in_app_available : t.status_background_not_configured,
       };
     case "error":
       return { tone: "info", message: error || t.status_firebase_error };

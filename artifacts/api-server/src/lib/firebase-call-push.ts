@@ -4,8 +4,12 @@ import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
 import { pool as pgPool } from "@workspace/db";
+import {
+  getCallStateDb,
+  type CallDatabase,
+  type CallStateDocumentReference,
+} from "./call-state-db";
 import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
-import { resolveServiceAccount } from "./firebase-service-account.mjs";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -104,6 +108,8 @@ interface PublicFirebaseConfig {
 export interface CallPushStatus {
   enabled: boolean;
   reason?: string;
+  /** Call lifecycle state is Postgres-backed and independent of FCM. */
+  callAuthorityReady: boolean;
   firebase?: PublicFirebaseConfig;
   /** Durable Firestore invitations can work without browser push credentials. */
   pushEnabled?: boolean;
@@ -140,6 +146,7 @@ export class CallPushError extends Error {
 }
 
 let servicesPromise: Promise<FirebaseServices> | undefined;
+let credentialWarningLogged = false;
 
 /**
  * FIREBASE_VAPID_PUBLIC is the current deployment name. Keep the old
@@ -178,6 +185,10 @@ function sessionTag(sessionId: string): string {
   return createHash("sha256").update(sessionId).digest("hex");
 }
 
+function fcmDisabled(): boolean {
+  return process.env.FCM_ENABLED?.trim().toLowerCase() === "false";
+}
+
 export function shouldRevokeFirebaseRefreshTokens(sessionFilter?: string): boolean {
   return !sessionFilter;
 }
@@ -201,17 +212,24 @@ function asPublicConfig(): PublicFirebaseConfig | null {
   }
 }
 
-let lastAccountParseError: string | null = null;
-
 function readServiceAccount(): Record<string, unknown> | null {
-  return resolveServiceAccount(process.env).account;
-}
-
-function adminConfigurationProblem(): string | null {
-  const { error, diagnostic } = resolveServiceAccount(process.env);
-  if (error && error !== lastAccountParseError) console.error("[Firebase]", error, diagnostic ?? "");
-  lastAccountParseError = error;
-  return error;
+  if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") return null;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim();
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  } catch {
+    // Credentials are optional. Never expose parser diagnostics or credential
+    // contents in startup logs.
+    if (!credentialWarningLogged) {
+      credentialWarningLogged = true;
+      console.warn("[FCM] disabled: no valid Firebase credential");
+    }
+    return null;
+  }
 }
 
 function clientConfigurationProblem(): string | null {
@@ -225,8 +243,8 @@ function clientConfigurationProblem(): string | null {
 }
 
 function pushConfigurationProblem(): string | null {
-  const adminProblem = adminConfigurationProblem();
-  if (adminProblem) return adminProblem;
+  if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") return "FCM is disabled";
+  if (!readServiceAccount()) return "FCM is disabled: no valid Firebase credential";
   const clientProblem = clientConfigurationProblem();
   if (clientProblem) return clientProblem;
   if (!firebaseVapidPublicKey()) return "Firebase web push VAPID key is not configured";
@@ -236,7 +254,9 @@ function pushConfigurationProblem(): string | null {
 // Firestore invitation persistence and custom-token issuance do not require
 // browser push. Keep the durable lifecycle available when VAPID is absent.
 function configurationProblem(): string | null {
-  return adminConfigurationProblem() ?? clientConfigurationProblem();
+  if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") return "FCM is disabled";
+  if (!readServiceAccount()) return "FCM is disabled: no valid Firebase credential";
+  return clientConfigurationProblem();
 }
 
 export function isFirebaseCallPushConfigured(): boolean {
@@ -249,31 +269,36 @@ async function loadServices(): Promise<FirebaseServices> {
   if (!servicesPromise) {
     servicesPromise = (async () => {
       const account = readServiceAccount();
-      if (!account) throw new CallPushError("Firebase service account is not configured");
-      console.info("[Firebase] Service account parsed successfully");
+      if (!account) {
+        console.warn("[FCM] disabled: no valid Firebase credential");
+        throw new CallPushError("FCM is disabled: no valid Firebase credential");
+      }
       let app: App;
       try {
         app = getApps()[0] ?? initializeApp({ credential: cert(account) });
       } catch {
-        throw new CallPushError("Firebase Admin initialization failed");
+        console.warn("[FCM] disabled: no valid Firebase credential");
+        throw new CallPushError("FCM is disabled: no valid Firebase credential");
       }
       return { db: getFirestore(app), auth: getAuth(app), messaging: getMessaging(app) };
     })().catch(error => {
       servicesPromise = undefined;
       if (error instanceof CallPushError) throw error;
-      throw new CallPushError("Firebase Admin initialization failed");
+      console.warn("[FCM] disabled: no valid Firebase credential");
+      throw new CallPushError("FCM is disabled: no valid Firebase credential");
     });
   }
   return servicesPromise;
 }
 
 /**
- * The call signalling store intentionally obtains its Admin Firestore handle
- * here instead of initializing a second Firebase app.  Call documents are
- * server-written only; this is not a browser SDK escape hatch.
+ * Legacy callers retain this getter name while call lifecycle state is backed
+ * by Postgres. It must never initialize Firebase or make calls depend on FCM.
  */
-export async function getAuthoritativeCallFirestore(): Promise<Firestore> {
-  return (await loadServices()).db;
+export async function getAuthoritativeCallFirestore(): Promise<CallDatabase> {
+  // Despite the legacy name, this is the Postgres-backed call-state facade.
+  // Firebase remains an optional push/device provider only.
+  return getCallStateDb();
 }
 
 /** A raw express-session id must never be put in Firestore. */
@@ -281,7 +306,7 @@ export function callSessionBinding(sessionId: string): string {
   return sessionTag(sessionId);
 }
 
-/** Best-effort wake-up after a call has already been committed to Firestore. */
+/** Best-effort wake-up after a call has already been committed to Postgres. */
 export async function sendAuthoritativeIncomingCallPush(input: {
   callId: string;
   callerId: number;
@@ -309,8 +334,8 @@ export async function sendAuthoritativeIncomingCallPush(input: {
       dedupeKey: `incoming-call:${input.callId}:${input.calleeId}`,
     });
   } catch {
-    // FCM is a wake-up transport only. The Firestore document is authoritative.
-    console.warn("[Firebase] Incoming call wake-up unavailable");
+    // FCM is a wake-up transport only. Postgres call state is authoritative.
+    console.warn("[FCM] Incoming call wake-up unavailable");
   }
 }
 
@@ -346,16 +371,16 @@ function dateValue(value: unknown, fallback = new Date()): Date {
   return fallback;
 }
 
-function callRef(db: Firestore, callId: string) {
-  return db.collection("callInvites").doc(callId);
+function callRef(db: Firestore, callId: string): FirebaseFirestore.DocumentReference;
+function callRef(db: CallDatabase, callId: string): CallStateDocumentReference;
+function callRef(db: Firestore | CallDatabase, callId: string):
+  FirebaseFirestore.DocumentReference | CallStateDocumentReference {
+  return (db as { collection(name: string): { doc(id: string): unknown } })
+    .collection("callInvites").doc(callId) as FirebaseFirestore.DocumentReference | CallStateDocumentReference;
 }
 
-function userRef(db: Firestore, userId: number) {
-  return db.collection("users").doc(String(userId));
-}
-
-function missedRef(db: Firestore, userId: number, callId: string) {
-  return userRef(db, userId).collection("missedCalls").doc(callId);
+function missedRef(db: CallDatabase, userId: number, callId: string): CallStateDocumentReference {
+  return db.collection("users").doc(String(userId)).collection("missedCalls").doc(callId);
 }
 
 function invitationPayload(invitation: DeferredCallInvitation) {
@@ -460,18 +485,20 @@ async function deviceTokens(
   userId: number,
   includeFocused: boolean,
 ): Promise<{ token: string; ref: FirebaseFirestore.DocumentReference }[]> {
-  const snapshot = await userRef(db, userId).collection("devices").limit(DEVICE_BATCH_SIZE).get();
+  const snapshot = await db.collection("users").doc(String(userId))
+    .collection("devices").limit(DEVICE_BATCH_SIZE).get();
   const cutoff = Date.now() - FOCUS_FRESH_MS;
-  const candidates = snapshot.docs.flatMap(doc => {
-    const value = doc.data();
-    if (value.configurationId !== pushConfigurationId()) return [];
-    if (typeof value.token !== "string" || value.token.length < 20 || value.token.length > 4096) return [];
-    const focusAt = dateValue(value.focusUpdatedAt, new Date(0)).getTime();
-    const focused = value.focused === true && focusAt >= cutoff;
-    if (!includeFocused && focused) return [];
-    if (typeof value.sessionTag !== "string" || !/^[a-f0-9]{64}$/.test(value.sessionTag)) return [];
-    return [{ token: value.token, ref: doc.ref, sessionTag: value.sessionTag }];
-  });
+  const candidates: { token: string; ref: FirebaseFirestore.DocumentReference; sessionTag: string }[] =
+    snapshot.docs.flatMap(doc => {
+      const value = doc.data();
+      if (value.configurationId !== pushConfigurationId()) return [];
+      if (typeof value.token !== "string" || value.token.length < 20 || value.token.length > 4096) return [];
+      const focusAt = dateValue(value.focusUpdatedAt, new Date(0)).getTime();
+      const focused = value.focused === true && focusAt >= cutoff;
+      if (!includeFocused && focused) return [];
+      if (typeof value.sessionTag !== "string" || !/^[a-f0-9]{64}$/.test(value.sessionTag)) return [];
+      return [{ token: value.token, ref: doc.ref, sessionTag: value.sessionTag }];
+    });
   if (!candidates.length) return [];
   // Firestore's session mirror is required for Firebase rules, but the
   // PostgreSQL session store is canonical for HTTP authentication. Keep only
@@ -492,7 +519,8 @@ async function deviceTokens(
   // call/message pushes after expiry or logout.
   const now = Date.now();
   const validated = await Promise.all(candidates.map(async candidate => {
-    const session = await userRef(db, userId).collection("sessions").doc(candidate.sessionTag).get();
+    const session = await db.collection("users").doc(String(userId))
+      .collection("sessions").doc(candidate.sessionTag).get();
     const value = session.data();
     if (!session.exists || !isPushSessionActive(value, now) ||
         !activeSessionTags.has(candidate.sessionTag)) {
@@ -626,19 +654,29 @@ async function sendPush(
 
 export async function getCallPushStatus(): Promise<CallPushStatus> {
   const problem = configurationProblem();
-  if (problem) return { enabled: false, reason: problem };
+  if (problem) return {
+    enabled: false,
+    reason: problem,
+    callAuthorityReady: true,
+    pushEnabled: false,
+    pushReason: problem,
+  };
   try {
     await loadServices();
   } catch (error) {
     return {
       enabled: false,
+      callAuthorityReady: true,
       reason: error instanceof CallPushError ? error.message : "Firebase Admin is unavailable",
+      pushEnabled: false,
+      pushReason: error instanceof CallPushError ? error.message : "Firebase Admin is unavailable",
     };
   }
   const vapidPublicKey = firebaseVapidPublicKey();
   const readiness = firebaseReadiness(true, true, !!vapidPublicKey);
   return {
     ...readiness,
+    callAuthorityReady: true,
     firebase: asPublicConfig() ?? undefined,
     vapidPublicKey,
   };
@@ -656,7 +694,7 @@ export async function createCallPushSession(
     // Rules require this record for every Firestore read. It is server-owned,
     // expires with the HTTP session, and is marked revoked at logout so an
     // already-issued Firebase ID token immediately loses document access.
-    await userRef(db, userId).collection("sessions").doc(tag).set({
+    await db.collection("users").doc(String(userId)).collection("sessions").doc(tag).set({
       expiresAt: sessionExpiresAt && sessionExpiresAt.getTime() > Date.now()
         ? sessionExpiresAt
         : new Date(Date.now() + 60 * 60 * 1000),
@@ -696,6 +734,7 @@ export async function registerCallPushDevice(
   sessionId: string,
   input: { token: unknown; installationId: unknown; focused: unknown },
 ): Promise<void> {
+  if (fcmDisabled()) throw new CallPushError("FCM is disabled");
   if (typeof input.token !== "string" || input.token.length < 20 || input.token.length > 4096 ||
     !validInstallationId(input.installationId) || typeof input.focused !== "boolean") {
     throw new CallPushError("Invalid push device registration");
@@ -703,7 +742,7 @@ export async function registerCallPushDevice(
   const { db } = await loadServices();
   try {
     const now = new Date();
-    await userRef(db, userId).collection("devices").doc(input.installationId).set({
+    await db.collection("users").doc(String(userId)).collection("devices").doc(input.installationId).set({
       token: input.token,
       configurationId: pushConfigurationId(),
       focused: input.focused,
@@ -835,8 +874,9 @@ export async function sendAuthenticatedFcmPush(
   request: FcmSendRequest,
 ): Promise<FcmSendOutcome> {
   const services = await loadServices();
+  const callDb = await getAuthoritativeCallFirestore();
   if (request.kind === "call") {
-    const snapshot = await callRef(services.db, request.callId).get();
+    const snapshot = await callRef(callDb, request.callId).get();
     if (!snapshot.exists) throw new CallPushError("Call invitation not found");
     const data = snapshot.data();
     if (!data || data.fromId !== senderId) {
@@ -849,7 +889,7 @@ export async function sendAuthenticatedFcmPush(
     const callerName = data.fromName;
     const callType = data.type;
     const expiresAt = dateValue(data.expiresAt, new Date(0));
-    if (!Number.isSafeInteger(calleeId) || typeof callerName !== "string" ||
+    if (typeof calleeId !== "number" || !Number.isSafeInteger(calleeId) || typeof callerName !== "string" ||
       (callType !== "video" && callType !== "voice") ||
       expiresAt.getTime() <= Date.now()) {
       throw new CallPushError("Call invitation is no longer valid");
@@ -966,7 +1006,7 @@ async function ownedDeviceRef(
   sessionId: string,
   installationId: string,
 ) {
-  const ref = userRef(db, userId).collection("devices").doc(installationId);
+  const ref = db.collection("users").doc(String(userId)).collection("devices").doc(installationId);
   const snapshot = await ref.get();
   if (!snapshot.exists || snapshot.data()?.sessionTag !== sessionTag(sessionId)) {
     throw new CallPushError("Push installation does not belong to this session");
@@ -975,6 +1015,7 @@ async function ownedDeviceRef(
 }
 
 export async function removeCallPushDevice(userId: number, sessionId: string, installationId: unknown): Promise<void> {
+  if (fcmDisabled()) throw new CallPushError("FCM is disabled");
   if (!validInstallationId(installationId)) throw new CallPushError("Invalid installation ID");
   const { db } = await loadServices();
   try {
@@ -991,6 +1032,7 @@ export async function setCallPushFocus(
   installationId: unknown,
   focused: unknown,
 ): Promise<void> {
+  if (fcmDisabled()) throw new CallPushError("FCM is disabled");
   if (!validInstallationId(installationId) || typeof focused !== "boolean") {
     throw new CallPushError("Invalid focus update");
   }
@@ -1008,37 +1050,24 @@ export async function setCallPushFocus(
 
 export async function createDeferredCallInvitation(invitation: DeferredCallInvitation): Promise<DeferredCallInvitation> {
   if (!isValidCallId(invitation.callId)) throw new CallPushError("Invalid call ID");
-  const { db, messaging, auth } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   const record = invitationPayload(invitation);
   try {
-    await callRef(db, invitation.callId).create(record);
+    await db.runTransaction(async transaction => {
+      transaction.create(callRef(db, invitation.callId), record);
+    });
   } catch {
-    throw new CallPushError("Firebase invitation creation failed");
+    throw new CallPushError("Call invitation creation failed");
   }
-  // Authentication is established above; messaging is deliberately best effort.
-  void auth;
-  void sendPush(
-    { db, messaging, auth },
-    invitation.calleeId,
-    {
-      type: "INCOMING_CALL",
-      callId: invitation.callId,
-      fromName: invitation.caller.name,
-      title: `مكالمة واردة من ${invitation.caller.name}`,
-      // Keep the established aliases while clients migrate to the canonical
-      // callId/fromName fields.
-      callerId: String(invitation.caller.id),
-      callerName: invitation.caller.name,
-      callerAvatar: invitation.caller.avatar ?? "",
-      roomId: invitation.callId,
-      expiresAt: record.expiresAt.toISOString(),
-      deferredMedia: "true",
-    },
-    undefined,
-    true,
-    INCOMING_PUSH_TTL_SECONDS,
-    { dedupeKey: `incoming-call:${invitation.callId}:${invitation.calleeId}` },
-  );
+  void sendAuthoritativeIncomingCallPush({
+    callId: invitation.callId,
+    callerId: invitation.caller.id,
+    callerName: invitation.caller.name,
+    callerAvatar: invitation.caller.avatar,
+    calleeId: invitation.calleeId,
+    expiresAt: record.expiresAt,
+    video: invitation.type === "video",
+  });
   return { ...invitation, createdAt: record.createdAt, expiresAt: record.expiresAt };
 }
 
@@ -1056,36 +1085,24 @@ export async function createDirectCallInvitation(invitation: DirectCallInvitatio
   if (record.transport.provider === "agora" && record.offer !== null) {
     throw new CallPushError("Invalid direct call offer");
   }
-  const { db, messaging, auth } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
-    await callRef(db, invitation.callId).create(record);
+    await db.runTransaction(async transaction => {
+      transaction.create(callRef(db, invitation.callId), record);
+    });
   } catch {
-    throw new CallPushError("Firebase invitation creation failed");
+    throw new CallPushError("Call invitation creation failed");
   }
-  // Do not put SDP in FCM: browser push has a small payload limit and the
-  // durable invitation is the authoritative source of the current offer.
-  void sendPush(
-    { db, messaging, auth },
-    invitation.calleeId,
-    {
-      type: "INCOMING_CALL",
-      callId: invitation.callId,
-      fromName: invitation.caller.name,
-      title: `مكالمة واردة من ${invitation.caller.name}`,
-      callerId: String(invitation.caller.id),
-      callerName: invitation.caller.name,
-      callerAvatar: invitation.caller.avatar ?? "",
-      roomId: invitation.callId,
-      expiresAt: record.expiresAt.toISOString(),
-      video: invitation.type === "video" ? "true" : "false",
-      transport: JSON.stringify(invitation.transport),
-      url: `/messages?callId=${encodeURIComponent(invitation.callId)}`,
-    },
-    undefined,
-    true,
-    INCOMING_PUSH_TTL_SECONDS,
-    { dedupeKey: `incoming-call:${invitation.callId}:${invitation.calleeId}` },
-  );
+  // Do not put SDP in FCM; the Postgres invitation is authoritative.
+  void sendAuthoritativeIncomingCallPush({
+    callId: invitation.callId,
+    callerId: invitation.caller.id,
+    callerName: invitation.caller.name,
+    callerAvatar: invitation.caller.avatar,
+    calleeId: invitation.calleeId,
+    expiresAt: record.expiresAt,
+    video: invitation.type === "video",
+  });
   return { ...invitation, createdAt: record.createdAt, expiresAt: record.expiresAt };
 }
 
@@ -1098,7 +1115,7 @@ export async function resumeDirectCallInvitation(
   calleeId: number,
 ): Promise<DirectCallResume | null> {
   if (!isValidCallId(callId)) throw new CallPushError("Invalid call ID");
-  const { db } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
     const snapshot = await callRef(db, callId).get();
     if (!snapshot.exists) return null;
@@ -1108,7 +1125,7 @@ export async function resumeDirectCallInvitation(
     if (!invitation || invitation.expiresAt.getTime() <= Date.now()) return null;
     return invitation;
   } catch {
-    throw new CallPushError("Firebase invitation retrieval failed");
+    throw new CallPushError("Call invitation retrieval failed");
   }
 }
 
@@ -1123,7 +1140,7 @@ export async function acceptDirectCallInvitation(
   answer: Record<string, unknown> | null,
 ): Promise<DirectCallAcceptance | null> {
   if (!isValidCallId(callId)) throw new CallPushError("Invalid call ID");
-  const { db } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
     let accepted: DirectCallAcceptance | null = null;
     await db.runTransaction(async transaction => {
@@ -1144,7 +1161,7 @@ export async function acceptDirectCallInvitation(
     });
     return accepted;
   } catch {
-    throw new CallPushError("Firebase invitation acceptance failed");
+    throw new CallPushError("Call invitation acceptance failed");
   }
 }
 
@@ -1160,35 +1177,11 @@ export async function watchDirectCallInvitation(
   callId: string,
   onEvent: (event: DirectCallWatcherEvent) => void,
 ): Promise<() => void> {
-  const { db } = await loadServices();
-  let disposed = false;
-  const unsubscribe = callRef(db, callId).onSnapshot(snapshot => {
-    if (disposed || !snapshot.exists) return;
-    const data = snapshot.data();
-    if (!data) return;
-    if (data.status === "declined" || data.status === "missed") {
-      onEvent({ kind: "terminal", status: data.status });
-      return;
-    }
-    if (data.status === "answered" && Object.hasOwn(data, "answer")) {
-      const answer = data.answer === null || typeof data.answer !== "object"
-        ? null
-        : data.answer as Record<string, unknown>;
-      onEvent({ kind: "answered", answer });
-      return;
-    }
-    if (data.status === "answered" && data.endedAt !== undefined && data.endedAt !== null) {
-      onEvent({ kind: "terminal", status: "ended" });
-    }
-  }, () => {
-    // The local WebSocket path remains authoritative if a transient listener
-    // failure occurs. No polling loop is created here.
-  });
-  return () => {
-    if (disposed) return;
-    disposed = true;
-    unsubscribe();
-  };
+  // WebSocket participant subscriptions are authoritative. Do not attach a
+  // client-style Firebase listener (or make call availability depend on FCM).
+  void callId;
+  void onEvent;
+  return () => {};
 }
 
 export async function finishDirectCallInvitation(
@@ -1201,7 +1194,7 @@ export async function finishDirectCallInvitation(
 }
 
 export async function acceptDeferredCallInvitation(callId: string, calleeId: number): Promise<boolean> {
-  const { db, messaging, auth } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
     let callerName = "";
     const accepted = await db.runTransaction(async transaction => {
@@ -1215,28 +1208,22 @@ export async function acceptDeferredCallInvitation(callId: string, calleeId: num
       return true;
     });
     if (accepted) {
-      await sendPush(
-        { db, messaging, auth },
-        calleeId,
-        {
-          type: "CALL_ENDED",
-          callId,
-          fromName: callerName,
-          title: "انتهت المكالمة",
-          // Retain aliases consumed by existing workers/clients.
-          roomId: callId,
-          callerName,
+      try {
+        const services = await loadServices();
+        await sendPush(services, calleeId, {
+          type: "CALL_ENDED", callId, fromName: callerName,
+          title: "انتهت المكالمة", roomId: callId, callerName,
           body: "تم قبول المكالمة",
-        },
-        undefined,
-        true,
-        INCOMING_PUSH_TTL_SECONDS,
-        { dedupeKey: `call-terminal:${callId}:answered` },
-      );
+        }, undefined, true, INCOMING_PUSH_TTL_SECONDS, {
+          dedupeKey: `call-terminal:${callId}:answered`,
+        });
+      } catch {
+        // Push is best effort; acceptance is already authoritative.
+      }
     }
     return accepted;
   } catch {
-    throw new CallPushError("Firebase invitation acceptance failed");
+    throw new CallPushError("Call invitation acceptance failed");
   }
 }
 
@@ -1317,7 +1304,7 @@ export async function declineDeferredCallInvitation(
   callId: string,
   calleeId: number,
 ): Promise<DeferredCallDeclineResult> {
-  const { db, messaging, auth } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
     const result = await db.runTransaction<DeferredCallDeclineResult>(async transaction => {
       const ref = callRef(db, callId);
@@ -1399,28 +1386,22 @@ export async function declineDeferredCallInvitation(
     });
     if (result.changed && (result.status === "declined" || result.status === "missed") &&
       result.calleeId !== undefined && result.callerName !== undefined) {
-      await sendPush(
-        { db, messaging, auth },
-        result.calleeId,
-        {
-          type: "MISSED_CALL",
-          callId,
-          fromName: result.callerName,
+      try {
+        const services = await loadServices();
+        await sendPush(services, result.calleeId, {
+          type: "MISSED_CALL", callId, fromName: result.callerName,
           title: `مكالمة فائتة من ${result.callerName}`,
-          // Retain aliases consumed by existing workers/clients.
-          roomId: callId,
-          callerName: result.callerName,
-          body: "لديك مكالمة فائتة",
-        },
-        undefined,
-        true,
-        MISSED_PUSH_TTL_SECONDS,
-        { dedupeKey: `call-terminal:${callId}:${result.status}` },
-      );
+          roomId: callId, callerName: result.callerName, body: "لديك مكالمة فائتة",
+        }, undefined, true, MISSED_PUSH_TTL_SECONDS, {
+          dedupeKey: `call-terminal:${callId}:${result.status}`,
+        });
+      } catch {
+        // Push is optional and must not make the authenticated decline fail.
+      }
     }
     return result;
   } catch {
-    throw new CallPushError("Firebase call status update failed");
+    throw new CallPushError("Call status update failed");
   }
 }
 
@@ -1428,7 +1409,7 @@ export async function finishDeferredCallInvitation(
   invitation: DeferredCallInvitation,
   status: DeferredTerminalStatus,
 ): Promise<boolean> {
-  const { db, messaging, auth } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
     const transition = await db.runTransaction(async transaction => {
       const ref = callRef(db, invitation.callId);
@@ -1478,47 +1459,38 @@ export async function finishDeferredCallInvitation(
     });
     if (!transition.changed) return false;
     if (transition.sendMissed) {
-      await sendPush(
-        { db, messaging, auth },
-        invitation.calleeId,
-        {
-          type: "MISSED_CALL",
-          callId: invitation.callId,
+      try {
+        const services = await loadServices();
+        await sendPush(services, invitation.calleeId, {
+          type: "MISSED_CALL", callId: invitation.callId,
           fromName: invitation.caller.name,
           title: `مكالمة فائتة من ${invitation.caller.name}`,
-          // Legacy aliases remain for existing workers/clients.
-          roomId: invitation.callId,
-          callerName: invitation.caller.name,
+          roomId: invitation.callId, callerName: invitation.caller.name,
           body: "لديك مكالمة فائتة",
-        },
-          undefined,
-          true,
-          MISSED_PUSH_TTL_SECONDS,
-          { dedupeKey: `call-terminal:${invitation.callId}:${status}` },
-      );
+        }, undefined, true, MISSED_PUSH_TTL_SECONDS, {
+          dedupeKey: `call-terminal:${invitation.callId}:${status}`,
+        });
+      } catch {
+        // Optional wake-up only.
+      }
     } else if (status === "ended") {
-      await sendPush(
-        { db, messaging, auth },
-        invitation.calleeId,
-        {
-          type: "CALL_ENDED",
-          callId: invitation.callId,
-          fromName: invitation.caller.name,
-          title: "انتهت المكالمة",
-          // Legacy aliases remain for existing workers/clients.
-          roomId: invitation.callId,
-          callerName: invitation.caller.name,
+      try {
+        const services = await loadServices();
+        await sendPush(services, invitation.calleeId, {
+          type: "CALL_ENDED", callId: invitation.callId,
+          fromName: invitation.caller.name, title: "انتهت المكالمة",
+          roomId: invitation.callId, callerName: invitation.caller.name,
           body: "انتهت المكالمة",
-        },
-          undefined,
-          true,
-          INCOMING_PUSH_TTL_SECONDS,
-          { dedupeKey: `call-terminal:${invitation.callId}:ended` },
-      );
+        }, undefined, true, INCOMING_PUSH_TTL_SECONDS, {
+          dedupeKey: `call-terminal:${invitation.callId}:ended`,
+        });
+      } catch {
+        // Optional wake-up only.
+      }
     }
     return true;
   } catch {
-    throw new CallPushError("Firebase call status update failed");
+    throw new CallPushError("Call status update failed");
   }
 }
 
@@ -1532,39 +1504,19 @@ export async function watchDeferredCallInvitation(
   callId: string,
   onTerminal: (status: DeferredCallWatcherStatus) => void,
 ): Promise<() => void> {
-  const { db } = await loadServices();
-  let disposed = false;
-  const unsubscribe = callRef(db, callId).onSnapshot(snapshot => {
-    if (disposed || !snapshot.exists) return;
-    const data = snapshot.data();
-    if (!data) return;
-    if (data.status === "declined" || data.status === "missed") {
-      onTerminal(data.status);
-      return;
-    }
-    // `answered` alone is still an active call. Only its explicit endedAt
-    // marker is a durable terminal event.
-    if (data.status === "answered" && data.endedAt !== undefined && data.endedAt !== null) {
-      onTerminal("ended");
-    }
-  }, () => {
-    // Firestore/WS remain authoritative if a transient watch stream fails.
-    // The bounded per-call listener is intentionally not replaced by polling.
-  });
-  return () => {
-    if (disposed) return;
-    disposed = true;
-    unsubscribe();
-  };
+  // Signalling owns lifecycle notifications through the participant channel.
+  void callId;
+  void onTerminal;
+  return () => {};
 }
 
 export async function listMissedCalls(userId: number): Promise<{
   items: { id: string; caller: CallerIdentity; type: CallType; time: string; isSeen: boolean; status: "declined" | "missed" }[];
   unseenCount: number;
 }> {
-  const { db } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
-    const collection = userRef(db, userId).collection("missedCalls");
+    const collection = db.collection("users").doc(String(userId)).collection("missedCalls");
     const [itemsSnapshot, unseenSnapshot, legacyUnseenSnapshot] = await Promise.all([
       collection.orderBy("time", "desc").limit(100).get(),
       collection.where("seen", "==", false).get(),
@@ -1573,16 +1525,21 @@ export async function listMissedCalls(userId: number): Promise<{
       collection.where("isSeen", "==", false).get(),
     ]);
     const items = itemsSnapshot.docs.flatMap(doc => {
-      const value = doc.data();
+      const raw = doc.data();
+      if (!raw) return [];
+      const value: Record<string, unknown> = raw;
+      const caller = value.caller && typeof value.caller === "object" && !Array.isArray(value.caller)
+        ? value.caller as Record<string, unknown>
+        : null;
       if ((value.type !== "video" && value.type !== "voice") ||
         (value.status !== "declined" && value.status !== "missed") ||
-        (typeof value.fromId !== "number" && (!value.caller || typeof value.caller.id !== "number")) ||
-        (typeof value.fromName !== "string" && (!value.caller || typeof value.caller.name !== "string"))) return [];
-      const fromId = typeof value.fromId === "number" ? value.fromId : value.caller.id;
-      const fromName = typeof value.fromName === "string" ? value.fromName : value.caller.name;
+        (typeof value.fromId !== "number" && (!caller || typeof caller.id !== "number")) ||
+        (typeof value.fromName !== "string" && (!caller || typeof caller.name !== "string"))) return [];
+      const fromId = typeof value.fromId === "number" ? value.fromId : caller!.id as number;
+      const fromName = typeof value.fromName === "string" ? value.fromName : caller!.name as string;
       const fromAvatar = typeof value.fromAvatar === "string"
         ? value.fromAvatar
-        : typeof value.caller?.avatar === "string" ? value.caller.avatar : null;
+        : typeof caller?.avatar === "string" ? caller.avatar : null;
       return [{
         id: doc.id,
         caller: {
@@ -1602,7 +1559,7 @@ export async function listMissedCalls(userId: number): Promise<{
     ]);
     return { items, unseenCount: unseenIds.size };
   } catch {
-    throw new CallPushError("Firebase missed-call retrieval failed");
+    throw new CallPushError("Missed-call retrieval failed");
   }
 }
 
@@ -1611,7 +1568,7 @@ export async function markMissedCallsSeen(userId: number, ids: unknown): Promise
     !ids.every(id => typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id))) {
     throw new CallPushError("Invalid missed call IDs");
   }
-  const { db } = await loadServices();
+  const db = await getAuthoritativeCallFirestore();
   try {
     const batch = db.batch();
     for (const id of new Set(ids)) {
@@ -1624,7 +1581,7 @@ export async function markMissedCallsSeen(userId: number, ids: unknown): Promise
     }
     await batch.commit();
   } catch {
-    throw new CallPushError("Firebase missed-call update failed");
+    throw new CallPushError("Missed-call update failed");
   }
 }
 
@@ -1636,7 +1593,7 @@ async function revokeFirebaseUser(
   if (problem) return true;
   try {
     const { db, auth } = await loadServices();
-    const user = userRef(db, userId);
+    const user = db.collection("users").doc(String(userId));
     const tag = sessionFilter ? sessionTag(sessionFilter) : undefined;
     if (tag) {
       await user.collection("sessions").doc(tag).set({
@@ -1691,7 +1648,7 @@ export function revokeAllCallPushSessions(userId: number): Promise<boolean> {
   return revokeFirebaseUser(userId);
 }
 
-async function expireInvitation(db: Firestore, callId: string, data: Record<string, unknown>): Promise<void> {
+async function expireInvitation(db: CallDatabase, callId: string, data: Record<string, unknown>): Promise<void> {
   const invitation: DeferredCallInvitation = {
     callId,
       caller: {
@@ -1708,18 +1665,20 @@ async function expireInvitation(db: Firestore, callId: string, data: Record<stri
 }
 
 export function startFirebaseCallExpirationSweep(): void {
-  if (configurationProblem()) return;
   const run = async () => {
-    let last: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    let last: any;
     for (let page = 0; page < SWEEP_MAX_PAGES; page += 1) {
       try {
-        const { db } = await loadServices();
+        const db = await getAuthoritativeCallFirestore();
         let query = db.collection("callInvites").where("status", "==", "ringing")
           .where("expiresAt", "<=", new Date()).orderBy("expiresAt").limit(SWEEP_PAGE_SIZE);
         if (last) query = query.startAfter(last);
         const snapshot = await query.get();
         if (!snapshot.size) return;
-        await Promise.all(snapshot.docs.map(doc => expireInvitation(db, doc.id, doc.data())));
+        await Promise.all(snapshot.docs.map(async doc => {
+          const data = doc.data();
+          if (data) await expireInvitation(db, doc.id, data);
+        }));
         if (snapshot.size < SWEEP_PAGE_SIZE) return;
         last = snapshot.docs[snapshot.docs.length - 1];
       } catch {

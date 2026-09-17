@@ -1,11 +1,8 @@
-import type { Firestore } from "firebase-admin/firestore";
-import {
-  CallPushError,
-  callSessionBinding,
-  getAuthoritativeCallFirestore,
-  isValidCallId,
-  sendAuthoritativeIncomingCallPush,
-} from "./firebase-call-push";
+import { CallPushError, callSessionBinding, getCallStateDb, type CallStateDb } from "./call-state-db";
+export { CallPushError, callSessionBinding } from "./call-state-db";
+function isValidCallId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
 
 export type CallProvider = "agora" | "webrtc";
 export type CallStatus = "ringing" | "answered" | "declined" | "missed";
@@ -51,10 +48,10 @@ const MAX_PREANSWER_DEVICES = 3;
 const MAX_PREANSWER_ICE = 16;
 const MAX_CALL_LIFETIME_MS = 4 * 60 * 60 * 1000;
 
-function ref(db: Firestore, callId: string) {
+function ref(db: CallStateDb, callId: string) {
   return db.collection("callInvites").doc(callId);
 }
-function lockRef(db: Firestore, userId: number) {
+function lockRef(db: CallStateDb, userId: number) {
   return db.collection("callLocks").doc(String(userId));
 }
 function asDate(value: unknown, fallback = new Date(0)): Date {
@@ -68,10 +65,10 @@ function description(value: unknown): StoredDescription | null {
   const candidate = value as StoredDescription;
   return (candidate.type === "offer" || candidate.type === "answer") &&
     typeof candidate.sdp === "string" && candidate.sdp.length > 0 &&
-    // Four SDP snapshots plus bounded ICE must fit a Firestore 1MiB document.
+    // Four SDP snapshots plus bounded ICE must fit a single JSONB document.
     candidate.sdp.length <= 96_000 ? candidate : null;
 }
-function canonical(callId: string, data: Record<string, unknown>): CallRecord | null {
+export function canonicalCallRecord(callId: string, data: Record<string, unknown>): CallRecord | null {
   if (typeof data.fromId !== "number" || typeof data.toId !== "number" ||
     typeof data.fromName !== "string" || typeof data.toName !== "string" ||
     (data.status !== "ringing" && data.status !== "answered" &&
@@ -109,7 +106,7 @@ export async function createAuthoritativeCall(input: Omit<CallRecord, "status" |
   callerSessionId: string; expiresAt?: Date;
 }): Promise<CallRecord> {
   if (!isValidCallId(input.callId)) throw new CallPushError("Invalid call ID");
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   const createdAt = new Date();
   const expiresAt = input.expiresAt && input.expiresAt.getTime() > createdAt.getTime()
     ? input.expiresAt : new Date(createdAt.getTime() + 30_000);
@@ -146,20 +143,16 @@ export async function createAuthoritativeCall(input: Omit<CallRecord, "status" |
     });
   } catch (error) {
     if (error instanceof CallPushError) throw error;
-    throw new CallPushError("Firebase call creation failed");
+    throw new CallPushError("Call state creation failed");
   }
-  void sendAuthoritativeIncomingCallPush({
-    callId: input.callId, callerId: input.caller.id, callerName: input.caller.name,
-    callerAvatar: input.caller.avatar, calleeId: input.callee.id, expiresAt, video: input.type === "video",
-  });
   return record;
 }
 
 export async function getAuthoritativeCall(callId: string): Promise<CallRecord | null> {
   if (!isValidCallId(callId)) return null;
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   const snapshot = await ref(db, callId).get();
-  return snapshot.exists && snapshot.data() ? canonical(callId, snapshot.data()!) : null;
+  return snapshot.exists && snapshot.data() ? canonicalCallRecord(callId, snapshot.data()!) : null;
 }
 
 function sessionOwns(record: CallRecord, userId: number, sessionId: string, deviceId: string, requireSelected = false): boolean {
@@ -173,13 +166,13 @@ function sessionOwns(record: CallRecord, userId: number, sessionId: string, devi
 export async function answerAuthoritativeCall(
   callId: string, calleeId: number, sessionId: string, deviceId: string, answer: StoredDescription | null,
 ): Promise<CallRecord | null> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   let accepted: CallRecord | null = null;
   await db.runTransaction(async transaction => {
-    accepted = null; // Firestore may retry this callback after a conflict.
+    accepted = null; // Reset before entering the serialized transaction.
     const snapshot = await transaction.get(ref(db, callId));
     if (!snapshot.exists || !snapshot.data()) return;
-    const record = canonical(callId, snapshot.data()!);
+    const record = canonicalCallRecord(callId, snapshot.data()!);
     if (!record || record.endedAt || record.callee.id !== calleeId || record.status !== "ringing" ||
       record.expiresAt.getTime() <= Date.now()) return;
     // Deferred calls use a null consent answer first, then exchange SDP through
@@ -208,16 +201,16 @@ export async function answerAuthoritativeCall(
 }
 
 /** One-way, durable direct-media failover. Authentication is evaluated inside
- * the Firestore transaction so a stale socket cannot downgrade or steal it. */
+ * the PostgreSQL transaction so a stale socket cannot downgrade or steal it. */
 export async function switchAuthoritativeCallProvider(
   callId: string, userId: number, sessionId: string, deviceId: string,
 ): Promise<CallRecord | null> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   let changed: CallRecord | null = null;
   await db.runTransaction(async transaction => {
     changed = null;
     const snapshot = await transaction.get(ref(db, callId));
-    const record = snapshot.exists && snapshot.data() ? canonical(callId, snapshot.data()!) : null;
+    const record = snapshot.exists && snapshot.data() ? canonicalCallRecord(callId, snapshot.data()!) : null;
     if (!record || record.endedAt || record.transport.provider !== "webrtc" ||
         (record.status !== "ringing" && record.status !== "answered")) return;
     const caller = record.caller.id === userId &&
@@ -249,13 +242,13 @@ export async function appendAuthoritativeSignal(input: {
   callId: string; userId: number; sessionId: string; deviceId: string;
   kind: CallSignal["kind"]; payload: Record<string, unknown>;
 }): Promise<CallSignal | null> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   let emitted: CallSignal | null = null;
   await db.runTransaction(async transaction => {
     emitted = null; // Never leak a result from an abandoned transaction attempt.
     const snapshot = await transaction.get(ref(db, input.callId));
     if (!snapshot.exists || !snapshot.data()) return;
-    const record = canonical(input.callId, snapshot.data()!);
+    const record = canonicalCallRecord(input.callId, snapshot.data()!);
     if (!record || record.endedAt) return;
     if (record.transport.provider !== "webrtc") return;
     const callerRingingIce = record.status === "ringing" && input.kind === "ice-candidate" &&
@@ -303,7 +296,7 @@ export async function appendAuthoritativeSignal(input: {
     }
     transaction.update(ref(db, input.callId), updates);
     // The bounded document copy makes reconnect replay a single-document read;
-    // this immutable event stream gives every replica a Firestore relay cursor.
+     // this immutable event stream gives every replica a durable relay cursor.
     transaction.set(ref(db, input.callId).collection("events").doc(signal.signalId.replace(":", "_")), {
       ...signal,
       callId: input.callId,
@@ -319,13 +312,13 @@ export async function appendAuthoritativeSignal(input: {
 export async function terminateAuthoritativeCall(
   callId: string, userId: number, sessionId: string, deviceId: string, requested: "declined" | "missed" | "ended",
 ): Promise<CallRecord | null> {
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   let result: CallRecord | null = null;
   await db.runTransaction(async transaction => {
     result = null;
     const snapshot = await transaction.get(ref(db, callId));
     if (!snapshot.exists || !snapshot.data()) return;
-    const record = canonical(callId, snapshot.data()!);
+    const record = canonicalCallRecord(callId, snapshot.data()!);
     if (!record || record.endedAt) return;
     const caller = userId === record.caller.id;
     const callee = userId === record.callee.id;
@@ -355,12 +348,12 @@ export async function expireAuthoritativeCall(callId: string): Promise<CallRecor
   if (!record || record.status !== "ringing" || record.expiresAt.getTime() > Date.now()) return null;
   // Expiry is a durable transaction; the caller binding is supplied from the
   // canonical document and is never inferred from a disconnected socket.
-  const db = await getAuthoritativeCallFirestore();
+  const db = getCallStateDb();
   let expired: CallRecord | null = null;
   await db.runTransaction(async transaction => {
     expired = null;
     const snapshot = await transaction.get(ref(db, callId));
-    const current = snapshot.exists && snapshot.data() ? canonical(callId, snapshot.data()!) : null;
+    const current = snapshot.exists && snapshot.data() ? canonicalCallRecord(callId, snapshot.data()!) : null;
     if (!current || current.status !== "ringing" || current.expiresAt.getTime() > Date.now()) return;
     const missed = db.collection("users").doc(String(current.callee.id)).collection("missedCalls").doc(callId);
     const missedSnapshot = await transaction.get(missed);
