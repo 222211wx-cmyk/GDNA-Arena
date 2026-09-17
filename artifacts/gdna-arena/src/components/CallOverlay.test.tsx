@@ -314,4 +314,37 @@ describe("CallOverlay media recovery", () => {
     expect(onAdjustCameraZoom).toHaveBeenNthCalledWith(1, "in");
     expect(onAdjustCameraZoom).toHaveBeenNthCalledWith(2, "out");
   });
+
+  it("routes mute and camera controls through provider callbacks", async () => {
+    const onMicrophoneEnabledChange = vi.fn().mockResolvedValue(undefined);
+    const onCameraEnabledChange = vi.fn().mockResolvedValue(undefined);
+    const localStream = {
+      getAudioTracks: () => [{ enabled: true }],
+      getVideoTracks: () => [{ enabled: true }],
+    } as unknown as MediaStream;
+
+    render(
+      <CallOverlay
+        {...baseProps}
+        status="active"
+        callPhase="connected"
+        localStream={localStream}
+        onMicrophoneEnabledChange={onMicrophoneEnabledChange}
+        onCameraEnabledChange={onCameraEnabledChange}
+      />,
+    );
+
+    expect(screen.getByTestId("local-video")).toBeVisible();
+    fireEvent.click(screen.getByTestId("button-mute-call"));
+    fireEvent.click(screen.getByTestId("button-camera-call"));
+
+    await waitFor(() => {
+      expect(onMicrophoneEnabledChange).toHaveBeenCalledWith(false);
+      expect(onCameraEnabledChange).toHaveBeenCalledWith(false);
+      expect(screen.getByTestId("button-mute-call")).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("button-camera-call")).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.getByTestId("button-end-call")).toBeVisible();
+    expect(screen.queryByTestId("local-video")).not.toBeInTheDocument();
+  });
 });

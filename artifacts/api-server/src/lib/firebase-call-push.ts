@@ -10,6 +10,7 @@ import {
   type CallStateDocumentReference,
 } from "./call-state-db";
 import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
+import { sendBrowserCallTerminalPush, sendBrowserIncomingCallPush } from "./browser-push";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -316,6 +317,20 @@ export async function sendAuthoritativeIncomingCallPush(input: {
   expiresAt: Date;
   video: boolean;
 }): Promise<void> {
+  // Standards-based Web Push is independent from Firebase and is attempted
+  // first. This function is called only after the authorized invitation commit.
+  try {
+    await sendBrowserIncomingCallPush({
+      callId: input.callId,
+      callerName: input.callerName,
+      calleeId: input.calleeId,
+      expiresAt: input.expiresAt,
+      video: input.video,
+    });
+  } catch {
+    // Durable call state remains authoritative; push is only a wake-up.
+    console.warn("[WebPush] Incoming call wake-up unavailable");
+  }
   try {
     const services = await loadServices();
     await sendPush(services, input.calleeId, {
@@ -1159,6 +1174,9 @@ export async function acceptDirectCallInvitation(
       });
       accepted = { ...invitation, answer };
     });
+    if (accepted) {
+      void sendBrowserCallTerminalPush({ callId, calleeId, status: "answered" }).catch(() => {});
+    }
     return accepted;
   } catch {
     throw new CallPushError("Call invitation acceptance failed");
@@ -1208,6 +1226,7 @@ export async function acceptDeferredCallInvitation(callId: string, calleeId: num
       return true;
     });
     if (accepted) {
+      void sendBrowserCallTerminalPush({ callId, calleeId, status: "answered" }).catch(() => {});
       try {
         const services = await loadServices();
         await sendPush(services, calleeId, {
@@ -1386,6 +1405,11 @@ export async function declineDeferredCallInvitation(
     });
     if (result.changed && (result.status === "declined" || result.status === "missed") &&
       result.calleeId !== undefined && result.callerName !== undefined) {
+      void sendBrowserCallTerminalPush({
+        callId,
+        calleeId: result.calleeId,
+        status: result.status,
+      }).catch(() => {});
       try {
         const services = await loadServices();
         await sendPush(services, result.calleeId, {
@@ -1458,6 +1482,11 @@ export async function finishDeferredCallInvitation(
       return { changed: true, sendMissed: status === "declined" || status === "missed" };
     });
     if (!transition.changed) return false;
+    void sendBrowserCallTerminalPush({
+      callId: invitation.callId,
+      calleeId: invitation.calleeId,
+      status: status === "ended" ? "ended" : status,
+    }).catch(() => {});
     if (transition.sendMissed) {
       try {
         const services = await loadServices();

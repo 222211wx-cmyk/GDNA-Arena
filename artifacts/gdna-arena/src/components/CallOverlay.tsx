@@ -61,6 +61,8 @@ interface Props {
   onRefreshDevices?: () => Promise<CallDevice[] | undefined>;
   onSwitchMicrophone?: (deviceId: string) => Promise<void>;
   onSwitchCamera?: (deviceId: string) => Promise<void>;
+  onMicrophoneEnabledChange?: (enabled: boolean) => Promise<void>;
+  onCameraEnabledChange?: (enabled: boolean) => Promise<void>;
   onSelectSpeaker?: (deviceId: string) => void;
   onSpeakerFailure?: () => void;
   onSpeakerSuccess?: () => void;
@@ -88,6 +90,7 @@ export default function CallOverlay({
   speakerSelectionSupported = false, deviceIssue = null, switchingDevice = null,
   onRefreshDevices = async () => undefined, onSwitchMicrophone = async () => undefined,
   onSwitchCamera = async () => undefined, onSelectSpeaker = () => undefined,
+  onMicrophoneEnabledChange, onCameraEnabledChange,
   onSpeakerFailure = () => undefined, onSpeakerSuccess = () => undefined,
   onDeviceRecoveryAttempt = () => undefined,
   canFlipCamera = false, cameraZoom = null,
@@ -159,13 +162,31 @@ export default function CallOverlay({
 
   // Mute local audio
   useEffect(() => {
+    if (onMicrophoneEnabledChange) return;
     localStream?.getAudioTracks().forEach(t => { t.enabled = !muted; });
-  }, [muted, localStream]);
+  }, [muted, localStream, onMicrophoneEnabledChange]);
 
   // Disable local video
   useEffect(() => {
+    if (onCameraEnabledChange) return;
     localStream?.getVideoTracks().forEach(t => { t.enabled = !videoOff; });
-  }, [videoOff, localStream]);
+  }, [videoOff, localStream, onCameraEnabledChange]);
+
+  const toggleMicrophone = async () => {
+    const nextMuted = !muted;
+    try {
+      await onMicrophoneEnabledChange?.(!nextMuted);
+      setMuted(nextMuted);
+    } catch { /* the call hook surfaces the provider error */ }
+  };
+
+  const toggleCamera = async () => {
+    const nextVideoOff = !videoOff;
+    try {
+      await onCameraEnabledChange?.(!nextVideoOff);
+      setVideoOff(nextVideoOff);
+    } catch { /* the call hook surfaces the provider error */ }
+  };
 
   // Call timer
   useEffect(() => {
@@ -366,7 +387,7 @@ export default function CallOverlay({
       {/* Remote video / avatar */}
       <div className="flex-1 min-h-0 relative flex items-center justify-center overflow-hidden">
         {remoteStream ? (
-          <video id="remote-player" ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" muted={speakerOff} />
+          <video data-testid="remote-video" id="remote-player" ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" muted={speakerOff} />
         ) : (
           <div className="text-center space-y-4">
             <div className="mx-auto w-fit">
@@ -393,7 +414,7 @@ export default function CallOverlay({
 
         {/* Timer overlay when video active */}
         {remoteStream && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-mono"
+          <div data-testid="call-timer" className="absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-mono"
             style={{ background: "rgba(0,0,0,0.6)", color: "#22c55e" }}>
             {peer} · {formatDuration(duration)}
           </div>
@@ -456,7 +477,7 @@ export default function CallOverlay({
         {localStream && hasVideo && !videoOff && (
           <div id="local-player" className="absolute bottom-4 right-4 w-28 h-20 rounded-xl overflow-hidden border-2"
             style={{ borderColor: "hsl(var(--primary) / 0.5)" }}>
-            <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+            <video data-testid="local-video" ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           </div>
         )}
       </div>
@@ -523,7 +544,8 @@ export default function CallOverlay({
           <CallRecordingPanelView recording={callRecording} />
           </div>
 
-        <button onClick={() => setMuted(v => !v)}
+        <button data-testid="button-mute-call" onClick={() => void toggleMicrophone()}
+          aria-pressed={muted}
           aria-label={muted ? st.unmute : st.mute}
           className="w-13 h-13 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
           style={{ background: muted ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
@@ -531,7 +553,8 @@ export default function CallOverlay({
         </button>
 
         {hasVideo && (
-          <button onClick={() => setVideoOff(v => !v)}
+          <button data-testid="button-camera-call" onClick={() => void toggleCamera()}
+            aria-pressed={videoOff}
             aria-label={videoOff ? st.enable_video : st.disable_video}
             className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
             style={{ background: videoOff ? "hsl(var(--destructive))" : "hsl(var(--secondary))", border: "1px solid hsl(var(--border) / 0.5)" }}>
@@ -540,7 +563,7 @@ export default function CallOverlay({
         )}
 
         {/* End call — center large */}
-        <button onClick={onEnd}
+        <button data-testid="button-end-call" onClick={onEnd}
           aria-label={st.end_call}
           className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg"
           style={{ background: "hsl(var(--destructive))" }}>

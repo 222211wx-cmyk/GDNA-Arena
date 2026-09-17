@@ -2,10 +2,21 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { randomUUID } from "node:crypto";
 import { pool } from "@workspace/db";
-import { answerAuthoritativeCall, createAuthoritativeCall } from "./call-signal-store";
+import {
+  answerAuthoritativeCall,
+  createAuthoritativeCall,
+  setCallPushSinksForTest,
+  terminateAuthoritativeCall,
+} from "./call-signal-store";
 import { getCallStateDb } from "./call-state-db";
 
 after(async () => { await pool.end(); });
+
+const noPush = {
+  incoming: async () => {},
+  terminal: async () => {},
+};
+setCallPushSinksForTest(noPush);
 
 async function clearCall(callId: string) {
   await pool.query(
@@ -70,6 +81,54 @@ test("two durable invitations cannot both win the answer CAS", { concurrency: fa
     null,
   );
   await clearCall(expiredId);
+});
+
+test("authoritative call entrypoints dispatch post-commit incoming and terminal pushes", { concurrency: false }, async t => {
+  if (!await databaseReady()) { t.skip("call_state_documents migration is not applied"); return; }
+  const callId = `pgPushEntry_${randomUUID().replaceAll("-", "")}`;
+  t.after(async () => {
+    setCallPushSinksForTest(noPush);
+    await clearCall(callId);
+  });
+  const incoming: string[] = [];
+  const terminal: string[] = [];
+  setCallPushSinksForTest({
+    incoming: async input => { incoming.push(`${input.callId}:${input.calleeId}`); },
+    terminal: async input => { terminal.push(`${input.callId}:${input.status}`); },
+  });
+  const input = {
+    callId,
+    caller: { id: -900011, name: "caller", avatar: null },
+    callee: { id: -900012, name: "callee", avatar: null },
+    type: "voice" as const,
+    deferredMedia: true,
+    transport: { provider: "webrtc" as const, version: 1 as const },
+    initialOffer: null,
+    latestOffer: null,
+    e2e: undefined,
+    callerDeviceId: "caller-device",
+    callerSessionId: "caller-session",
+  };
+  await createAuthoritativeCall(input);
+  assert.deepEqual(incoming, [`${callId}:${input.callee.id}`]);
+  const accepted = await answerAuthoritativeCall(
+    callId,
+    input.callee.id,
+    "callee-session",
+    "callee-device",
+    null,
+  );
+  assert.ok(accepted);
+  assert.deepEqual(terminal, [`${callId}:answered`]);
+  const ended = await terminateAuthoritativeCall(
+    callId,
+    input.caller.id,
+    input.callerSessionId,
+    input.callerDeviceId,
+    "ended",
+  );
+  assert.ok(ended);
+  assert.deepEqual(terminal, [`${callId}:answered`, `${callId}:ended`]);
 });
 
 test("a new subscriber replays an already committed invitation after restart", { concurrency: false }, async t => {

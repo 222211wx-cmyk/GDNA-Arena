@@ -7,6 +7,10 @@ import {
   type MissedCall,
   PUSH_LOGOUT_EVENT,
 } from "@/lib/call-firebase";
+import {
+  createBrowserCallPush,
+  type BrowserCallPushSession,
+} from "@/lib/browser-call-push";
 
 export function useCallPush(
   user: { id: number } | null,
@@ -24,6 +28,7 @@ export function useCallPush(
   const [missedCallsLoading, setMissedCallsLoading] = useState(false);
   const [missedCallsError, setMissedCallsError] = useState(false);
   const firebaseRef = useRef<Awaited<ReturnType<typeof createCallFirebase>> | null>(null);
+  const browserPushRef = useRef<BrowserCallPushSession | null>(null);
   const pushCleanupRef = useRef<((revoke?: boolean) => Promise<void>) | null>(null);
   const sessionGenerationRef = useRef(0);
   const resumeRef = useRef(resumeCall);
@@ -38,8 +43,11 @@ export function useCallPush(
       // alive so background FCM remains available after a reload.
       const cleanup = pushCleanupRef.current;
       pushCleanupRef.current = null;
+      const browserCleanup = browserPushRef.current?.cleanup;
+      browserPushRef.current = null;
       sessionGenerationRef.current += 1;
       void cleanup?.(true);
+      void browserCleanup?.(true);
     };
     window.addEventListener(PUSH_LOGOUT_EVENT, handleLogout);
     return () => window.removeEventListener(PUSH_LOGOUT_EVENT, handleLogout);
@@ -80,6 +88,22 @@ export function useCallPush(
         if (!cancelled) setMissedCallsLoading(false);
       }
     };
+    const loadStandardWebPush = async () => {
+      const browserPush = await createBrowserCallPush(
+        callId => resumeRef.current(callId),
+        (callId, status) => terminalRef.current(callId, status),
+        () => !cancelled && generation === sessionGenerationRef.current,
+      );
+      if (cancelled || generation !== sessionGenerationRef.current) {
+        await browserPush.cleanup();
+        return;
+      }
+      browserPushRef.current = browserPush;
+      setNotificationPermission(browserPush.permission);
+      setPushEnabled(browserPush.enabled);
+      setPushReason(browserPush.reason ?? null);
+      setFirebaseStatus(browserPush.enabled ? "ready" : "disabled");
+    };
     void createCallFirebase(
       (callId, _fromName) => resumeRef.current(callId),
       (callId, status) => terminalRef.current(callId, status),
@@ -100,13 +124,10 @@ export function useCallPush(
       if (cancelled) { if (firebase.enabled) await firebase.cleanup(); return; }
       firebaseRef.current = firebase;
       if (!firebase.enabled) {
-        // Push/Firebase being disabled is not a call failure. Missed-call
-        // history is durable REST data and remains available independently.
-        setFirebaseStatus("disabled");
+        // FCM is optional. When it is off, use standards-based Web Push without
+        // loading Firebase or creating a Firebase authentication session.
         setFirebaseError(null);
-        setPushEnabled(false);
-        setPushReason(firebase.pushReason ?? firebase.reason);
-        await loadMissedCallsFromAuthority();
+        await Promise.all([loadStandardWebPush(), loadMissedCallsFromAuthority()]);
         return;
       }
       setPushEnabled(firebase.pushEnabled);
@@ -150,10 +171,33 @@ export function useCallPush(
       const firebase = firebaseRef.current;
       firebaseRef.current = null;
       if (firebase?.enabled) void firebase.cleanup();
+      const browserPush = browserPushRef.current;
+      browserPushRef.current = null;
+      void browserPush?.cleanup();
     };
   }, [user?.id]);
 
   const enableCallNotifications = useCallback(async () => {
+    const browserPush = browserPushRef.current;
+    if (browserPush?.enabled) {
+      try {
+        const permission = await browserPush.enable();
+        setNotificationPermission(permission);
+        if (permission === "denied") {
+          setPushReason("Call notification permission was denied in browser settings");
+        } else if (permission === "granted") {
+          setPushEnabled(true);
+          setPushReason(null);
+        }
+        return permission;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Background call notifications are unavailable";
+        setPushEnabled(false);
+        setPushReason(reason);
+        setFirebaseError(reason);
+        return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+      }
+    }
     const firebase = firebaseRef.current;
     if (!firebase?.enabled) {
       setPushEnabled(false);

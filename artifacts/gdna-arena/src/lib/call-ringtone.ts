@@ -5,6 +5,7 @@
  * ringtone is playing.
  */
 export class CallRingtone {
+  private static readonly AUDIBLE_GAIN = 0.18;
   private context: AudioContext | null = null;
   private timer: number | null = null;
   private delayedBeeps = new Set<number>();
@@ -32,7 +33,9 @@ export class CallRingtone {
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
     gain.gain.setValueAtTime(0.0001, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.09, context.currentTime + 0.015);
+    // Loud enough to be useful on mobile speakers, while remaining well below
+    // full-scale gain to avoid clipping and startling volume spikes.
+    gain.gain.exponentialRampToValueAtTime(CallRingtone.AUDIBLE_GAIN, context.currentTime + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + durationMs / 1000);
     oscillator.connect(gain).connect(context.destination);
     this.oscillators.add(oscillator);

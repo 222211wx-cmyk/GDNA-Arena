@@ -10,6 +10,7 @@ import {
 } from "./call-signal-store";
 import { CallPushError, callSessionBinding, getCallStateDb } from "./call-state-db";
 import { canIssueGroupAgoraToken, getGroupCall } from "./group-call-store";
+import { sendBrowserCallTerminalPush } from "./browser-push";
 
 interface RTCIceCandidateInit { candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null; }
 interface E2eCallEnvelope { devices: Record<string, { wrappedSecret: string; fingerprint: string }>; }
@@ -243,7 +244,7 @@ export async function isCallParticipant(callId: string, userId: number): Promise
 export async function declineCallForUser(callId: string, userId: number): Promise<DeferredCallDeclineResult> {
   try {
     const db = getCallStateDb();
-    return await db.runTransaction(async transaction => {
+    const result = await db.runTransaction<DeferredCallDeclineResult>(async transaction => {
       const ref = db.collection("callInvites").doc(callId);
       const snapshot = await transaction.get(ref);
       const data = snapshot.data();
@@ -276,6 +277,15 @@ export async function declineCallForUser(callId: string, userId: number): Promis
       }, { merge: true });
       return { callId, outcome: expired ? "expired" : "declined", changed: true, status, ...details };
     });
+    if (result.changed && result.calleeId !== undefined &&
+      (result.status === "declined" || result.status === "missed")) {
+      void sendBrowserCallTerminalPush({
+        callId,
+        calleeId: result.calleeId,
+        status: result.status,
+      }).catch(() => {});
+    }
+    return result;
   } catch (error) {
     throw error instanceof CallPushError ? error : new CallPushError("Call state status update failed");
   }

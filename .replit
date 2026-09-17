@@ -31,7 +31,7 @@ channel = "stable-25_05"
 ADMIN_EMAILS = "222211wx@gmail.com"
 GIPHY_API_KEY = "dc6zaT0xFJmzC"
 AGORA_APP_ID = "62585b9b53c44c47baa7600ee5d74e54"
-CALL_MEDIA_PROVIDER = "hybrid"
+CALL_MEDIA_PROVIDER = "agora"
 TURN_URLS = "turn:turn.helixly.app:3478?transport=udp,turn:turn.helixly.app:3478?transport=tcp,turns:turn.helixly.app:5349?transport=tcp"
 FIREBASE_WEB_CONFIG = "{\"apiKey\":\"AIzaSyDgro5MZqUTSrOzgJPRlEgve2j-88TDnFQ\",\"authDomain\":\"helixly-b7653.firebaseapp.com\",\"projectId\":\"helixly-b7653\",\"storageBucket\":\"helixly-b7653.firebasestorage.app\",\"messagingSenderId\":\"630195919424\",\"appId\":\"1:630195919424:web:1693e46da2370942115da5\",\"measurementId\":\"G-4CXJQNDK53\"}"
 VITE_FIREBASE_API_KEY = "AIzaSyDgro5MZqUTSrOzgJPRlEgve2j-88TDnFQ"
@@ -46,6 +46,7 @@ VITE_FIREBASE_VAPID_KEY = "BLm1TSJk2Hvpqoi1lWCRJuPc4SGKX54ltiGmdlizQ-Wf6jsq_NZto
 ENC_EVOLVE_ENABLED = "false"
 FIREBASE_VAPID_PUBLIC = "BLm1TSJk2Hvpqoi1lWCRJuPc4SGKX54ltiGmdlizQ-Wf6jsq_NZto3fS-BzFD8Hplwr76T0nxUQE_Gn7QVt3Z_I"
 FCM_ENABLED = "false"
+WEB_PUSH_SUBJECT = "https://helixly.app"
 
 [userenv.development]
 ROYAL_CREDIT_SANDBOX = "true"

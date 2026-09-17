@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { useCall } from "@/client/hooks/useCall";
 import { useAuth } from "@/contexts/AuthContext";
 import CallOverlay from "@/components/CallOverlay";
+import GlobalCallAlerts from "@/components/GlobalCallAlerts";
 
 type CallCtx = ReturnType<typeof useCall>;
 const CallContext = createContext<CallCtx | null>(null);
@@ -37,6 +38,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         onRefreshDevices={call.refreshCallDevices}
         onSwitchMicrophone={call.switchMicrophone}
         onSwitchCamera={call.switchCamera}
+        onMicrophoneEnabledChange={call.setMicrophoneEnabled}
+        onCameraEnabledChange={call.setCameraEnabled}
         onSelectSpeaker={call.selectSpeaker}
         onSpeakerFailure={call.reportSpeakerFailure}
         onSpeakerSuccess={call.reportSpeakerSuccess}
@@ -49,6 +52,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         recordingLocalUserId={call.recordingLocalUserId}
         recordingParticipantUserIds={call.recordingParticipantIds}
       />
+      {user && <GlobalCallAlerts call={call} />}
     </CallContext.Provider>
   );
 }

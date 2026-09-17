@@ -7,6 +7,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import type {
   IAgoraRTCClient,
+  IAgoraRTCRemoteUser,
   IMicrophoneAudioTrack,
   ICameraVideoTrack,
   ILocalAudioTrack,
@@ -66,6 +67,7 @@ import {
   rememberDurableCallSignal,
   rememberRemoteIceCandidate,
 } from "@/lib/call-signal-dedupe";
+import { fetchAgoraTurnConfig } from "@/lib/agora-turn";
 
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
 export type CallPhase = "idle" | "ringing" | "accepted" | "connecting" | "connected" | "ended";
@@ -73,6 +75,7 @@ export type LiveStatus  = "idle" | "live" | "ended";
 export type ConnectionTestStatus = "idle" | "testing" | "ready" | "unstable" | "failed";
 export type CallNetworkQuality = "unknown" | "good" | "weak" | "poor";
 export type CallDeviceKind = "audioinput" | "videoinput" | "audiooutput";
+export type SecureCallRegistrationStatus = "idle" | "registering" | "ready" | "error";
 
 export interface CallDevice {
   deviceId: string;
@@ -225,11 +228,20 @@ export function useCall(user: { id: number; username: string } | null) {
   const screenTrackRef = useRef<ILocalVideoTrack | null>(null);
   const remoteAudioRef = useRef<IRemoteAudioTrack | null>(null);
   const remoteVideoRef = useRef<IRemoteVideoTrack | null>(null);
+  const microphoneEnabledRef = useRef(true);
+  const cameraEnabledRef = useRef(true);
 
   const [connected,    setConnected]    = useState(false);
   const [callStatus,   setCallStatus]   = useState<CallStatus>("idle");
   const [callPhase, setCallPhase] = useState<CallPhase>("idle");
-  const [soundBlocked, setSoundBlocked] = useState(false);
+  // Browsers start with audio locked until a trusted user gesture resumes an
+  // AudioContext. Starting in the blocked state keeps the global UI honest.
+  const [soundBlocked, setSoundBlocked] = useState(true);
+  const [secureCallRegistrationStatus, setSecureCallRegistrationStatus] =
+    useState<SecureCallRegistrationStatus>("idle");
+  const [secureCallRegistrationError, setSecureCallRegistrationError] = useState<string | null>(null);
+  const secureCallRegistrationRetryRef = useRef<(() => void) | null>(null);
+  const secureCallRegistrationReadyRef = useRef(false);
   const [liveStatus,   setLiveStatus]   = useState<LiveStatus>("idle");
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [activePeer,   setActivePeer]   = useState<string | null>(null);
@@ -532,6 +544,27 @@ export function useCall(user: { id: number; username: string } | null) {
     return enabled;
   }, [callPhase, callStatus]);
 
+  // Unlock ringtone audio on the first ordinary trusted interaction, but never
+  // couple that interaction to a notification permission prompt.
+  useEffect(() => {
+    if (!user || !soundBlocked) return;
+    const unlock = (event: Event) => {
+      if (!event.isTrusted) return;
+      if (event instanceof KeyboardEvent && (event.metaKey || event.ctrlKey || event.altKey)) return;
+      void enableCallSound().then((enabled) => {
+        if (!enabled) return;
+        window.removeEventListener("click", unlock);
+        window.removeEventListener("keydown", unlock);
+      });
+    };
+    window.addEventListener("click", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("click", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [enableCallSound, soundBlocked, user?.id]);
+
   useEffect(() => {
     const ringing = callStatus === "ringing"
       ? "incoming"
@@ -544,8 +577,21 @@ export function useCall(user: { id: number; username: string } | null) {
     }
     const started = ringtoneRef.current?.start(ringing) ?? false;
     if (!started) setSoundBlocked(true);
-    if (ringing === "incoming" && typeof navigator.vibrate === "function") navigator.vibrate([100, 60, 100]);
-    return () => ringtoneRef.current?.stop();
+    let vibrationTimer: ReturnType<typeof setInterval> | null = null;
+    if (ringing === "incoming" && typeof navigator.vibrate === "function") {
+      const vibrate = () => {
+        try { navigator.vibrate([180, 100, 180, 900]); } catch { /* best effort */ }
+      };
+      vibrate();
+      vibrationTimer = setInterval(vibrate, 2_300);
+    }
+    return () => {
+      ringtoneRef.current?.stop();
+      if (vibrationTimer) clearInterval(vibrationTimer);
+      if (typeof navigator.vibrate === "function") {
+        try { navigator.vibrate(0); } catch { /* best effort */ }
+      }
+    };
   }, [callPhase, callStatus]);
 
   useEffect(() => {
@@ -630,27 +676,99 @@ export function useCall(user: { id: number; username: string } | null) {
     }
   }, []);
 
-  // Publish only the current browser's public key. The private RSA key remains
-  // non-extractable in IndexedDB and is never included in an HTTP/WS payload.
+  // Publish only the current browser's public key. This root-owned registration
+  // is independent of Messenger mounting and of the signaling subscription.
+  // The private RSA key remains non-extractable in IndexedDB.
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      secureCallRegistrationReadyRef.current = false;
+      setSecureCallRegistrationStatus("idle");
+      setSecureCallRegistrationError(null);
+      secureCallRegistrationRetryRef.current = null;
+      return;
+    }
     let cancelled = false;
-    void (async () => {
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+    let running = false;
+
+    const clearRetry = () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+    };
+    const register = async (manual = false) => {
+      // Focus/visibility and reconnect events only recover a failed/incomplete
+      // registration. They never revalidate a ready device, disturb the live
+      // socket, or transiently regress readiness.
+      if (cancelled || running || !navigator.onLine || (!manual && secureCallRegistrationReadyRef.current)) return;
+      running = true;
+      clearRetry();
+      if (manual || attempt === 0) setSecureCallRegistrationStatus("registering");
+      if (manual) {
+        attempt = 0;
+        setSecureCallRegistrationError(null);
+      }
       try {
         const identity = await ensureDeviceIdentity(user.id);
         if (cancelled) return;
-        await fetch(apiPath("/api/messages/e2e/key"), {
+        const response = await fetch(apiPath("/api/messages/e2e/key"), {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceId: identity.deviceId, publicKey: identity.publicKey }),
           credentials: "include",
         });
+        if (!response.ok) {
+          let detail = "";
+          try {
+            const body = await response.json() as { error?: unknown; message?: unknown };
+            detail = typeof body.error === "string" ? body.error : typeof body.message === "string" ? body.message : "";
+          } catch { /* response had no JSON error body */ }
+          throw new Error(detail || `Secure device registration failed (HTTP ${response.status}).`);
+        }
+        if (cancelled) return;
+        attempt = 0;
+        secureCallRegistrationReadyRef.current = true;
+        setSecureCallRegistrationStatus("ready");
+        setSecureCallRegistrationError(null);
       } catch (error) {
-        console.warn("[E2E] Device key registration failed:", error);
+        if (cancelled) return;
+        secureCallRegistrationReadyRef.current = false;
+        setSecureCallRegistrationStatus("error");
+        setSecureCallRegistrationError(
+          error instanceof Error ? error.message : "Secure device registration failed.",
+        );
+        const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt++, 5));
+        retryTimer = setTimeout(() => void register(), delay);
+      } finally {
+        running = false;
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    const retryNow = () => void register(true);
+    const retryOnReconnect = () => void register();
+    const retryOnFocus = () => {
+      if (document.visibilityState === "visible") void register();
+    };
+    secureCallRegistrationRetryRef.current = retryNow;
+    window.addEventListener("online", retryOnReconnect);
+    window.addEventListener("focus", retryOnReconnect);
+    window.addEventListener("gdna:realtime-reconnected", retryOnReconnect);
+    document.addEventListener("visibilitychange", retryOnFocus);
+    void register();
+    return () => {
+      cancelled = true;
+      secureCallRegistrationReadyRef.current = false;
+      clearRetry();
+      secureCallRegistrationRetryRef.current = null;
+      window.removeEventListener("online", retryOnReconnect);
+      window.removeEventListener("focus", retryOnReconnect);
+      window.removeEventListener("gdna:realtime-reconnected", retryOnReconnect);
+      document.removeEventListener("visibilitychange", retryOnFocus);
+    };
   }, [user?.id]);
+
+  const retrySecureCallRegistration = useCallback(() => {
+    secureCallRegistrationRetryRef.current?.();
+  }, []);
 
   // ── Pre-call media configuration test ─────────────────────────────────────
   // Validate the selected provider without opening a media client or requesting
@@ -711,6 +829,7 @@ export function useCall(user: { id: number; username: string } | null) {
     signalingDeviceId: string,
     preparedAudioTrack?: IMicrophoneAudioTrack,
     preparedVideoTrack?: ICameraVideoTrack,
+    isCurrentCall: () => boolean = () => true,
   ) => {
     // The participant/session/device-scoped endpoint is the only source of
     // credentials. Never create an Agora client before it returns a complete
@@ -719,6 +838,10 @@ export function useCall(user: { id: number; username: string } | null) {
       ? agoraStandbyTokenRef.current
       : null;
     const { appId, token, uid } = standby ?? await fetchAgoraToken(channel, signalingDeviceId);
+    if (!isCurrentCall()) throw new Error("CALL_SETUP_CANCELLED");
+    // Suppress SDK debug/info output before any client setup. In particular,
+    // credentials and TURN configuration must never reach browser logs.
+    AgoraRTC.setLogLevel(2);
     const client = createAgoraClient();
     agoraRef.current = client;
     callProviderRef.current = "agora";
@@ -734,26 +857,44 @@ export function useCall(user: { id: number; username: string } | null) {
     ));
     client.setEncryptionConfig("aes-256-gcm2", encryptionSecret, salt);
 
-    const subscribedPeers = new Set<string>();
+    const subscribedMedia = new Set<string>();
+    const liveRemotePeers = new Set<string>();
     const refreshAgoraConnectivity = () => {
       if (agoraRef.current !== client) return;
-      // Muting or switching off a camera is not a network disconnect. Require
-      // an established subscription and the peer still present on the transport.
+      // Muting or switching off a camera is not a network disconnect. Require a
+      // subscribed track that is genuinely present on the remote participant.
       setActualMediaConnected(
         client.connectionState === "CONNECTED" &&
-        client.remoteUsers.some(peer => subscribedPeers.has(String(peer.uid))),
+        client.remoteUsers.some(peer => liveRemotePeers.has(String(peer.uid))),
       );
     };
-    client.on("user-published", async (remoteUser, mediaType) => {
+    const subscribePublishedMedia = async (
+      remoteUser: IAgoraRTCRemoteUser,
+      mediaType: "audio" | "video",
+    ) => {
       if (agoraRef.current !== client) return; // stale client
-      await client.subscribe(remoteUser, mediaType);
+      const key = `${String(remoteUser.uid)}:${mediaType}`;
+      if (!subscribedMedia.has(key)) {
+        await client.subscribe(remoteUser, mediaType);
+        if (agoraRef.current !== client) return;
+        subscribedMedia.add(key);
+      }
       if (agoraRef.current !== client) return;
-      subscribedPeers.add(String(remoteUser.uid));
       if (mediaType === "audio") remoteAudioRef.current = remoteUser.audioTrack ?? null;
       if (mediaType === "video") remoteVideoRef.current = remoteUser.videoTrack ?? null;
+      const subscribedTrack = mediaType === "audio" ? remoteUser.audioTrack : remoteUser.videoTrack;
+      if (subscribedTrack) liveRemotePeers.add(String(remoteUser.uid));
       rebuildRemoteStream();
-      setCallStatus("active");
       refreshAgoraConnectivity();
+    };
+    client.on("user-published", async (remoteUser, mediaType) => {
+      if (mediaType === "audio" || mediaType === "video") {
+        try {
+          await subscribePublishedMedia(remoteUser, mediaType);
+        } catch (error) {
+          if (agoraRef.current === client) showCallError(mediaFailureMessage(error));
+        }
+      }
     });
 
     client.on("user-unpublished", (_remoteUser, mediaType) => {
@@ -765,7 +906,9 @@ export function useCall(user: { id: number; username: string } | null) {
     });
 
     client.on("user-left", remoteUser => {
-      subscribedPeers.delete(String(remoteUser.uid));
+      subscribedMedia.delete(`${String(remoteUser.uid)}:audio`);
+      subscribedMedia.delete(`${String(remoteUser.uid)}:video`);
+      liveRemotePeers.delete(String(remoteUser.uid));
       refreshAgoraConnectivity();
     });
 
@@ -792,13 +935,35 @@ export function useCall(user: { id: number; username: string } | null) {
       }
     });
 
+    const turnConfig = await fetchAgoraTurnConfig();
+    if (!isCurrentCall()) {
+      if (agoraRef.current === client) agoraRef.current = null;
+      throw new Error("CALL_SETUP_CANCELLED");
+    }
+    if (turnConfig) client.setTurnServer(turnConfig);
     await client.join(appId, channel, token, uid);
-    // Do not emit channel identifiers, raw tokens, or participant identifiers.
-    console.info("[AGORA] Fallback/Group mode", { hasToken: Boolean(token) });
+    if (!isCurrentCall()) {
+      if (agoraRef.current === client) agoraRef.current = null;
+      await client.leave().catch(() => {});
+      throw new Error("CALL_SETUP_CANCELLED");
+    }
+    // A publication can predate our join/event handlers. Subscribe both event
+    // publications and the join snapshot through the same idempotent path.
+    await Promise.all(client.remoteUsers.flatMap(remoteUser => [
+      ...(remoteUser.hasAudio ? [subscribePublishedMedia(remoteUser, "audio")] : []),
+      ...(remoteUser.hasVideo ? [subscribePublishedMedia(remoteUser, "video")] : []),
+    ]));
 
     // Reuse the track that triggered the citizen's single permission prompt.
     // Opening, closing, then reopening the microphone is unreliable on mobile.
     const audioTrack = preparedAudioTrack ?? await AgoraRTC.createMicrophoneAudioTrack();
+    if (!isCurrentCall()) {
+      audioTrack.close();
+      if (agoraRef.current === client) agoraRef.current = null;
+      await client.leave().catch(() => {});
+      throw new Error("CALL_SETUP_CANCELLED");
+    }
+    await audioTrack.setEnabled(microphoneEnabledRef.current);
     localAudioRef.current = audioTrack;
     let videoTrack: ICameraVideoTrack | null = preparedVideoTrack ?? null;
     let cameraWarning: string | null = null;
@@ -811,6 +976,17 @@ export function useCall(user: { id: number; username: string } | null) {
         // or busy camera from the citizen.
         cameraWarning = `${mediaFailureMessage(error, "camera")} — ستستمر المكالمة صوتياً`;
       }
+    }
+    if (videoTrack) {
+      localVideoRef.current = videoTrack;
+      await videoTrack.setEnabled(cameraEnabledRef.current);
+    }
+    if (!isCurrentCall()) {
+      audioTrack.close();
+      videoTrack?.close();
+      if (agoraRef.current === client) agoraRef.current = null;
+      await client.leave().catch(() => {});
+      throw new Error("CALL_SETUP_CANCELLED");
     }
 
     await client.publish(videoTrack ? [audioTrack, videoTrack] : [audioTrack]);
@@ -1076,6 +1252,10 @@ export function useCall(user: { id: number; username: string } | null) {
   const switchToAgoraAfterServerAck = useCallback(async (callId: string) => {
     const userId = user?.id;
     if (currentCallIdRef.current !== callId || agoraRef.current || !userId) return;
+    // Direct Agora answer/resume snapshots are synchronization frames, not
+    // hybrid switch commands. A real hybrid switch always owns a live direct
+    // peer connection (or its signed standby token).
+    if (!callPcRef.current && agoraStandbyTokenRef.current?.callId !== callId) return;
     const secret = callSecretRef.current;
     if (!secret) {
       showCallError("تعذّر تبديل مسار المكالمة الآمن — مفتاح الوسائط غير متاح", 15_000);
@@ -1091,7 +1271,16 @@ export function useCall(user: { id: number; username: string } | null) {
     await leaveAgora(true);
     if (currentCallIdRef.current !== callId) return;
     try {
-      await createAgoraCall(callId, withVideo, secret, signalingDeviceIdFor(userId));
+      const generation = callGenerationRef.current;
+      await createAgoraCall(
+        callId,
+        withVideo,
+        secret,
+        signalingDeviceIdFor(userId),
+        undefined,
+        undefined,
+        () => currentCallIdRef.current === callId && callGenerationRef.current === generation,
+      );
       const audioTrack = localAudioRef.current?.getMediaStreamTrack();
       const videoTrack = localVideoRef.current?.getMediaStreamTrack();
       if (audioTrack) audioTrack.enabled = audioEnabled;
@@ -1135,6 +1324,34 @@ export function useCall(user: { id: number; username: string } | null) {
     setLocalStream(stream);
   }, []);
 
+  const setMicrophoneEnabled = useCallback(async (enabled: boolean) => {
+    try {
+      if (callProviderRef.current === "agora" && localAudioRef.current) {
+        await localAudioRef.current.setEnabled(enabled);
+      } else {
+        localStreamRef.current?.getAudioTracks().forEach(track => { track.enabled = enabled; });
+      }
+      microphoneEnabledRef.current = enabled;
+    } catch (error) {
+      showCallError(mediaFailureMessage(error, "microphone"));
+      throw error;
+    }
+  }, []);
+
+  const setCameraEnabled = useCallback(async (enabled: boolean) => {
+    try {
+      if (callProviderRef.current === "agora" && localVideoRef.current) {
+        await localVideoRef.current.setEnabled(enabled);
+      } else {
+        localStreamRef.current?.getVideoTracks().forEach(track => { track.enabled = enabled; });
+      }
+      cameraEnabledRef.current = enabled;
+    } catch (error) {
+      showCallError(mediaFailureMessage(error, "camera"));
+      throw error;
+    }
+  }, []);
+
   const switchMicrophone = useCallback(async (deviceId: string) => {
     if (callProviderRef.current === "webrtc" && callPcRef.current && callStatus === "active") {
       setSwitchingDevice("audioinput");
@@ -1144,6 +1361,7 @@ export function useCall(user: { id: number; username: string } | null) {
           video: false,
         })).getAudioTracks()[0];
         if (!replacement) throw new Error("Microphone unavailable");
+        replacement.enabled = microphoneEnabledRef.current;
         const sender = callPcRef.current.getSenders().find(item => item.track?.kind === "audio");
         await sender?.replaceTrack(replacement);
         const stream = localStreamRef.current;
@@ -1189,6 +1407,7 @@ export function useCall(user: { id: number; username: string } | null) {
           video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
         })).getVideoTracks()[0];
         if (!replacement) throw new Error("Camera unavailable");
+        replacement.enabled = cameraEnabledRef.current;
         const sender = callPcRef.current.getTransceivers()
           .find(item => item.receiver.track.kind === "video")?.sender;
         await sender?.replaceTrack(replacement);
@@ -1607,6 +1826,12 @@ export function useCall(user: { id: number; username: string } | null) {
             });
             setCallPhase("ringing");
             setCallStatus("ringing");
+            if (document.visibilityState === "hidden") {
+              showForegroundCallNotification(
+                msg.callerName || msg.from || "Incoming call",
+                msg.video ? "Incoming video call" : "Incoming voice call",
+              );
+            }
             clearRingTimer();
           }
         }
@@ -2057,8 +2282,6 @@ export function useCall(user: { id: number; username: string } | null) {
     let callGeneration = 0;
     let callStateStarted = false;
     let agoraConfig: CallRtcConfig | null = null;
-    let agoraPreparedAudio: IMicrophoneAudioTrack | undefined;
-    let agoraPreparedVideo: ICameraVideoTrack | undefined;
     let agoraCallSecret = "";
     try {
       currentCallIdRef.current = callId;
@@ -2067,6 +2290,8 @@ export function useCall(user: { id: number; username: string } | null) {
       callStateStarted = true;
       callDirectionRef.current = "outgoing";
       callVideoRef.current = withVideo;
+      microphoneEnabledRef.current = true;
+      cameraEnabledRef.current = true;
       setActivePeer(targetUsername);
       setActiveCallId(callId);
       setActiveVideo(withVideo);
@@ -2118,11 +2343,8 @@ export function useCall(user: { id: number; username: string } | null) {
         }
         callProviderRef.current = "agora";
         callRtcConfigRef.current = agoraConfig;
-        // Caller media is acquired before the authenticated invitation is
-        // published. The callee never enters this path before Answer.
-        const prepared = await prepareAgoraMedia(withVideo);
-        agoraPreparedAudio = prepared.audioTrack;
-        agoraPreparedVideo = prepared.videoTrack;
+        // Publish the authenticated invitation first. Caller media permission
+        // is requested only after the server confirms durable call readiness.
         agoraCallSecret = callSecret;
       } else {
         // WebRTC/TURN compatibility branch: request caller media and put the
@@ -2157,14 +2379,15 @@ export function useCall(user: { id: number; username: string } | null) {
       for (const candidate of pendingCallIceRef.current.splice(0)) {
         sendWS({ type: "ice-candidate", to: targetUsername, callId, candidate });
       }
-      if (agoraConfig && agoraPreparedAudio) {
+      if (agoraConfig) {
         await createAgoraCall(
           callId,
           withVideo,
           agoraCallSecret,
           signalingDeviceIdFor(user.id),
-          agoraPreparedAudio,
-          agoraPreparedVideo,
+          undefined,
+          undefined,
+          () => currentCallIdRef.current === callId && callGenerationRef.current === callGeneration,
         );
       } else if (selectedConfig.provider === "hybrid") {
         // A signed standby token is acquired only after durable invitation
@@ -2206,7 +2429,7 @@ export function useCall(user: { id: number; username: string } | null) {
       }
       setCallStatus("idle");
     }
-  }, [callStatus, createDirectCallerOffer, createAgoraCall, fetchCallRtcConfig, isOnline, leaveAgora, prepareAgoraMedia, sendWS, signalingDeviceIdFor, setActualMediaConnected, user, waitForCallReady]);
+  }, [callStatus, createDirectCallerOffer, createAgoraCall, fetchCallRtcConfig, isOnline, leaveAgora, sendWS, signalingDeviceIdFor, setActualMediaConnected, user, waitForCallReady]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {
@@ -2232,6 +2455,8 @@ export function useCall(user: { id: number; username: string } | null) {
       setRecordingParticipantIds([user.id, callerId]);
       setActiveVideo(withVideo && invitation.video);
       callVideoRef.current = withVideo && invitation.video;
+      microphoneEnabledRef.current = true;
+      cameraEnabledRef.current = true;
       setIncomingCall(null);
       setCallPhase(deferred ? "accepted" : "connecting");
       setCallStatus("calling");
@@ -2275,11 +2500,16 @@ export function useCall(user: { id: number; username: string } | null) {
         const envelope = invitation.e2e?.devices?.[identity.deviceId];
         if (!envelope) throw new Error("Secure call key is unavailable for this device");
         const secret = await decryptCallSecret(user.id, envelope);
+        callSecretRef.current = secret;
         await createAgoraCall(
           invitation.callId,
           withVideo && invitation.video,
           secret,
           signalingDeviceIdFor(user.id),
+          undefined,
+          undefined,
+          () => currentCallIdRef.current === invitation.callId &&
+            callGenerationRef.current === generation,
         );
         return;
       }
@@ -2658,10 +2888,12 @@ export function useCall(user: { id: number; username: string } | null) {
     startLive, endLive, joinLive,
     startScreenShare, stopScreenShare,
     refreshCallDevices, switchMicrophone, switchCamera, selectSpeaker,
+    setMicrophoneEnabled, setCameraEnabled,
     flipCamera, adjustCameraZoom,
     reportSpeakerFailure, reportSpeakerSuccess, reportDeviceRecoveryAttempt,
     ...callPush,
     soundBlocked, enableCallSound,
+    secureCallRegistrationStatus, secureCallRegistrationError, retrySecureCallRegistration,
   };
 }
 

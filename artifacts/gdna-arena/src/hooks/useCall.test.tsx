@@ -187,6 +187,21 @@ describe("useCall signaling reconnect", () => {
     expect(result.current.incomingCall?.transport).toEqual({ provider: "agora", version: 1 });
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(sentTypes(socket)).not.toContainEqual(expect.objectContaining({ type: "call-answer" }));
+
+    await act(async () => {
+      socket.receive({
+        type: "call-resumed",
+        signalId: "agora-resume-1",
+        callId: "call-agora-consent",
+        from: "caller",
+        video: true,
+        offer: null,
+        deferredMedia: false,
+        transport: { provider: "agora", version: 1 },
+      });
+    });
+    expect(result.current.callError).toBeNull();
+    expect(result.current.callStatus).toBe("ringing");
     unmount();
   });
 
@@ -228,5 +243,53 @@ describe("useCall signaling reconnect", () => {
       uid: 7,
     });
     expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not report secure incoming calls ready when key registration returns an HTTP error", async () => {
+    const request = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: vi.fn().mockResolvedValue({ error: "Secure registration is unavailable" }),
+    });
+    vi.stubGlobal("fetch", request);
+
+    const { result, unmount } = renderHook(() => useCall({ id: 7, username: "recipient" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.secureCallRegistrationStatus).toBe("error");
+    expect(result.current.secureCallRegistrationError).toBe("Secure registration is unavailable");
+
+    await act(async () => {
+      result.current.retrySecureCallRegistration();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it("does not revalidate a ready key or recreate signaling when the window regains focus", async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal("fetch", request);
+    const { result, unmount } = renderHook(() => useCall({ id: 7, username: "recipient" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.secureCallRegistrationStatus).toBe("ready");
+    expect(request).toHaveBeenCalledOnce();
+    expect(sockets).toHaveLength(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+    expect(result.current.secureCallRegistrationStatus).toBe("ready");
+    expect(request).toHaveBeenCalledOnce();
+    expect(sockets).toHaveLength(1);
+    unmount();
   });
 });

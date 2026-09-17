@@ -1,5 +1,25 @@
 import { CallPushError, callSessionBinding, getCallStateDb, type CallStateDb } from "./call-state-db";
+import { sendAuthoritativeIncomingCallPush } from "./firebase-call-push";
+import { sendBrowserCallTerminalPush } from "./browser-push";
 export { CallPushError, callSessionBinding } from "./call-state-db";
+
+type IncomingSink = typeof sendAuthoritativeIncomingCallPush;
+type TerminalSink = typeof sendBrowserCallTerminalPush;
+let incomingSink: IncomingSink = sendAuthoritativeIncomingCallPush;
+let terminalSink: TerminalSink = sendBrowserCallTerminalPush;
+
+/** Test seam for verifying that the durable call entrypoints dispatch pushes. */
+export function setCallPushSinksForTest(sinks: {
+  incoming: IncomingSink;
+  terminal: TerminalSink;
+} | null): void {
+  incomingSink = sinks?.incoming ?? sendAuthoritativeIncomingCallPush;
+  terminalSink = sinks?.terminal ?? sendBrowserCallTerminalPush;
+}
+
+function notifyTerminal(record: CallRecord, status: "answered" | "ended" | "declined" | "missed"): void {
+  void terminalSink({ callId: record.callId, calleeId: record.callee.id, status }).catch(() => {});
+}
 function isValidCallId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
@@ -145,6 +165,15 @@ export async function createAuthoritativeCall(input: Omit<CallRecord, "status" |
     if (error instanceof CallPushError) throw error;
     throw new CallPushError("Call state creation failed");
   }
+  void incomingSink({
+    callId: record.callId,
+    callerId: record.caller.id,
+    callerName: record.caller.name,
+    callerAvatar: record.caller.avatar,
+    calleeId: record.callee.id,
+    expiresAt: record.expiresAt,
+    video: record.type === "video",
+  }).catch(() => {});
   return record;
 }
 
@@ -197,6 +226,7 @@ export async function answerAuthoritativeCall(
     transaction.set(lockRef(db, record.callee.id), { callId, expiresAt: activeUntil, updatedAt: new Date() });
     accepted = { ...record, status: "answered", answerer, initialAnswer: answer, latestAnswer: answer, replayIce, preAnswerIce: {} };
   });
+  if (accepted) notifyTerminal(accepted, "answered");
   return accepted;
 }
 
@@ -340,7 +370,16 @@ export async function terminateAuthoritativeCall(
     if (calleeLock.data()?.callId === callId) transaction.delete(lockRef(db, record.callee.id));
     result = { ...record, status, endedAt };
   });
-  return result;
+  const completed = result as CallRecord | null;
+  if (completed) {
+    notifyTerminal(
+      completed,
+      completed.status === "declined" || completed.status === "missed"
+        ? completed.status
+        : "ended",
+    );
+  }
+  return completed;
 }
 
 export async function expireAuthoritativeCall(callId: string): Promise<CallRecord | null> {
@@ -371,6 +410,7 @@ export async function expireAuthoritativeCall(callId: string): Promise<CallRecor
     }, { merge: true });
     expired = { ...current, status: "missed", endedAt };
   });
+  if (expired) notifyTerminal(expired, "missed");
   return expired;
 }
 

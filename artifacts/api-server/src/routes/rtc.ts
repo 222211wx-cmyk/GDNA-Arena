@@ -60,7 +60,7 @@ router.get(["/rtc/agora-token", "/agora/token"], async (req, res): Promise<void>
       return;
     }
   } catch {
-    res.status(503).json({ error: "Authoritative Firebase call signaling is unavailable", code: "CALL_SIGNALING_UNAVAILABLE" });
+    res.status(503).json({ error: "Call signaling is unavailable", code: "CALL_SIGNALING_UNAVAILABLE" });
     return;
   }
 

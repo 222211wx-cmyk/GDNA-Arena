@@ -8,6 +8,7 @@
 - [Session persistence](session-persistence.md) — sessions persist in Postgres; citizen auth is username + password only, with no email, verification, Resend, or recovery flow.
 - [API hardening](api-hardening.md) — helmet + tiered rate limits (auth 10/15min, AI 30/5min, global 600/5min) on api-server; trust proxy 1; secure cookies auto in prod.
 - [AMIS call system](amis-calls.md) — call signaling must ride /api/ws (prod router only forwards /api/*); WS upgrades session-authenticated, identity never trusted from client.
+- [Browser call verification](browser-call-verification.md) — test fresh recipients outside Messages; real Web Push needs a normal profile and exact-call notification checks.
 - [Stars Hall + AI Council](stars-hall.md) — star = roster username + reserved email; AI replies gated on invite; daily council report idempotent via unique report_date.
 - [Chat attachments](chat-attachments.md) — uploads: server-chosen extension + nosniff (XSS guard), 15/10min rate limit, uploads/chat not persistent in prod.
 - [Rights & Monetization](rights-monetization.md) — content earnings per view/like, sha256 first-owner fingerprints, piracy freeze; only authed non-self likes mint coins; earnings updates must be raw SQL.

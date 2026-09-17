@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 // PORT only needed for dev server — build doesn't use it
 const port = Number(process.env.PORT || 3000);
@@ -12,9 +13,17 @@ const port = Number(process.env.PORT || 3000);
 const basePath = process.env.BASE_PATH || "/";
 
 function pwaServiceWorker() {
+  const pushWorkerSource = readFileSync(path.resolve(import.meta.dirname, "src/service-worker.js"), "utf8");
   return {
     name: "gdna-safe-pwa-service-worker",
-    apply: "build" as const,
+    configureServer(server: { middlewares: { use: (route: string, handler: (_req: unknown, res: { setHeader: (name: string, value: string) => void; end: (body: string) => void }) => void) => void } }) {
+      const workerPath = `${basePath.endsWith("/") ? basePath : `${basePath}/`}sw.js`;
+      server.middlewares.use(workerPath, (_req, res) => {
+        res.setHeader("Content-Type", "text/javascript");
+        res.setHeader("Service-Worker-Allowed", basePath);
+        res.end(pushWorkerSource);
+      });
+    },
     generateBundle(_: unknown, bundle: Record<string, { fileName: string; type: string }>) {
       const normalizedBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
       const precache = Object.values(bundle)
@@ -90,7 +99,9 @@ self.addEventListener("fetch", event => {
     }
     return response;
   })));
-});`;
+});
+
+${pushWorkerSource}`;
       this.emitFile({ type: "asset", fileName: "sw.js", source });
     },
   };
