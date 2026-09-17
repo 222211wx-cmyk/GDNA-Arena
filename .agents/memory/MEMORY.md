@@ -25,3 +25,4 @@
 - [Production schema ownership](production-schema-ownership.md) — Publish owns production schema application; never replay Drizzle application migrations during startup.
 - [Royal Reserve policy](royal-reserve-policy.md) — messaging calls are free, without credit or reserve consent; preserve legacy finance records and require internet.
 - [Drizzle peer alignment](drizzle-peer-alignment.md) — Firebase Admin can split Drizzle type identities through optional OpenTelemetry peers; align consumers, not query casts.
+- [Optional AI policy](optional-ai-policy.md) — keep core availability independent of AI credentials and credits; no automatic paid-provider replacement.

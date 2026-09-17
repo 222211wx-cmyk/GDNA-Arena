@@ -7,10 +7,8 @@
  * ═══════════════════════════════════════════════════════════════
  */
 import { pool } from "@workspace/db";
-import OpenAI from "openai";
 import { ingestMemory, getNeuralStatus } from "../lib/neural-core.js";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createOptionalOpenAI } from "../lib/openai-client.js";
 
 let cycleNumber = 0;
 let lastFullEvolution = 0;
@@ -114,6 +112,8 @@ async function ingestPlatformActivity(): Promise<number> {
 // ── Full evolution cycle — generates intelligence report ──────
 async function runEvolutionCycle(): Promise<void> {
   try {
+    const openai = createOptionalOpenAI();
+    if (!openai) return;
     const status = await getNeuralStatus();
 
     // Ask GPT-4o-mini to analyse the neural core state
@@ -168,8 +168,8 @@ Be precise and imperial in tone.`;
 
     console.log(`[ENC] 🧬 Evolution cycle ${cycleNumber} complete — IQ: ${score.toFixed(1)}`);
     console.log(`[ENC] 📋 ${report.slice(0, 100)}...`);
-  } catch (err) {
-    console.error("[ENC-EVOLVE] Evolution error:", err);
+  } catch {
+    console.warn("[ENC-EVOLVE] Evolution unavailable; no report filed");
   }
 }
 

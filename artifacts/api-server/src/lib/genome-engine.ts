@@ -18,9 +18,7 @@
  */
 
 import { pool } from "@workspace/db";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createOptionalOpenAI } from "./openai-client.js";
 
 // ── DNA alphabet (base-64, URL-safe) ─────────────────────────
 const DNA_CHARS =
@@ -203,6 +201,9 @@ Memory A: ${a}
 Memory B: ${b}
 
 Output ONLY the new insight sentence. No explanation.`;
+
+    const openai = createOptionalOpenAI();
+    if (!openai) return null;
 
     const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",

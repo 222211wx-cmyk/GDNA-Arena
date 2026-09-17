@@ -3,10 +3,8 @@
 //  يحدد مجال كل مواطن، يولّد مرسوم مخصص، ينشره كالنار في الهشيم
 // ══════════════════════════════════════════════════════════════════════════════
 
-import OpenAI from "openai";
 import { pool } from "@workspace/db";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createOptionalOpenAI } from "../lib/openai-client.js";
 
 // ── مستويات الشرف ─────────────────────────────────────────────────────────────
 function honorTier(xp: number, wins: number): "newcomer" | "rising" | "elite" {
@@ -224,7 +222,8 @@ async function detectDomain(userId: number): Promise<string> {
 
 // ── بناء رسالة مُولَّدة بالذكاء الاصطناعي (اختياري — للنخبة فقط) ──────────
 async function generateAIDecree(username: string, domain: string, tier: string): Promise<{ title: string; body: string } | null> {
-  if (!process.env.OPENAI_API_KEY) return null;
+  const openai = createOptionalOpenAI();
+  if (!openai) return null;
   try {
     const prompt = `أنت النظام الذكي GDN-AI لإمبراطورية Arena Qaisypro.
 اكتب مرسوماً شرفياً إمبراطورياً قصيراً وقوياً موجَّهاً لمواطن اسمه "${username}".

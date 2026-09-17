@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { smartSystem, formatSmartReportForAI } from "../lib/smart-system";
+import { AI_UNAVAILABLE_MESSAGE, createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 // ── Smart System keywords (AR + FR + EN) ──────────────────────────────────────
 const SMART_KEYWORDS = [
@@ -107,11 +108,6 @@ router.post("/chat/stream", async (req, res): Promise<void> => {
     return;
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(500).json({ error: "OpenAI API key not configured" });
-    return;
-  }
-
   // ── Content filter ────────────────────────────────────────────────────────
   if (hasBlockedKeyword(message)) {
     res.status(400).json({ error: "Message contains prohibited content." });
@@ -143,6 +139,13 @@ router.post("/chat/stream", async (req, res): Promise<void> => {
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
+  if (!isOpenAIAvailable()) {
+    res.write(`data: ${JSON.stringify({ delta: AI_UNAVAILABLE_MESSAGE })}\n\n`);
+    res.write("data: [DONE]\n\n");
+    res.end();
+    return;
+  }
+
   try {
     const stream = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -161,9 +164,10 @@ router.post("/chat/stream", async (req, res): Promise<void> => {
 
     res.write("data: [DONE]\n\n");
     req.log.info({ userId: req.session?.userId }, "Streaming chat complete");
-  } catch (err) {
-    req.log.error({ err }, "Streaming chat error");
-    res.write(`data: ${JSON.stringify({ error: "Neural grid disruption — try again" })}\n\n`);
+  } catch {
+    req.log.warn("Streaming chat provider unavailable");
+    res.write(`data: ${JSON.stringify({ delta: AI_UNAVAILABLE_MESSAGE })}\n\n`);
+    res.write("data: [DONE]\n\n");
   } finally {
     res.end();
   }
@@ -178,11 +182,6 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   if (!message || typeof message !== "string") {
     res.status(400).json({ error: "Message required" });
-    return;
-  }
-
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(500).json({ error: "OpenAI API key not configured" });
     return;
   }
 
@@ -211,16 +210,26 @@ router.post("/chat", async (req, res): Promise<void> => {
     { role: "user", content: message },
   ];
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages,
-    max_tokens: 600,
-    temperature: 0.82,
-  });
+  if (!isOpenAIAvailable()) {
+    res.json({ reply: AI_UNAVAILABLE_MESSAGE });
+    return;
+  }
 
-  const reply = completion.choices[0]?.message?.content ?? "The neural grid is recalibrating... try again.";
-  req.log.info({ userId: req.session?.userId }, "Chat response generated");
-  res.json({ reply });
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      max_tokens: 600,
+      temperature: 0.82,
+    });
+
+    const reply = completion.choices[0]?.message?.content ?? AI_UNAVAILABLE_MESSAGE;
+    req.log.info({ userId: req.session?.userId }, "Chat response generated");
+    res.json({ reply });
+  } catch {
+    req.log.warn("Chat provider unavailable");
+    res.json({ reply: AI_UNAVAILABLE_MESSAGE });
+  }
 });
 
 export default router;

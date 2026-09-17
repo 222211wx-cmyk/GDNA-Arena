@@ -7,9 +7,10 @@
  * ═══════════════════════════════════════════════════════════════
  */
 import { pool } from "@workspace/db";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import {
+  AI_UNAVAILABLE_MESSAGE,
+  createOptionalOpenAI,
+} from "./openai-client.js";
 
 export interface NeuralMemory {
   id: number;
@@ -84,12 +85,21 @@ export async function ensureNeuralTables(): Promise<void> {
 }
 
 // ── Generate embedding for any text ──────────────────────────
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: text.slice(0, 8000), // token safety
-  });
-  return response.data[0].embedding;
+export async function generateEmbedding(text: string): Promise<number[] | null> {
+  const openai = createOptionalOpenAI();
+  if (!openai) return null;
+
+  try {
+    const response = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: text.slice(0, 8000), // token safety
+    });
+    return response.data[0]?.embedding ?? null;
+  } catch {
+    // The shared client handles quota cooldowns and error sanitisation. Do not
+    // persist a row without a real vector when the provider is unavailable.
+    return null;
+  }
 }
 
 // ── Ingest a new memory into the neural core ─────────────────
@@ -113,6 +123,7 @@ export async function ingestMemory(
     }
 
     const embedding = await generateEmbedding(content);
+    if (!embedding) return;
     const embeddingStr = `[${embedding.join(",")}]`;
 
     await pool.query(
@@ -140,6 +151,7 @@ export async function semanticSearch(
 ): Promise<NeuralMemory[]> {
   try {
     const embedding = await generateEmbedding(query);
+    if (!embedding) return [];
     const embeddingStr = `[${embedding.join(",")}]`;
 
     const domainFilter = domain ? `AND domain = $3` : "";
@@ -210,14 +222,21 @@ Rules:
     { role: "user" as const, content: query },
   ];
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages,
-    max_tokens: 500,
-    temperature: 0.7,
-  });
+  const openai = createOptionalOpenAI();
+  if (!openai) return AI_UNAVAILABLE_MESSAGE;
 
-  return response.choices[0].message.content ?? "Neural core offline.";
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages,
+      max_tokens: 500,
+      temperature: 0.7,
+    });
+
+    return response.choices[0].message.content ?? AI_UNAVAILABLE_MESSAGE;
+  } catch {
+    return AI_UNAVAILABLE_MESSAGE;
+  }
 }
 
 // ── Get neural core health stats ─────────────────────────────

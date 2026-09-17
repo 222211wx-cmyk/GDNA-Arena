@@ -10,10 +10,8 @@
  */
 
 import { pool } from "@workspace/db";
-import OpenAI from "openai";
 import { pushNotification } from "../routes/notifications.js";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createOptionalOpenAI } from "../lib/openai-client.js";
 
 // ── Ensure citizen_missions table exists ──────────────────────
 export async function ensureMissionsTables(): Promise<void> {
@@ -115,6 +113,8 @@ function buildCitizenSummary(c: Awaited<ReturnType<typeof fetchActiveCitizens>>[
 // ── Generate missions for a batch of citizens (1 API call) ───
 async function generateMissionsForBatch(citizens: Awaited<ReturnType<typeof fetchActiveCitizens>>) {
   const profiles = citizens.map(c => buildCitizenSummary(c)).join("\n");
+  const openai = createOptionalOpenAI();
+  if (!openai) return [];
 
   const prompt = `You are GDN-AI — the Sovereign Intelligence of Arena Qaisypro.
 For each citizen below, generate exactly 3 personalized daily development missions.
@@ -217,11 +217,9 @@ export async function runSovereignMissions(): Promise<{ generated: number; notif
     let batchResults: { username: string; missions: { title: string; title_ar: string; description: string; description_ar: string; category: string; xp_reward: number }[] }[] = [];
 
     try {
-      if (process.env.OPENAI_API_KEY) {
-        batchResults = await generateMissionsForBatch(batch);
-      }
-    } catch (err) {
-      console.warn("[MISSIONS] ⚠️ AI batch failed, using fallback:", err);
+      batchResults = await generateMissionsForBatch(batch);
+    } catch {
+      console.warn("[MISSIONS] ⚠️ AI batch unavailable, using deterministic missions");
     }
 
     // Match results back to citizens by username

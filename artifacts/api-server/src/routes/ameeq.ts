@@ -4,8 +4,8 @@
  */
 import { Router, type IRouter } from "express";
 import { createHash } from "node:crypto";
-import OpenAI from "openai";
 import { validateContent } from "../lib/moderate";
+import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
 
@@ -27,7 +27,7 @@ setInterval(() => {
   const now = Date.now();
   for (const [k, v] of rateMap) if (now - v.windowStart > RATE_WINDOW_MS * 2) rateMap.delete(k);
 }, RATE_WINDOW_MS).unref();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 // ── 1. CONFIG - إعدادات الموظف الحكومي ──────────────────────────────
 export const EMPLOYEE_NAME = "Ameeq AI";
@@ -46,6 +46,9 @@ Style: formal yet warm royal tone. Answer in the language the user writes in (de
 
 // ── 2. محرك الذكاء ──────────────────────────────────────────────────
 async function callAiEngine(userInput: string, userKey: string, log: { warn: (o: unknown, m: string) => void }): Promise<string> {
+  if (!isOpenAIAvailable()) {
+    return fallbackResponse(userInput);
+  }
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -58,9 +61,13 @@ async function callAiEngine(userInput: string, userKey: string, log: { warn: (o:
     });
     const reply = completion.choices[0]?.message?.content?.trim();
     if (reply) return reply;
-  } catch (err) {
-    log.warn({ err }, "[AMEEQ] OpenAI unavailable, falling back");
+  } catch {
+    log.warn({}, "[AMEEQ] OpenAI unavailable, falling back");
   }
+  return fallbackResponse(userInput);
+}
+
+function fallbackResponse(userInput: string): string {
   // fallback بسيط إلى تعذّر المحرك
   if (userInput.includes("مرحبا") || userInput.toLowerCase().includes("salam")) {
     return `السلام. أنا ${EMPLOYEE_NAME}، المساعد الرسمي لـ ${OWNER}.`;

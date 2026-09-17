@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import OpenAI from "openai";
+import { AI_UNAVAILABLE_MESSAGE, createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 /**
  * POST /api/growth/trajectory
@@ -18,8 +18,8 @@ router.post("/growth/trajectory", async (req, res): Promise<void> => {
     lang?: string;
   };
 
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(500).json({ error: "AI service unavailable" });
+  if (!isOpenAIAvailable()) {
+    res.status(503).json({ error: AI_UNAVAILABLE_MESSAGE });
     return;
   }
 
@@ -87,9 +87,9 @@ Analyze this player's NLP profile and return a JSON object with these exact fiel
 
     req.log.info({ userId: req.session?.userId }, "Growth trajectory generated");
     res.json({ analysis });
-  } catch (err) {
-    req.log.error({ err }, "Growth trajectory error");
-    res.status(500).json({ error: "Neural grid disruption — try again" });
+  } catch {
+    req.log.warn("Growth trajectory provider unavailable");
+    res.status(502).json({ error: AI_UNAVAILABLE_MESSAGE });
   }
 });
 

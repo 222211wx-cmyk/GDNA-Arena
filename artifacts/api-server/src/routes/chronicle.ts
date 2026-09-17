@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import OpenAI from "openai";
+import { AI_UNAVAILABLE_MESSAGE, createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 /**
  * POST /api/chronicle/predictions
@@ -11,8 +11,8 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 router.post("/chronicle/predictions", async (req, res): Promise<void> => {
   const { lang } = req.body as { lang?: string };
 
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(500).json({ error: "AI service unavailable" });
+  if (!isOpenAIAvailable()) {
+    res.status(503).json({ error: AI_UNAVAILABLE_MESSAGE });
     return;
   }
 
@@ -66,9 +66,9 @@ Generate future predictions for the Arena Qaisypro platform timeline. Return a J
 
     req.log.info({}, "Chronicle predictions generated");
     res.json({ predictions });
-  } catch (err) {
-    req.log.error({ err }, "Chronicle predictions error");
-    res.status(500).json({ error: "Timeline disruption — try again" });
+  } catch {
+    req.log.warn("Chronicle predictions provider unavailable");
+    res.status(502).json({ error: AI_UNAVAILABLE_MESSAGE });
   }
 });
 

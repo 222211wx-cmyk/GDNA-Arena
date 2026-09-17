@@ -13,15 +13,13 @@
  * ═══════════════════════════════════════════════════════════════
  */
 import { pool } from "@workspace/db";
-import OpenAI from "openai";
 import {
   encodeCitizenDNA,
   encodeEmpireGenome,
   geneticCrossover,
 } from "../lib/genome-engine.js";
 import { ingestMemory } from "../lib/neural-core.js";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createOptionalOpenAI } from "../lib/openai-client.js";
 
 // ── Step 1: Evolve all active citizen DNAs ────────────────────
 async function evolveCitizenDNAs(): Promise<number> {
@@ -75,6 +73,9 @@ async function runGeneticCrossover(): Promise<number> {
 
 // ── Step 3: Self-generate content ────────────────────────────
 async function selfGenerateContent(): Promise<void> {
+  const openai = createOptionalOpenAI();
+  if (!openai) return;
+
   // Gather platform snapshot
   const [citizens, memories, patterns, topDomain] = await Promise.all([
     pool.query(`SELECT COUNT(*)::int AS c FROM users`),

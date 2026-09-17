@@ -5,14 +5,14 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { Router, type IRouter } from "express";
-import OpenAI from "openai";
 import bcrypt from "bcrypt";
 import { db, pool, dmRooms, dmRoomMembers, dmMessages, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { notifyMessageRecipients } from "../lib/message-push";
+import { AI_UNAVAILABLE_MESSAGE, createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 const DAILY_INVITE_LIMIT = 3;
 
@@ -281,25 +281,31 @@ export async function generateStarReply(
         content: m.content as string,
       }));
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_tokens: 220,
-      temperature: 0.9,
-      messages: [
-        {
-          role: "system",
-          content: `You are ${star.fullName} (${star.nationality}), a world ${star.domain} star, hosted as an honorary citizen inside Arena Qaisypro — a black-and-gold digital empire. Persona: ${star.persona}
+    let reply: string | undefined;
+    try {
+      if (!isOpenAIAvailable()) throw new Error("AI provider unavailable");
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        max_tokens: 220,
+        temperature: 0.9,
+        messages: [
+          {
+            role: "system",
+            content: `You are ${star.fullName} (${star.nationality}), a world ${star.domain} star, hosted as an honorary citizen inside Arena Qaisypro — a black-and-gold digital empire. Persona: ${star.persona}
 Rules:
 - Stay warmly in character; you are chatting 1:1 with citizen "${citizenUsername}".
 - ALWAYS reply in the same language the citizen writes in (Arabic → Arabic, Darija → Darija, French → French, English → English).
 - Keep replies short (1-3 sentences), personal and motivational. Occasionally use 👑 or your signature style.
 - Never break character, never mention being an AI. If asked, you are "${star.fullName}, hosted by Arena Qaisypro's intelligence".`,
-        },
-        ...chat,
-      ],
-    });
+          },
+          ...chat,
+        ],
+      });
 
-    const reply = completion.choices[0]?.message?.content?.trim();
+      reply = completion.choices[0]?.message?.content?.trim();
+    } catch {
+      reply = AI_UNAVAILABLE_MESSAGE;
+    }
     if (!reply) return;
 
     if (replaceMessageId) {
@@ -312,8 +318,8 @@ Rules:
         void notifyMessageRecipients(roomId, starUserId, savedReply.id, star.username).catch(() => {});
       }
     }
-  } catch (err) {
-    console.error("[STARS] AI reply failed:", err);
+  } catch {
+    // The background reply is best-effort; avoid exposing provider or storage details.
   } finally {
     activeReplies--;
   }

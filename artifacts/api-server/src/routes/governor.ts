@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
-import OpenAI from "openai";
 import { smartSystem, formatSmartReportForAI } from "../lib/smart-system";
+import { AI_UNAVAILABLE_MESSAGE, createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 // عنوان ولاية الحاكم — optional external Ameeq bridge
 const AMEEQ_BRIDGE_URL = process.env.AMEEQ_BRIDGE_URL;
@@ -77,8 +77,8 @@ router.post("/governor/consult", async (req, res): Promise<void> => {
   }
 
   // ── 2) Fallback: الحاكم المحلي (GDN-AI) ───────────────────────────────────
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(503).json({ error: "الحاكم مشغول فـ اجتماع. عاود من بعد." });
+  if (!isOpenAIAvailable()) {
+    res.status(503).json({ error: AI_UNAVAILABLE_MESSAGE });
     return;
   }
   try {
@@ -94,9 +94,9 @@ router.post("/governor/consult", async (req, res): Promise<void> => {
     const reply = completion.choices[0]?.message?.content ?? "الحاكم مشغول فـ اجتماع. عاود من بعد.";
     req.log.info({ userId, topic: subject }, "[GOVERNOR] local reply");
     res.json({ reply, source: "gdn-ai-local" });
-  } catch (err) {
-    req.log.error({ err }, "[GOVERNOR] local fallback failed");
-    res.status(502).json({ error: "الحاكم مشغول فـ اجتماع. عاود من بعد." });
+  } catch {
+    req.log.warn("[GOVERNOR] local provider unavailable");
+    res.status(502).json({ error: AI_UNAVAILABLE_MESSAGE });
   }
 });
 

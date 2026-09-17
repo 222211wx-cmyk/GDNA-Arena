@@ -7,10 +7,8 @@
 //  directions, and directives toward global digital leadership.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import OpenAI from "openai";
 import { pool } from "@workspace/db";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client.js";
 
 const REPORT_INTERVAL_MS = 24 * 60 * 60 * 1000; // one session per day
 const FIRST_RUN_DELAY_MS = 20_000;
@@ -63,7 +61,7 @@ async function gatherEmpireFacts(): Promise<string> {
 }
 
 export async function runCouncilSession(): Promise<void> {
-  if (!pool || !process.env.OPENAI_API_KEY) return;
+  if (!pool || !isOpenAIAvailable()) return;
   const todayKey = new Date().toISOString().slice(0, 10);
   try {
     // Skip (cheaply, BEFORE the OpenAI call) if today's session is already filed
@@ -72,6 +70,8 @@ export async function runCouncilSession(): Promise<void> {
     if (done.length > 0) return;
 
     const facts = await gatherEmpireFacts();
+    const openai = createOptionalOpenAI();
+    if (!openai) return;
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 900,
@@ -105,8 +105,8 @@ Be specific, reference the actual numbers, dignified imperial tone, no fluff.`,
       [report.headline, JSON.stringify(report)],
     );
     console.log(`[COUNCIL] 🏛️ Imperial AI Council session filed: ${report.headline}`);
-  } catch (err) {
-    console.error("[COUNCIL] session failed:", err);
+  } catch {
+    console.warn("[COUNCIL] session unavailable; no report filed");
   }
 }
 

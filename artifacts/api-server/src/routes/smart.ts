@@ -6,13 +6,13 @@
  * ═══════════════════════════════════════════════════════════════
  */
 import { Router, type IRouter } from "express";
-import OpenAI from "openai";
 import { db, pool } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
 function requireAuth(req: any, res: any, next: any) {
@@ -256,45 +256,50 @@ Génère un JSON EXACT avec cette structure (sans markdown, juste le JSON):
   }
 }`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 1000,
+    const fallbackAnalysis = () => ({
+      headline: "نظامك الذكي نشط ويراقبك",
+      overallMessage: "مرحباً بك في النظام الذكي — GDNA SMART يحلل بياناتك ويقدم توصيات شخصية.",
+      recommendations: modules
+        .filter((m: any) => m.status === "INACTIF")
+        .slice(0, 3)
+        .map((m: any) => ({
+          moduleId: m.id,
+          priority: "HIGH",
+          title: `فعّل ${m.name}`,
+          action: `انتقل إلى ${m.name} وابدأ نشاطك`,
+          reward: "+50 XP",
+          icon: "🚀",
+        })),
+      strengths: ["لديك حضور في المنصة"],
+      weaknesses: ["بعض الوحدات غير مفعّلة"],
+      dailyMission: {
+        title: "مهمة اليوم",
+        tasks: ["العب لعبة واحدة", "انشر منشوراً", "اشترك بمسابقة"],
+        totalReward: "+150 XP +100 coins",
+      },
     });
 
     let analysis: any;
-    try {
-      const raw = completion.choices[0]?.message?.content ?? "{}";
-      analysis = JSON.parse(raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
-    } catch {
-      analysis = {
-        headline: "نظامك الذكي نشط ويراقبك",
-        overallMessage: "مرحباً بك في النظام الذكي — GDNA SMART يحلل بياناتك ويقدم توصيات شخصية.",
-        recommendations: modules
-          .filter((m: any) => m.status === "INACTIF")
-          .slice(0, 3)
-          .map((m: any) => ({
-            moduleId: m.id,
-            priority: "HIGH",
-            title: `فعّل ${m.name}`,
-            action: `انتقل إلى ${m.name} وابدأ نشاطك`,
-            reward: "+50 XP",
-            icon: "🚀",
-          })),
-        strengths: ["لديك حضور في المنصة"],
-        weaknesses: ["بعض الوحدات غير مفعّلة"],
-        dailyMission: {
-          title: "مهمة اليوم",
-          tasks: ["العب لعبة واحدة", "انشر منشوراً", "اشترك بمسابقة"],
-          totalReward: "+150 XP +100 coins",
-        },
-      };
+    if (!isOpenAIAvailable()) {
+      analysis = fallbackAnalysis();
+    } else {
+      try {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.7,
+          max_tokens: 1000,
+        });
+        const raw = completion.choices[0]?.message?.content ?? "{}";
+        analysis = JSON.parse(raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+      } catch {
+        req.log.warn("[SMART] AI provider unavailable — using deterministic analysis");
+        analysis = fallbackAnalysis();
+      }
     }
 
     res.json({ ...statusData, analysis, generatedAt: new Date().toISOString() });
-  } catch (err) {
-    console.error("[SMART] analysis error:", err);
+  } catch {
     res.status(500).json({ error: "AI analysis failed" });
   }
 });

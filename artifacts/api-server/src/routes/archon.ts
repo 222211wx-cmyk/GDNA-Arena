@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
-import OpenAI from "openai";
 import { db, pool } from "@workspace/db";
 import { archonSessionsTable, archonDirectivesTable } from "@workspace/db/schema";
 import { usersTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOptionalOpenAI();
 
 const MOROCCO_TIME_ZONE = "Africa/Casablanca";
 const DAILY_ARCHON_DIRECTIVES = [
@@ -142,7 +142,7 @@ Return this exact JSON structure:
   let aiProfile: Record<string, string> = {};
 
   try {
-    if (!process.env.OPENAI_API_KEY) throw new Error("No API key");
+    if (!isOpenAIAvailable()) throw new Error("AI provider unavailable");
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -155,8 +155,8 @@ Return this exact JSON structure:
     });
     aiProfile = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
     archetype = aiProfile.archetype ?? "THE SEEKER";
-  } catch (err) {
-    req.log?.warn({ err }, "ARCHON AI unavailable — using computed profile");
+  } catch {
+    req.log?.warn("ARCHON AI unavailable — using computed profile");
     archetype = overallScore >= 75 ? "THE SOVEREIGN"
       : dims.volontas >= 80 ? "THE CONQUEROR"
       : dims.intellectus >= 80 ? "THE VISIONARY"
@@ -274,6 +274,7 @@ Blend one short quote with a concrete mission, and when appropriate reference ne
 Example tone: "Today: earn 100 points in the Arena of Legends to claim the weekly crown."`;
 
   try {
+    if (!isOpenAIAvailable()) throw new Error("AI provider unavailable");
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],

@@ -1,6 +1,4 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createOptionalOpenAI } from "./openai-client.js";
 
 // ── EMPIRE ETERNAL — Allowed content domains ──────────────────────────────────
 // Only Education, Sports, Science, Art, Business, Debates are permitted.
@@ -58,7 +56,8 @@ export async function moderateText(
     return { ok: false, reason: "Meme/trash content is not allowed. The Empire only accepts Education, Sports, Science, Art, Business, and meaningful Debates." };
   }
 
-  if (!process.env.OPENAI_API_KEY) return { ok: true };
+  const openai = createOptionalOpenAI();
+  if (!openai) return { ok: true };
 
   try {
     const resp = await openai.moderations.create({ input: trimmed.slice(0, 2000) });
