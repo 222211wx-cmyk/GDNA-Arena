@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { PermissionsAndroid, Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
@@ -13,12 +13,12 @@ import {
   type IRtcEngineEventHandler,
   type LastmileProbeResult,
 } from 'react-native-agora';
-import { apiGet, apiPost, createAuthenticatedWebSocket, type AuthUser } from './api';
+import { ApiError, apiGet, apiPost, createAuthenticatedWebSocket, type AuthUser } from './api';
 import { assertNetworkOnline, useOnline } from '@/contexts/OnlineContext';
 import {
   decryptCallSecret,
   encryptCallSecret,
-  getCurrentDeviceId,
+  ensureDeviceIdentity,
   type DeviceKey,
 } from './e2e';
 
@@ -53,12 +53,22 @@ type Signal = {
   by?: string;
   reason?: string;
   video?: boolean;
+  offer?: unknown;
+  answer?: unknown;
   e2e?: E2eOffer;
   message?: string;
+  transport?: { provider: 'agora' | 'webrtc'; version: 1 };
 };
 type Credentials = { appId: string; token: string; uid: number; channel?: string };
+const AGORA_TRANSPORT = { provider: 'agora', version: 1 } as const;
 
 const RING_MS = 30_000;
+const SIGNAL_WAIT_MS = 15_000;
+type SignalWaiter = {
+  resolve: () => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+};
 const randomUrl = (length: number) => {
   let binary = '';
   Crypto.getRandomBytes(length).forEach(value => { binary += String.fromCharCode(value); });
@@ -89,6 +99,29 @@ async function makeOffer(username: string, secret: string): Promise<E2eOffer> {
   };
 }
 
+export async function fetchAgoraToken(channel: string, deviceId: string): Promise<Credentials> {
+  if (!channel || !deviceId) throw new Error('A call channel and secure device identity are required.');
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const credentials = await apiGet<Credentials>(
+        `/agora/token?channel=${encodeURIComponent(channel)}&deviceId=${encodeURIComponent(deviceId)}`,
+      );
+      if (typeof credentials.appId !== 'string' || !credentials.appId ||
+          typeof credentials.token !== 'string' || !credentials.token ||
+          !Number.isSafeInteger(credentials.uid)) {
+        throw new Error('The secure Agora token response is invalid.');
+      }
+      return credentials;
+    } catch (cause) {
+      lastError = cause instanceof Error ? cause : new Error('Agora token request failed.');
+      if (!(cause instanceof ApiError) || cause.status !== 503 || attempt === 2) throw lastError;
+      await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw lastError ?? new Error('Agora token request failed.');
+}
+
 export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   const { isOnline } = useOnline();
   const queryClient = useQueryClient();
@@ -105,6 +138,12 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const closedRef = useRef(false);
   const incomingE2eRef = useRef<E2eOffer | null>(null);
+  const incomingProviderRef = useRef<'agora' | 'webrtc'>('agora');
+  const deviceIdRef = useRef<string | null>(null);
+  const joiningCallRef = useRef<string | null>(null);
+  const callReadyWaitersRef = useRef(new Map<string, SignalWaiter>());
+  const callResumeWaitersRef = useRef(new Map<string, SignalWaiter>());
+  const providerWaitersRef = useRef(new Map<string, SignalWaiter>());
 
   useEffect(() => { callRef.current = call; }, [call]);
   const send = useCallback((value: object) => {
@@ -117,6 +156,24 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   };
   const release = useCallback(() => {
     clearTimer();
+    const error = new Error('Call ended before secure media was ready.');
+    for (const waiter of callReadyWaitersRef.current.values()) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(error);
+    }
+    for (const waiter of callResumeWaitersRef.current.values()) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(error);
+    }
+    for (const waiter of providerWaitersRef.current.values()) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(error);
+    }
+    providerWaitersRef.current.clear();
+    incomingProviderRef.current = 'agora';
+    callReadyWaitersRef.current.clear();
+    callResumeWaitersRef.current.clear();
+    joiningCallRef.current = null;
     callRef.current = null;
     const engine = engineRef.current;
     engineRef.current = null;
@@ -127,6 +184,30 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     }
     secretRef.current = null;
     incomingE2eRef.current = null;
+  }, []);
+
+  const waitForSignal = useCallback((
+    waiters: MutableRefObject<Map<string, SignalWaiter>>,
+    callId: string,
+  ) => new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      const waiter = waiters.current.get(callId);
+      if (waiter?.timeout !== timeout) return;
+      waiters.current.delete(callId);
+      reject(new Error('Secure call signaling timed out.'));
+    }, SIGNAL_WAIT_MS);
+    waiters.current.set(callId, { resolve, reject, timeout });
+  }), []);
+
+  const settleSignal = useCallback((
+    waiters: MutableRefObject<Map<string, SignalWaiter>>,
+    callId: string,
+  ) => {
+    const waiter = waiters.current.get(callId);
+    if (!waiter) return;
+    waiters.current.delete(callId);
+    clearTimeout(waiter.timeout);
+    waiter.resolve();
   }, []);
   const log = useCallback(async (value: ActiveCall, status: string) => {
     if (value.incoming) return;
@@ -150,25 +231,42 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     setCall(null);
   }, [log, release, send]);
 
-  const join = useCallback(async (current: ActiveCall, secret: string) => {
-    await permissions(current.video);
-    const credentials = await apiGet<Credentials>(
-      `/rtc/agora-token?channel=${encodeURIComponent(current.callId)}`,
-    );
+  const join = useCallback(async (current: ActiveCall, secret: string, deviceId: string) => {
+    const credentials = await fetchAgoraToken(current.callId, deviceId);
     const engine = createAgoraRtcEngine();
     const handler: IRtcEngineEventHandler = {
-      onJoinChannelSuccess: () => setCall(value => value ? { ...value, phase: 'active', startedAt: value.startedAt ?? Date.now() } : value),
+      onJoinChannelSuccess: () => setCall(value => value
+        ? { ...value, phase: value.phase === 'active' ? 'active' : value.phase }
+        : value),
       onUserJoined: (_connection, remoteUid) => setCall(value => value ? { ...value, remoteUid, phase: 'active', startedAt: value.startedAt ?? Date.now() } : value),
       onUserOffline: () => finish('completed', true),
       onConnectionStateChanged: (_connection, state) => {
         if (state === ConnectionStateType.ConnectionStateReconnecting) {
           setCall(value => value ? { ...value, phase: 'reconnecting' } : value);
         } else if (state === ConnectionStateType.ConnectionStateConnected) {
-          setCall(value => value ? { ...value, phase: 'active' } : value);
+          setCall(value => value
+            ? { ...value, phase: value.remoteUid !== undefined || value.phase === 'active' ? 'active' : value.phase }
+            : value);
         } else if (state === ConnectionStateType.ConnectionStateFailed) {
           setError('The secure media connection failed.');
           finish('failed');
         }
+      },
+      onRequestToken: () => {
+        void fetchAgoraToken(current.callId, deviceId)
+          .then(next => { engine.renewToken(next.token); })
+          .catch(() => {
+            setError('The secure media token could not be refreshed.');
+            finish('failed');
+          });
+      },
+      onTokenPrivilegeWillExpire: () => {
+        void fetchAgoraToken(current.callId, deviceId)
+          .then(next => { engine.renewToken(next.token); })
+          .catch(() => {
+            setError('The secure media token could not be refreshed.');
+            finish('failed');
+          });
       },
       onError: (_code, message) => setError(message || 'Agora media error.'),
     };
@@ -202,18 +300,50 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     if (joined !== 0) throw new Error(`Agora could not join the call (${joined}).`);
   }, [finish]);
 
+  const beginJoin = useCallback((current: ActiveCall, deviceId: string) => {
+    if (joiningCallRef.current === current.callId || engineRef.current) return;
+    const secret = secretRef.current;
+    if (!secret) {
+      setError('The secure call key is unavailable.');
+      finish('failed', true);
+      return;
+    }
+    joiningCallRef.current = current.callId;
+    setCall(value => value ? { ...value, phase: 'connecting' } : value);
+    void join(current, secret, deviceId).catch(cause => {
+      if (callRef.current?.callId !== current.callId) return;
+      setError(cause instanceof Error ? cause.message : 'Could not join the call.');
+      finish('failed', true);
+    });
+  }, [finish, join]);
+
   const handleSignal = useCallback(async (message: Signal) => {
     if (message.type === 'session-ended') {
       setError('Your session ended. Sign in again to make calls.');
       finish('session-ended');
       return;
     }
-    if (message.type === 'call-incoming' && message.callId && message.from && message.e2e) {
+    if (message.type === 'call-incoming' && message.callId && message.from) {
+      const provider = message.transport?.provider;
+      if ((provider !== 'agora' && provider !== 'webrtc') ||
+          message.transport?.version !== 1 || !message.e2e ||
+          (provider === 'agora' && message.offer !== null)) {
+        try { send({ type: 'call-reject', to: message.from, callId: message.callId }); } catch {}
+        return;
+      }
+      // A provider change replays the same durable invitation. It is not a
+      // second call and must never trigger a busy rejection.
+      if (callRef.current?.callId === message.callId) {
+        incomingProviderRef.current = provider;
+        if (provider === 'agora') settleSignal(providerWaitersRef, message.callId);
+        return;
+      }
       if (callRef.current) {
         send({ type: 'call-reject', to: message.from, callId: message.callId });
         return;
       }
       incomingE2eRef.current = message.e2e;
+      incomingProviderRef.current = provider;
       const next: ActiveCall = { callId: message.callId, peer: message.from, video: !!message.video, incoming: true, phase: 'incoming' };
       callRef.current = next;
       setCall(next);
@@ -227,13 +357,23 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     }
     const current = callRef.current;
     if (!current || message.callId && message.callId !== current.callId) return;
-    if (message.type === 'call-accepted') {
+    if (message.type === 'call-provider-changed' && message.transport?.provider === 'agora') {
+      incomingProviderRef.current = 'agora';
+      settleSignal(providerWaitersRef, current.callId);
+    } else if (message.type === 'call-ready') {
+      const wasWaiting = callReadyWaitersRef.current.has(current.callId);
+      settleSignal(callReadyWaitersRef, current.callId);
+      if (!current.incoming && !wasWaiting && deviceIdRef.current) beginJoin(current, deviceIdRef.current);
+    } else if (message.type === 'call-resumed') {
+      settleSignal(callResumeWaitersRef, current.callId);
+    } else if (message.type === 'call-accepted') {
       clearTimer();
-      setCall(value => value ? { ...value, phase: 'connecting' } : value);
-      try { await join(current, secretRef.current!); } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'Could not join the call.');
+      if (message.transport?.provider !== 'agora' || message.transport.version !== 1 || message.answer !== null) {
+        setError('The secure Agora media protocol was not accepted.');
         finish('failed', true);
+        return;
       }
+      setCall(value => value ? { ...value, phase: value.phase === 'active' ? value.phase : 'connecting' } : value);
     } else if (message.type === 'call-rejected') finish('rejected');
     else if (message.type === 'call-ended') finish(current.phase === 'active' ? 'completed' : 'ended');
     else if (message.type === 'call-busy') { setError(`${current.peer} is busy.`); finish('busy'); }
@@ -244,7 +384,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
         : `${current.peer} is unavailable.`);
       finish('unavailable');
     }
-  }, [finish, join, onIncoming, release, send]);
+  }, [beginJoin, finish, onIncoming, release, send, settleSignal]);
   const signalHandlerRef = useRef(handleSignal);
   useEffect(() => { signalHandlerRef.current = handleSignal; }, [handleSignal]);
 
@@ -260,7 +400,16 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
         connect();
       }, delay);
     };
-    const connect = () => {
+    const connect = async () => {
+      if (closedRef.current || !isOnline) return;
+      let deviceId: string;
+      try {
+        deviceId = (await ensureDeviceIdentity(user)).deviceId;
+        deviceIdRef.current = deviceId;
+      } catch {
+        scheduleReconnect(connect);
+        return;
+      }
       if (closedRef.current || !isOnline) return;
       let ws: WebSocket;
       try {
@@ -271,7 +420,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       }
       wsRef.current = ws;
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'register', userId: user.id, username: user.username }));
+        ws.send(JSON.stringify({ type: 'register', userId: user.id, username: user.username, deviceId }));
         if (pingRef.current) clearInterval(pingRef.current);
         pingRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
@@ -312,15 +461,18 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       if (pingRef.current) clearInterval(pingRef.current);
       pingRef.current = null;
       wsRef.current?.close();
+      deviceIdRef.current = null;
       release();
     };
-  }, [finish, isOnline, queryClient, release, user]);
+  }, [ensureDeviceIdentity, finish, isOnline, queryClient, release, user]);
 
   const start = useCallback(async (peer: string, video: boolean) => {
     assertNetworkOnline();
     if (!user || callRef.current) return;
     setError(null);
     await permissions(video);
+    const identity = await ensureDeviceIdentity(user);
+    deviceIdRef.current = identity.deviceId;
     const callId = `call_${randomUrl(32)}`;
     const secret = randomUrl(32);
     const e2e = await makeOffer(peer, secret);
@@ -328,9 +480,31 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     const next: ActiveCall = { callId, peer, video, incoming: false, phase: 'ringing' };
     callRef.current = next;
     setCall(next);
-    send({ type: 'call-offer', to: peer, offer: null, callId, video, e2e });
+    const callReady = waitForSignal(callReadyWaitersRef, callId);
+    send({
+      type: 'call-offer',
+      to: peer,
+      offer: null,
+      callId,
+      from: user.username,
+      video,
+      deferredMedia: false,
+      transport: AGORA_TRANSPORT,
+      e2e,
+    });
     timerRef.current = setTimeout(() => finish('no-answer', true), RING_MS);
-  }, [finish, send, user]);
+    try {
+      await callReady;
+    } catch (cause) {
+      if (callRef.current?.callId === callId) {
+        setError(cause instanceof Error ? cause.message : 'Secure call signaling timed out.');
+        finish('failed', true);
+      }
+      throw cause;
+    }
+    if (callRef.current?.callId !== callId) throw new Error('CALL_SETUP_CANCELLED');
+    beginJoin(next, identity.deviceId);
+  }, [beginJoin, ensureDeviceIdentity, finish, send, user, waitForSignal]);
 
   const answer = useCallback(async () => {
     assertNetworkOnline();
@@ -340,22 +514,49 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     setError(null);
     try {
       await permissions(current.video);
-      const deviceId = await getCurrentDeviceId(user.id);
-      if (!deviceId) throw new Error('No secure device identity is available.');
+      const identity = await ensureDeviceIdentity(user);
+      const deviceId = identity.deviceId;
+      deviceIdRef.current = deviceId;
       const envelope = incomingE2eRef.current.devices[deviceId];
       if (!envelope) throw new Error('This call was not encrypted for this device.');
       const secret = await decryptCallSecret(user.id, envelope);
       secretRef.current = secret;
-      send({ type: 'call-answer', to: current.peer, answer: null, callId: current.callId });
+      // Native uses Agora. Negotiate that capability only after the person
+      // presses Answer, without acquiring a token or joining before consent.
+      if (incomingProviderRef.current === 'webrtc') {
+        const switched = waitForSignal(providerWaitersRef, current.callId);
+        send({ type: 'call-provider-switch', callId: current.callId, provider: 'agora' });
+        await switched;
+        if (callRef.current?.callId !== current.callId) throw new Error('CALL_SETUP_CANCELLED');
+      }
+      const durableResume = waitForSignal(callResumeWaitersRef, current.callId);
+      send({
+        type: 'call-answer',
+        to: current.peer,
+        answer: null,
+        callId: current.callId,
+        deferredMedia: false,
+        transport: AGORA_TRANSPORT,
+      });
+      send({ type: 'call-resume', callId: current.callId });
+      const resumeTimer = setInterval(() => {
+        try { send({ type: 'call-resume', callId: current.callId }); } catch {}
+      }, 500);
       setCall(value => value ? { ...value, phase: 'connecting' } : value);
-      await join(current, secret);
+      try {
+        await durableResume;
+      } finally {
+        clearInterval(resumeTimer);
+      }
+      if (callRef.current?.callId !== current.callId) throw new Error('CALL_SETUP_CANCELLED');
+      await join(current, secret, deviceId);
     } catch (cause) {
       try { send({ type: 'call-reject', to: current.peer, callId: current.callId }); } catch {}
       release();
       setCall(null);
       setError(cause instanceof Error ? cause.message : 'Could not answer securely.');
     }
-  }, [join, release, send, user]);
+  }, [ensureDeviceIdentity, join, release, send, user, waitForSignal]);
   const reject = useCallback(() => {
     const current = callRef.current;
     if (!current) return;

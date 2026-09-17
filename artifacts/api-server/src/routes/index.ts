@@ -45,6 +45,7 @@ import royalVerificationRouter from "./royal-verification";
 import royalCreditRouter from "./royal-credit";
 import turnConfigRouter from "./turn-config";
 import callPushRouter from "./call-push";
+import communicationGroupsRouter from "./communication-groups";
 
 const router: IRouter = Router();
 
@@ -81,6 +82,7 @@ router.use(levelsRouter);
 router.use(rtcRouter);
 router.use(turnConfigRouter);
 router.use(callPushRouter);
+router.use(communicationGroupsRouter);
 router.use(fortressRouter);
 router.use(solidarityRouter);
 router.use(financeRouter);

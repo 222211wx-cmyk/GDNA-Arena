@@ -1,4 +1,5 @@
 import { apiPath } from "./network";
+import { registerFcm } from "@/client/lib/communication";
 
 export type FirebaseStatus = "loading" | "disabled" | "ready" | "error";
 /** Emitted only after the Arena session has actually logged out. */
@@ -10,6 +11,11 @@ export interface MissedCall {
   time: string | number;
   isSeen: boolean;
   status: string;
+}
+
+export interface IncomingGroupCallPush {
+  groupCallId: string;
+  roomId: number;
 }
 
 const MISSED_CALL_TYPES = new Set(["video", "voice"]);
@@ -27,6 +33,25 @@ function normalizeMissedTime(value: unknown): string | null {
   if (typeof value === "number") return Number.isFinite(value) ? new Date(value).toISOString() : null;
   if (typeof value === "string" && Number.isFinite(Date.parse(value))) return new Date(value).toISOString();
   return null;
+}
+
+/** Validates the opaque wake-up identifiers before any group-call UI consumes them. */
+export function parseIncomingGroupCallPush(value: unknown): IncomingGroupCallPush | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  if (data.type !== "INCOMING_GROUP_CALL" && data.event !== "INCOMING_GROUP_CALL") return null;
+  const groupCallId = typeof data.groupCallId === "string"
+    ? data.groupCallId
+    : typeof data.group_call_id === "string"
+      ? data.group_call_id
+      : "";
+  const rawRoomId = data.roomId ?? data.room_id;
+  const roomId = typeof rawRoomId === "number"
+    ? rawRoomId
+    : typeof rawRoomId === "string" && /^\d+$/.test(rawRoomId) ? Number(rawRoomId) : NaN;
+  return /^[A-Za-z0-9_-]{1,128}$/.test(groupCallId) && Number.isSafeInteger(roomId) && roomId > 0
+    ? { groupCallId, roomId }
+    : null;
 }
 
 /** Converts Firestore data to the API/UI shape; never expose a Timestamp object. */
@@ -348,10 +373,17 @@ export async function createCallFirebase(
       // leaking a new Firestore device row every time a tab mounts while still
       // allowing the server to revoke it on a real logout/session revocation.
       const installationId = pushInstallationId();
-      const registerToken = async () => json("/api/call-push/devices", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, installationId, focused: document.visibilityState === "visible" }),
-      });
+      const registerToken = async (revoke = false) => {
+        // Keep installation/focus fields in the central registration payload;
+        // the API derives the authenticated account/session binding itself.
+        const registration = {
+          token,
+          installationId,
+          focused: document.visibilityState === "visible",
+          revoke,
+        };
+        return registerFcm(registration);
+      };
       await registerToken();
       const updateFocus = () => {
         // Firebase v9 refreshes tokens through getToken rather than an
@@ -387,6 +419,14 @@ export async function createCallFirebase(
           }));
           return;
         }
+        const groupWakeUp = parseIncomingGroupCallPush(payload.data);
+        if (groupWakeUp) {
+          // This is a wake-up only. GroupCallProvider fetches the authenticated
+          // durable invitation; it never trusts FCM participant data or answers
+          // from a foreground notification.
+          window.dispatchEvent(new CustomEvent("gdna:group-call-push", { detail: groupWakeUp }));
+          return;
+        }
         const callId = payload.data?.callId || payload.data?.roomId;
         if (!callId) return;
         const fromName = payload.data?.fromName || payload.data?.callerName;
@@ -412,11 +452,7 @@ export async function createCallFirebase(
           // authenticated logout path emits PUSH_LOGOUT_EVENT and passes
           // revoke=true; the API also revokes session-bound devices server-side.
           if (shouldRevokePushRegistration(revoke)) {
-            await json("/api/call-push/devices", {
-              method: "DELETE",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ installationId }),
-            }).catch(() => {});
+            await registerToken(true).catch(() => {});
           }
         },
       };

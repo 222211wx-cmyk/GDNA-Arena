@@ -5,8 +5,10 @@ import {
   durableTerminalUpdate,
   evaluateDeferredCallDecline,
   firebaseReadiness,
+  firebaseVapidPublicKey,
   isPushSessionActive,
   newMessagePushPayload,
+  parseFcmSendRequest,
   shouldRevokeFirebaseRefreshTokens,
 } from "./firebase-call-push.js";
 
@@ -102,4 +104,47 @@ test("background fanout requires an unrevoked, unexpired registration session", 
 test("refresh-token revocation is reserved for all-session cleanup", () => {
   assert.equal(shouldRevokeFirebaseRefreshTokens(), true);
   assert.equal(shouldRevokeFirebaseRefreshTokens("old-session-id"), false);
+});
+
+test("FCM send requests contain only durable server-owned identifiers", () => {
+  assert.deepEqual(parseFcmSendRequest({ type: "call", callId: "call_42" }), {
+    kind: "call",
+    callId: "call_42",
+  });
+  assert.deepEqual(parseFcmSendRequest({
+    kind: "message",
+    roomId: 7,
+    messageId: 99,
+  }), {
+    kind: "message",
+    roomId: 7,
+    messageId: 99,
+  });
+  assert.equal(parseFcmSendRequest({
+    type: "message",
+    roomId: 7,
+    messageId: 99,
+    token: "client-token-must-never-be-accepted",
+  }), null);
+  assert.equal(parseFcmSendRequest({
+    type: "call",
+    callId: "../other-user",
+  }), null);
+});
+
+test("current VAPID alias wins while the legacy public key remains compatible", () => {
+  const oldCurrent = process.env.FIREBASE_VAPID_PUBLIC;
+  const oldLegacy = process.env.FIREBASE_VAPID_PUBLIC_KEY;
+  try {
+    process.env.FIREBASE_VAPID_PUBLIC = "current-public-vapid";
+    process.env.FIREBASE_VAPID_PUBLIC_KEY = "legacy-public-vapid";
+    assert.equal(firebaseVapidPublicKey(), "current-public-vapid");
+    delete process.env.FIREBASE_VAPID_PUBLIC;
+    assert.equal(firebaseVapidPublicKey(), "legacy-public-vapid");
+  } finally {
+    if (oldCurrent === undefined) delete process.env.FIREBASE_VAPID_PUBLIC;
+    else process.env.FIREBASE_VAPID_PUBLIC = oldCurrent;
+    if (oldLegacy === undefined) delete process.env.FIREBASE_VAPID_PUBLIC_KEY;
+    else process.env.FIREBASE_VAPID_PUBLIC_KEY = oldLegacy;
+  }
 });

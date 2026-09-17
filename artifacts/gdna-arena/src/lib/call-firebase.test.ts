@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMissedCall, resolvePushCapability } from "./call-firebase";
+import { parseIncomingGroupCallPush, parseMissedCall, resolvePushCapability } from "./call-firebase";
 
 describe("parseMissedCall", () => {
   it("normalizes an actual Firestore Timestamp-like value to an ISO time", () => {
@@ -72,5 +72,23 @@ describe("parseMissedCall", () => {
       reason: "Push credentials are disabled",
     });
     expect(resolvePushCapability(true, "vapid", false).reason).toContain("IndexedDB");
+  });
+
+  it("accepts only a numeric-room, opaque-ID group-call wake-up", () => {
+    expect(parseIncomingGroupCallPush({
+      type: "INCOMING_GROUP_CALL",
+      groupCallId: "group_call-1",
+      roomId: "42",
+    })).toEqual({ groupCallId: "group_call-1", roomId: 42 });
+    expect(parseIncomingGroupCallPush({
+      type: "INCOMING_GROUP_CALL",
+      groupCallId: "../other",
+      roomId: "42",
+    })).toBeNull();
+    expect(parseIncomingGroupCallPush({
+      type: "INCOMING_GROUP_CALL",
+      groupCallId: "group_call-1",
+      roomId: "not-a-room",
+    })).toBeNull();
   });
 });

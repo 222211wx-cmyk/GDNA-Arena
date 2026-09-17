@@ -207,6 +207,44 @@ export async function answerAuthoritativeCall(
   return accepted;
 }
 
+/** One-way, durable direct-media failover. Authentication is evaluated inside
+ * the Firestore transaction so a stale socket cannot downgrade or steal it. */
+export async function switchAuthoritativeCallProvider(
+  callId: string, userId: number, sessionId: string, deviceId: string,
+): Promise<CallRecord | null> {
+  const db = await getAuthoritativeCallFirestore();
+  let changed: CallRecord | null = null;
+  await db.runTransaction(async transaction => {
+    changed = null;
+    const snapshot = await transaction.get(ref(db, callId));
+    const record = snapshot.exists && snapshot.data() ? canonical(callId, snapshot.data()!) : null;
+    if (!record || record.endedAt || record.transport.provider !== "webrtc" ||
+        (record.status !== "ringing" && record.status !== "answered")) return;
+    const caller = record.caller.id === userId &&
+      record.callerSessionTag === callSessionBinding(sessionId) && record.callerDeviceId === deviceId;
+    const selectedCallee = record.status === "answered" && record.callee.id === userId &&
+      record.answerer?.sessionTag === callSessionBinding(sessionId) && record.answerer.deviceId === deviceId;
+    // A hybrid native client may not have WebRTC support. While the invitation
+    // is still ringing it can request, but not join, the Agora failover only
+    // from an E2EE recipient device included in the caller's durable envelope.
+    // Its session remains authenticated by the WebSocket; it receives no token
+    // until the normal answer transaction binds this session/device.
+    const ringingEnvelopeDevice = record.status === "ringing" && record.callee.id === userId &&
+      !!record.e2e?.devices && typeof record.e2e.devices === "object" &&
+      Object.hasOwn(record.e2e.devices as object, deviceId);
+    if (!caller && !selectedCallee && !ringingEnvelopeDevice) return;
+    const transport: CallTransport = { provider: "agora", version: 1 };
+    transaction.update(ref(db, callId), { transport, providerChangedAt: new Date() });
+    changed = { ...record, transport };
+  });
+  return changed;
+}
+
+export function canControlDirectCallRecording(record: CallRecord | null, userId: number, sessionId: string, deviceId: string): boolean {
+  if (!record || record.status !== "answered" || record.endedAt) return false;
+  return sessionOwns(record, userId, sessionId, deviceId, true);
+}
+
 export async function appendAuthoritativeSignal(input: {
   callId: string; userId: number; sessionId: string; deviceId: string;
   kind: CallSignal["kind"]; payload: Record<string, unknown>;

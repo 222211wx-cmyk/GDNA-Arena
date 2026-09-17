@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { issueIceServerConfig, TurnConfigurationError } from "../lib/turn-config";
+import { TurnConfigurationError } from "../lib/turn-config";
+import { getRtcIceServers, getTurnCredentials } from "../server/turn";
 
 const router: IRouter = Router();
 const iceConfigLimiter = rateLimit({
@@ -11,7 +12,7 @@ const iceConfigLimiter = rateLimit({
   keyGenerator: req => req.session.userId ? `user:${req.session.userId}` : "unauthenticated",
 });
 
-router.get("/rtc/ice-servers", iceConfigLimiter, (req, res): void => {
+router.get(["/rtc/ice-servers", "/rtc/turn-ice-servers", "/turn/creds"], iceConfigLimiter, (req, res): void => {
   if (!req.session.userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
@@ -19,7 +20,12 @@ router.get("/rtc/ice-servers", iceConfigLimiter, (req, res): void => {
 
   res.setHeader("Cache-Control", "no-store, private");
   try {
-    res.json(issueIceServerConfig(req.session.userId, req.sessionID));
+    const diagnostic = req.path === "/rtc/turn-ice-servers" || req.path === "/turn/creds";
+    const config = diagnostic
+      ? getTurnCredentials(req.session.userId, req.sessionID)
+      : getRtcIceServers(req.session.userId, req.sessionID);
+    if (diagnostic) req.log.info({ turnUrls: process.env.TURN_URLS?.split(",").map(url => url.trim()) }, "TURN relay diagnostic configuration issued");
+    res.json(config);
   } catch (error) {
     if (error instanceof TurnConfigurationError) {
       req.log.error({ error: error.message }, "WebRTC provider is opted in but TURN is not ready");

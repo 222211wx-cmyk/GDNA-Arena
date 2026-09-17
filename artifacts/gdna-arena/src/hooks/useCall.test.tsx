@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useCall } from "./useCall";
+import { fetchAgoraToken, useCall } from "./useCall";
 
 const mocks = vi.hoisted(() => ({
   connectivity: {
@@ -22,6 +22,7 @@ vi.mock("@/lib/network", () => ({
 vi.mock("@/lib/amis-e2ee", () => ({
   ensureDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "device", publicKey: "key" }),
   encryptCallSecret: vi.fn(),
+  decryptCallSecret: vi.fn(),
 }));
 vi.mock("@/lib/analytics", () => ({ trackCallDeviceOutcome: vi.fn() }));
 vi.mock("@/lib/call-rtc-config", () => ({
@@ -160,5 +161,72 @@ describe("useCall signaling reconnect", () => {
     expect(result.current.callStatus).toBe("ringing");
     expect(getUserMedia).not.toHaveBeenCalled();
     unmount();
+  });
+
+  it("does not auto-answer an Agora invitation or request media before consent", async () => {
+    const { result, unmount } = renderHook(() => useCall({ id: 7, username: "recipient" }));
+    const socket = sockets[0];
+
+    await act(async () => {
+      socket.open();
+      socket.receive({ type: "registered", userId: 7 });
+      socket.receive({
+        type: "call-incoming",
+        signalId: "agora-invitation-1",
+        callId: "call-agora-consent",
+        from: "caller",
+        video: true,
+        offer: null,
+        deferredMedia: false,
+        transport: { provider: "agora", version: 1 },
+        e2e: { devices: {} },
+      });
+    });
+
+    expect(result.current.callStatus).toBe("ringing");
+    expect(result.current.incomingCall?.transport).toEqual({ provider: "agora", version: 1 });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(sentTypes(socket)).not.toContainEqual(expect.objectContaining({ type: "call-answer" }));
+    unmount();
+  });
+
+  it("requires a complete participant token and never falls back after rejection", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: vi.fn().mockResolvedValue({ error: "Not a participant of this call" }),
+      });
+    vi.stubGlobal("fetch", request);
+
+    await expect(fetchAgoraToken("call-token-rejected", "calltab_device")).rejects.toThrow(
+      "Not a participant of this call",
+    );
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(String(request.mock.calls[0][0])).toContain("/api/agora/token?channel=call-token-rejected&deviceId=calltab_device");
+  });
+
+  it("retries explicit token readiness and returns only safe join metadata", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: vi.fn().mockResolvedValue({ error: "Secure call service is starting" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ appId: "app", token: "signed-token", uid: 7 }),
+      });
+    vi.stubGlobal("fetch", request);
+
+    const token = fetchAgoraToken("call-token-ready", "calltab_device");
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(token).resolves.toEqual({
+      appId: "app",
+      token: "signed-token",
+      uid: 7,
+    });
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });

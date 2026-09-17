@@ -187,6 +187,39 @@ test("wrong caller binding and non-winning callee device cannot signal or termin
   assert.equal((await replicaA.getAuthoritativeCall(input.callId))?.status, "answered");
 });
 
+test("only a bound caller or winning callee can durably switch WebRTC to Agora", async () => {
+  useSharedFirestore();
+  const input = callInput();
+  await replicaA.createAuthoritativeCall(input);
+  assert.equal(await replicaB.switchAuthoritativeCallProvider(
+    input.callId, 101, "stolen-session", "caller-device",
+  ), null);
+  const changed = await replicaA.switchAuthoritativeCallProvider(
+    input.callId, 101, "caller-session", "caller-device",
+  );
+  assert.deepEqual(changed?.transport, { provider: "agora", version: 1 });
+  // The persisted Agora transport is one-way; neither party can downgrade it.
+  assert.equal(await replicaB.switchAuthoritativeCallProvider(
+    input.callId, 202, "other-session", "other-device",
+  ), null);
+  assert.deepEqual((await replicaB.getAuthoritativeCall(input.callId))?.transport, { provider: "agora", version: 1 });
+});
+
+test("an invited E2EE callee device can request hybrid Agora failover before answering", async () => {
+  useSharedFirestore();
+  const input = callInput({ e2e: { devices: { native_callee_device: { wrappedSecret: "wrapped", fingerprint: "key" } } } });
+  await replicaA.createAuthoritativeCall(input);
+  assert.equal(await replicaA.switchAuthoritativeCallProvider(
+    input.callId, 202, "native-session", "unlisted-device",
+  ), null);
+  const changed = await replicaB.switchAuthoritativeCallProvider(
+    input.callId, 202, "native-session", "native_callee_device",
+  );
+  assert.deepEqual(changed?.transport, { provider: "agora", version: 1 });
+  assert.equal(changed?.status, "ringing");
+  assert.equal(changed?.answerer, undefined);
+});
+
 test("pre-answer ICE keeps callee candidates private until the winning device is selected", async () => {
   useSharedFirestore();
   const input = callInput();

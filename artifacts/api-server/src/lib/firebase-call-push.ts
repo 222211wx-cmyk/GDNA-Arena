@@ -14,6 +14,8 @@ const SWEEP_MAX_PAGES = 5;
 const INCOMING_PUSH_TTL_SECONDS = 30;
 const MISSED_PUSH_TTL_SECONDS = 86_400;
 const MESSAGE_PUSH_TTL_SECONDS = 86_400;
+const PUSH_CLAIM_STALE_MS = 60_000;
+const PUSH_CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function isValidCallId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -140,6 +142,19 @@ export class CallPushError extends Error {
 let servicesPromise: Promise<FirebaseServices> | undefined;
 
 /**
+ * FIREBASE_VAPID_PUBLIC is the current deployment name. Keep the old
+ * FIREBASE_VAPID_PUBLIC_KEY name as a compatibility fallback because VAPID is
+ * a public browser credential and rotating this alias must not invalidate
+ * already-installed clients.
+ */
+export function firebaseVapidPublicKey(): string | undefined {
+  const current = process.env.FIREBASE_VAPID_PUBLIC?.trim();
+  if (current) return current;
+  const legacy = process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim();
+  return legacy || undefined;
+}
+
+/**
  * Maps the WebSocket's terminal state to the durable invitation contract.
  * `ended` is intentionally transport-only: an answered Firestore invitation
  * keeps status=answered and records its completion with endedAt.
@@ -214,7 +229,7 @@ function pushConfigurationProblem(): string | null {
   if (adminProblem) return adminProblem;
   const clientProblem = clientConfigurationProblem();
   if (clientProblem) return clientProblem;
-  if (!process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim()) return "Firebase web push VAPID key is not configured";
+  if (!firebaseVapidPublicKey()) return "Firebase web push VAPID key is not configured";
   return null;
 }
 
@@ -290,10 +305,36 @@ export async function sendAuthoritativeIncomingCallPush(input: {
       video: input.video ? "true" : "false",
       roomId: input.callId,
       url: `/messages?callId=${encodeURIComponent(input.callId)}`,
-    }, undefined, true);
+    }, undefined, true, INCOMING_PUSH_TTL_SECONDS, {
+      dedupeKey: `incoming-call:${input.callId}:${input.calleeId}`,
+    });
   } catch {
     // FCM is a wake-up transport only. The Firestore document is authoritative.
     console.warn("[Firebase] Incoming call wake-up unavailable");
+  }
+}
+
+/** Best-effort wake-up for a server-authorized group invitation. Recipient
+ * selection (membership/mute/block) is deliberately done before this function;
+ * this provider only delivers to the supplied durable recipient. */
+export async function sendAuthoritativeGroupCallPush(input: {
+  callId: string; roomId: number; callerName: string; recipientId: number; video: boolean;
+}): Promise<void> {
+  try {
+    const services = await loadServices();
+    await sendPush(services, input.recipientId, {
+      type: "INCOMING_GROUP_CALL",
+      callId: input.callId,
+      roomId: String(input.roomId),
+      fromName: input.callerName,
+      title: `مكالمة جماعية واردة من ${input.callerName}`,
+      video: input.video ? "true" : "false",
+      url: `/messages?roomId=${input.roomId}&groupCallId=${encodeURIComponent(input.callId)}`,
+    }, undefined, true, INCOMING_PUSH_TTL_SECONDS, {
+      dedupeKey: `incoming-group-call:${input.callId}:${input.recipientId}`,
+    });
+  } catch {
+    console.warn("[FCM] group invitation wake-up unavailable", { userId: input.recipientId });
   }
 }
 
@@ -463,6 +504,69 @@ async function deviceTokens(
   return validated.flatMap(device => device ? [device] : []);
 }
 
+interface PushSendOptions {
+  /**
+   * A stable server-generated key shared by automatic fanout and an explicit
+   * retry. It is never accepted from an HTTP client.
+   */
+  dedupeKey?: string;
+  /** Explicit API sends report provider/device failures instead of swallowing them. */
+  strict?: boolean;
+}
+
+export interface PushSendResult {
+  attempted: number;
+  delivered: number;
+  skippedDuplicate: boolean;
+}
+
+function pushDeliveryRef(db: Firestore, key: string) {
+  // A Firebase/VAPID rotation is a new delivery namespace. Without this,
+  // an old project's sent marker could suppress the first notification in the
+  // replacement project for an otherwise-identical message/call.
+  const id = createHash("sha256").update(`${pushConfigurationId()}:${key}`).digest("hex");
+  return db.collection("pushDeliveries").doc(id);
+}
+
+async function claimPushDelivery(db: Firestore, key: string, strict = false): Promise<boolean> {
+  const ref = pushDeliveryRef(db, key);
+  const now = new Date();
+  try {
+    return await db.runTransaction(async transaction => {
+      const existing = await transaction.get(ref);
+      const value = existing.data();
+      if (value?.status === "sent") return false;
+      const updatedAt = dateValue(value?.updatedAt, new Date(0));
+      if (value?.status === "sending" &&
+        now.getTime() - updatedAt.getTime() < PUSH_CLAIM_STALE_MS) return false;
+      transaction.set(ref, {
+        status: "sending",
+        updatedAt: now,
+        expiresAt: new Date(now.getTime() + PUSH_CLAIM_TTL_MS),
+      });
+      return true;
+    });
+  } catch {
+    // Fail closed for a deduplicated send. A provider call without an
+    // authoritative claim could turn an HTTP retry into duplicate alerts.
+    if (strict) throw new CallPushError("Firebase push deduplication unavailable");
+    return false;
+  }
+}
+
+async function finishPushDelivery(
+  db: Firestore,
+  key: string,
+  delivered: number,
+): Promise<void> {
+  const ref = pushDeliveryRef(db, key);
+  if (delivered > 0) {
+    await ref.set({ status: "sent", delivered, updatedAt: new Date() }, { merge: true });
+  } else {
+    await ref.delete().catch(() => {});
+  }
+}
+
 async function sendPush(
   services: FirebaseServices,
   userId: number,
@@ -470,19 +574,33 @@ async function sendPush(
   notification?: { title: string; body: string },
   includeFocused = false,
   ttlSeconds = INCOMING_PUSH_TTL_SECONDS,
-): Promise<void> {
+  options: PushSendOptions = {},
+): Promise<PushSendResult> {
   // VAPID is a browser-push credential, not a Firestore credential. The
   // invitation must already be persisted before this best-effort path runs.
-  if (pushConfigurationProblem()) return;
+  const configurationError = pushConfigurationProblem();
+  if (configurationError) {
+    if (options.strict) throw new CallPushError(configurationError);
+    return { attempted: 0, delivered: 0, skippedDuplicate: false };
+  }
+  let claimed = false;
+  if (options.dedupeKey) {
+    claimed = await claimPushDelivery(services.db, options.dedupeKey, options.strict);
+    if (!claimed) return { attempted: 0, delivered: 0, skippedDuplicate: true };
+  }
   try {
     const devices = await deviceTokens(services.db, userId, includeFocused);
-    if (!devices.length) return;
+    if (!devices.length) {
+      if (claimed) await finishPushDelivery(services.db, options.dedupeKey!, 0);
+      return { attempted: 0, delivered: 0, skippedDuplicate: false };
+    }
     const response = await services.messaging.sendEachForMulticast({
       tokens: devices.map(device => device.token),
-      data,
+      data: data.url ? { ...data, click_action: data.url } : data,
       notification,
       webpush: { headers: { Urgency: "high", TTL: String(ttlSeconds) } },
     });
+    const delivered = response.responses.filter(result => result.success).length;
     await Promise.all(response.responses.map(async (result, index) => {
       const code = result.error?.code;
       if (!result.success && (code === "messaging/registration-token-not-registered" ||
@@ -491,10 +609,18 @@ async function sendPush(
       }
       if (!result.success) console.warn("[Firebase] A background notification was not delivered");
     }));
+    if (claimed) await finishPushDelivery(services.db, options.dedupeKey!, delivered);
+    if (options.strict && delivered === 0) {
+      throw new CallPushError("Firebase push delivery failed");
+    }
+    return { attempted: devices.length, delivered, skippedDuplicate: false };
   } catch {
+    if (claimed) await finishPushDelivery(services.db, options.dedupeKey!, 0);
     // Push delivery is intentionally isolated from call-state persistence. Never
     // log an FCM token or let a provider outage crash WebSocket signaling.
+    if (options.strict) throw new CallPushError("Firebase push delivery failed");
     console.warn("[Firebase] Background notification delivery failed");
+    return { attempted: 0, delivered: 0, skippedDuplicate: false };
   }
 }
 
@@ -509,11 +635,12 @@ export async function getCallPushStatus(): Promise<CallPushStatus> {
       reason: error instanceof CallPushError ? error.message : "Firebase Admin is unavailable",
     };
   }
-  const readiness = firebaseReadiness(true, true, !!process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim());
+  const vapidPublicKey = firebaseVapidPublicKey();
+  const readiness = firebaseReadiness(true, true, !!vapidPublicKey);
   return {
     ...readiness,
     firebase: asPublicConfig() ?? undefined,
-    vapidPublicKey: process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim(),
+    vapidPublicKey,
   };
 }
 
@@ -553,7 +680,7 @@ function pushConfigurationId(): string {
   const config = asPublicConfig();
   return createHash("sha256").update(JSON.stringify([
     config?.projectId, config?.appId, config?.messagingSenderId,
-    process.env.FIREBASE_VAPID_PUBLIC_KEY?.trim(),
+    firebaseVapidPublicKey(),
   ])).digest("hex");
 }
 
@@ -629,12 +756,208 @@ export async function sendNewMessagePush(
       undefined,
       false,
       MESSAGE_PUSH_TTL_SECONDS,
+      { dedupeKey: `new-message:${input.messageId}:${userId}` },
     );
   } catch {
     // A message has already committed by the time this function is called.
     // Never turn an FCM outage into a failed message or call request.
     console.warn("[Firebase] Background message notification unavailable");
   }
+}
+
+export type FcmSendRequest =
+  | { kind: "call"; callId: string }
+  | { kind: "message"; roomId: number; messageId: number };
+
+/**
+ * Parse the intentionally small explicit-send contract. Tokens, recipients,
+ * notification bodies, and FCM data are not part of this contract: the
+ * authenticated server derives all of them from durable state.
+ */
+export function parseFcmSendRequest(value: unknown): FcmSendRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  const kind = body.kind ?? body.type;
+  const allowed = new Set(["kind", "type", "callId", "roomId", "messageId"]);
+  if (Object.keys(body).some(key => !allowed.has(key))) return null;
+  if (body.kind !== undefined && body.type !== undefined && body.kind !== body.type) return null;
+  if (kind === "call" && isValidCallId(body.callId)) {
+    return { kind: "call", callId: body.callId };
+  }
+  if (kind === "message" &&
+    Number.isSafeInteger(body.roomId) && (body.roomId as number) > 0 &&
+    Number.isSafeInteger(body.messageId) && (body.messageId as number) > 0) {
+    return {
+      kind: "message",
+      roomId: body.roomId as number,
+      messageId: body.messageId as number,
+    };
+  }
+  return null;
+}
+
+function validStoredTransport(value: unknown): value is { provider: "agora" | "webrtc"; version: 1 } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const transport = value as Record<string, unknown>;
+  return transport.version === 1 &&
+    (transport.provider === "agora" || transport.provider === "webrtc");
+}
+
+async function blockedPushPair(callerId: number, calleeId: number): Promise<boolean> {
+  const blocked = await pgPool.query(
+    `SELECT 1
+       FROM citizen_blocks
+      WHERE (blocker_id = $1 AND blocked_id = $2)
+         OR (blocker_id = $2 AND blocked_id = $1)
+      LIMIT 1`,
+    [callerId, calleeId],
+  );
+  return blocked.rows.length > 0;
+}
+
+export interface FcmSendOutcome {
+  kind: FcmSendRequest["kind"];
+  attempted: number;
+  delivered: number;
+  skippedDuplicates: number;
+  recipientCount: number;
+}
+
+/**
+ * Explicit, authenticated retry for an already-persisted invitation/message.
+ * This is deliberately not a general FCM gateway. The caller may only retry
+ * their own durable call invitation; a message author may only retry their own
+ * persisted message in its recorded room. Recipient selection, mute/block
+ * policy, payload, and device/session checks all remain server-side.
+ */
+export async function sendAuthenticatedFcmPush(
+  senderId: number,
+  request: FcmSendRequest,
+): Promise<FcmSendOutcome> {
+  const services = await loadServices();
+  if (request.kind === "call") {
+    const snapshot = await callRef(services.db, request.callId).get();
+    if (!snapshot.exists) throw new CallPushError("Call invitation not found");
+    const data = snapshot.data();
+    if (!data || data.fromId !== senderId) {
+      throw new CallPushError("Only the call caller can send this push");
+    }
+    if (data.status !== "ringing") {
+      throw new CallPushError("Call invitation is no longer ringing");
+    }
+    const calleeId = data.toId;
+    const callerName = data.fromName;
+    const callType = data.type;
+    const expiresAt = dateValue(data.expiresAt, new Date(0));
+    if (!Number.isSafeInteger(calleeId) || typeof callerName !== "string" ||
+      (callType !== "video" && callType !== "voice") ||
+      expiresAt.getTime() <= Date.now()) {
+      throw new CallPushError("Call invitation is no longer valid");
+    }
+    if (await blockedPushPair(senderId, calleeId)) {
+      throw new CallPushError("Push is unavailable for this call");
+    }
+    const payload: Record<string, string> = {
+      type: "INCOMING_CALL",
+      callId: request.callId,
+      callerId: String(senderId),
+      callerName,
+      callerAvatar: typeof data.fromAvatar === "string" ? data.fromAvatar : "",
+      fromName: callerName,
+      title: `مكالمة واردة من ${callerName}`,
+      roomId: request.callId,
+      expiresAt: expiresAt.toISOString(),
+      video: callType === "video" ? "true" : "false",
+      deferredMedia: data.deferredMedia === true ? "true" : "false",
+    };
+    if (validStoredTransport(data.transport)) {
+      payload.transport = JSON.stringify(data.transport);
+    }
+    const result = await sendPush(
+      services,
+      calleeId,
+      payload,
+      undefined,
+      true,
+      INCOMING_PUSH_TTL_SECONDS,
+      { dedupeKey: `incoming-call:${request.callId}:${calleeId}`, strict: true },
+    );
+    return {
+      kind: request.kind,
+      attempted: result.attempted,
+      delivered: result.delivered,
+      skippedDuplicates: result.skippedDuplicate ? 1 : 0,
+      recipientCount: 1,
+    };
+  }
+
+  const message = await pgPool.query<{
+    id: number;
+    room_id: number;
+    user_id: number;
+    username: string;
+  }>(
+    `SELECT message.id, message.room_id, message.user_id, message.username
+       FROM dm_messages message
+       JOIN dm_room_members author_member
+         ON author_member.room_id = message.room_id
+        AND author_member.user_id = message.user_id
+      WHERE message.id = $1 AND message.room_id = $2 AND message.user_id = $3
+      LIMIT 1`,
+    [request.messageId, request.roomId, senderId],
+  );
+  const authoredMessage = message.rows[0];
+  if (!authoredMessage) {
+    throw new CallPushError("Message not found or not authorized");
+  }
+  const recipients = await pgPool.query<{ user_id: number }>(
+    `SELECT member.user_id
+       FROM dm_room_members member
+       LEFT JOIN dm_user_settings settings ON settings.user_id = member.user_id
+      WHERE member.room_id = $1
+        AND member.user_id <> $2
+        AND COALESCE(member.muted, false) = false
+        AND COALESCE(settings.notifications, true) = true
+        AND NOT EXISTS (
+          SELECT 1
+            FROM citizen_blocks blocked
+           WHERE (blocked.blocker_id = $2 AND blocked.blocked_id = member.user_id)
+              OR (blocked.blocker_id = member.user_id AND blocked.blocked_id = $2)
+        )
+      ORDER BY member.user_id`,
+    [request.roomId, senderId],
+  );
+  const results = await Promise.allSettled(recipients.rows.map(recipient =>
+    sendPush(
+      services,
+      recipient.user_id,
+      newMessagePushPayload({
+        roomId: request.roomId,
+        messageId: request.messageId,
+        fromName: authoredMessage.username,
+      }),
+      undefined,
+      false,
+      MESSAGE_PUSH_TTL_SECONDS,
+      { dedupeKey: `new-message:${request.messageId}:${recipient.user_id}`, strict: true },
+    ),
+  ));
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failures.length === results.length && failures.length > 0) {
+    const first = failures[0].reason;
+    throw first instanceof CallPushError
+      ? first
+      : new CallPushError("Firebase push delivery failed");
+  }
+  const totals = results.reduce((sum, result) => {
+    if (result.status === "rejected") return sum;
+    return {
+      attempted: sum.attempted + result.value.attempted,
+      delivered: sum.delivered + result.value.delivered,
+      skippedDuplicates: sum.skippedDuplicates + (result.value.skippedDuplicate ? 1 : 0),
+    };
+  }, { attempted: 0, delivered: 0, skippedDuplicates: 0 });
+  return { kind: request.kind, ...totals, recipientCount: recipients.rows.length };
 }
 
 async function ownedDeviceRef(
@@ -713,6 +1036,8 @@ export async function createDeferredCallInvitation(invitation: DeferredCallInvit
     },
     undefined,
     true,
+    INCOMING_PUSH_TTL_SECONDS,
+    { dedupeKey: `incoming-call:${invitation.callId}:${invitation.calleeId}` },
   );
   return { ...invitation, createdAt: record.createdAt, expiresAt: record.expiresAt };
 }
@@ -758,6 +1083,8 @@ export async function createDirectCallInvitation(invitation: DirectCallInvitatio
     },
     undefined,
     true,
+    INCOMING_PUSH_TTL_SECONDS,
+    { dedupeKey: `incoming-call:${invitation.callId}:${invitation.calleeId}` },
   );
   return { ...invitation, createdAt: record.createdAt, expiresAt: record.expiresAt };
 }
@@ -904,6 +1231,7 @@ export async function acceptDeferredCallInvitation(callId: string, calleeId: num
         undefined,
         true,
         INCOMING_PUSH_TTL_SECONDS,
+        { dedupeKey: `call-terminal:${callId}:answered` },
       );
     }
     return accepted;
@@ -1087,6 +1415,7 @@ export async function declineDeferredCallInvitation(
         undefined,
         true,
         MISSED_PUSH_TTL_SECONDS,
+        { dedupeKey: `call-terminal:${callId}:${result.status}` },
       );
     }
     return result;
@@ -1162,9 +1491,10 @@ export async function finishDeferredCallInvitation(
           callerName: invitation.caller.name,
           body: "لديك مكالمة فائتة",
         },
-        undefined,
-        true,
-        MISSED_PUSH_TTL_SECONDS,
+          undefined,
+          true,
+          MISSED_PUSH_TTL_SECONDS,
+          { dedupeKey: `call-terminal:${invitation.callId}:${status}` },
       );
     } else if (status === "ended") {
       await sendPush(
@@ -1180,9 +1510,10 @@ export async function finishDeferredCallInvitation(
           callerName: invitation.caller.name,
           body: "انتهت المكالمة",
         },
-        undefined,
-        true,
-        INCOMING_PUSH_TTL_SECONDS,
+          undefined,
+          true,
+          INCOMING_PUSH_TTL_SECONDS,
+          { dedupeKey: `call-terminal:${invitation.callId}:ended` },
       );
     }
     return true;

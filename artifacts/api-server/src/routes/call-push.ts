@@ -10,13 +10,22 @@ import {
   registerCallPushDevice,
   removeCallPushDevice,
   setCallPushFocus,
+  parseFcmSendRequest,
 } from "../lib/firebase-call-push";
 import { declineCallForUser } from "../lib/signaling";
+import { registerFcmDevice, sendDerivedFcm } from "../server/fcm";
 
 const router: IRouter = Router();
 const callPushLimiter = rateLimit({
   windowMs: 60_000,
   limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: req => req.session.userId ? `user:${req.session.userId}` : "unauthenticated",
+});
+const fcmSendLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: req => req.session.userId ? `user:${req.session.userId}` : "unauthenticated",
@@ -29,6 +38,10 @@ function authenticatedUserId(req: Request): number | null {
 function errorStatus(error: unknown): number {
   if (!(error instanceof CallPushError)) return 500;
   if (error.message.includes("does not belong")) return 403;
+  if (error.message.includes("Only the call caller") ||
+    error.message.includes("not authorized") ||
+    error.message.includes("unavailable for this call")) return 403;
+  if (error.message.includes("not found")) return 404;
   return error.message.startsWith("Invalid ") ? 400 : 503;
 }
 
@@ -127,7 +140,7 @@ router.post("/call-push/devices", callPushLimiter, async (req, res): Promise<voi
     return;
   }
   try {
-    await registerCallPushDevice(userId, req.sessionID, req.body ?? {});
+    await registerFcmDevice(userId, req.sessionID, req.body ?? {});
     res.json({ ok: true });
   } catch (error) {
     res.status(errorStatus(error)).json({ error: errorMessage(error) });
@@ -142,6 +155,19 @@ router.delete("/call-push/devices", callPushLimiter, async (req, res): Promise<v
   }
   try {
     await removeCallPushDevice(userId, req.sessionID, req.body?.installationId);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: errorMessage(error) });
+  }
+});
+
+// Public compatibility alias. It intentionally shares the exact validator and
+// HTTP-session binding used by the original secure registration endpoint.
+router.post("/fcm/register", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  try {
+    await registerFcmDevice(userId, req.sessionID, req.body ?? {});
     res.json({ ok: true });
   } catch (error) {
     res.status(errorStatus(error)).json({ error: errorMessage(error) });
@@ -185,6 +211,35 @@ router.post("/call-push/missed/seen", callPushLimiter, async (req, res): Promise
   try {
     await markMissedCallsSeen(userId, req.body?.ids);
     res.json({ ok: true });
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: errorMessage(error) });
+  }
+});
+
+/**
+ * Retry an FCM wake-up for an existing server-owned call/message. This is not
+ * an FCM proxy: the body contains only a durable call ID or message/room ID;
+ * the authenticated server resolves the recipient, payload, mute/block policy,
+ * and session-bound device tokens.
+ */
+router.post("/fcm/send", fcmSendLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  if (!requestOriginAllowed(req)) {
+    res.status(403).json({ error: "Request origin is not allowed" });
+    return;
+  }
+  const request = parseFcmSendRequest(req.body);
+  if (!request) {
+    res.status(400).json({ error: "Invalid FCM send request" });
+    return;
+  }
+  try {
+    res.setHeader("Cache-Control", "no-store, private");
+    res.json({ ok: true, ...(await sendDerivedFcm(userId, request)) });
   } catch (error) {
     res.status(errorStatus(error)).json({ error: errorMessage(error) });
   }

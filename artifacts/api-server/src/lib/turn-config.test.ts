@@ -5,6 +5,20 @@ import { issueIceServerConfig, TurnConfigurationError } from "./turn-config";
 
 const originalEnv = { ...process.env };
 
+test("independent TURN diagnostics issue relay credentials while Agora is selected", () => {
+  try {
+    process.env.CALL_MEDIA_PROVIDER = "agora";
+    process.env.TURN_URLS = "turn:relay.example.test:3478?transport=udp";
+    process.env.TURN_SHARED_SECRET = "test-only-shared-secret-with-32-characters";
+    const result = issueIceServerConfig(7, "session-a", 1000, "webrtc");
+    assert.equal(result.provider, "webrtc");
+    assert.equal(result.turnConfigured, true);
+    assert.equal(result.iceServers.some(server => !!server.credential), true);
+  } finally {
+    process.env = { ...originalEnv };
+  }
+});
+
 test("ICE config preserves Agora and returns STUN only by default", () => {
   try {
     delete process.env.CALL_MEDIA_PROVIDER;

@@ -5,10 +5,11 @@ import { pool } from "@workspace/db";
 import { requireReadyCallMediaProvider } from "./turn-config";
 import {
   appendAuthoritativeSignal, answerAuthoritativeCall, createAuthoritativeCall,
-  expireAuthoritativeCall, getAuthoritativeCall, isDurableCallParticipant, terminateAuthoritativeCall,
+  canControlDirectCallRecording, expireAuthoritativeCall, getAuthoritativeCall, isDurableCallParticipant, switchAuthoritativeCallProvider, terminateAuthoritativeCall,
   type CallRecord, type CallTransport, type StoredDescription,
 } from "./call-signal-store";
 import { CallPushError, callSessionBinding, declineDeferredCallInvitation, getAuthoritativeCallFirestore, type DeferredCallDeclineResult } from "./firebase-call-push";
+import { canIssueGroupAgoraToken, getGroupCall } from "./group-call-store";
 
 interface RTCIceCandidateInit { candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null; }
 interface E2eCallEnvelope { devices: Record<string, { wrappedSecret: string; fingerprint: string }>; }
@@ -23,6 +24,8 @@ type SignalMsg =
   | { type: "call-resume"; callId: string }
   | { type: "call-cancel"; callId: string } | { type: "call-reject"; to: string; callId: string }
   | { type: "call-end"; to: string; callId: string }
+  | { type: "call-provider-switch"; callId: string; provider: "agora" }
+  | { type: "call-recording-control"; callId: string; requestId: string; action: "request" | "accept" | "reject" | "stop" | "revoke" }
   | { type: "call-webrtc-offer"; callId: string; offer: StoredDescription; transport?: CallTransport }
   | { type: "call-webrtc-answer"; callId: string; answer: StoredDescription; transport?: CallTransport }
   | { type: "call-renegotiate-offer"; callId: string; offer: StoredDescription; transport?: CallTransport }
@@ -66,6 +69,11 @@ function transportMatches(value: CallTransport | undefined, provider: "agora" | 
 function validDeviceId(value: unknown, sessionId: string) {
   return typeof value === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(value)
     ? value : `session_${callSessionBinding(sessionId).slice(0, 32)}`;
+}
+function validRecordingControl(msg: SignalMsg): msg is Extract<SignalMsg, { type: "call-recording-control" }> {
+  return msg.type === "call-recording-control" && /^[A-Za-z0-9_-]{1,128}$/.test(msg.callId) &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId) &&
+    (msg.action === "request" || msg.action === "accept" || msg.action === "reject" || msg.action === "stop" || msg.action === "revoke");
 }
 async function sessionIsActive(sessionId: string, userId: number) {
   const result = await pool?.query(`SELECT 1 FROM user_sessions WHERE sid=$1 AND (sess->>'userId')::int=$2 AND expire > NOW() LIMIT 1`, [sessionId, userId]);
@@ -276,10 +284,13 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       if (msg.type === "call-offer") {
         try {
           const provider = requireReadyCallMediaProvider();
+          const offeredProvider = msg.transport?.provider ?? (provider === "hybrid" ? "webrtc" : provider);
+          const permitted = provider === "hybrid"
+            ? offeredProvider === "webrtc" || offeredProvider === "agora"
+            : offeredProvider === provider;
           const valid = (msg.deferredMedia === true ? transportMatches(msg.transport, "webrtc") && msg.offer === null :
-            transportMatches(msg.transport, provider) || (provider === "agora" && msg.transport === undefined)) &&
-            (provider === "agora" ? msg.offer === null : msg.deferredMedia === true || validDescription(msg.offer, "offer"));
-          if (!valid || (msg.deferredMedia === true && provider !== "webrtc")) throw new Error("MEDIA_PROTOCOL_MISMATCH");
+            permitted && (offeredProvider === "agora" ? msg.offer === null : validDescription(msg.offer, "offer")));
+          if (!valid || (msg.deferredMedia === true && provider !== "webrtc" && provider !== "hybrid")) throw new Error("MEDIA_PROTOCOL_MISMATCH");
           const target = await pool?.query<{ id: number; username: string }>(`SELECT id, username FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1`, [msg.to]);
           const callee = target?.rows[0];
           if (!callee || callee.id === self.userId) { send(ws, { type: "call-unavailable", callId: msg.callId, to: msg.to }); return; }
@@ -288,7 +299,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           const record = await createAuthoritativeCall({
             callId: msg.callId, caller: { id: self.userId, name: self.username, avatar: await callerAvatar(self.userId) },
             callee: { id: callee.id, name: callee.username.toLowerCase(), avatar: null }, type: msg.video ? "video" : "voice",
-            deferredMedia: msg.deferredMedia === true, transport: msg.deferredMedia ? { provider: "webrtc", version: 1 } : (msg.transport ?? { provider, version: 1 }),
+            deferredMedia: msg.deferredMedia === true, transport: msg.deferredMedia ? { provider: "webrtc", version: 1 } : (msg.transport ?? { provider: offeredProvider, version: 1 }),
             initialOffer: msg.offer, latestOffer: msg.offer, e2e: msg.e2e as Record<string, unknown> | undefined, callerDeviceId: self.deviceId, callerSessionId: self.sessionId,
           });
           // Persistence is complete before call-ready. Remote replicas receive
@@ -316,6 +327,48 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           if (!caller && !calleeRinging && !selected) { send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SESSION_DENIED" }); return; }
           deliverCallSnapshot(self, record);
         } catch { send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SIGNALING_UNAVAILABLE" }); }
+        return;
+      }
+      if (msg.type === "call-provider-switch") {
+        try {
+          // Failover is offered only by an explicitly hybrid deployment and is
+          // one-way; an Agora call can never be downgraded by a client.
+          if (requireReadyCallMediaProvider() !== "hybrid" || msg.provider !== "agora") return;
+          const changed = await switchAuthoritativeCallProvider(msg.callId, self.userId, self.sessionId, self.deviceId);
+          if (!changed) return;
+          const event = { type: "call-provider-changed", callId: changed.callId, transport: changed.transport };
+          broadcastToUser(changed.caller.id, event);
+          broadcastToUser(changed.callee.id, event);
+        } catch {
+          send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SIGNALING_UNAVAILABLE" });
+        }
+        return;
+      }
+      if (msg.type === "call-recording-control") {
+        if (!validRecordingControl(msg)) return;
+        try {
+          const direct = await getAuthoritativeCall(msg.callId);
+          const group = direct ? null : await getGroupCall(msg.callId);
+          let recipientIds: number[] | null = null;
+          if (direct && canControlDirectCallRecording(direct, self.userId, self.sessionId, self.deviceId)) {
+            recipientIds = [direct.caller.id, direct.callee.id];
+          } else if (group && canIssueGroupAgoraToken(group, self.userId, self.sessionId, self.deviceId)) {
+            recipientIds = group.participants.filter(participant => participant.status === "accepted").map(participant => participant.userId);
+          }
+          if (!recipientIds) return;
+          // Controls are a consent transcript, never media. Persist before relay
+          // so reconnecting clients can retrieve the authoritative call record.
+          const db = await getAuthoritativeCallFirestore();
+          const collection = direct ? db.collection("callInvites").doc(msg.callId) : db.collection("groupCallInvites").doc(msg.callId);
+          await collection.collection("recordingControls").doc(msg.requestId).set({
+            type: "call-recording-control", callId: msg.callId, requestId: msg.requestId,
+            action: msg.action, fromUserId: self.userId, createdAt: new Date(),
+          }, { merge: false });
+          const event = { type: "call-recording-control", callId: msg.callId, requestId: msg.requestId, action: msg.action, serverFromUserId: self.userId };
+          for (const recipientId of new Set(recipientIds)) if (recipientId !== self.userId) broadcastToUser(recipientId, event);
+        } catch {
+          send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SIGNALING_UNAVAILABLE" });
+        }
         return;
       }
       if (msg.type === "call-answer") {

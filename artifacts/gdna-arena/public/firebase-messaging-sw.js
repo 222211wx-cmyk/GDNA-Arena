@@ -67,6 +67,7 @@ const messaging = initializeMessaging(readFirebaseConfig());
 
 const CALL_TTL_MS = 30_000;
 const INCOMING_CALL_TAG = "gdna-incoming-call";
+const INCOMING_GROUP_CALL_TAG = "gdna-incoming-group-call";
 const MISSED_CALL_TAG = "gdna-missed-call";
 const NEW_MESSAGE_TAG = "gdna-new-message";
 const ICON_FILE = "icon.png";
@@ -124,6 +125,10 @@ function isNewMessage(data) {
   return callType(data.type || data.event) === "NEW_MESSAGE";
 }
 
+function isIncomingGroupCall(data) {
+  return callType(data.type || data.event) === "INCOMING_GROUP_CALL";
+}
+
 function isMissedCall(data) {
   const type = callType(data.type || data.event);
   return type === "MISSED_CALL" || type === "MISSED" || type === "CALL_MISSED" ||
@@ -150,6 +155,10 @@ function assetUrl(file) {
 
 function tagForCall(callId) {
   return INCOMING_CALL_TAG + "-" + callId;
+}
+
+function tagForGroupCall(callId) {
+  return INCOMING_GROUP_CALL_TAG + "-" + callId;
 }
 
 function missedTagForCall(callId) {
@@ -183,6 +192,16 @@ function notificationCallData(data, callId, kind, expiresAt) {
     type: text(data.type || data.event),
     kind,
     expiresAt: expiresAt || undefined,
+  };
+}
+
+function notificationGroupCallData(data, groupCallId, roomId) {
+  return {
+    groupCallId,
+    roomId,
+    fromName: text(data.fromName || data.callerName || data.caller),
+    type: "INCOMING_GROUP_CALL",
+    kind: "incoming-group",
   };
 }
 
@@ -273,6 +292,28 @@ function incomingOptions(data, callId, expiresAt) {
   };
 }
 
+function incomingGroupOptions(data, groupCallId, roomId) {
+  const fromName = text(data.fromName || data.callerName || data.caller);
+  const title = text(data.title || data.notificationTitle) ||
+    (fromName ? "دعوة مكالمة جماعية من " + fromName : "دعوة مكالمة جماعية");
+  const body = text(data.body || data.notificationBody) ||
+    "يمكنك الانضمام إلى مكالمة المجموعة بعد تأكيدك.";
+  return {
+    body,
+    icon: assetUrl(ICON_FILE),
+    tag: tagForGroupCall(groupCallId),
+    requireInteraction: true,
+    vibrate: [200, 100, 200, 100, 200],
+    // These actions are explicit navigation intents only. The authenticated
+    // application verifies current membership and performs Answer/Reject.
+    actions: [
+      { action: "answer", title: "الرد" },
+      { action: "reject", title: "رفض" },
+    ],
+    data: notificationGroupCallData(data, groupCallId, roomId),
+  };
+}
+
 function missedOptions(data, callId) {
   const fromName = text(data.fromName || data.callerName || data.caller);
   const title = text(data.title) || (fromName ? "مكالمة فائتة من " + fromName : "مكالمة فائتة");
@@ -309,6 +350,17 @@ function handleBackgroundMessage(payload) {
     return self.registration.showNotification(
       text(data.title) || "رسالة جديدة",
       messageOptions(data),
+    );
+  }
+  if (isIncomingGroupCall(data)) {
+    const groupCallId = text(data.groupCallId || data.group_call_id || data.callId);
+    const roomId = readRoomId(data);
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(groupCallId) || !roomId) {
+      return showGenericNotification(data, payload);
+    }
+    return self.registration.showNotification(
+      text(data.title) || "دعوة مكالمة جماعية",
+      incomingGroupOptions(data, groupCallId, roomId),
     );
   }
   const callId = readCallId(data);
@@ -401,6 +453,12 @@ function appRoute(callId, action) {
   return appUrl("messages", params);
 }
 
+function groupCallRoute(groupCallId, roomId, action) {
+  const params = { roomId, groupCallId };
+  if (action) params.groupCallAction = action;
+  return appUrl("messages", params);
+}
+
 function missedCallsUrl() {
   return appUrl("missed-calls");
 }
@@ -452,6 +510,19 @@ function handleNotificationClick(event) {
   if (data.kind === "message" || isNewMessage(data)) {
     if (typeof notification.close === "function") notification.close();
     return focusOrOpen(messageUrl(data));
+  }
+  if (data.kind === "incoming-group" || isIncomingGroupCall(data)) {
+    const groupCallId = text(data.groupCallId || data.group_call_id || data.callId);
+    const roomId = readRoomId(data);
+    const action = text(event.action).toLowerCase();
+    const explicitAction = action === "answer" || action === "reject" ? action : "";
+    if (typeof notification.close === "function") notification.close();
+    // A body click has no action and is deliberately passive. It opens the
+    // targeted room/invitation but cannot ask for media or auto-answer.
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(groupCallId) || !roomId) {
+      return focusOrOpen(appUrl("messages"));
+    }
+    return focusOrOpen(groupCallRoute(groupCallId, roomId, explicitAction));
   }
   const callId = readCallId(data);
   const action = text(event.action).toLowerCase();

@@ -195,6 +195,58 @@ describe("requested Firebase background worker", () => {
     ]);
   });
 
+  it("renders a targeted incoming group call with explicit actions", async () => {
+    const worker = workerHarness();
+    worker.background({
+      data: {
+        type: "INCOMING_GROUP_CALL",
+        groupCallId: "group_call-7",
+        roomId: "42",
+        fromName: "ليلى",
+      },
+    });
+    await flushWorkerPromises();
+    const [, options] = worker.showNotification.mock.calls[0];
+    expect(options).toMatchObject({
+      tag: "gdna-incoming-group-call-group_call-7",
+      requireInteraction: true,
+      data: {
+        kind: "incoming-group",
+        groupCallId: "group_call-7",
+        roomId: "42",
+      },
+    });
+    expect(options.actions).toEqual([
+      { action: "answer", title: "الرد" },
+      { action: "reject", title: "رفض" },
+    ]);
+  });
+
+  it("routes group actions separately and keeps a group body click passive", async () => {
+    const worker = workerHarness();
+    const data = { kind: "incoming-group", groupCallId: "group_call-8", roomId: "42", type: "INCOMING_GROUP_CALL" };
+    let waited: Promise<unknown> | undefined;
+    worker.notificationClick({
+      action: "answer",
+      notification: { data, close: vi.fn() },
+      waitUntil: promise => { waited = promise; },
+    });
+    await waited;
+    expect(worker.openWindow).toHaveBeenCalledWith(
+      "https://example.test/messages?roomId=42&groupCallId=group_call-8&groupCallAction=answer",
+    );
+
+    const passive = workerHarness();
+    passive.notificationClick({
+      notification: { data, close: vi.fn() },
+      waitUntil: promise => { waited = promise; },
+    });
+    await waited;
+    expect(passive.openWindow).toHaveBeenCalledWith(
+      "https://example.test/messages?roomId=42&groupCallId=group_call-8",
+    );
+  });
+
   it("body-clicks an incoming call passively without auto-answering", async () => {
     const worker = workerHarness();
     worker.background({

@@ -7,28 +7,9 @@
 
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
-import { RtcTokenBuilder, RtcRole } from "agora-token";
-import { isCallParticipant } from "../lib/signaling";
-import { getAgoraConfigStatus, readAgoraServerConfig } from "../lib/agora-config";
+import { authorizeAgoraJoin, getAgoraConfigStatus, issueAgoraCredentials } from "../server/agora";
 
 const router: IRouter = Router();
-
-const TOKEN_TTL_SEC = 60 * 60; // 1h — longer than any realistic call setup + duration
-
-function issueAgoraCredentials(channel: string, userId: number) {
-  const config = readAgoraServerConfig();
-
-  const token = RtcTokenBuilder.buildTokenWithUid(
-    config.appId,
-    config.certificate,
-    channel,
-    userId,
-    RtcRole.PUBLISHER,
-    TOKEN_TTL_SEC,
-    TOKEN_TTL_SEC,
-  );
-  return { appId: config.appId, token, uid: userId };
-}
 
 // The preflight joins an isolated Agora channel and measures Agora's own
 // last-mile quality signal. It intentionally does not make any direct/relay
@@ -51,7 +32,7 @@ router.get("/rtc/preflight-token", (req, res): void => {
   }
 });
 
-router.get("/rtc/agora-token", async (req, res): Promise<void> => {
+router.get(["/rtc/agora-token", "/agora/token"], async (req, res): Promise<void> => {
   if (!req.session.userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
@@ -65,10 +46,21 @@ router.get("/rtc/agora-token", async (req, res): Promise<void> => {
 
   res.setHeader("Cache-Control", "no-store");
 
-  // Participant authorization: tokens are only issued to one of the two
-  // recorded participants of an active call — never for arbitrary channels.
-  if (!await isCallParticipant(channel, req.session.userId)) {
-    res.status(403).json({ error: "Not a participant of this call" });
+  const deviceId = typeof req.query.deviceId === "string" ? req.query.deviceId : "";
+  if (!deviceId || deviceId.length > 128) {
+    res.status(400).json({ error: "Valid signaling deviceId required" });
+    return;
+  }
+
+  // Binding tokens to the winning session/device prevents another logged-in
+  // device from joining a call before Answer or after it answered elsewhere.
+  try {
+    if (!await authorizeAgoraJoin(channel, req.session.userId, req.sessionID, deviceId)) {
+      res.status(403).json({ error: "This session/device is not authorized to join the call" });
+      return;
+    }
+  } catch {
+    res.status(503).json({ error: "Authoritative Firebase call signaling is unavailable", code: "CALL_SIGNALING_UNAVAILABLE" });
     return;
   }
 

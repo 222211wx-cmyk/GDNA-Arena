@@ -15,6 +15,12 @@ export interface BrowserIceServer {
 export type IceServerResponse =
   | { provider: "agora"; turnConfigured: false; iceServers: BrowserIceServer[] }
   | {
+      provider: "hybrid";
+      turnConfigured: boolean;
+      credentialExpiresAt?: number;
+      iceServers: BrowserIceServer[];
+    }
+  | {
       provider: "webrtc";
       turnConfigured: true;
       credentialExpiresAt: number;
@@ -23,21 +29,28 @@ export type IceServerResponse =
 
 export class TurnConfigurationError extends Error {}
 
-export function getConfiguredCallMediaProvider(): "agora" | "webrtc" {
-  return process.env.CALL_MEDIA_PROVIDER?.trim().toLowerCase() === "webrtc"
-    ? "webrtc"
-    : "agora";
+export function getConfiguredCallMediaProvider(): "agora" | "webrtc" | "hybrid" {
+  const provider = process.env.CALL_MEDIA_PROVIDER?.trim().toLowerCase();
+  return provider === "webrtc" || provider === "hybrid" ? provider : "agora";
 }
 
-export function requireReadyCallMediaProvider(): "agora" | "webrtc" {
+export function requireReadyCallMediaProvider(): "agora" | "webrtc" | "hybrid" {
   const provider = getConfiguredCallMediaProvider();
-  if (provider === "agora") return provider;
+  // Hybrid calls deliberately start with direct WebRTC, but may safely switch
+  // to authenticated Agora when relay credentials are absent or ICE stalls.
+  if (provider === "agora" || provider === "hybrid") return provider;
   const turnUrls = splitUrls(process.env.TURN_URLS);
   const sharedSecret = process.env.TURN_SHARED_SECRET?.trim() ?? "";
   if (turnUrls.length === 0 || !turnUrls.every(validTurnUrl) || sharedSecret.length < 32) {
     throw new TurnConfigurationError("WebRTC media provider is not ready");
   }
   return provider;
+}
+
+export function isTurnConfigured(): boolean {
+  const turnUrls = splitUrls(process.env.TURN_URLS);
+  const sharedSecret = process.env.TURN_SHARED_SECRET?.trim() ?? "";
+  return turnUrls.length > 0 && turnUrls.every(validTurnUrl) && sharedSecret.length >= 32;
 }
 
 function splitUrls(value: string | undefined): string[] {
@@ -63,19 +76,24 @@ export function issueIceServerConfig(
   userId: number,
   sessionId: string,
   nowSeconds = Math.floor(Date.now() / 1000),
+  diagnosticProvider?: "webrtc",
 ): IceServerResponse {
-  const provider = requireReadyCallMediaProvider();
+  const provider = diagnosticProvider ?? requireReadyCallMediaProvider();
   const configuredStun = splitUrls(process.env.CALL_STUN_URLS);
   const stunUrls = configuredStun.length && configuredStun.every(validStunUrl)
     ? configuredStun
     : DEFAULT_STUN_URLS;
 
-  if (provider !== "webrtc") {
+  if (provider === "agora") {
     return {
       provider: "agora",
       turnConfigured: false,
       iceServers: stunUrls.map(urls => ({ urls })),
     };
+  }
+
+  if (provider === "hybrid" && !isTurnConfigured()) {
+    return { provider: "hybrid", turnConfigured: false, iceServers: stunUrls.map(urls => ({ urls })) };
   }
 
   const turnUrls = splitUrls(process.env.TURN_URLS);
@@ -98,13 +116,12 @@ export function issueIceServerConfig(
   const username = `${credentialExpiresAt}:${userId}:${sessionTag}`;
   const credential = createHmac("sha1", sharedSecret).update(username).digest("base64");
 
-  return {
-    provider: "webrtc",
-    turnConfigured: true,
-    credentialExpiresAt,
-    iceServers: [
-      ...stunUrls.map(urls => ({ urls })),
-      { urls: turnUrls, username, credential },
-    ],
-  };
+  const iceServers = [
+    ...stunUrls.map(urls => ({ urls })),
+    { urls: turnUrls, username, credential },
+  ];
+  if (provider === "hybrid") {
+    return { provider: "hybrid", turnConfigured: true, credentialExpiresAt, iceServers };
+  }
+  return { provider: "webrtc", turnConfigured: true, credentialExpiresAt, iceServers };
 }

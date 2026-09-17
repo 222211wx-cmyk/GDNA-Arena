@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
 import { LegalProvider } from "@/contexts/LegalContext";
 import { CallProvider } from "@/contexts/CallContext";
+import { GroupCallProvider } from "@/contexts/GroupCallContext";
 import { ConnectivityProvider } from "@/contexts/ConnectivityContext";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import CookieBanner from "@/components/legal/CookieBanner";
@@ -182,10 +183,12 @@ function App() {
             <LegalProvider>
               <AuthProvider>
                 <CallProvider>
-                  <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                    <Router />
-                  </WouterRouter>
-                  <Toaster />
+                  <GroupCallProvider>
+                    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                      <Router />
+                    </WouterRouter>
+                    <Toaster />
+                  </GroupCallProvider>
                 </CallProvider>
               </AuthProvider>
             </LegalProvider>

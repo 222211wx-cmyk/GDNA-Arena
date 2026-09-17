@@ -1,11 +1,10 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  useCall — authenticated WebSocket signaling + direct WebRTC/TURN media.
-//  New callers publish an SDP offer immediately; durable deferred invitations
-//  remain supported for older push-delivered calls.
+//  useCall — authenticated WebSocket signaling + Agora/WebRTC media.
+//  Agora invitations publish a null offer and open media only after durable
+//  signaling gates; the relay-only WebRTC branch remains for compatibility.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import AgoraRTC from "agora-rtc-sdk-ng";
 import type {
   IAgoraRTCClient,
   IMicrophoneAudioTrack,
@@ -16,7 +15,16 @@ import type {
   IRemoteVideoTrack,
 } from "agora-rtc-sdk-ng";
 import {
+  AgoraRTC,
+  createAgoraClient,
+  fetchAgoraToken,
+  publishPeerConnection,
+} from "@/client/lib/communication";
+import { peerTransfer } from "@/client/lib/peer-transfer";
+export { fetchAgoraToken } from "@/client/lib/communication";
+import {
   encryptCallSecret,
+  decryptCallSecret,
   ensureDeviceIdentity,
   type E2ERecipientKey,
 } from "@/lib/amis-e2ee";
@@ -30,11 +38,14 @@ import {
 } from "@/lib/call-network";
 import {
   fetchCallRtcConfig,
+  canUseHybridWebRtc,
+  shouldRequestHybridFallback,
   preferOpus,
   type CallMediaProvider,
   type CallRtcConfig,
 } from "@/lib/call-rtc-config";
 import { CallRingtone } from "@/lib/call-ringtone";
+import { testAgoraPreflight, testTurnRelay } from "@/lib/call-preflight";
 import { useCallPush } from "@/hooks/use-call-push";
 import {
   WEBRTC_TRANSPORT,
@@ -55,13 +66,6 @@ import {
   rememberDurableCallSignal,
   rememberRemoteIceCandidate,
 } from "@/lib/call-signal-dedupe";
-
-// Kept only for an unreachable legacy SDK helper below. Call setup never
-// invokes this function; authenticated calls fetch TURN through
-// fetchCallRtcConfig and use direct WebRTC.
-async function fetchAgoraToken(_channel: string): Promise<{ appId: string; token: string; uid: number }> {
-  throw new Error("Native call transport is unavailable; use WebRTC/TURN");
-}
 
 export type CallStatus = "idle" | "calling" | "ringing" | "active" | "ended";
 export type CallPhase = "idle" | "ringing" | "accepted" | "connecting" | "connected" | "ended";
@@ -168,7 +172,8 @@ export function useCall(user: { id: number; username: string } | null) {
   const wsRef   = useRef<WebSocket | null>(null);
   const pcRef   = useRef<RTCPeerConnection | null>(null); // live stories only
   const callPcRef = useRef<RTCPeerConnection | null>(null);
-  const callProviderRef = useRef<CallMediaProvider>("webrtc");
+  // Hybrid is configuration only; an active call is always one concrete media transport.
+  const callProviderRef = useRef<Exclude<CallMediaProvider, "hybrid">>("webrtc");
   const callRtcConfigRef = useRef<CallRtcConfig | null>(null);
   const remoteCallStreamRef = useRef<MediaStream | null>(null);
   const webRtcScreenTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -205,9 +210,15 @@ export function useCall(user: { id: number; username: string } | null) {
   const seenNotificationResumeRef = useRef<string | null>(null);
   const registeredSocketRef = useRef(false);
   const pendingCallResumesRef = useRef(new Map<string, { userId: number; until: number }>());
+  const hybridFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hybridSwitchRequestedRef = useRef(false);
+  const callSecretRef = useRef<string | null>(null);
+  const agoraStandbyTokenRef = useRef<{ callId: string; appId: string; token: string; uid: number } | null>(null);
+  const groupCallActiveRef = useRef(false);
+  const recordingRequestIdsRef = useRef(new Map<string, string>());
 
-  // Legacy SDK refs are kept isolated from the call state machine. Calls
-  // themselves always select the WebRTC/TURN provider below.
+  // Agora and WebRTC refs are kept isolated so the UI can continue consuming
+  // ordinary MediaStreams regardless of the selected call provider.
   const agoraRef = useRef<IAgoraRTCClient | null>(null);
   const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null);
   const localVideoRef = useRef<ICameraVideoTrack | null>(null);
@@ -223,6 +234,7 @@ export function useCall(user: { id: number; username: string } | null) {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [activePeer,   setActivePeer]   = useState<string | null>(null);
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
+  const [recordingParticipantIds, setRecordingParticipantIds] = useState<number[]>([]);
   // Mirror of the call the user is currently in or being offered — WS handlers
   // use this ref to IGNORE call events whose callId does not belong to us.
   const currentCallIdRef = useRef<string | null>(null);
@@ -235,6 +247,11 @@ export function useCall(user: { id: number; username: string } | null) {
   const appliedRenegotiationOfferRef = useRef(new Map<string, string>());
   const appliedRenegotiationAnswerRef = useRef(new Map<string, string>());
   const callSetupWaitersRef = useRef(new Map<string, {
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  }>());
+  const durableAnswerWaitersRef = useRef(new Map<string, {
     resolve: () => void;
     reject: (error: Error) => void;
     timeout: ReturnType<typeof setTimeout>;
@@ -356,6 +373,71 @@ export function useCall(user: { id: number; username: string } | null) {
       wsRef.current.send(JSON.stringify(data));
     }
   }, []);
+
+  // Group calls own their own UI/controller. A direct dial must not race a
+  // group session and steal the user's microphone.
+  useEffect(() => {
+    const onGroupCallActive = (event: Event) => {
+      groupCallActiveRef.current = (event as CustomEvent<boolean>).detail === true;
+    };
+    window.addEventListener("gdna:group-call-active", onGroupCallActive);
+    return () => window.removeEventListener("gdna:group-call-active", onGroupCallActive);
+  }, []);
+
+  useEffect(() => {
+    const onRecordingControlSend = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        callId?: unknown; requestId?: unknown; action?: unknown; type?: unknown;
+      }>).detail;
+      if (!detail || typeof detail.callId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(detail.callId)) return;
+      const action = typeof detail.action === "string"
+        ? detail.action
+        : ({ request: "request", accepted: "accept", rejected: "reject", stopped: "stop", revoked: "revoke" } as const)[
+          String(detail.type) as "request" | "accepted" | "rejected" | "stopped" | "revoked"
+        ];
+      if (!["request", "accept", "reject", "stop", "revoke"].includes(String(action))) return;
+      // Direct calls require the exact local call id. A group call deliberately
+      // has no direct-call id; its server validates selected membership/device.
+      const directCall = detail.callId === currentCallIdRef.current;
+      const groupCall = groupCallActiveRef.current === true;
+      if (!directCall && !groupCall) return;
+      let requestId = typeof detail.requestId === "string" && /^[A-Za-z0-9_-]{8,128}$/.test(detail.requestId)
+        ? detail.requestId
+        : recordingRequestIdsRef.current.get(detail.callId);
+      if (!requestId && action === "request") {
+        requestId = `record_${crypto.randomUUID().replace(/-/g, "")}`;
+      }
+      if (!requestId) return;
+      recordingRequestIdsRef.current.set(detail.callId, requestId);
+      sendWS({
+        type: "call-recording-control",
+        callId: detail.callId,
+        requestId,
+        action,
+      });
+    };
+    // The hyphenated event is canonical. Keep the short-lived colon alias so
+    // an already-loaded recording panel is not silently disconnected mid-call.
+    window.addEventListener("gdna:recording-control-send", onRecordingControlSend);
+    window.addEventListener("gdna:recording-control:send", onRecordingControlSend);
+    return () => {
+      window.removeEventListener("gdna:recording-control-send", onRecordingControlSend);
+      window.removeEventListener("gdna:recording-control:send", onRecordingControlSend);
+    };
+  }, [sendWS]);
+
+  useEffect(() => {
+    const active = callStatus !== "idle" && currentCallIdRef.current !== null;
+    window.dispatchEvent(new CustomEvent("gdna:direct-call-active", { detail: active }));
+    return () => {
+      if (active) window.dispatchEvent(new CustomEvent("gdna:direct-call-active", { detail: false }));
+    };
+  }, [callStatus]);
+
+  useEffect(() => {
+    if (activeCallId) return;
+    setRecordingParticipantIds([]);
+  }, [activeCallId]);
 
   const signalingDeviceIdFor = useCallback((userId: number) => {
     const current = signalingDeviceRef.current;
@@ -518,11 +600,33 @@ export function useCall(user: { id: number; username: string } | null) {
     else waiter.resolve();
   }, []);
 
+  const waitForDurableAnswer = useCallback((callId: string) => new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      durableAnswerWaitersRef.current.delete(callId);
+      reject(new Error("لم يتم تثبيت قبول المكالمة على جهازك"));
+    }, RING_TIMEOUT_MS + 5_000);
+    durableAnswerWaitersRef.current.set(callId, { resolve, reject, timeout });
+  }), []);
+
+  const settleDurableAnswer = useCallback((callId: string, error?: Error) => {
+    const waiter = durableAnswerWaitersRef.current.get(callId);
+    if (!waiter) return;
+    clearTimeout(waiter.timeout);
+    durableAnswerWaitersRef.current.delete(callId);
+    if (error) waiter.reject(error);
+    else waiter.resolve();
+  }, []);
+
   const rejectPendingCallSetups = useCallback((message: string) => {
     for (const [callId, waiter] of callSetupWaitersRef.current) {
       clearTimeout(waiter.timeout);
       waiter.reject(new Error(message));
       callSetupWaitersRef.current.delete(callId);
+    }
+    for (const [callId, waiter] of durableAnswerWaitersRef.current) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(new Error(message));
+      durableAnswerWaitersRef.current.delete(callId);
     }
   }, []);
 
@@ -548,9 +652,11 @@ export function useCall(user: { id: number; username: string } | null) {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  // ── Pre-call TURN configuration test ─────────────────────────────────────
-  // Fetch and validate the authenticated relay configuration without opening
-  // a media client or requesting microphone/camera permission.
+  // ── Pre-call media configuration test ─────────────────────────────────────
+  // Validate the selected provider without opening a media client or requesting
+  // microphone/camera permission. Agora does not require TURN; an independent
+  // TURN diagnostic endpoint, when used by operations, must not be fed into the
+  // Agora SDK.
   const testConnection = useCallback(async () => {
     if (connectionTest === "testing") return;
     if (!isOnline) {
@@ -565,14 +671,32 @@ export function useCall(user: { id: number; username: string } | null) {
     setConnectionTest("testing");
     try {
       const config = await fetchCallRtcConfig();
-      setConnectionTest(config.turnConfigured ? "ready" : "failed");
+      const agoraCheck = config.provider === "agora"
+        ? testAgoraPreflight({
+            createClient: createAgoraClient,
+            fetchImpl: fetch,
+          })
+        : null;
+      // TURN is an independent diagnostic. It is useful operational evidence
+      // for every deployment, but never gates an Agora call.
+      const relayCheck = testTurnRelay({ fetchImpl: fetch });
+      const [agoraResult, relayResult] = await Promise.all([
+        agoraCheck
+          ? agoraCheck.then(() => true).catch(() => false)
+          : Promise.resolve(true),
+        relayCheck,
+      ]);
+      setConnectionTest(config.provider === "agora"
+        ? (agoraResult ? "ready" : "failed")
+        : (relayResult ? "ready" : "failed"));
     } catch (error) {
-      console.warn("[CALL] TURN preflight failed:", error);
+      console.warn("[CALL] Media preflight failed:", error);
       setConnectionTest("failed");
     }
   }, [connectionTest, isOnline, user]);
 
-  // Legacy SDK helpers below are unreachable; calls use createWebRtcCall.
+  // Agora media bridge. The token is deliberately fetched here, after the
+  // authoritative call lifecycle gate has opened, immediately before join.
   const rebuildRemoteStream = useCallback(() => {
     const tracks: MediaStreamTrack[] = [];
     if (remoteAudioRef.current) tracks.push(remoteAudioRef.current.getMediaStreamTrack());
@@ -580,20 +704,24 @@ export function useCall(user: { id: number; username: string } | null) {
     setRemoteStream(tracks.length > 0 ? new MediaStream(tracks) : null);
   }, []);
 
-  // Legacy provider helper retained only for source compatibility. It is not
-  // referenced by any call path; all invitations use direct WebRTC/TURN (with
-  // deferred push invitations accepted for compatibility).
-  const joinAgora = useCallback(async (
+  const createAgoraCall = useCallback(async (
     channel: string,
     withVideo: boolean,
     encryptionSecret: string,
+    signalingDeviceId: string,
     preparedAudioTrack?: IMicrophoneAudioTrack,
+    preparedVideoTrack?: ICameraVideoTrack,
   ) => {
-    // Resolve and validate runtime server configuration before any legacy
-    // provider could create or join a channel.
-    const { appId, token, uid } = await fetchAgoraToken(channel);
-    const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    // The participant/session/device-scoped endpoint is the only source of
+    // credentials. Never create an Agora client before it returns a complete
+    // signed token.
+    const standby = agoraStandbyTokenRef.current?.callId === channel
+      ? agoraStandbyTokenRef.current
+      : null;
+    const { appId, token, uid } = standby ?? await fetchAgoraToken(channel, signalingDeviceId);
+    const client = createAgoraClient();
     agoraRef.current = client;
+    callProviderRef.current = "agora";
     // Agora encrypts media frames before they leave this browser. The secret is
     // generated by the caller and RSA-wrapped for the callee, so the signaling
     // server and Agora never receive the clear session secret.
@@ -665,14 +793,16 @@ export function useCall(user: { id: number; username: string } | null) {
     });
 
     await client.join(appId, channel, token, uid);
+    // Do not emit channel identifiers, raw tokens, or participant identifiers.
+    console.info("[AGORA] Fallback/Group mode", { hasToken: Boolean(token) });
 
     // Reuse the track that triggered the citizen's single permission prompt.
     // Opening, closing, then reopening the microphone is unreliable on mobile.
     const audioTrack = preparedAudioTrack ?? await AgoraRTC.createMicrophoneAudioTrack();
     localAudioRef.current = audioTrack;
-    let videoTrack: ICameraVideoTrack | null = null;
+    let videoTrack: ICameraVideoTrack | null = preparedVideoTrack ?? null;
     let cameraWarning: string | null = null;
-    if (withVideo) {
+    if (withVideo && !videoTrack) {
       try {
         videoTrack = await AgoraRTC.createCameraVideoTrack();
         localVideoRef.current = videoTrack;
@@ -722,14 +852,25 @@ export function useCall(user: { id: number; username: string } | null) {
       stream.getTracks().forEach(track => track.stop());
       throw new Error("CALL_SETUP_CANCELLED");
     }
-    if (config.provider !== "webrtc") throw new Error("WebRTC TURN calling is unavailable");
-    const pc = new RTCPeerConnection({ iceServers: config.iceServers, iceTransportPolicy: "relay" });
+    if (config.provider !== "webrtc" && config.provider !== "hybrid") {
+      throw new Error("WebRTC TURN calling is unavailable");
+    }
+    // Explicit legacy WebRTC remains relay-only. Hybrid first tries a direct
+    // P2P route while retaining authenticated TURN candidates for NAT recovery.
+    const pc = new RTCPeerConnection({
+      iceServers: config.iceServers,
+      iceTransportPolicy: config.provider === "hybrid" ? "all" : "relay",
+    });
     if (!isCurrentCall()) {
       pc.close();
       stream.getTracks().forEach(track => track.stop());
       throw new Error("CALL_SETUP_CANCELLED");
     }
     callPcRef.current = pc;
+    publishPeerConnection(pc);
+    // Attach before creating SDP so the data-channel m-line is negotiated in
+    // the initial offer rather than requiring a second call renegotiation.
+    peerTransfer.attach(pc, { createChannel: canInitiateRestart });
     callProviderRef.current = "webrtc";
     callRtcConfigRef.current = config;
     iceRestartAttemptedRef.current = false;
@@ -789,7 +930,10 @@ export function useCall(user: { id: number; username: string } | null) {
       }
       iceRestartAttemptedRef.current = true;
       try {
-        pc.setConfiguration({ iceServers: config.iceServers, iceTransportPolicy: "relay" });
+        pc.setConfiguration({
+          iceServers: config.iceServers,
+          iceTransportPolicy: config.provider === "hybrid" ? "all" : "relay",
+        });
         pc.restartIce();
         void pc.createOffer({ iceRestart: true }).then(async offer => {
           if (callPcRef.current !== pc) return;
@@ -842,7 +986,7 @@ export function useCall(user: { id: number; username: string } | null) {
   }, [refreshCallDevices, refreshCameraZoom, sendWS, setActualMediaConnected]);
 
   // ── Release all call media ────────────────────────────────────────────────
-  const leaveAgora = useCallback(async () => {
+  const leaveAgora = useCallback(async (preserveCallSecret = false) => {
     setActualMediaConnected(false);
     if (iceRestartTimerRef.current) clearTimeout(iceRestartTimerRef.current);
     if (webRtcStatsTimerRef.current) clearInterval(webRtcStatsTimerRef.current);
@@ -850,6 +994,7 @@ export function useCall(user: { id: number; username: string } | null) {
     webRtcStatsTimerRef.current = null;
     try { callPcRef.current?.close(); } catch { /* already closed */ }
     callPcRef.current = null;
+    publishPeerConnection(null);
     webRtcScreenTrackRef.current?.stop();
     webRtcScreenTrackRef.current = null;
     webRtcCameraTrackRef.current?.stop();
@@ -883,6 +1028,11 @@ export function useCall(user: { id: number; username: string } | null) {
     reducedVideoRef.current = false;
     callProviderRef.current = "webrtc";
     callRtcConfigRef.current = null;
+    if (hybridFallbackTimerRef.current) clearTimeout(hybridFallbackTimerRef.current);
+    hybridFallbackTimerRef.current = null;
+    hybridSwitchRequestedRef.current = false;
+    agoraStandbyTokenRef.current = null;
+    if (!preserveCallSecret) callSecretRef.current = null;
     pendingCallIceRef.current = [];
     pendingRemoteIceRef.current = [];
     callSignalingReadyRef.current.clear();
@@ -893,6 +1043,68 @@ export function useCall(user: { id: number; username: string } | null) {
     mediaSetupCallRef.current = null;
     if (client) { try { await client.leave(); } catch { /* already left */ } }
   }, [setActualMediaConnected]);
+
+  const scheduleHybridFallback = useCallback((callId: string) => {
+    const config = callRtcConfigRef.current;
+    const pc = callPcRef.current;
+    if (!pc || !shouldRequestHybridFallback({
+      config,
+      negotiated: true,
+      connectionState: pc.connectionState,
+      mediaConnected: mediaConnectedRef.current,
+      switchRequested: hybridSwitchRequestedRef.current,
+    })) return;
+    if (hybridFallbackTimerRef.current) clearTimeout(hybridFallbackTimerRef.current);
+    // This timer starts only after a direct answer was negotiated; ringing is
+    // consent/signalling time and must never trigger a provider change.
+    hybridFallbackTimerRef.current = setTimeout(() => {
+      hybridFallbackTimerRef.current = null;
+      const current = callPcRef.current;
+      if (currentCallIdRef.current !== callId || !current || !shouldRequestHybridFallback({
+        config: callRtcConfigRef.current,
+        negotiated: true,
+        connectionState: current.connectionState,
+        mediaConnected: mediaConnectedRef.current,
+        switchRequested: hybridSwitchRequestedRef.current,
+      })) return;
+      hybridSwitchRequestedRef.current = true;
+      console.info("[AGORA] Fallback/Group mode", { hasToken: Boolean(agoraStandbyTokenRef.current?.token) });
+      sendWS({ type: "call-provider-switch", callId, provider: "agora" });
+    }, 3_000);
+  }, [sendWS]);
+
+  const switchToAgoraAfterServerAck = useCallback(async (callId: string) => {
+    const userId = user?.id;
+    if (currentCallIdRef.current !== callId || agoraRef.current || !userId) return;
+    const secret = callSecretRef.current;
+    if (!secret) {
+      showCallError("تعذّر تبديل مسار المكالمة الآمن — مفتاح الوسائط غير متاح", 15_000);
+      return;
+    }
+    const withVideo = callVideoRef.current;
+    // UI mute/video controls change MediaStreamTrack.enabled. Keep those user
+    // choices through transport replacement instead of silently unmuting them.
+    const audioEnabled = localStreamRef.current?.getAudioTracks()[0]?.enabled ?? true;
+    const videoEnabled = localStreamRef.current?.getVideoTracks()[0]?.enabled ?? true;
+    // The server is the synchronization point: no peer can switch merely
+    // because its local timer fired. Release P2P media before Agora acquires it.
+    await leaveAgora(true);
+    if (currentCallIdRef.current !== callId) return;
+    try {
+      await createAgoraCall(callId, withVideo, secret, signalingDeviceIdFor(userId));
+      const audioTrack = localAudioRef.current?.getMediaStreamTrack();
+      const videoTrack = localVideoRef.current?.getMediaStreamTrack();
+      if (audioTrack) audioTrack.enabled = audioEnabled;
+      if (videoTrack) videoTrack.enabled = videoEnabled;
+    } catch (error) {
+      showCallError("تعذّر الانتقال إلى مسار Agora الآمن", 15_000);
+      console.warn("[AGORA] Fallback failed", { hasToken: Boolean(agoraStandbyTokenRef.current?.token) });
+    }
+  // This callback is a WebSocket-effect dependency. Depend on the durable
+  // account scalar only: consumers commonly pass an inline user object, and
+  // depending on that object made the effect tear down/recreate the socket on
+  // every state update (including its cleanup's new empty arrays).
+  }, [createAgoraCall, leaveAgora, signalingDeviceIdFor, user?.id]);
 
   // Firebase terminal snapshots are authoritative wake-up/termination signals,
   // but must only clear the exact call they describe. A delayed snapshot for a
@@ -1111,7 +1323,9 @@ export function useCall(user: { id: number; username: string } | null) {
       if (!config) return;
       // Calls deliberately have no Agora fallback. A deployment without TURN is
       // not permitted to silently create a less reliable call path.
-      if (config.provider !== "webrtc") throw new Error("WebRTC TURN calling is unavailable");
+      if (config.provider !== "webrtc" && !canUseHybridWebRtc(config)) {
+        throw new Error("WebRTC TURN calling is unavailable");
+      }
       const { pc } = await createWebRtcCall(config, peer, callId, withVideo, true, isCurrentCall);
       if (!isCurrentCall()) return;
       const offer = await pc.createOffer();
@@ -1151,7 +1365,9 @@ export function useCall(user: { id: number; username: string } | null) {
     const isCurrentCall = () => currentCallIdRef.current === callId && callGenerationRef.current === generation;
     const config = await loadDeferredConfig(isCurrentCall, fetchCallRtcConfig);
     if (!config) return null;
-    if (config.provider !== "webrtc") throw new Error("WebRTC TURN calling is unavailable");
+    if (config.provider !== "webrtc" && !canUseHybridWebRtc(config)) {
+      throw new Error("WebRTC TURN calling is unavailable");
+    }
     const { pc } = await createWebRtcCall(config, peer, callId, withVideo, true, isCurrentCall);
     if (!isCurrentCall()) return null;
     const offer = await pc.createOffer();
@@ -1173,7 +1389,9 @@ export function useCall(user: { id: number; username: string } | null) {
       setCallPhase("connecting");
       const config = await loadDeferredConfig(isCurrentCall, fetchCallRtcConfig);
       if (!config) return null;
-      if (config.provider !== "webrtc") throw new Error("WebRTC TURN calling is unavailable");
+      if (config.provider !== "webrtc" && !canUseHybridWebRtc(config)) {
+        throw new Error("WebRTC TURN calling is unavailable");
+      }
       callSignalingReadyRef.current.add(msg.callId);
       const { pc } = await createWebRtcCall(config, msg.from, msg.callId, withVideo, false, isCurrentCall);
       if (!isCurrentCall()) return null;
@@ -1329,17 +1547,39 @@ export function useCall(user: { id: number; username: string } | null) {
         if (msg.type === "chat-message-deleted") {
           window.dispatchEvent(new CustomEvent("gdna:chat-message-deleted", { detail: msg }));
         }
+        if (msg.type === "call-recording-control" && typeof msg.callId === "string") {
+          // Dispatch group frames before applying the direct-call guard. The
+          // group controller owns its active id and the server has already
+          // authenticated its selected device/participant.
+          window.dispatchEvent(new CustomEvent("gdna:recording-control", { detail: msg }));
+        }
 
         // ── Incoming call ──────────────────────────────────────────────────
         if (msg.type === "call-incoming" || msg.type === "call-resumed") {
           pendingCallResumesRef.current.delete(msg.callId);
+          // A callee sends Answer first, then asks the authoritative store for
+          // this selected-device snapshot. Only this durable winner opens the
+          // Agora token/join gate.
+          if (msg.type === "call-resumed" && msg.callId === currentCallIdRef.current) {
+            settleDurableAnswer(msg.callId);
+            // A resumed durable envelope records the provider transition. It
+            // is equivalent to call-provider-changed after a socket restart,
+            // never a fresh timed fallback.
+            if (msg.transport?.provider === "agora" && msg.transport?.version === 1) {
+              void switchToAgoraAfterServerAck(msg.callId);
+            }
+          }
           // Ignore if already in / being offered another call
           if (!currentCallIdRef.current) {
             const deferred = isDeferredWebRtcTransport(msg.transport, msg.deferredMedia);
             const direct = isDirectWebRtcTransport(msg.transport, msg.deferredMedia, msg.offer);
+            const agora = !deferred &&
+              msg.transport?.provider === "agora" &&
+              msg.transport?.version === 1 &&
+              msg.offer === null;
             // Direct offers are shown but never answered automatically. The
             // callee's explicit Answer gesture is the media-permission gate.
-            if (!deferred && !direct) {
+            if (!deferred && !direct && !agora) {
               sendWS({ type: "call-reject", to: msg.from, callId: msg.callId, code: "MEDIA_PROTOCOL_MISMATCH" });
               return;
             }
@@ -1353,7 +1593,7 @@ export function useCall(user: { id: number; username: string } | null) {
               callId: msg.callId,
               video: msg.video,
               offer: direct ? msg.offer : null,
-              transport: direct ? msg.transport : DEFERRED_WEBRTC_TRANSPORT,
+              transport: direct || agora ? msg.transport : DEFERRED_WEBRTC_TRANSPORT,
               e2e: msg.e2e,
               callerId: msg.callerId,
               callerName: msg.callerName,
@@ -1379,11 +1619,15 @@ export function useCall(user: { id: number; username: string } | null) {
         // once the peer connection actually delivers remote tracks. ─────────
         if (msg.type === "call-accepted" && msg.callId === currentCallIdRef.current) {
           const deferred = isDeferredWebRtcTransport(msg.transport, msg.deferredMedia);
+          const agora = !deferred &&
+            msg.transport?.provider === "agora" &&
+            msg.transport?.version === 1 &&
+            msg.answer === null;
           const direct = !deferred &&
             msg.transport?.provider === WEBRTC_TRANSPORT.provider &&
             msg.transport?.version === WEBRTC_TRANSPORT.version &&
             isRtcDescription(msg.answer, "answer");
-          if (!deferred && !direct) {
+          if (!deferred && !direct && !agora) {
             showCallError("تعذّر التحقق من بروتوكول وسائط المكالمة");
             sendWS({ type: "call-end", to: msg.from, callId: msg.callId });
             setActualMediaConnected(false);
@@ -1403,6 +1647,11 @@ export function useCall(user: { id: number; username: string } | null) {
           }
           if (callDirectionRef.current === "outgoing") {
             const pc = callPcRef.current;
+            if (agora && agoraRef.current) {
+              clearRingTimer();
+              setCallPhase("accepted");
+              return;
+            }
             // Replayed acceptance cannot regress an active call to accepted or
             // submit the same SDP answer a second time.
             if ((deferred && mediaSetupCallRef.current === msg.callId) ||
@@ -1420,6 +1669,7 @@ export function useCall(user: { id: number; username: string } | null) {
                 for (const candidate of pendingRemoteIceRef.current.splice(0)) {
                   try { await pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
                 }
+                scheduleHybridFallback(msg.callId);
               } catch {
                 showCallError("تعذّر إكمال اتصال WebRTC", 12_000);
                 sendWS({ type: "call-end", to: msg.from, callId: msg.callId });
@@ -1480,6 +1730,19 @@ export function useCall(user: { id: number; username: string } | null) {
           }
         }
 
+        if (
+          msg.type === "call-provider-changed" &&
+          msg.callId === currentCallIdRef.current &&
+          msg.transport?.provider === "agora" &&
+          msg.transport?.version === 1
+        ) {
+          // A local timeout merely requests the change. Both callers wait for
+          // this durable server acknowledgement before changing transports.
+          if (hybridFallbackTimerRef.current) clearTimeout(hybridFallbackTimerRef.current);
+          hybridFallbackTimerRef.current = null;
+          void switchToAgoraAfterServerAck(msg.callId);
+        }
+
         if (msg.type === "ice-candidate" && msg.callId === currentCallIdRef.current) {
           if (!rememberRemoteIceCandidate(seenRemoteIceRef.current, msg.callId, msg.candidate)) return;
           if (callPcRef.current?.remoteDescription) {
@@ -1503,7 +1766,10 @@ export function useCall(user: { id: number; username: string } | null) {
           if (!isRtcDescription(msg.offer, "offer") ||
             appliedRenegotiationOfferRef.current.get(msg.callId) === msg.offer.sdp) return;
           appliedRenegotiationOfferRef.current.set(msg.callId, msg.offer.sdp);
-          pc.setConfiguration({ iceServers: config.iceServers, iceTransportPolicy: "relay" });
+          pc.setConfiguration({
+            iceServers: config.iceServers,
+            iceTransportPolicy: config.provider === "hybrid" ? "all" : "relay",
+          });
           try {
             await pc.setRemoteDescription(msg.offer);
             const answer = await pc.createAnswer();
@@ -1542,6 +1808,7 @@ export function useCall(user: { id: number; username: string } | null) {
         // ── Call rejected / ended — only for OUR current call ──────────────
         if ((msg.type === "call-rejected" || msg.type === "call-ended")
             && msg.callId === currentCallIdRef.current) {
+          settleDurableAnswer(msg.callId, new Error("CALL_SETUP_REJECTED"));
           clearRingTimer();
           if (callDirectionRef.current === "outgoing") {
             showForegroundCallNotification(
@@ -1572,6 +1839,7 @@ export function useCall(user: { id: number; username: string } | null) {
         if (msg.type === "call-busy" || msg.type === "call-unavailable" || msg.type === "call-blocked") {
           if (typeof msg.callId === "string") {
             settleCallReady(msg.callId, new Error("CALL_SETUP_REJECTED"));
+            settleDurableAnswer(msg.callId, new Error("CALL_SETUP_REJECTED"));
           }
           if (typeof msg.callId === "string" && msg.callId !== currentCallIdRef.current) return;
           clearRingTimer();
@@ -1725,7 +1993,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setConnectionTest("idle");
       setCallError(null);
     };
-  }, [user?.id, user?.username, isOnline, answerWebRtcOffer, beginCallerWebRtc, flushPendingCallIce, leaveAgora, rejectPendingCallSetups, resumeCurrentCall, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting, settleCallReady, signalingDeviceIdFor]);
+  }, [user?.id, user?.username, isOnline, answerWebRtcOffer, beginCallerWebRtc, flushPendingCallIce, leaveAgora, rejectPendingCallSetups, resumeCurrentCall, scheduleHybridFallback, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting, settleCallReady, settleDurableAnswer, signalingDeviceIdFor, switchToAgoraAfterServerAck]);
 
   // A route change or logout must not leave a microphone/camera LED on.
   useEffect(() => () => {
@@ -1744,8 +2012,30 @@ export function useCall(user: { id: number; username: string } | null) {
     return pc;
   };
 
+  const prepareAgoraMedia = useCallback(async (withVideo: boolean) => {
+    if (!window.isSecureContext) throw new Error("Secure browser media is unavailable");
+    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+    localAudioRef.current = audioTrack;
+    let videoTrack: ICameraVideoTrack | undefined;
+    if (withVideo) {
+      try {
+        videoTrack = await AgoraRTC.createCameraVideoTrack();
+        localVideoRef.current = videoTrack;
+      } catch (error) {
+        // Keep the invitation usable as audio-only while surfacing the camera
+        // failure once the call UI is visible.
+        showCallError(`${mediaFailureMessage(error, "camera")} — ستستمر المكالمة صوتياً`, 15_000);
+      }
+    }
+    return { audioTrack, videoTrack };
+  }, []);
+
   // ── Start a call ──────────────────────────────────────────────────────────
   const startCall = useCallback(async (targetUsername: string, withVideo = true) => {
+    if (groupCallActiveRef.current) {
+      showCallError("أنهِ مكالمة المجموعة أولاً قبل بدء مكالمة مباشرة");
+      return;
+    }
     if (callStatus !== "idle") {
       showCallError("مكالمة أخرى جارية بالفعل — أنهِها أولاً");
       return;
@@ -1766,6 +2056,10 @@ export function useCall(user: { id: number; username: string } | null) {
     let offered = false;
     let callGeneration = 0;
     let callStateStarted = false;
+    let agoraConfig: CallRtcConfig | null = null;
+    let agoraPreparedAudio: IMicrophoneAudioTrack | undefined;
+    let agoraPreparedVideo: ICameraVideoTrack | undefined;
+    let agoraCallSecret = "";
     try {
       currentCallIdRef.current = callId;
       currentCallPeerRef.current = targetUsername;
@@ -1797,19 +2091,46 @@ export function useCall(user: { id: number; username: string } | null) {
         await new Promise(resolve => setTimeout(resolve, 350));
       }
       if (!recipients) throw new Error("Secure call key unavailable");
+      // E2EE recipient keys are the existing authenticated target data. Keep
+      // the first user's id as the recording peer; devices never create extra
+      // recording participants.
+      const recordingPeerId = recipients[0]?.userId;
+      if (!Number.isSafeInteger(recordingPeerId)) throw new Error("Secure call recipient is unavailable");
+      setRecordingParticipantIds([user.id, recordingPeerId]);
       const callSecret = randomSecret();
+      callSecretRef.current = callSecret;
       const wrappedDevices = await Promise.all(recipients.map(async recipient => [
         recipient.deviceId,
         await encryptCallSecret(callSecret, recipient),
       ] as const));
       const e2e = { devices: Object.fromEntries(wrappedDevices) };
 
-      // Request caller media, build the direct offer, and put that offer in
-      // the first socket message. The callee still sees Answer/Decline before
-      // any callee-side media permission is requested.
-      const offer = await createDirectCallerOffer(callId, targetUsername, withVideo);
-      if (!offer || currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration) {
-        throw new Error("CALL_SETUP_CANCELLED");
+      let offer: RTCSessionDescriptionInit | null = null;
+      const selectedConfig = await fetchCallRtcConfig();
+      // Hybrid explicitly uses Agora when authenticated TURN is unavailable;
+      // it must never present a STUN-only direct path as call readiness.
+      const useAgoraInitially = selectedConfig.provider === "agora" ||
+        (selectedConfig.provider === "hybrid" && !canUseHybridWebRtc(selectedConfig));
+      if (useAgoraInitially) {
+        agoraConfig = selectedConfig;
+        if (agoraConfig.provider !== "agora" && agoraConfig.provider !== "hybrid") {
+          throw new Error("Agora media provider changed during setup");
+        }
+        callProviderRef.current = "agora";
+        callRtcConfigRef.current = agoraConfig;
+        // Caller media is acquired before the authenticated invitation is
+        // published. The callee never enters this path before Answer.
+        const prepared = await prepareAgoraMedia(withVideo);
+        agoraPreparedAudio = prepared.audioTrack;
+        agoraPreparedVideo = prepared.videoTrack;
+        agoraCallSecret = callSecret;
+      } else {
+        // WebRTC/TURN compatibility branch: request caller media and put the
+        // direct offer in the first socket message.
+        offer = await createDirectCallerOffer(callId, targetUsername, withVideo);
+        if (!offer || currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration) {
+          throw new Error("CALL_SETUP_CANCELLED");
+        }
       }
       const callReady = waitForCallReady(callId);
       sendWS({
@@ -1820,7 +2141,7 @@ export function useCall(user: { id: number; username: string } | null) {
         from: user.username,
         video: withVideo,
         deferredMedia: false,
-        transport: WEBRTC_TRANSPORT,
+        transport: agoraConfig ? { provider: "agora", version: 1 } : WEBRTC_TRANSPORT,
         e2e,
       });
       offered = true;
@@ -1835,6 +2156,26 @@ export function useCall(user: { id: number; username: string } | null) {
       callSignalingReadyRef.current.add(callId);
       for (const candidate of pendingCallIceRef.current.splice(0)) {
         sendWS({ type: "ice-candidate", to: targetUsername, callId, candidate });
+      }
+      if (agoraConfig && agoraPreparedAudio) {
+        await createAgoraCall(
+          callId,
+          withVideo,
+          agoraCallSecret,
+          signalingDeviceIdFor(user.id),
+          agoraPreparedAudio,
+          agoraPreparedVideo,
+        );
+      } else if (selectedConfig.provider === "hybrid") {
+        // A signed standby token is acquired only after durable invitation
+        // creation. It is never logged or used to join until the server
+        // authorizes an actual provider switch.
+        const standby = await fetchAgoraToken(callId, signalingDeviceIdFor(user.id));
+        if (currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration) {
+          throw new Error("CALL_SETUP_CANCELLED");
+        }
+        agoraStandbyTokenRef.current = { callId, ...standby };
+        console.info("[HETZNER] Trying P2P...", { hasToken: true });
       }
     } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
@@ -1865,21 +2206,30 @@ export function useCall(user: { id: number; username: string } | null) {
       }
       setCallStatus("idle");
     }
-  }, [callStatus, createDirectCallerOffer, isOnline, leaveAgora, sendWS, setActualMediaConnected, user, waitForCallReady]);
+  }, [callStatus, createDirectCallerOffer, createAgoraCall, fetchCallRtcConfig, isOnline, leaveAgora, prepareAgoraMedia, sendWS, signalingDeviceIdFor, setActualMediaConnected, user, waitForCallReady]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {
     const invitation = incomingCall;
     if (!invitation) return;
     const deferred = isDeferredWebRtcTransport(invitation.transport, invitation.deferredMedia);
+    const agora = !deferred &&
+      invitation.transport?.provider === "agora" &&
+      invitation.transport?.version === 1 &&
+      invitation.offer === null;
     const generation = callGenerationRef.current;
     try {
-      if (!deferred && !isDirectWebRtcTransport(invitation.transport, invitation.deferredMedia, invitation.offer)) {
+      if (!deferred && !agora && !isDirectWebRtcTransport(invitation.transport, invitation.deferredMedia, invitation.offer)) {
         throw new Error("Secure call media protocol is unavailable");
       }
       clearRingTimer();
       setActivePeer(invitation.from);
       setActiveCallId(invitation.callId);
+      const callerId = invitation.callerId;
+      if (!user || typeof callerId !== "number" || !Number.isSafeInteger(callerId)) {
+        throw new Error("Secure call participant is unavailable");
+      }
+      setRecordingParticipantIds([user.id, callerId]);
       setActiveVideo(withVideo && invitation.video);
       callVideoRef.current = withVideo && invitation.video;
       setIncomingCall(null);
@@ -1898,8 +2248,49 @@ export function useCall(user: { id: number; username: string } | null) {
         return;
       }
 
+      if (agora) {
+        // Answer is only an invitation-consent signal. The durable selected
+        // device/session is established by the authoritative store before any
+        // callee token request or media permission operation.
+        const answerReady = waitForDurableAnswer(invitation.callId);
+        sendWS({
+          type: "call-answer",
+          to: invitation.from,
+          answer: null,
+          callId: invitation.callId,
+          deferredMedia: false,
+          transport: { provider: "agora", version: 1 },
+        });
+        sendWS({ type: "call-resume", callId: invitation.callId });
+        const resumeTimer = setInterval(() => sendWS({ type: "call-resume", callId: invitation.callId }), 500);
+        try {
+          await answerReady;
+        } finally {
+          clearInterval(resumeTimer);
+        }
+        if (currentCallIdRef.current !== invitation.callId || callGenerationRef.current !== generation || !user) {
+          throw new Error("CALL_SETUP_CANCELLED");
+        }
+        const identity = await ensureDeviceIdentity(user.id);
+        const envelope = invitation.e2e?.devices?.[identity.deviceId];
+        if (!envelope) throw new Error("Secure call key is unavailable for this device");
+        const secret = await decryptCallSecret(user.id, envelope);
+        await createAgoraCall(
+          invitation.callId,
+          withVideo && invitation.video,
+          secret,
+          signalingDeviceIdFor(user.id),
+        );
+        return;
+      }
+
       // Direct invitations already contain the caller's offer. Creating the
       // answer here is the first callee media operation, after explicit Answer.
+      if (!user) throw new Error("CALL_SETUP_CANCELLED");
+      const identity = await ensureDeviceIdentity(user.id);
+      const envelope = invitation.e2e?.devices?.[identity.deviceId];
+      if (!envelope) throw new Error("Secure call key is unavailable for this device");
+      callSecretRef.current = await decryptCallSecret(user.id, envelope);
       const answer = await answerWebRtcOffer({
         callId: invitation.callId,
         from: invitation.from,
@@ -1907,6 +2298,9 @@ export function useCall(user: { id: number; username: string } | null) {
       }, withVideo && invitation.video, "direct");
       if (!answer) throw new Error("CALL_SETUP_CANCELLED");
       if (currentCallIdRef.current !== invitation.callId || callGenerationRef.current !== generation) return;
+      // Direct SDP has now been negotiated. Only this point can start hybrid's
+      // bounded fallback window; an unanswered invitation never can.
+      scheduleHybridFallback(invitation.callId);
       sendWS({
         type: "call-answer",
         to: invitation.from,
@@ -1925,6 +2319,9 @@ export function useCall(user: { id: number; username: string } | null) {
       callGenerationRef.current += 1;
       callDirectionRef.current = null;
       setIncomingCall(null);
+      setActivePeer(null);
+      setActiveCallId(null);
+      setRecordingParticipantIds([]);
       setCallPhase("idle");
       setCallStatus("idle");
       const message = err instanceof Error ? err.message : "";
@@ -1932,7 +2329,7 @@ export function useCall(user: { id: number; username: string } | null) {
         ? `🔐 ${message}`
         : mediaFailureMessage(err));
     }
-  }, [answerWebRtcOffer, incomingCall, leaveAgora, sendWS]);
+  }, [answerWebRtcOffer, createAgoraCall, decryptCallSecret, incomingCall, leaveAgora, scheduleHybridFallback, sendWS, signalingDeviceIdFor, user, waitForDurableAnswer]);
 
   // ── Reject call ───────────────────────────────────────────────────────────
   const rejectCall = useCallback(() => {
@@ -2246,7 +2643,9 @@ export function useCall(user: { id: number; username: string } | null) {
 
   return {
     connected, callStatus, callPhase, liveStatus, incomingCall,
-    activePeer, activeVideo, onlineUsers, activeLives, currentLiveId,
+    activePeer, activeVideo, activeCallId, recordingCallId: activeCallId,
+    recordingLocalUserId: user?.id, recordingParticipantIds,
+    onlineUsers, activeLives, currentLiveId,
     localStream, remoteStream, screenSharing,
     callError,
     connectionTest,

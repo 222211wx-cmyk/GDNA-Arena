@@ -17,6 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MEDIA_CONTROL_LABELS } from "./media-control-labels";
 import Avatar from "@/components/social/Avatar";
 import { getMissedCallsCopy } from "@/i18n/missed-calls-copy";
+import { PeerTransferPanel } from "@/components/communication/PeerTransferPanel";
+import { CallRecordingPanelView } from "@/components/communication/CallRecordingPanel";
+import { useCallRecording } from "@/client/hooks/useCallRecording";
 
 interface IncomingCallView {
   from: string;
@@ -66,6 +69,16 @@ interface Props {
   cameraZoom?: { min: number; max: number; step: number; value: number } | null;
   onFlipCamera?: () => void;
   onAdjustCameraZoom?: (direction: "in" | "out") => void;
+  /** A stable server-generated call id is required for recording consent. */
+  recordingCallId?: string | null;
+  /** Authenticated current user ID, supplied by the call provider. */
+  recordingLocalUserId?: number;
+  /** Expected other call members; including recordingLocalUserId is harmless. */
+  recordingParticipantUserIds?: number[];
+  /** Group-call input; remoteStream remains the 1:1 compatibility input. */
+  recordingRemoteStreams?: MediaStream[];
+  /** Optional provider bridge for an already-composited video recording stream. */
+  compositeRecordingStream?: MediaStream | null;
 }
 
 export default function CallOverlay({
@@ -79,6 +92,8 @@ export default function CallOverlay({
   onDeviceRecoveryAttempt = () => undefined,
   canFlipCamera = false, cameraZoom = null,
   onFlipCamera = () => undefined, onAdjustCameraZoom = () => undefined,
+  recordingCallId = null, recordingLocalUserId = 0, recordingParticipantUserIds = [],
+  recordingRemoteStreams, compositeRecordingStream = null,
 }: Props) {
   const { lang } = useLang();
   const st = SOCIAL_T[lang] ?? SOCIAL_T.en;
@@ -98,7 +113,20 @@ export default function CallOverlay({
   const [duration,    setDuration]    = useState(0);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [devicePickerOpen, setDevicePickerOpen] = useState(false);
+  const [communicationPanel, setCommunicationPanel] = useState<"transfer" | "recording" | null>(null);
   const lastTrackedSpeakerIdRef = useRef("");
+  // Kept at overlay level so minimizing the call does not stop an active local
+  // recording. Group-call surfaces can use CallRecordingPanel directly.
+  const callRecording = useCallRecording({
+    active: status === "active",
+    callId: recordingCallId,
+    localUserId: recordingLocalUserId,
+    participantUserIds: recordingParticipantUserIds,
+    localStream,
+    remoteStream,
+    remoteStreams: recordingRemoteStreams,
+    compositeVideoStream: compositeRecordingStream,
+  });
 
   // Attach streams to video elements
   useEffect(() => {
@@ -154,6 +182,7 @@ export default function CallOverlay({
       setMinimized(false);
       setPlaybackBlocked(false);
       setDevicePickerOpen(false);
+      setCommunicationPanel(null);
     }
   }, [status, peer, incomingCall?.from]);
 
@@ -484,6 +513,16 @@ export default function CallOverlay({
           </div>
         )}
 
+        {communicationPanel === "transfer" && (
+          <div className="absolute bottom-full mb-3">
+            <PeerTransferPanel localStream={localStream} />
+          </div>
+        )}
+
+        <div className={`absolute bottom-full mb-3 ${communicationPanel === "recording" ? "" : "hidden"}`}>
+          <CallRecordingPanelView recording={callRecording} />
+          </div>
+
         <button onClick={() => setMuted(v => !v)}
           aria-label={muted ? st.unmute : st.mute}
           className="w-13 h-13 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
@@ -540,6 +579,26 @@ export default function CallOverlay({
               : <Monitor className="w-5 h-5 text-white" />}
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => setCommunicationPanel(value => value === "transfer" ? null : "transfer")}
+          aria-label="In-call transfers"
+          aria-pressed={communicationPanel === "transfer"}
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 bg-secondary border border-border/50 text-secondary-foreground"
+        >
+          <span className="text-base font-bold" aria-hidden="true">⇧</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCommunicationPanel(value => value === "recording" ? null : "recording")}
+          aria-label="Call recording"
+          aria-pressed={communicationPanel === "recording"}
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 bg-secondary border border-border/50 text-secondary-foreground"
+        >
+          <span className="text-sm font-bold" aria-hidden="true">REC</span>
+        </button>
 
         {status === "active" && hasVideo && canFlipCamera && (
           <button type="button" onClick={onFlipCamera} aria-label={mediaLabels.flipCamera}

@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { useCall } from "@/hooks/useCall";
+import { useCall } from "@/client/hooks/useCall";
 import { useAuth } from "@/contexts/AuthContext";
 import CallOverlay from "@/components/CallOverlay";
 
@@ -45,6 +45,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
         cameraZoom={call.cameraZoom}
         onFlipCamera={call.flipCamera}
         onAdjustCameraZoom={call.adjustCameraZoom}
+        recordingCallId={call.recordingCallId}
+        recordingLocalUserId={call.recordingLocalUserId}
+        recordingParticipantUserIds={call.recordingParticipantIds}
       />
     </CallContext.Provider>
   );

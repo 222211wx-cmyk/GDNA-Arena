@@ -30,6 +30,7 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { GOLD, GOLD_A, timeAgo, api, SOCIAL_T } from "../social/social-i18n";
 import { useCallContext } from "../../contexts/CallContext";
+import { useGroupCallContext } from "../../contexts/GroupCallContext";
 import { useAuth, type AuthUser } from "../../contexts/AuthContext";
 import { useLang } from "../../contexts/LangContext";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
@@ -1062,6 +1063,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const st = { ...(SOCIAL_T[lang] ?? SOCIAL_T.en), ...getMessengerCopy(lang) };
   const dir = lang === "ar" ? "rtl" : "ltr";
   const call = useCallContext();
+  const groupCall = useGroupCallContext();
   const callExtras = readCallExtras(call);
   const { isOnline } = useConnectivity();
 
@@ -1104,6 +1106,14 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const [relayRoomName, setRelayRoomName] = useState<string | null>(null);
   const offlineToast = st.offline_action;
   const blockOffline = useCallback(() => setToast(offlineToast), [offlineToast]);
+  const startDirectCall = useCallback((username: string, withVideo: boolean) => {
+    if (groupCall.busy) {
+      setToast("Finish the active group call before starting a private call.");
+      return;
+    }
+    if (!isOnline) { blockOffline(); return; }
+    void call.startCall(username, withVideo);
+  }, [blockOffline, call, groupCall.busy, isOnline]);
 
   const pendingRef = useRef<PendingFile[]>([]);
   useEffect(() => { pendingRef.current = pending; }, [pending]);
@@ -2491,12 +2501,36 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                 The server is the security boundary; this only hides affordances. */}
             {activeRoom.type === "direct" && !activeRoom.blocked && !activeRoom.blockedByMe && (
               <>
-                <button onClick={() => isOnline ? call.startCall(getPeerName(activeRoom), true) : blockOffline()} disabled={!isOnline} title={st.video_call}
+                <button onClick={() => startDirectCall(getPeerName(activeRoom), true)} disabled={!isOnline || groupCall.busy} title={st.video_call}
                   style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <Video size={21} />
                 </button>
-                <button onClick={() => isOnline ? call.startCall(getPeerName(activeRoom), false) : blockOffline()} disabled={!isOnline} title={st.voice_call}
+                <button onClick={() => startDirectCall(getPeerName(activeRoom), false)} disabled={!isOnline || groupCall.busy} title={st.voice_call}
                   style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Phone size={20} />
+                </button>
+              </>
+            )}
+            {activeRoom.type === "group" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void groupCall.startCall(activeRoom.id, "video")}
+                  disabled={!isOnline || groupCall.busy || call.callStatus !== "idle"}
+                  title="Start group video call"
+                  aria-label="Start group video call"
+                  style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: (!isOnline || groupCall.busy || call.callStatus !== "idle") ? 0.5 : 1 }}
+                >
+                  <Video size={21} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void groupCall.startCall(activeRoom.id, "audio")}
+                  disabled={!isOnline || groupCall.busy || call.callStatus !== "idle"}
+                  title="Start group voice call"
+                  aria-label="Start group voice call"
+                  style={{ width: 40, height: 40, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: (!isOnline || groupCall.busy || call.callStatus !== "idle") ? 0.5 : 1 }}
+                >
                   <Phone size={20} />
                 </button>
               </>
@@ -2834,17 +2868,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             user={user}
             onNewCall={() => setShowContacts("call")}
             onCallBack={missedCall => {
-              if (!isOnline) {
-                blockOffline();
-                return;
-              }
-              void call.startCall(missedCall.caller.name, missedCall.type === "video");
+              startDirectCall(missedCall.caller.name, missedCall.type === "video");
             }}
             connectionTest={call.connectionTest}
             onTestConnection={call.testConnection}
             isOnline={isOnline}
             onOffline={blockOffline}
-            callActive={call.callStatus === "active" || call.callStatus === "calling" || call.callStatus === "ringing"}
+            callActive={groupCall.busy || call.callStatus === "active" || call.callStatus === "calling" || call.callStatus === "ringing"}
             callExtras={callExtras}
             tabActive={tab === "calls"}
           />
@@ -2981,7 +3011,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
               callMode={showContacts === "call"}
               onClose={() => setShowContacts(false)}
               onDm={openDmWith}
-              onCall={(u, v) => isOnline ? call.startCall(u, v) : blockOffline()}
+              onCall={startDirectCall}
               isOnline={isOnline}
               onOffline={blockOffline} />
           )}
