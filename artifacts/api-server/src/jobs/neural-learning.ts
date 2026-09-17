@@ -110,7 +110,12 @@ async function ingestPlatformActivity(): Promise<number> {
 }
 
 // ── Full evolution cycle — generates intelligence report ──────
+function isEvolutionEnabled(): boolean {
+  return process.env.ENC_EVOLVE_ENABLED?.trim().toLowerCase() === "true";
+}
+
 async function runEvolutionCycle(): Promise<void> {
+  if (!isEvolutionEnabled()) return;
   try {
     const openai = createOptionalOpenAI();
     if (!openai) return;
@@ -232,7 +237,8 @@ export async function runNeuralLearningCycle(): Promise<void> {
 
   // Full evolution every 24 cycles (≈ every 24 hours at hourly cadence)
   const now = Date.now();
-  if (cycleNumber === 1 || now - lastFullEvolution > 24 * 60 * 60 * 1000) {
+  if (isEvolutionEnabled() &&
+      (cycleNumber === 1 || now - lastFullEvolution > 24 * 60 * 60 * 1000)) {
     await runEvolutionCycle();
     lastFullEvolution = now;
   }
@@ -242,6 +248,7 @@ export async function runNeuralLearningCycle(): Promise<void> {
 
 // ── Start the perpetual learning engine ──────────────────────
 export function startNeuralLearningJob(): void {
+  if (!isEvolutionEnabled()) console.log("[ENC-EVOLVE] Disabled by configuration");
   console.log("[ENC] 🧠 EMPIRE NEURAL CORE — SELF-LEARNING ENGINE ACTIVATED");
 
   // First cycle immediately (with slight delay to let DB settle)
