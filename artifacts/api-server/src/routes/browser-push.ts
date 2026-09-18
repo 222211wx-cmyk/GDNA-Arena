@@ -2,10 +2,13 @@ import { Router, type IRouter, type Request } from "express";
 import rateLimit from "express-rate-limit";
 import {
   BrowserPushError,
+  BrowserPushRenewalConflictError,
   getBrowserPushConfig,
   parseBrowserPushRegistration,
+  parseBrowserPushRenewal,
   parseBrowserPushRemoval,
   registerBrowserPushSubscription,
+  renewBrowserPushSubscription,
   removeBrowserPushSubscription,
 } from "../lib/browser-push";
 
@@ -94,6 +97,35 @@ router.post("/browser-push/subscriptions", mutationLimiter, async (req, res): Pr
     const conflict = error instanceof BrowserPushError && error.message.includes("another session");
     res.status(conflict ? 409 : 503).json({
       error: error instanceof BrowserPushError ? error.message : "Browser push registration failed",
+    });
+  }
+});
+
+router.post("/browser-push/subscriptions/renew", mutationLimiter, async (req, res): Promise<void> => {
+  const userId = currentUserId(req);
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  if (!allowedBrowserOrigin(req)) {
+    res.status(403).json({ error: "Cross-origin request rejected" });
+    return;
+  }
+  const input = parseBrowserPushRenewal(req.body);
+  if (!input) {
+    res.status(400).json({ error: "Invalid browser push renewal" });
+    return;
+  }
+  try {
+    await renewBrowserPushSubscription({
+      userId,
+      sessionId: req.sessionID,
+      ...input,
+    });
+    res.status(204).end();
+  } catch (error) {
+    res.status(error instanceof BrowserPushRenewalConflictError ? 409 : 503).json({
+      error: error instanceof BrowserPushError ? error.message : "Browser push renewal failed",
     });
   }
 });

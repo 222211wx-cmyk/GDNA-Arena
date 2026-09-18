@@ -93,6 +93,11 @@ export function useCallPush(
         callId => resumeRef.current(callId),
         (callId, status) => terminalRef.current(callId, status),
         () => !cancelled && generation === sessionGenerationRef.current,
+        reason => {
+          if (cancelled || generation !== sessionGenerationRef.current) return;
+          setPushEnabled(false);
+          setPushReason(reason);
+        },
       );
       if (cancelled || generation !== sessionGenerationRef.current) {
         await browserPush.cleanup();

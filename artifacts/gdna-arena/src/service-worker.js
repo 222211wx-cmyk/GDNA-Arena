@@ -69,6 +69,45 @@ function gdnaFocusOrOpen(url) {
   });
 }
 
+// A worker cannot read the page's installation ID from localStorage. Renew the
+// previous endpoint only; the server checks its original account/session owner.
+self.addEventListener("pushsubscriptionchange", event => {
+  event.waitUntil((async () => {
+    const previous = event.oldSubscription;
+    if (!previous || !previous.endpoint) throw new Error("Previous subscription unavailable");
+    const subscription = event.newSubscription || await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Subscription renewal timed out")), 15_000);
+      self.registration.pushManager.subscribe(previous.options).then(
+        value => { clearTimeout(timer); resolve(value); },
+        error => { clearTimeout(timer); reject(error); },
+      );
+    });
+    if (!subscription) throw new Error("Replacement subscription unavailable");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch(new URL("api/browser-push/subscriptions/renew", self.registration.scope).toString(), {
+        method: "POST",
+        credentials: "same-origin",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          oldEndpoint: previous.endpoint,
+          subscription: subscription.toJSON(),
+        }),
+      });
+      if (!response.ok) throw new Error("Subscription renewal rejected");
+    } finally {
+      clearTimeout(timer);
+    }
+  })().catch(() => {
+    // Do not log private endpoint/key values. The normal authenticated restore
+    // on the next app opening also repairs a renewal that happened offline.
+    console.warn("Call notification renewal failed; reopen the app or enable call alerts again.");
+    return gdnaClientsMessage({ type: "GDNA_PUSH_RENEWAL_FAILED" });
+  }));
+});
+
 self.addEventListener("push", event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { return; }

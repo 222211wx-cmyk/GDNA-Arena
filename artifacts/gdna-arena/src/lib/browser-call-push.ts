@@ -220,6 +220,7 @@ export async function createBrowserCallPush(
   onRinging: (callId: string) => void,
   onTerminal: (callId: string, status: string) => void,
   sessionIsCurrent: () => boolean = () => true,
+  onRenewalError: (reason: string) => void = () => {},
 ): Promise<BrowserCallPushSession> {
   const unsupported = capabilityReason();
   if (unsupported) {
@@ -248,7 +249,12 @@ export async function createBrowserCallPush(
   let disposed = false;
   let registration: ServiceWorkerRegistration | null = null;
   const onWorkerMessage = (event: MessageEvent<WorkerCallMessage>) => {
-    if (disposed || !event.data || !CALL_ID.test(String(event.data.callId ?? ""))) return;
+    if (disposed || !sessionIsCurrent() || !event.data) return;
+    if (event.data.type === "GDNA_PUSH_RENEWAL_FAILED") {
+      onRenewalError("Call notification renewal failed. Enable call alerts again to restore background notifications.");
+      return;
+    }
+    if (!CALL_ID.test(String(event.data.callId ?? ""))) return;
     const callId = String(event.data.callId);
     if (event.data.type === "GDNA_CALL_INVITATION") onRinging(callId);
     if (event.data.type === "GDNA_CALL_TERMINAL") {
@@ -264,7 +270,13 @@ export async function createBrowserCallPush(
       await bindSubscription(registration, publicKey, () => sessionIsCurrent() && !disposed);
     }
   };
-  await restore();
+  try {
+    await restore();
+  } catch (error) {
+    disposed = true;
+    navigator.serviceWorker.removeEventListener("message", onWorkerMessage);
+    throw error;
+  }
 
   return {
     enabled: true,

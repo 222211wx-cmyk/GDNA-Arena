@@ -17,6 +17,11 @@ export interface BrowserPushSubscriptionInput {
   keys: { p256dh: string; auth: string };
 }
 
+export interface BrowserPushRenewalInput {
+  oldEndpoint: string;
+  subscription: BrowserPushSubscriptionInput;
+}
+
 export interface IncomingCallPush {
   callId: string;
   callerName: string;
@@ -32,6 +37,7 @@ export interface TerminalCallPush {
 }
 
 export class BrowserPushError extends Error {}
+export class BrowserPushRenewalConflictError extends BrowserPushError {}
 
 export function browserPushSessionHash(sessionId: string): string {
   return createHash("sha256").update(sessionId).digest("hex");
@@ -78,32 +84,45 @@ function isBase64UrlKey(value: unknown, maxLength = MAX_KEY_LENGTH): value is st
     /^[A-Za-z0-9_-]+={0,2}$/.test(value);
 }
 
+function parseBrowserPushSubscription(value: unknown): BrowserPushSubscriptionInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const keys = candidate.keys;
+  if (!keys || typeof keys !== "object" || Array.isArray(keys)) return null;
+  const keyValues = keys as Record<string, unknown>;
+  if (!isAllowedBrowserPushEndpoint(candidate.endpoint) ||
+    !isBase64UrlKey(keyValues.p256dh) ||
+    !isBase64UrlKey(keyValues.auth, 128)) return null;
+  return {
+    endpoint: candidate.endpoint,
+    keys: { p256dh: keyValues.p256dh, auth: keyValues.auth },
+  };
+}
+
 export function parseBrowserPushRegistration(value: unknown): {
   subscription: BrowserPushSubscriptionInput;
   installationId: string;
 } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
-  const subscription = body.subscription;
-  if (!subscription || typeof subscription !== "object" || Array.isArray(subscription)) return null;
-  const candidate = subscription as Record<string, unknown>;
-  const keys = candidate.keys;
-  if (!keys || typeof keys !== "object" || Array.isArray(keys)) return null;
-  const keyValues = keys as Record<string, unknown>;
-  if (!isAllowedBrowserPushEndpoint(candidate.endpoint) ||
-    !isBase64UrlKey(keyValues.p256dh) ||
-    !isBase64UrlKey(keyValues.auth, 128) ||
+  const subscription = parseBrowserPushSubscription(body.subscription);
+  if (!subscription ||
     typeof body.installationId !== "string" ||
     body.installationId.length < 1 ||
     body.installationId.length > MAX_INSTALLATION_ID_LENGTH ||
     !/^[A-Za-z0-9._:-]+$/.test(body.installationId)) return null;
   return {
-    subscription: {
-      endpoint: candidate.endpoint,
-      keys: { p256dh: keyValues.p256dh, auth: keyValues.auth },
-    },
+    subscription,
     installationId: body.installationId,
   };
+}
+
+export function parseBrowserPushRenewal(value: unknown): BrowserPushRenewalInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  const subscription = parseBrowserPushSubscription(body.subscription);
+  if (!isAllowedBrowserPushEndpoint(body.oldEndpoint) || !subscription) return null;
+  return { oldEndpoint: body.oldEndpoint, subscription };
 }
 
 export function parseBrowserPushRemoval(value: unknown): { installationId: string } | null {
@@ -229,6 +248,100 @@ export async function registerBrowserPushSubscription(input: {
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
+  }
+}
+
+interface BrowserPushRenewalClient {
+  query<T = Record<string, unknown>>(
+    text: string,
+    values?: unknown[],
+  ): Promise<{ rows: T[]; rowCount: number | null }>;
+}
+
+interface BrowserPushBindingRow {
+  endpoint: string;
+  user_id: number;
+  session_hash: string;
+}
+
+function ownsBrowserPushBinding(
+  row: BrowserPushBindingRow | undefined,
+  userId: number,
+  sessionHash: string,
+): boolean {
+  return !!row && row.user_id === userId && row.session_hash === sessionHash;
+}
+
+/**
+ * Transaction body is exported only so authorization and collision behavior can
+ * be unit tested with a pg-compatible query mock.
+ */
+export async function renewBrowserPushSubscriptionWithClient(
+  client: BrowserPushRenewalClient,
+  input: BrowserPushRenewalInput & { userId: number; sessionId: string },
+): Promise<void> {
+  const sessionHash = browserPushSessionHash(input.sessionId);
+  const encryptedKeys = encryptJson(input.subscription.keys);
+  try {
+    await client.query("BEGIN");
+    const endpoints = input.oldEndpoint === input.subscription.endpoint
+      ? [input.oldEndpoint]
+      : [input.oldEndpoint, input.subscription.endpoint];
+    const bindings = await client.query<BrowserPushBindingRow>(
+      `SELECT endpoint, user_id, session_hash
+         FROM browser_push_subscriptions
+        WHERE endpoint = ANY($1::text[])
+        ORDER BY endpoint
+        FOR UPDATE`,
+      [endpoints],
+    );
+    const oldBinding = bindings.rows.find(row => row.endpoint === input.oldEndpoint);
+    const destinationBinding = bindings.rows.find(row => row.endpoint === input.subscription.endpoint);
+
+    if (input.oldEndpoint === input.subscription.endpoint) {
+      if (!ownsBrowserPushBinding(oldBinding, input.userId, sessionHash)) {
+        throw new BrowserPushRenewalConflictError("Push subscription binding does not match this session");
+      }
+    } else if (oldBinding) {
+      if (!ownsBrowserPushBinding(oldBinding, input.userId, sessionHash)) {
+        throw new BrowserPushRenewalConflictError("Push subscription binding does not match this session");
+      }
+      if (destinationBinding) {
+        throw new BrowserPushRenewalConflictError("Replacement push endpoint is already registered");
+      }
+    } else if (!ownsBrowserPushBinding(destinationBinding, input.userId, sessionHash)) {
+      throw new BrowserPushRenewalConflictError("Push subscription binding does not match this session");
+    }
+
+    const sourceEndpoint = oldBinding ? input.oldEndpoint : input.subscription.endpoint;
+    const updated = await client.query(
+      `UPDATE browser_push_subscriptions
+          SET endpoint = $1, encrypted_keys = $2, updated_at = NOW()
+        WHERE endpoint = $3 AND user_id = $4 AND session_hash = $5`,
+      [input.subscription.endpoint, encryptedKeys, sourceEndpoint, input.userId, sessionHash],
+    );
+    if (updated.rowCount !== 1) {
+      throw new BrowserPushRenewalConflictError("Push subscription binding does not match this session");
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (typeof error === "object" && error !== null && "code" in error &&
+      (error as { code?: unknown }).code === "23505") {
+      throw new BrowserPushRenewalConflictError("Replacement push endpoint is already registered");
+    }
+    throw error;
+  }
+}
+
+export async function renewBrowserPushSubscription(
+  input: BrowserPushRenewalInput & { userId: number; sessionId: string },
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await renewBrowserPushSubscriptionWithClient(client, input);
   } finally {
     client.release();
   }
