@@ -2,14 +2,16 @@ import { Router, type IRouter, type Request } from "express";
 import multer from "multer";
 import { createHash, randomUUID } from "node:crypto";
 import type { File, CreateWriteStreamOptions } from "@google-cloud/storage";
-import { CLIP_EXT, ClipUploadError, resolveClipUploadType, isAudioClip } from "../lib/clip-upload-protocol.js";
+import {
+  CLIP_EXT, ClipUploadError, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, resolveClipUploadType,
+} from "../lib/clip-upload-protocol.js";
 
-export const SIMPLE_CLIP_MAX_BYTES = 20 * 1024 * 1024;
+export const SIMPLE_CLIP_MAX_BYTES = MAX_NEW_CLIP_BYTES;
 export const SIMPLE_CLIP_CHUNK_BYTES = 5 * 1024 * 1024;
 export const SIMPLE_CLIP_MAX_DURATION_SECONDS = 300;
 export const SIMPLE_CLIP_TIMEOUT_MS = SIMPLE_CLIP_MAX_DURATION_SECONDS * 1000;
-export const SIMPLE_CLIP_TOO_LARGE = "صغر الفيديو";
-export const SIMPLE_AUDIO_TOO_LARGE = "صغر الملف الصوتي";
+export const SIMPLE_CLIP_TOO_LARGE = NEW_CLIP_TOO_LARGE;
+export const SIMPLE_AUDIO_TOO_LARGE = NEW_CLIP_TOO_LARGE;
 export const SIMPLE_CLIP_WRITE_OPTIONS: CreateWriteStreamOptions = {
   resumable: true,
   chunkSize: SIMPLE_CLIP_CHUNK_BYTES,
@@ -40,7 +42,7 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
       if (!normalizedType) { cb(new ClipUploadError(415, "صيغة الصوت أو الفيديو غير مدعومة")); return; }
       file.mimetype = normalizedType;
       contentTypes.set(req, normalizedType);
-      const sizeMessage = isAudioClip(normalizedType) ? SIMPLE_AUDIO_TOO_LARGE : SIMPLE_CLIP_TOO_LARGE;
+      const sizeMessage = SIMPLE_CLIP_TOO_LARGE;
       const filename = `clip_${randomUUID().replace(/-/g, "")}${CLIP_EXT[file.mimetype]}`;
       let stream: ReturnType<File["createWriteStream"]>;
       try {
@@ -94,9 +96,9 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
     },
   };
   // Busboy emits "limit" at equality, so reserve one sentinel byte and enforce
-  // the actual 20 MiB bound ourselves. Exactly 20 MiB remains valid.
+  // the actual 25 MiB bound ourselves. Exactly 25 MiB remains valid.
   const upload = multer({ storage, limits: { fileSize: SIMPLE_CLIP_MAX_BYTES + 1, files: 1, fields: 6, fieldSize: 1024, parts: 8 } });
-  router.post("/clip/upload", (req, res) => {
+  router.post(["/clip/upload", "/clip/upload-simple"], (req, res) => {
     const userId = (req.session as { userId?: number } | undefined)?.userId;
     if (!userId) { res.status(401).json({ error: "يجب تسجيل الدخول" }); return; }
     if (!req.is("multipart/form-data")) { res.status(415).json({ error: "Expected multipart/form-data with file" }); return; }
@@ -143,7 +145,7 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
         const status = isLimit ? 413 : caught instanceof ClipUploadError ? caught.status : caught instanceof multer.MulterError ? 400 : 500;
         deps.log(caught, "Simple clip upload failed");
         if (!res.headersSent && !res.destroyed) res.status(status).json({
-          error: status === 413 ? (isAudioClip(contentTypes.get(req) ?? "") ? SIMPLE_AUDIO_TOO_LARGE : SIMPLE_CLIP_TOO_LARGE) : caught instanceof ClipUploadError ? caught.message : "فشل الرفع",
+          error: status === 413 ? SIMPLE_CLIP_TOO_LARGE : caught instanceof ClipUploadError ? caught.message : "فشل الرفع",
         });
       } finally { finish(); }
     });

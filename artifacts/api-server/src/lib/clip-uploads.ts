@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
-  ClipUploadError, CLIP_EXT, MAX_CLIP_BYTES, normalizeClipContentType,
+  ClipUploadError, CLIP_EXT, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, normalizeClipContentType,
   validateClipRightsInput, parseIsOriginalFootage, type ClipPublishPurpose,
 } from "./clip-upload-protocol.js";
 
@@ -83,7 +83,8 @@ export function parseUploadMetadata(header: string | undefined): UploadMetadata 
   const partCount = unsignedInteger(entries.partCount, "partCount");
   const totalSize = unsignedInteger(entries.totalSize, "totalSize");
   if (partCount < 1 || partCount > 3 || partIndex >= partCount) fail(400, "Invalid part bounds");
-  if (totalSize < partCount || totalSize > MAX_CLIP_BYTES) fail(413, "Video must be between 1 byte and 2 GiB");
+  if (totalSize < partCount) fail(400, "Invalid totalSize");
+  if (totalSize > MAX_NEW_CLIP_BYTES) fail(413, NEW_CLIP_TOO_LARGE);
   const title = entries.title?.trim();
   if (!title || title.length > 120) fail(400, "Title is required (maximum 120 characters)");
   const contentType = normalizeClipContentType(entries.contentType ?? "");
@@ -242,7 +243,8 @@ export class ClipUploads {
             session.chunks.reduce((sum, chunk) => sum + chunk.size, 0) !== session.length) fail(409, "Parts are incomplete or inconsistent");
         size += session.length;
       }
-      if (size !== first.metadata.totalSize || size > MAX_CLIP_BYTES) fail(409, "Completed size differs from totalSize");
+      if (size > MAX_NEW_CLIP_BYTES) fail(413, NEW_CLIP_TOO_LARGE);
+      if (size !== first.metadata.totalSize) fail(409, "Completed size differs from totalSize");
       if (group.value.result) return group.value.result;
       const filename = this.objectName(first);
       // Recover a crash/lost acknowledgement between PG COMMIT and GCS result save.

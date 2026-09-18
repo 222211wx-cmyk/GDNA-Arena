@@ -26,11 +26,11 @@ function pwaServiceWorker() {
     },
     generateBundle(_: unknown, bundle: Record<string, { fileName: string; type: string }>) {
       const normalizedBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
-      const precache = Object.values(bundle)
-        .filter(asset => asset.type === "chunk" || /\.(?:css|js|svg|png|jpe?g|webp|woff2?)$/i.test(asset.fileName))
-        .map(asset => `${normalizedBase}${asset.fileName}`);
-      precache.push(`${normalizedBase}index.html`);
-      const version = createHash("sha256").update(precache.join("|")).digest("hex").slice(0, 12);
+      // Do not make installation download every lazy application chunk. Runtime
+      // assets are cached only after they are actually requested.
+      const precache = [`${normalizedBase}index.html`];
+      const versionInputs = Object.values(bundle).map(asset => asset.fileName).sort();
+      const version = createHash("sha256").update(versionInputs.join("|")).digest("hex").slice(0, 12);
       const source = `/* Generated at build time. Private API, AMIS, and key material are never cached. */
 const VERSION = ${JSON.stringify(version)};
 const SHELL_CACHE = "gdna-arena-shell-" + VERSION;

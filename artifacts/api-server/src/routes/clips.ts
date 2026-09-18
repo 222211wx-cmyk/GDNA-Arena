@@ -13,7 +13,9 @@ import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js"
 import { clipByteRange } from "../lib/clip-byte-range.js";
 import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
 import { createSimpleClipUploadRouter } from "./clip-simple-upload.js";
-import { CLIP_EXT, resolveClipUploadType, clipDownloadExtension } from "../lib/clip-upload-protocol.js";
+import {
+  CLIP_EXT, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, resolveClipUploadType, clipDownloadExtension,
+} from "../lib/clip-upload-protocol.js";
 
 // ─── CLIPS — كليبسز (Reels-style stories and original declarations) ──────────
 // Publishing rules:
@@ -45,11 +47,41 @@ router.use(createSimpleClipUploadRouter({
     await clipFile(name).delete({ ignoreNotFound: true });
   },
 }));
-const MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB per clip
+const MAX_BYTES = MAX_NEW_CLIP_BYTES;
 
 function requirePool() {
   if (!pool) throw new Error("Database not configured");
   return pool;
+}
+
+async function acquireFeedClient(signal?: AbortSignal) {
+  const db = requirePool();
+  if (signal?.aborted) throw new Error("Clips feed deadline exceeded");
+  // Never join an existing checkout queue: the public endpoint degrades instead
+  // of consuming its entire latency budget waiting behind private work.
+  const maximum = Number((db as typeof db & { options?: { max?: number } }).options?.max) || 10;
+  if (db.waitingCount > 0 || (db.idleCount === 0 && db.totalCount >= maximum)) {
+    throw new Error("Clips feed database pool is saturated");
+  }
+  const pending = db.connect();
+  if (!signal) return pending;
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new Error("Clips feed deadline exceeded"));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([pending, aborted]);
+  } catch (error) {
+    if (signal.aborted) {
+      // A checkout already dispatched by pg cannot be cancelled. If it resolves
+      // after the response deadline, release it without issuing BEGIN or SQL.
+      void pending.then(client => client.release(), () => {});
+    }
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 export async function ensureClipsTables(): Promise<void> {
@@ -167,21 +199,36 @@ async function isAdmin(userId: number): Promise<boolean> {
 
 // ─── GET /clips/feed — Reels feed, newest first ──────────────────────────────
 router.get("/clips/feed", createClipsFeedHandler({
-  async loadRows(before, limit) {
-    const params = before === null ? [limit + 1] : [before, limit + 1];
-    const { rows } = await requirePool().query(
-      `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec,
-              c.views, c.created_at, c.thumbnail_object_name, c.is_original_footage,
-              CASE WHEN r.id IS NULL THEN 'story' ELSE 'original' END AS rights_purpose,
-              r.created_at AS rights_registered_at,
-              r.rights_holder_name, r.rights_holder_role
-       FROM clips c
-       LEFT JOIN clip_original_registrations r ON r.clip_id=c.id
-       WHERE c.is_frozen = FALSE AND c.object_name IS NOT NULL AND c.object_name <> ''
-         ${before === null ? "" : "AND c.id < $1"}
-       ORDER BY c.id DESC LIMIT $${params.length}`, params,
-    );
-    return rows;
+  async loadRows(before, limit, signal) {
+    const client = await acquireFeedClient(signal);
+    try {
+      // The handler deadline may fire while waiting for a saturated pool. In that
+      // case release immediately and never start a query after the response.
+      if (signal?.aborted) throw new Error("Clips feed deadline exceeded");
+      await client.query("BEGIN");
+      await client.query("SET LOCAL statement_timeout = '120ms'");
+      await client.query("SET LOCAL lock_timeout = '80ms'");
+      const params = before === null ? [limit + 1] : [before, limit + 1];
+      const { rows } = await client.query(
+        `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec,
+                c.views, c.created_at, c.thumbnail_object_name, c.is_original_footage,
+                CASE WHEN r.id IS NULL THEN 'story' ELSE 'original' END AS rights_purpose,
+                r.created_at AS rights_registered_at,
+                r.rights_holder_name, r.rights_holder_role
+         FROM clips c
+         LEFT JOIN clip_original_registrations r ON r.clip_id=c.id
+         WHERE c.is_frozen = FALSE AND c.object_name IS NOT NULL AND c.object_name <> ''
+           ${before === null ? "" : "AND c.id < $1"}
+         ORDER BY c.id DESC LIMIT $${params.length}`, params,
+      );
+      await client.query("COMMIT");
+      return rows;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   },
   logFailure: err => logger.error({ err }, "[clips] feed failed"),
 }));
@@ -211,8 +258,8 @@ router.post("/clips", uploadLimiter, (req, res): void => {
       if (err) {
         const msg = (err as Error).message === "UNSUPPORTED_TYPE"
           ? "صيغة الصوت أو الفيديو غير مدعومة"
-          : (err as { code?: string }).code === "LIMIT_FILE_SIZE" ? "الفيديو كبير بزاف — الحد 2GB" : "فشل الرفع";
-        res.status(400).json({ error: msg }); return;
+          : (err as { code?: string }).code === "LIMIT_FILE_SIZE" ? NEW_CLIP_TOO_LARGE : "فشل الرفع";
+        res.status((err as { code?: string }).code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error: msg }); return;
       }
       if (!f?.filename || !f.sha256) { res.status(400).json({ error: "الفيديو مطلوب" }); return; }
       const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 120) : "";

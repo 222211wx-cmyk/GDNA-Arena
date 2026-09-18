@@ -1,7 +1,7 @@
 import { Router, json, type IRouter, type Request, type Response, type NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import { ClipUploads, CHUNK_BYTES, parseUploadMetadata, unsignedInteger } from "../lib/clip-uploads.js";
-import { ClipUploadError, MAX_CLIP_BYTES } from "../lib/clip-upload-protocol.js";
+import { ClipUploadError, MAX_NEW_CLIP_BYTES } from "../lib/clip-upload-protocol.js";
 import { logger } from "../lib/logger.js";
 
 export function uploadAuth(req: Request, res: Response, next: NextFunction): void {
@@ -24,7 +24,7 @@ export function createClipsUploadsRouter(service: ClipUploads): IRouter {
     next();
   }, uploadAuth);
   router.options("/clips/uploads{/:id}", (_req, res) => {
-    res.set({ "Tus-Version": "1.0.0", "Tus-Extension": "creation,termination,expiration", "Tus-Max-Size": String(MAX_CLIP_BYTES) }).status(204).end();
+    res.set({ "Tus-Version": "1.0.0", "Tus-Extension": "creation,termination,expiration", "Tus-Max-Size": String(MAX_NEW_CLIP_BYTES) }).status(204).end();
   });
   // Completion is JSON, not a Tus concatenation extension.
   router.post("/clips/uploads/complete", json({ limit: "4kb" }), asyncRoute(async (req, res) => {

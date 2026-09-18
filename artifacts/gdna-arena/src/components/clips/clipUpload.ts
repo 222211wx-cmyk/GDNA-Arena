@@ -16,11 +16,14 @@ export type ClipUploadMetadata = {
 
 type SavedUpload = { location: string; id: string; groupId: string };
 class NonRetryableUploadError extends Error {}
+const fileSessionIds = new WeakMap<File, string>();
+const resumableSessions = new Map<string, SavedUpload>();
 
 function timeoutSignal(parent: AbortSignal) {
   const controller = new AbortController();
   const abort = () => controller.abort(parent.reason);
-  parent.addEventListener("abort", abort, { once: true });
+  if (parent.aborted) abort();
+  else parent.addEventListener("abort", abort, { once: true });
   const timer = window.setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), REQUEST_TIMEOUT_MS);
   return { signal: controller.signal, dispose: () => {
     clearTimeout(timer);
@@ -35,6 +38,69 @@ async function request(url: string, init: RequestInit, parent: AbortSignal) {
   } finally {
     timed.dispose();
   }
+}
+
+function responseHeaders(xhr: XMLHttpRequest) {
+  const headers = new Headers();
+  for (const line of xhr.getAllResponseHeaders().trim().split(/[\r\n]+/)) {
+    if (!line) continue;
+    const separator = line.indexOf(":");
+    if (separator > 0) headers.append(line.slice(0, separator).trim(), line.slice(separator + 1).trim());
+  }
+  return headers;
+}
+
+function patchRequest(
+  url: string,
+  offset: number,
+  body: Blob,
+  signal: AbortSignal,
+  onBytesSent: (bytesSent: number) => void,
+) {
+  return new Promise<Response>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"));
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    let settled = false;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", abort);
+      action();
+    };
+    const abort = () => {
+      xhr.abort();
+      finish(() => reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError")));
+    };
+
+    xhr.open("PATCH", url);
+    xhr.withCredentials = true;
+    xhr.timeout = REQUEST_TIMEOUT_MS;
+    xhr.setRequestHeader("Tus-Resumable", "1.0.0");
+    xhr.setRequestHeader("Upload-Offset", String(offset));
+    xhr.setRequestHeader("Content-Type", "application/offset+octet-stream");
+    xhr.upload.onprogress = event => onBytesSent(Math.min(body.size, Math.max(0, event.loaded)));
+    xhr.onload = () => finish(() => {
+      const responseBody = xhr.status === 204 || xhr.status === 205 ? null : xhr.responseText;
+      resolve(new Response(responseBody, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: responseHeaders(xhr),
+      }));
+    });
+    xhr.onerror = () => finish(() => reject(new TypeError("Network request failed")));
+    xhr.ontimeout = () => finish(() => reject(new DOMException("Request timed out", "TimeoutError")));
+    xhr.onabort = () => finish(() => reject(
+      signal.aborted
+        ? signal.reason ?? new DOMException("The operation was aborted", "AbortError")
+        : new DOMException("The operation was aborted", "AbortError"),
+    ));
+    signal.addEventListener("abort", abort, { once: true });
+    xhr.send(body);
+  });
 }
 
 async function errorMessage(response: Response) {
@@ -71,9 +137,16 @@ async function sha256(blob: Blob) {
 }
 
 async function sessionKey(file: File, metadata: ClipUploadMetadata) {
-  const contentHash = await sha256(file);
+  // Resume is intentionally limited to the exact File object selected in this
+  // page. A similarly named replacement can never be stitched onto its upload,
+  // and no unsafe cross-reload resume is claimed without a full-file identity.
+  let sessionId = fileSessionIds.get(file);
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    fileSessionIds.set(file, sessionId);
+  }
   const metadataHash = await sha256(new Blob([JSON.stringify(metadata)]));
-  return `gdna:clip-upload:v1:${contentHash}:${metadataHash}:${file.size}:${file.lastModified}`;
+  return `${sessionId}:${metadataHash}`;
 }
 
 async function headOffset(location: string, signal: AbortSignal): Promise<number | null> {
@@ -116,14 +189,10 @@ export async function uploadClip(
   file: File,
   metadata: ClipUploadMetadata,
   signal: AbortSignal,
-  onProgress: (percent: number) => void,
+  onProgress: (percent: number, uploadedBytes?: number) => void,
 ) {
   const key = await sessionKey(file, metadata);
-  let saved: SavedUpload | null = null;
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) saved = JSON.parse(raw) as SavedUpload;
-  } catch { localStorage.removeItem(key); }
+  let saved: SavedUpload | null = resumableSessions.get(key) ?? null;
 
   let offset: number | null = null;
   if (saved) {
@@ -134,7 +203,7 @@ export async function uploadClip(
   if (!saved || offset === null) {
     const groupId = crypto.randomUUID();
     saved = await create(file, metadata, groupId, signal);
-    localStorage.setItem(key, JSON.stringify(saved));
+    resumableSessions.set(key, saved);
     offset = 0;
   }
 
@@ -144,15 +213,12 @@ export async function uploadClip(
     let lastError: unknown;
     for (let attempt = 0; attempt < MAX_RETRIES && !advanced; attempt++) {
       try {
-        const response = await request(saved.location, {
-          method: "PATCH",
-          headers: {
-            "Tus-Resumable": "1.0.0",
-            "Upload-Offset": String(offset),
-            "Content-Type": "application/offset+octet-stream",
-          },
-          body: file.slice(offset, end),
-        }, signal);
+        const chunk = file.slice(offset, end);
+        const confirmedOffset = offset;
+        const response = await patchRequest(saved.location, offset, chunk, signal, bytesSent => {
+          const uploadedBytes = Math.min(file.size, confirmedOffset + bytesSent);
+          onProgress(Math.min(99, uploadedBytes / file.size * 100), uploadedBytes);
+        });
         if (response.status === 204) {
           const acknowledged = Number(response.headers.get("Upload-Offset"));
           offset = Number.isSafeInteger(acknowledged) && acknowledged > offset ? acknowledged : end;
@@ -180,7 +246,7 @@ export async function uploadClip(
         ? lastError
         : new Error("تعذر متابعة الرفع بعد عدة محاولات");
     }
-    onProgress(Math.min(99, Math.floor(offset / file.size * 100)));
+    onProgress(Math.min(99, offset / file.size * 100), offset);
   }
 
   const completion = await request(`${ROOT}/complete`, {
@@ -191,7 +257,7 @@ export async function uploadClip(
   if (!completion.ok) throw new Error(await errorMessage(completion));
   const body = await completion.json();
   if (!body?.clip || !Number.isSafeInteger(body.clip.id)) throw new Error("لم يؤكد الخادم نشر الكليب");
-  localStorage.removeItem(key);
-  onProgress(100);
+  resumableSessions.delete(key);
+  onProgress(100, file.size);
   return body.clip;
 }

@@ -181,8 +181,10 @@ export async function clipsFixture(t, database) {
       id SERIAL PRIMARY KEY, clip_id INTEGER NOT NULL UNIQUE, user_id INTEGER NOT NULL,
       original_reference TEXT NOT NULL, rights_holder_name TEXT NOT NULL,
       rights_holder_role TEXT NOT NULL, duration_seconds NUMERIC(12,3) NOT NULL,
-      visual_signature JSONB, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
+      visual_signature JSONB, audio_signature JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE clips ADD COLUMN is_original_footage BOOLEAN NOT NULL DEFAULT TRUE
   `);
   assert.equal((await observer.query("SELECT count(*) FROM clips")).rows[0].count, "0");
   async function seed(id, options = {}) {

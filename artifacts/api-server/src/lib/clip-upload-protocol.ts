@@ -1,4 +1,7 @@
 export const MAX_CLIP_BYTES = 2 * 1024 * 1024 * 1024;
+/** New mobile/resumable clip intake. Legacy multipart publishing keeps its 2 GiB ceiling. */
+export const MAX_NEW_CLIP_BYTES = 25 * 1024 * 1024;
+export const NEW_CLIP_TOO_LARGE = "الفيديو كبير - صغر 720p";
 export const CLIP_EXT: Record<string, string> = {
   "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
   "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac",

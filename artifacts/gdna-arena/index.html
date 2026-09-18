@@ -87,13 +87,46 @@
     }
     </script>
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <!-- Fonts: the isolated clip route deliberately avoids this external request. -->
+    <script>
+      {
+        const base = "%BASE_URL%".replace(/\/$/, "");
+        const rawRoute = location.pathname.slice(base.length) || "/";
+        const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
+        const isClipRoute = route === "/clip" || route === "/clips";
+      if (!isClipRoute) {
+        for (const href of ["https://fonts.googleapis.com", "https://fonts.gstatic.com"]) {
+          const connection = document.createElement("link");
+          connection.rel = "preconnect";
+          connection.href = href;
+          if (href.includes("gstatic")) connection.crossOrigin = "";
+          document.head.appendChild(connection);
+        }
+        const font = document.createElement("link");
+        font.rel = "stylesheet";
+        font.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap";
+        document.head.appendChild(font);
+      }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (() => {
+        const base = "%BASE_URL%".replace(/\/$/, "");
+        const rawRoute = location.pathname.slice(base.length) || "/";
+        const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
+        if (route === "/clip" || route === "/clips") {
+          document.documentElement.lang = "ar";
+          document.documentElement.dir = "rtl";
+          document.documentElement.style.colorScheme = "dark";
+          document.title = "الكليبز — ARENA";
+          document.getElementById("root").innerHTML =
+            '<main data-testid="clip-shell" aria-busy="true"><h1>الكليبز</h1><p>جارٍ تجهيز الرفع…</p></main>';
+        }
+      })();
+    </script>
     <script type="module" src="%BASE_URL%src/main.tsx"></script>
   </body>
 </html>

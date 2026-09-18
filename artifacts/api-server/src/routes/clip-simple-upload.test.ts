@@ -59,7 +59,8 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
   }));
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
-  const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/clip/upload`;
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  let endpoint = `${origin}/api/clip/upload`;
   const post = async (size: number, config: {
     auth?: boolean; title?: string; field?: string; type?: string; filename?: string;
     purpose?: string; originalReference?: string;
@@ -86,6 +87,9 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
     assert.equal(options[0].timeout, 300_000);
     assert.equal(SIMPLE_CLIP_TIMEOUT_MS, 300_000);
     assert.equal(options[0].preconditionOpts?.ifGenerationMatch, 0);
+    endpoint = `${origin}/api/clip/upload-simple`;
+    assert.equal((await post(1024, { auth: false })).status, 401);
+    assert.equal(options.length, 1, "the new alias authenticates before reading upload bytes");
     const exact = await post(SIMPLE_CLIP_MAX_BYTES);
     assert.equal(exact.status, 200, JSON.stringify(exact.body));
     assert.equal(published.at(-1)?.size, SIMPLE_CLIP_MAX_BYTES);
@@ -102,7 +106,7 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
     assert.equal(published.at(-1)?.rightsHolderRole, "producer");
     const tooLarge = await post(SIMPLE_CLIP_MAX_BYTES + 1);
     assert.equal(tooLarge.status, 413);
-    assert.deepEqual(tooLarge.body, { error: "صغر الفيديو" });
+    assert.deepEqual(tooLarge.body, { error: "الفيديو كبير - صغر 720p" });
     assert.equal(objects.size, 3, "oversize bytes are not retained or published");
     assert.equal((await post(10, { type: "text/plain" })).status, 415);
     assert.equal((await post(10, { field: "video" })).status, 400);
@@ -123,7 +127,7 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
     committedThenError = false;
     const audioTooLarge = await post(SIMPLE_CLIP_MAX_BYTES + 1, { type: "audio/wav" });
     assert.equal(audioTooLarge.status, 413);
-    assert.deepEqual(audioTooLarge.body, { error: "صغر الملف الصوتي" });
+    assert.deepEqual(audioTooLarge.body, { error: "الفيديو كبير - صغر 720p" });
     assert.equal((await post(512, { type: "", filename: "voice.mp3" })).status, 200);
     assert.equal(published.at(-1)?.contentType, "audio/mpeg");
     for (const [type, normalized, extension] of [
@@ -179,6 +183,45 @@ test("simplified feed always returns empty JSON on parsing, database and mapping
     );
     assert.deepEqual(fallback, { clips: [], hasMore: false, degraded: true });
     assert.equal(failures.length, 4);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test("public feed meets its deadline and never resurrects a previous snapshot", async () => {
+  let hang = false;
+  const app = express();
+  const handler = createClipsFeedHandler({
+    async loadRows(before, _limit, signal) {
+      if (hang) {
+        await new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+        });
+      }
+      return [{ id: before === null ? 9 : before - 1, thumbnail_object_name: null }];
+    },
+    logFailure() {},
+  });
+  app.get("/clips/feed", handler);
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/clips/feed`;
+  try {
+    const initial = await (await fetch(`${base}?limit=3`)).json() as {
+      clips: { id: number }[];
+    };
+    assert.equal(initial.clips[0].id, 9);
+    hang = true;
+    const started = Date.now();
+    const response = await fetch(`${base}?limit=3`);
+    assert.equal(response.status, 200);
+    const body = await response.json() as { clips: { id: number }[]; degraded: boolean };
+    assert.ok(Date.now() - started < 300, "deadline response must stay tightly bounded");
+    assert.deepEqual(body, { clips: [], hasMore: false, degraded: true });
+    const otherPage = await (await fetch(`${base}?before=9&limit=3`)).json();
+    assert.deepEqual(otherPage, { clips: [], hasMore: false, degraded: true },
+      "failures must not reuse any older page");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

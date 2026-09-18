@@ -1,30 +1,31 @@
-import { createRoot } from "react-dom/client";
-import App from "./App";
-import "./index.css";
-import { installOfflineNetworkGuards } from "@/lib/network";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const rawRoute = window.location.pathname.slice(base.length) || "/";
+const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
+const isClipRoute = route === "/clip" || route === "/clips";
 
-installOfflineNetworkGuards();
-createRoot(document.getElementById("root")!).render(<App />);
+function showClipStartupError() {
+  const root = document.getElementById("root");
+  if (!root) return;
+  root.innerHTML = "";
+  const main = document.createElement("main");
+  main.dir = "rtl";
+  main.setAttribute("data-testid", "clip-startup-error");
+  const message = document.createElement("p");
+  message.setAttribute("role", "alert");
+  message.textContent = "تعذر تشغيل صفحة الكليبز. تحقق من الاتصال وحاول مجدداً.";
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.setAttribute("data-testid", "clip-startup-retry");
+  retry.textContent = "إعادة المحاولة";
+  retry.addEventListener("click", () => window.location.reload());
+  main.append(message, retry);
+  root.append(main);
+}
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  const syncServiceWorkerConnectivity = () => {
-    navigator.serviceWorker.controller?.postMessage({
-      type: "GDNA_CONNECTIVITY",
-      online: navigator.onLine,
-    });
-  };
-  window.addEventListener("online", syncServiceWorkerConnectivity);
-  window.addEventListener("offline", syncServiceWorkerConnectivity);
-  navigator.serviceWorker.addEventListener("controllerchange", syncServiceWorkerConnectivity);
-  window.addEventListener("load", () => {
-    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
-      scope: import.meta.env.BASE_URL,
-      updateViaCache: "none",
-    }).then(registration => {
-      syncServiceWorkerConnectivity();
-      return registration.update();
-    }).catch(error => {
-      console.warn("Service worker registration failed:", error);
-    });
-  });
+// Keep these imports in distinct branches. A conditional import expression makes
+// Vite merge both dependency lists and eagerly fetch the App stylesheet.
+if (isClipRoute) {
+  void import("./clip-entry").catch(showClipStartupError);
+} else {
+  void import("./app-entry");
 }

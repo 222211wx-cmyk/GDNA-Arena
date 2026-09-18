@@ -3,11 +3,17 @@ name: Clips upload transport decisions
 description: Owner-directed Clips compression and resumable upload policy, plus integrity constraints
 ---
 
-Keep the citizen Clips page simple, but permit browser video compression and resumable upload.
+Keep the citizen Clips page isolated and lightweight: upload original files without browser compression or media decoding. The current limit is 25 MiB.
 
-**Why:** On 2026-09-18 the owner's subsequent emergency request explicitly superseded the earlier direct-upload-only decision: reduce large videos to 480p at approximately 800 kbps and upload in 1 MiB chunks with retry/resume. This is authorization for compression and resumability, not for deleting the original.
+**Why:** On 2026-09-18 the owner explicitly reversed the earlier 480p compression request after reporting a blank page and indefinite file-selection blocking on Android at 13.7 KB/s with many tabs. The live page also loaded the full application bundle, making even its compressed JavaScript prohibitively slow.
 
-**How to apply:** Preserve the selected source file and create a derivative. Distinguish preparation progress from transferred bytes and committed publication. Retain native playback, existing storage, server-side media verification, and legacy upload compatibility. Do not promise a fixed output size or universal browser codec support.
+**How to apply:** Do not reintroduce MediaRecorder, ffmpeg, audio decoding, or large-file hashing into file selection. Retain 1 MiB resumable network chunks, native playback on demand, server-side media/rights verification, and visible progress that reaches 100% only after publication. A multipart request is not chunked merely because the storage SDK streams it. Do not promise a two-second load without measuring production-built assets at the requested bandwidth.
+
+Scope upload retry identities to the exact selected File object unless full content identity is safely established.
+
+**Why:** Matching names, sizes, modification dates and a small beginning/end sample cannot distinguish files whose middle bytes differ. Reusing an upload offset across those files can splice unrelated bytes.
+
+**How to apply:** Keep same-selection network recovery and retries without claiming persistence across reloads. Do not substitute partial fingerprints for full-file identity in durable resume logic.
 
 Treat the historical one-minute minimum as a video rule, not a restriction on newly supported audio uploads.
 
