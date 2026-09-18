@@ -1,11 +1,18 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ClipsPage from "./clips";
 import { SimpleClipUpload } from "@/components/clips/SimpleClipUpload";
 
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("wouter", () => ({ Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span> }));
 
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
+});
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("minimal Clips page", () => {
@@ -89,6 +96,8 @@ describe("direct Clips upload", () => {
     expect(xhr.open).toHaveBeenCalledWith("POST", "/api/clip/upload");
     expect(xhr.timeout).toBe(300_000);
     expect((xhr.send.mock.calls[0][0] as FormData).get("file")).toBe(file);
+    expect((xhr.send.mock.calls[0][0] as FormData).get("purpose")).toBe("story");
+    expect((xhr.send.mock.calls[0][0] as FormData).get("originalReference")).toBeNull();
     act(() => xhr.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 }));
     expect(screen.getByRole("status").textContent).toContain("50%");
     act(() => { xhr.upload.onprogress?.({ lengthComputable: true, loaded: 100, total: 100 }); xhr.upload.onload?.(); });
@@ -120,5 +129,47 @@ describe("direct Clips upload", () => {
     fireEvent.submit(container.querySelector("form")!);
     expect((UploadRequest.latest.send.mock.calls[0][0] as FormData).get("file")).toBe(file);
     expect(container.querySelector("input")!.accept).toContain("audio/mpeg");
+  });
+  it("requires an original reference, sends the declaration, and shows the server-dated receipt", () => {
+    vi.stubGlobal("XMLHttpRequest", UploadRequest);
+    const published = vi.fn();
+    const { container } = render(<SimpleClipUpload onPublished={published} />);
+    fireEvent.change(container.querySelector("#clip-upload-file")!, { target: { files: [new File(["video"], "original.mp4")] } });
+    fireEvent.click(screen.getByRole("radio", { name: "إيداع أصل لديّ حقوقه" }));
+    fireEvent.submit(container.querySelector("form")!);
+    expect(screen.getByRole("alert").textContent).toContain("أدخل مرجع");
+    fireEvent.change(screen.getByLabelText("مرجع تسجيل الأصل أو وثيقة الحقوق"), { target: { value: " DOC-123 " } });
+    fireEvent.change(screen.getByLabelText("اسم صاحب الحقوق أو المنتج المخوّل"), { target: { value: "منتج الاختبار" } });
+    fireEvent.click(screen.getByRole("radio", { name: "منتج مخوّل" }));
+    fireEvent.submit(container.querySelector("form")!);
+    const xhr = UploadRequest.latest;
+    const form = xhr.send.mock.calls[0][0] as FormData;
+    expect(form.get("purpose")).toBe("original");
+    expect(form.get("originalReference")).toBe("DOC-123");
+    expect(form.get("rightsHolderName")).toBe("منتج الاختبار");
+    expect(form.get("rightsHolderRole")).toBe("producer");
+    xhr.responseText = JSON.stringify({ ok: true, url: "/api/clips/stream/2", clip: {
+      rights: { purpose: "original", registrationId: 7, registeredAt: "2026-09-18T10:00:00.000Z", status: "declared",
+        rightsHolderName: "منتج الاختبار", rightsHolderRole: "producer" },
+    } });
+    act(() => xhr.onload?.());
+    expect(screen.getByTestId("clip-original-receipt").textContent).toContain("برقم 7");
+    expect(screen.getByTestId("clip-original-receipt").textContent).toContain("باسم منتج الاختبار (منتج مخوّل)");
+    expect(screen.getByTestId("clip-original-receipt").querySelector("time")?.dateTime).toBe("2026-09-18T10:00:00.000Z");
+    expect(published).toHaveBeenCalledOnce();
+  });
+  it("does not send a stale original reference when switching back to a citizen clip", () => {
+    vi.stubGlobal("XMLHttpRequest", UploadRequest);
+    const { container } = render(<SimpleClipUpload onPublished={vi.fn()} />);
+    fireEvent.change(container.querySelector("#clip-upload-file")!, { target: { files: [new File(["video"], "story.mp4")] } });
+    fireEvent.click(screen.getByRole("radio", { name: "إيداع أصل لديّ حقوقه" }));
+    fireEvent.change(screen.getByLabelText("مرجع تسجيل الأصل أو وثيقة الحقوق"), { target: { value: "REF-123" } });
+    fireEvent.click(screen.getByRole("radio", { name: "ستوري / مقطع مواطن" }));
+    fireEvent.submit(container.querySelector("form")!);
+    const form = UploadRequest.latest.send.mock.calls[0][0] as FormData;
+    expect(form.get("purpose")).toBe("story");
+    expect(form.get("originalReference")).toBeNull();
+    expect(form.get("rightsHolderName")).toBeNull();
+    expect(form.get("rightsHolderRole")).toBeNull();
   });
 });

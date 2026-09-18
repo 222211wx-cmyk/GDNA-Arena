@@ -142,17 +142,16 @@ export function Navbar() {
             <circle cx="22" cy="39" r="2" fill="#C9A84C" fillOpacity="0.6"/>
           </svg>
 
-          {/* Wordmark */}
-          <div className="hidden sm:flex flex-col leading-none">
-            <span className="font-black text-base tracking-[0.12em] uppercase"
-              style={{ color: "hsl(var(--primary))", letterSpacing: "0.12em", fontFamily: "inherit" }}>
-              ARENA
-            </span>
-            <span className="text-[9px] font-bold tracking-[0.35em] uppercase"
-              style={{ color: "#ffffff40", letterSpacing: "0.35em" }}>
-              QAISYPRO
-            </span>
-          </div>
+          {/* Wordmark — keep the public brand visible beside the mark at every
+              viewport size; Arabic users see the localized name. */}
+          <span
+            className="font-black text-sm sm:text-base tracking-[0.12em] whitespace-nowrap"
+            dir={lang === "ar" ? "rtl" : "ltr"}
+            style={{ color: "hsl(var(--primary))", letterSpacing: lang === "ar" ? "0" : "0.12em", fontFamily: "inherit" }}
+            aria-label={lang === "ar" ? "أرينا" : "ARENA"}
+          >
+            {lang === "ar" ? "أرينا" : "ARENA"}
+          </span>
         </Link>
 
         {/* ── Desktop nav ── */}

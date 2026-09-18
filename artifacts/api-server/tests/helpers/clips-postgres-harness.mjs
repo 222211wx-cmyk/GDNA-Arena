@@ -174,6 +174,16 @@ export async function clipsFixture(t, database) {
   const b = await replica("b");
   // Production DDL, in the private search_path only.
   await a.ensureClipsTables();
+  // Publish owns this durable schema in production; the isolated integration
+  // schema mirrors migration 0022 without adding application startup DDL.
+  await observer.query(`
+    CREATE TABLE clip_original_registrations (
+      id SERIAL PRIMARY KEY, clip_id INTEGER NOT NULL UNIQUE, user_id INTEGER NOT NULL,
+      original_reference TEXT NOT NULL, rights_holder_name TEXT NOT NULL,
+      rights_holder_role TEXT NOT NULL, duration_seconds NUMERIC(12,3) NOT NULL,
+      visual_signature JSONB, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
   assert.equal((await observer.query("SELECT count(*) FROM clips")).rows[0].count, "0");
   async function seed(id, options = {}) {
     const objectName = `original_${id}.mp4`;

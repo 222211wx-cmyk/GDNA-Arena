@@ -60,10 +60,18 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/clip/upload`;
-  const post = async (size: number, config: { auth?: boolean; title?: string; field?: string; type?: string; filename?: string } = {}) => {
+  const post = async (size: number, config: {
+    auth?: boolean; title?: string; field?: string; type?: string; filename?: string;
+    purpose?: string; originalReference?: string;
+    rightsHolderName?: string; rightsHolderRole?: string;
+  } = {}) => {
     const form = new FormData();
     form.append(config.field ?? "file", new Blob([Buffer.alloc(size, 7)], { type: config.type ?? "video/mp4" }), config.filename ?? "original.mp4");
     if (config.title !== undefined) form.append("title", config.title);
+    if (config.purpose !== undefined) form.append("purpose", config.purpose);
+    if (config.originalReference !== undefined) form.append("originalReference", config.originalReference);
+    if (config.rightsHolderName !== undefined) form.append("rightsHolderName", config.rightsHolderName);
+    if (config.rightsHolderRole !== undefined) form.append("rightsHolderRole", config.rightsHolderRole);
     const response = await fetch(endpoint, { method: "POST", headers: config.auth === false ? {} : { "X-Test-User": "1" }, body: form });
     return { status: response.status, body: await response.json() };
   };
@@ -82,26 +90,36 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
     assert.equal(exact.status, 200, JSON.stringify(exact.body));
     assert.equal(published.at(-1)?.size, SIMPLE_CLIP_MAX_BYTES);
     assert.equal(published.at(-1)?.title, "كليب", "title is optional");
+    const declared = await post(1024, {
+      purpose: "original", originalReference: "  archive registration  ",
+      rightsHolderName: "  Studio Producer  ", rightsHolderRole: "producer",
+    });
+    assert.equal(declared.status, 200);
+    assert.equal(published.at(-1)?.purpose, "original");
+    assert.equal(published.at(-1)?.originalReference, "  archive registration  ",
+      "the route forwards declarations for server-side trimming and validation");
+    assert.equal(published.at(-1)?.rightsHolderName, "  Studio Producer  ");
+    assert.equal(published.at(-1)?.rightsHolderRole, "producer");
     const tooLarge = await post(SIMPLE_CLIP_MAX_BYTES + 1);
     assert.equal(tooLarge.status, 413);
     assert.deepEqual(tooLarge.body, { error: "صغر الفيديو" });
-    assert.equal(objects.size, 2, "oversize bytes are not retained or published");
+    assert.equal(objects.size, 3, "oversize bytes are not retained or published");
     assert.equal((await post(10, { type: "text/plain" })).status, 415);
     assert.equal((await post(10, { field: "video" })).status, 400);
     assert.equal((await post(0)).status, 400);
     publishError = new ClipUploadError(400, "Duration below 60 seconds");
     assert.equal((await post(1024)).status, 400);
-    assert.equal(objects.size, 2);
+    assert.equal(objects.size, 3);
     publishError = new ClipUploadError(409, "First-owner registry rejected duplicate");
     assert.equal((await post(1024)).status, 409);
-    assert.equal(objects.size, 2);
+    assert.equal(objects.size, 3);
     publishError = undefined;
     streamError = true;
     assert.equal((await post(1024)).status, 500);
     streamError = false;
     committedThenError = true;
     assert.equal((await post(1024)).status, 500);
-    assert.equal(objects.size, 3, "ambiguous commit cleanup preserves published original");
+    assert.equal(objects.size, 4, "ambiguous commit cleanup preserves published original");
     committedThenError = false;
     const audioTooLarge = await post(SIMPLE_CLIP_MAX_BYTES + 1, { type: "audio/wav" });
     assert.equal(audioTooLarge.status, 413);

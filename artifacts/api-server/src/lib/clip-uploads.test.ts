@@ -69,7 +69,11 @@ export class FakePublisher implements UploadPublisher {
 }
 
 export function metadata(overrides: Partial<UploadMetadata> = {}): UploadMetadata {
-  return { groupId: randomUUID(), partIndex: 0, partCount: 1, totalSize: 6, title: "عنوان الفيديو", contentType: "video/mp4", durationSec: 61, ...overrides };
+  return {
+    groupId: randomUUID(), partIndex: 0, partCount: 1, totalSize: 6,
+    title: "عنوان الفيديو", contentType: "video/mp4", durationSec: 61,
+    purpose: "story", ...overrides,
+  };
 }
 export function metadataHeader(values: Record<string, unknown>): string {
   return Object.entries(values).map(([key, value]) => `${key} ${Buffer.from(String(value)).toString("base64")}`).join(",");
@@ -96,6 +100,42 @@ test("Tus metadata decodes UTF-8 and validates all bounds without trusting durat
   assert.throws(() => parseUploadMetadata("title !!!"), ClipUploadError);
   assert.throws(() => parseUploadMetadata("title /w=="), ClipUploadError);
   assert.throws(() => parseUploadMetadata("title YQ==,title Yg=="), ClipUploadError);
+});
+
+test("rights metadata defaults legacy callers to story and validates original declarations", () => {
+  const valid = metadata();
+  const legacy = { ...valid } as Partial<UploadMetadata>;
+  delete legacy.purpose;
+  assert.equal(parseUploadMetadata(metadataHeader(legacy)).purpose, "story");
+  assert.throws(
+    () => parseUploadMetadata(metadataHeader({ ...legacy, purpose: "original" })),
+    (error: unknown) => error instanceof ClipUploadError && error.status === 400,
+  );
+  const original = parseUploadMetadata(metadataHeader({
+    ...legacy, purpose: "original", originalReference: "  catalog ref 123  ",
+    rightsHolderName: "  Producer Name  ", rightsHolderRole: "producer",
+  }));
+  assert.equal(original.purpose, "original");
+  assert.equal(original.originalReference, "catalog ref 123");
+  assert.equal(original.rightsHolderName, "Producer Name");
+  assert.equal(original.rightsHolderRole, "producer");
+  for (const originalReference of ["  ", "x".repeat(201)]) {
+    assert.throws(
+      () => parseUploadMetadata(metadataHeader({
+        ...legacy, purpose: "original", originalReference,
+        rightsHolderName: "Owner Name", rightsHolderRole: "owner",
+      })),
+      ClipUploadError,
+    );
+  }
+  for (const update of [
+    { rightsHolderName: " " }, { rightsHolderRole: "uploader" },
+  ]) {
+    assert.throws(() => parseUploadMetadata(metadataHeader({
+      ...legacy, purpose: "original", originalReference: "catalog ref",
+      rightsHolderName: "Owner Name", rightsHolderRole: "owner", ...update,
+    })), ClipUploadError);
+  }
 });
 
 test("part lengths and metadata must be consistent for an entire group", async () => {

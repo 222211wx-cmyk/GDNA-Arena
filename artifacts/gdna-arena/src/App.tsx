@@ -86,6 +86,33 @@ function RealtimeQuerySync() {
   return null;
 }
 
+function ArenaDocumentTitle() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    // Keep any meaningful title supplied by a page, while ensuring every
+    // browser tab carries the public ARENA brand.
+    const ensureArenaTitle = () => {
+      const current = document.title.trim();
+      if (!current || !current.toLocaleUpperCase().includes("ARENA")) {
+        document.title = current ? `ARENA — ${current}` : "ARENA";
+      }
+    };
+    ensureArenaTitle();
+    // A page may set a meaningful title after it mounts. Observe those
+    // updates rather than replacing the page title, and only add the brand.
+    const observer = new MutationObserver(ensureArenaTitle);
+    observer.observe(document.querySelector("title") ?? document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    return () => observer.disconnect();
+  }, [location]);
+
+  return null;
+}
+
 function PageWrapper() {
   const [location] = useLocation();
   return (
@@ -161,6 +188,7 @@ function Router() {
   const isChoiceEntry = location === "/login";
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
+      <ArenaDocumentTitle />
       {!isChoiceEntry && <Navbar />}
       <PageWrapper />
       {!isChoiceEntry && <Footer />}

@@ -42,6 +42,53 @@ export const isAudioClip = (contentType: string): boolean =>
 export class ClipUploadError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
+export type ClipPublishPurpose = "story" | "original";
+export type ClipRightsInput =
+  | { purpose: "story"; originalReference?: undefined }
+  | {
+      purpose: "original";
+      originalReference: string;
+      rightsHolderName: string;
+      rightsHolderRole: "owner" | "producer";
+    };
+
+export function validateClipRightsInput(
+  purpose: unknown,
+  originalReference: unknown,
+  rightsHolderName?: unknown,
+  rightsHolderRole?: unknown,
+): ClipRightsInput {
+  const normalizedPurpose = purpose === undefined || purpose === null || purpose === ""
+    ? "story"
+    : purpose;
+  if (normalizedPurpose !== "story" && normalizedPurpose !== "original") {
+    throw new ClipUploadError(400, "purpose must be story or original");
+  }
+  if (normalizedPurpose === "story") return { purpose: "story" };
+  if (typeof originalReference !== "string") {
+    throw new ClipUploadError(400, "Original registration requires an originalReference");
+  }
+  const reference = originalReference.trim();
+  if (reference.length < 3 || reference.length > 200) {
+    throw new ClipUploadError(400, "originalReference must be 3–200 characters after trimming");
+  }
+  if (typeof rightsHolderName !== "string") {
+    throw new ClipUploadError(400, "Original registration requires a rightsHolderName");
+  }
+  const holderName = rightsHolderName.trim();
+  if (holderName.length < 2 || holderName.length > 120) {
+    throw new ClipUploadError(400, "rightsHolderName must be 2–120 characters after trimming");
+  }
+  if (rightsHolderRole !== "owner" && rightsHolderRole !== "producer") {
+    throw new ClipUploadError(400, "rightsHolderRole must be owner or producer");
+  }
+  return {
+    purpose: "original",
+    originalReference: reference,
+    rightsHolderName: holderName,
+    rightsHolderRole,
+  };
+}
 export function clipDurationSeconds(seconds: number, contentType: string): number {
   if (!Number.isFinite(seconds) || seconds <= 0) throw new ClipUploadError(400, "مدة الملف غير صالحة");
   if (isAudioClip(contentType)) return Math.max(1, Math.floor(seconds));

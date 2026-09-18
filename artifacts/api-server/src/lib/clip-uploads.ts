@@ -1,6 +1,9 @@
 import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
-import { ClipUploadError, CLIP_EXT, MAX_CLIP_BYTES, normalizeClipContentType } from "./clip-upload-protocol.js";
+import {
+  ClipUploadError, CLIP_EXT, MAX_CLIP_BYTES, normalizeClipContentType,
+  validateClipRightsInput, type ClipPublishPurpose,
+} from "./clip-upload-protocol.js";
 
 export const CHUNK_BYTES = 5 * 1024 * 1024;
 export const UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -14,6 +17,10 @@ export interface UploadMetadata {
   title: string;
   contentType: string;
   durationSec: number;
+  purpose: ClipPublishPurpose;
+  originalReference?: string;
+  rightsHolderName?: string;
+  rightsHolderRole?: "owner" | "producer";
 }
 export interface UploadSession {
   id: string;
@@ -45,7 +52,11 @@ export interface UploadStore {
 export interface UploadPublisher {
   lock<T>(key: string, action: () => Promise<T>): Promise<T>;
   find(userId: number, objectName: string): Promise<Record<string, unknown> | null>;
-  publish(input: { userId: number; filename: string; title: string; contentType: string; size: number; sha256: string }): Promise<Record<string, unknown>>;
+  publish(input: {
+    userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
+    purpose: ClipPublishPurpose; originalReference?: string;
+    rightsHolderName?: string; rightsHolderRole?: "owner" | "producer";
+  }): Promise<Record<string, unknown>>;
 }
 function fail(status: number, message: string): never { throw new ClipUploadError(status, message); }
 export function unsignedInteger(raw: string | undefined, name: string): number {
@@ -78,7 +89,10 @@ export function parseUploadMetadata(header: string | undefined): UploadMetadata 
   if (!contentType) fail(415, "Unsupported media contentType");
   const durationSec = Number(entries.durationSec);
   if (!entries.durationSec?.trim() || !Number.isFinite(durationSec) || durationSec < 0) fail(400, "Invalid durationSec");
-  return { groupId, partIndex, partCount, totalSize, title, contentType, durationSec };
+  const rights = validateClipRightsInput(
+    entries.purpose, entries.originalReference, entries.rightsHolderName, entries.rightsHolderRole,
+  );
+  return { groupId, partIndex, partCount, totalSize, title, contentType, durationSec, ...rights };
 }
 function common(metadata: UploadMetadata) {
   const { partIndex: _partIndex, ...rest } = metadata;
@@ -261,7 +275,10 @@ export class ClipUploads {
       if (actualSize !== size) fail(409, "Stored video is incomplete");
       const result = await this.publisher.publish({
         userId, filename, title: first.metadata.title, contentType: first.metadata.contentType,
-        size, sha256: hash.digest("hex"),
+        size, sha256: hash.digest("hex"), purpose: first.metadata.purpose,
+        originalReference: first.metadata.originalReference,
+        rightsHolderName: first.metadata.rightsHolderName,
+        rightsHolderRole: first.metadata.rightsHolderRole,
       });
       await this.store.write(key, { ...group.value, state: "published", result }, group.generation);
       // Only temporary bytes are removed, after both the publication and result are durable.

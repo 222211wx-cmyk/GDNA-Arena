@@ -15,12 +15,12 @@ import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
 import { createSimpleClipUploadRouter } from "./clip-simple-upload.js";
 import { CLIP_EXT, resolveClipUploadType, clipDownloadExtension } from "../lib/clip-upload-protocol.js";
 
-// ─── CLIPS — كليبسز (Reels-style, producer-owned) ────────────────────────────
-// Owner's rules:
+// ─── CLIPS — كليبسز (Reels-style stories and original declarations) ──────────
+// Publishing rules:
 //  • Minimum duration 1 minute — shorter clips are REJECTED.
 //  • No upper limit (even 25 hours).
-//  • Only the owner of the work may publish: every file is sha256-fingerprinted
-//    at upload; first owner wins (same rights system as the rest of the empire).
+//  • SHA-256 detects exact bytes only. Original declarations additionally protect
+//    registered full-duration visuals; they are declarations, not legal findings.
 //  • Views earn coins via monetization_settings (content_type 'clip').
 import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
 import { publishClip, ClipUploadError } from "../lib/clip-publish.js";
@@ -30,7 +30,7 @@ const router: IRouter = Router();
 router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));
 router.use(createSimpleClipUploadRouter({
   file: clipFile,
-  publish: publishClip,
+  publish: input => publishClip({ ...input, deferThumbnail: true }),
   log: (err, message) => logger.warn({ err }, `[clips] ${message}`),
   async cleanup(name) {
     // Preserve a committed original when a COMMIT acknowledgement was lost.
@@ -170,9 +170,16 @@ router.get("/clips/feed", createClipsFeedHandler({
   async loadRows(before, limit) {
     const params = before === null ? [limit + 1] : [before, limit + 1];
     const { rows } = await requirePool().query(
-      `SELECT id, user_id, username, title, content_type, duration_sec, views, created_at, thumbnail_object_name
-       FROM clips WHERE is_frozen = FALSE AND object_name IS NOT NULL AND object_name <> '' ${before === null ? "" : "AND id < $1"}
-       ORDER BY id DESC LIMIT $${params.length}`, params,
+      `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec,
+              c.views, c.created_at, c.thumbnail_object_name,
+              CASE WHEN r.id IS NULL THEN 'story' ELSE 'original' END AS rights_purpose,
+              r.created_at AS rights_registered_at,
+              r.rights_holder_name, r.rights_holder_role
+       FROM clips c
+       LEFT JOIN clip_original_registrations r ON r.clip_id=c.id
+       WHERE c.is_frozen = FALSE AND c.object_name IS NOT NULL AND c.object_name <> ''
+         ${before === null ? "" : "AND c.id < $1"}
+       ORDER BY c.id DESC LIMIT $${params.length}`, params,
     );
     return rows;
   },
@@ -213,6 +220,8 @@ router.post("/clips", uploadLimiter, (req, res): void => {
       const clip = await publishClip({
         userId, filename: f.filename, title, contentType: f.mimetype,
         size: f.size, sha256: f.sha256,
+        purpose: req.body?.purpose, originalReference: req.body?.originalReference,
+        rightsHolderName: req.body?.rightsHolderName, rightsHolderRole: req.body?.rightsHolderRole,
       });
       res.json({ clip });
     } catch (e) {

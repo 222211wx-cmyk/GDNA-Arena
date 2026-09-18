@@ -2,6 +2,15 @@
 
 Play-to-earn crypto gaming platform — players register, compete in 3 arenas, earn coins & XP, claim daily rewards, chat with an AI genie, and track stats on a leaderboard.
 
+## Preserve the original — owner instruction (2026-09-18)
+
+Future work must update and improve the existing product while preserving its original functionality, content, assets, and data.
+
+- Do not remove existing pages, tabs, features, files, original media, or stored records without the owner's explicit approval.
+- Requests to update, simplify, optimize, or maintain the app are not permission to delete original material or functionality.
+- Prefer additions and compatible in-place improvements. Keep original media intact when producing derived versions.
+- If a proposed change requires removal or replacement of an original, explain what would be lost and obtain approval before proceeding.
+
 ## Run & Operate
 
 - `pnpm --filter @workspace/gdna-arena run dev` — frontend (port from env)

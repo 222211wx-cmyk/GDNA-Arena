@@ -22,7 +22,9 @@ export function reset() {
     objects: new Map(), reads: [], deletes: [], saves: [], queries: [],
     clips: new Map(), fingerprints: new Map(), nextClipId: 1, nextFingerprintId: 1,
     thumbnailMode: "ok", jpeg: Buffer.from([0xff, 0xd8, 0x45, 0x32, 0xff, 0xd9]),
-    duration: 75.8, failClipInsert: false,
+    duration: 75.8, failClipInsert: false, originals: [], registrations: [],
+    visualSignature: { version: 1, frames: ["candidate"] },
+    thumbnailInput: null,
   });
 }
 reset();
@@ -83,6 +85,10 @@ async function query(sql, params = []) {
     return result([{ count }]);
   }
   if (compact.startsWith("SELECT username FROM users")) return result([{ username: "rights-owner" }]);
+  if (compact.startsWith("SELECT EXISTS (SELECT user_id, duration_seconds, visual_signature")) {
+    return result([{ exists: state.originals.length > 0 }]);
+  }
+  if (compact.startsWith("SELECT user_id, duration_seconds, visual_signature FROM clip_original_registrations")) return result(state.originals);
   if (compact.startsWith("SELECT is_admin FROM users")) return result([{ is_admin: false }]);
   if (compact.startsWith("INSERT INTO content_fingerprints")) {
     if (state.fingerprints.has(params[0])) return result([]);
@@ -112,8 +118,18 @@ async function query(sql, params = []) {
     for (const value of state.fingerprints.values()) if (value.id === params[1]) value.content_id = params[0];
     return result([], 1);
   }
-  if (compact.includes("FROM clips WHERE is_frozen = FALSE")) {
+  if (compact.startsWith("INSERT INTO clip_original_registrations")) {
+    const row = { id: state.registrations.length + 1, created_at: new Date("2026-01-02T03:04:05Z") };
+    state.registrations.push({
+      clip_id: params[0], user_id: params[1], original_reference: params[2],
+      rights_holder_name: params[3], rights_holder_role: params[4],
+      duration_seconds: params[5], visual_signature: params[6],
+    });
+    return result([row]);
+  }
+  if (compact.includes("FROM clips c") && compact.includes("c.is_frozen = FALSE")) {
     return result([...state.clips.values()].filter(c => !c.is_frozen)
+      .map(c => ({ ...c, rights_purpose: "story", rights_registered_at: null }))
       .sort((a, b) => b.id - a.id).slice(0, params.at(-1)));
   }
   if (compact.startsWith("SELECT thumbnail_object_name FROM clips")) {
@@ -144,6 +160,14 @@ export async function generateClipThumbnail(original) {
   for await (const chunk of original.createReadStream()) chunks.push(chunk);
   state.thumbnailInput = Buffer.concat(chunks);
   return Buffer.from(state.jpeg);
+}
+
+export async function extractClipVisualSignature() {
+  return state.visualSignature;
+}
+export function matchesOriginalVideo(a, b) {
+  return Math.abs(a.durationSeconds - b.durationSeconds) <= 0.5 &&
+    JSON.stringify(a.signature) === JSON.stringify(b.signature);
 }
 
 export function spawn() {
@@ -194,6 +218,7 @@ await build({
       plugin.onResolve({ filter: /(?:^|\/)chatStorage(?:\.js)?$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /\/(?:lib\/)?logger(?:\.js)?$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /\/clip-thumbnail\.js$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /\/clip-original-signature\.js$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /^node:child_process$/ }, () => ({ path: mocksPath }));
     },
   }],
@@ -209,15 +234,31 @@ const server = await new Promise(resolve => {
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 test.after(() => new Promise(resolve => server.close(resolve)));
 
-async function publish(bytes, { title = "Original work", userId = 7 } = {}) {
+async function publish(bytes, {
+  title = "Original work", userId = 7, purpose, originalReference,
+  rightsHolderName, rightsHolderRole,
+} = {}) {
   const body = new FormData();
   body.append("title", title);
   body.append("durationSec", "75");
+  if (purpose !== undefined) body.append("purpose", purpose);
+  if (originalReference !== undefined) body.append("originalReference", originalReference);
+  if (rightsHolderName !== undefined) body.append("rightsHolderName", rightsHolderName);
+  if (rightsHolderRole !== undefined) body.append("rightsHolderRole", rightsHolderRole);
   body.append("video", new Blob([bytes], { type: "video/mp4" }), "original.mp4");
   return fetch(`${baseUrl}/clips`, {
     method: "POST",
     headers: { "x-test-user": String(userId) },
     body,
+  });
+}
+
+async function publishSimple(bytes) {
+  const body = new FormData();
+  body.append("title", "Fast story");
+  body.append("file", new Blob([bytes], { type: "video/mp4" }), "story.mp4");
+  return fetch(`${baseUrl}/clip/upload`, {
+    method: "POST", headers: { "x-test-user": "7" }, body,
   });
 }
 
@@ -237,11 +278,20 @@ test("clips route thumbnail and ownership integration", async t => {
     const response = await publish(original);
     assert.equal(response.status, 200);
     const { clip } = await response.json();
+    assert.deepEqual(clip.rights, { purpose: "story" });
     assert.equal(clip.thumb, `/api/clips/thumbnail/${clip.id}`);
     assert.equal("thumbnail_object_name" in clip, false);
 
     const fingerprintInsert = state.queries.find(q => q.sql.startsWith("INSERT INTO content_fingerprints"));
     assert.equal(fingerprintInsert.params[0], crypto.createHash("sha256").update(original).digest("hex"));
+    const lockKeys = state.queries
+      .filter(q => q.sql.startsWith("SELECT pg_advisory_xact_lock"))
+      .map(q => q.params[0]);
+    assert.deepEqual(lockKeys, [
+      "clip-original-duration:v1:75", "clip-original-duration:v1:76", "clip-publish-user:7",
+    ]);
+    assert.equal(lockKeys.includes("clip-original-policy:v1"), false,
+      "unrelated video durations are never serialized by one global lock");
     const savedClip = state.clips.get(clip.id);
     assert.deepEqual(storedObject(savedClip.object_name), original);
     assert.deepEqual(state.thumbnailInput, original);
@@ -251,6 +301,7 @@ test("clips route thumbnail and ownership integration", async t => {
     const feedResponse = await fetch(`${baseUrl}/clips/feed`);
     const feed = await feedResponse.json();
     assert.equal(feed.clips[0].thumb, `/api/clips/thumbnail/${clip.id}`);
+    assert.equal(feed.clips[0].rights_purpose, "story");
     assert.equal("thumbnail_object_name" in feed.clips[0], false);
 
     state.reads.length = 0;
@@ -261,6 +312,68 @@ test("clips route thumbnail and ownership integration", async t => {
     assert.deepEqual(Buffer.from(await jpegResponse.arrayBuffer()), state.jpeg);
     assert.equal(state.reads.length, 1);
     assert.equal(state.reads[0].endsWith(`/clips/${savedClip.thumbnail_object_name}`), true);
+  });
+
+  await t.test("declares originals privately and blocks only another citizen's full matching visuals", async () => {
+    reset();
+    const declaredResponse = await publish(Buffer.from("declared-original"), {
+      purpose: "original", originalReference: "  private catalog #42  ",
+      rightsHolderName: "  Producer Forty Two  ", rightsHolderRole: "producer",
+    });
+    assert.equal(declaredResponse.status, 200);
+    const declared = (await declaredResponse.json()).clip;
+    assert.deepEqual(declared.rights, {
+      purpose: "original",
+      registrationId: 1,
+      registeredAt: "2026-01-02T03:04:05.000Z",
+      rightsHolderName: "Producer Forty Two",
+      rightsHolderRole: "producer",
+      status: "declared",
+    });
+    assert.equal(state.registrations[0].original_reference, "private catalog #42");
+    assert.equal(state.registrations[0].rights_holder_name, "Producer Forty Two");
+
+    state.originals = [{
+      user_id: 8, duration_seconds: state.duration,
+      visual_signature: { version: 1, frames: ["candidate"] },
+    }];
+    const rejected = await publish(Buffer.from("transcoded-full-copy"), { userId: 9 });
+    assert.equal(rejected.status, 409);
+    assert.match((await rejected.json()).error, /حقوق النشر/);
+
+    state.visualSignature = { version: 1, frames: ["different-visuals"] };
+    const allowed = await publish(Buffer.from("same-music-new-visuals"), { userId: 9 });
+    assert.equal(allowed.status, 200,
+      "same duration does not block a story when its visuals differ; audio is not perceptually compared");
+    await allowed.json();
+  });
+
+  await t.test("rejects malformed original flags while legacy publishing defaults to story", async () => {
+    reset();
+    const missing = await publish(Buffer.from("missing-reference"), { purpose: "original" });
+    assert.equal(missing.status, 400);
+    await missing.json();
+    const short = await publish(Buffer.from("short-reference"), {
+      purpose: "original", originalReference: " x ",
+    });
+    assert.equal(short.status, 400);
+    await short.json();
+    const invalid = await publish(Buffer.from("invalid-purpose"), { purpose: "verified" });
+    assert.equal(invalid.status, 400);
+    await invalid.json();
+    const legacy = await publish(Buffer.from("legacy-story"));
+    assert.equal(legacy.status, 200);
+    assert.deepEqual((await legacy.json()).clip.rights, { purpose: "story" });
+  });
+
+  await t.test("simple direct publishing defers only thumbnail work", async () => {
+    reset();
+    const response = await publishSimple(Buffer.from("fast-direct-story"));
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.clip.thumb, null);
+    assert.equal(state.thumbnailInput, null, "simple publication does not wait for thumbnail decoding");
+    assert.equal(state.clips.get(body.clip.id).thumbnail_object_name, null);
   });
 
   await t.test("returns 404 for missing or frozen thumbnails without reading storage", async () => {
@@ -321,7 +434,7 @@ test("clips route thumbnail and ownership integration", async t => {
     });
     const duplicate = await publish(bytes);
     assert.equal(duplicate.status, 409);
-    assert.match((await duplicate.json()).error, /first-owner/);
+    assert.match((await duplicate.json()).error, /Exact-byte duplicate/);
     assert.equal(state.objects.size, 0);
     assert.ok(state.deletes.some(name => name.includes("/clip_")));
     assert.ok(state.deletes.some(name => name.includes("/thumb_")));

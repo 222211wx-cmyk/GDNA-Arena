@@ -22,7 +22,11 @@ export interface SimpleClipUploadDependencies {
   file(name: string): Pick<File, "createWriteStream">;
   /** Must check DB references before deleting, including ambiguous COMMITs. */
   cleanup(name: string): Promise<void>;
-  publish(input: { userId: number; filename: string; title: string; contentType: string; size: number; sha256: string }): Promise<{ id: number; [key: string]: unknown }>;
+  publish(input: {
+    userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
+    purpose?: unknown; originalReference?: unknown;
+    rightsHolderName?: unknown; rightsHolderRole?: unknown;
+  }): Promise<{ id: number; [key: string]: unknown }>;
   log(error: unknown, message: string): void;
 }
 
@@ -91,7 +95,7 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
   };
   // Busboy emits "limit" at equality, so reserve one sentinel byte and enforce
   // the actual 20 MiB bound ourselves. Exactly 20 MiB remains valid.
-  const upload = multer({ storage, limits: { fileSize: SIMPLE_CLIP_MAX_BYTES + 1, files: 1, fields: 1, fieldSize: 1024, parts: 3 } });
+  const upload = multer({ storage, limits: { fileSize: SIMPLE_CLIP_MAX_BYTES + 1, files: 1, fields: 5, fieldSize: 1024, parts: 7 } });
   router.post("/clip/upload", (req, res) => {
     const userId = (req.session as { userId?: number } | undefined)?.userId;
     if (!userId) { res.status(401).json({ error: "يجب تسجيل الدخول" }); return; }
@@ -128,6 +132,8 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
         const clip = await deps.publish({
           userId, filename: file.filename, title: title || "كليب",
           contentType: file.mimetype, size: file.size, sha256: file.sha256,
+          purpose: req.body?.purpose, originalReference: req.body?.originalReference,
+          rightsHolderName: req.body?.rightsHolderName, rightsHolderRole: req.body?.rightsHolderRole,
         });
         if (!res.headersSent && !res.destroyed) res.json({ url: `/api/clips/stream/${clip.id}`, ok: true, clip });
       } catch (caught) {

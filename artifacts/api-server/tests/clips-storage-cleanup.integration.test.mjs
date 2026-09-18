@@ -83,6 +83,12 @@ test("DELETE durably enqueues three distinct names and retries each independentl
 test("outage backoff persists across fresh replicas and destroyed database sessions without a retry cap", { timeout: 30000 }, async t => {
   const f = await clipsFixture(t, database);
   const clip = await f.seed(110, { thumbnailObjectName: "stored_poster_110.jpg" });
+  await f.observer.query(
+    `INSERT INTO clip_original_registrations
+       (clip_id,user_id,original_reference,rights_holder_name,rights_holder_role,duration_seconds,visual_signature)
+     VALUES ($1,7,'private archive reference','Fixture Producer','producer',61.125,$2)`,
+    [clip.id, { version: 1, frames: ["durable"] }],
+  );
   f.state.objects.set(clip.posterName, Buffer.from("candidate"));
   const rights = (await f.observer.query(
     "SELECT * FROM content_fingerprints ORDER BY fingerprint",
@@ -114,6 +120,11 @@ test("outage backoff persists across fresh replicas and destroyed database sessi
     assert.deepEqual(
       (await f.observer.query("SELECT * FROM content_fingerprints ORDER BY fingerprint")).rows,
       rights,
+    );
+    assert.equal(
+      (await f.observer.query("SELECT count(*) FROM clip_original_registrations WHERE clip_id=$1", [clip.id])).rows[0].count,
+      "1",
+      "deleting a clip must retain its private original declaration and visual protection",
     );
     if (attempt === 11) break;
 

@@ -89,10 +89,36 @@ export const clipUploadPublisher: UploadPublisher = {
   },
   async find(userId, objectName) {
     const { rows } = await (groupConnection.getStore() ?? pool).query(
-      `SELECT c.id, c.title, c.duration_sec, c.created_at, c.thumbnail_object_name
+      `SELECT c.id, c.title, c.duration_sec, c.created_at, c.thumbnail_object_name,
+              CASE WHEN r.id IS NULL THEN 'story' ELSE 'original' END AS rights_purpose,
+              r.id AS rights_registration_id, r.created_at AS rights_registered_at,
+              r.rights_holder_name, r.rights_holder_role
        FROM clips c JOIN content_fingerprints f ON f.content_id=c.id AND f.content_type='clip'
+       LEFT JOIN clip_original_registrations r ON r.clip_id=c.id
        WHERE c.user_id=$1 AND c.object_name=$2 LIMIT 1`, [userId, objectName]);
-    return rows[0] ? clipWithThumbnail(rows[0]) : null;
+    if (!rows[0]) return null;
+    const row = rows[0];
+    const {
+      rights_purpose: rightsPurpose,
+      rights_registration_id: registrationId,
+      rights_registered_at: registeredAt,
+      rights_holder_name: rightsHolderName,
+      rights_holder_role: rightsHolderRole,
+      ...publicRow
+    } = row;
+    return {
+      ...clipWithThumbnail(publicRow),
+      rights: rightsPurpose === "original"
+        ? {
+            purpose: "original",
+            registrationId,
+            registeredAt,
+            rightsHolderName,
+            rightsHolderRole,
+            status: "declared",
+          }
+        : { purpose: "story" },
+    };
   },
   publish: input => publishClip(input, groupConnection.getStore()),
 };
