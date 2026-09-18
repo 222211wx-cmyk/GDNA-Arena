@@ -1,0 +1,100 @@
+import { pool } from "@workspace/db";
+import { clipFile } from "../lib/clip-storage.js";
+import { logger } from "../lib/logger";
+
+const BATCH_SIZE = 12;
+const BATCH_DEADLINE_MS = 90_000;
+const DELETE_TIMEOUT_MS = 10_000;
+const INTERVAL_MS = 60_000;
+let timer: NodeJS.Timeout | undefined;
+
+async function removeObject(objectName: string): Promise<void> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      clipFile(objectName).delete({ ignoreNotFound: true }),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("CLIP_CLEANUP_TIMEOUT")), DELETE_TIMEOUT_MS);
+        timeout.unref();
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+  // A timed-out SDK request may still finish. That is safe: names are immutable
+  // upload identities, deletion is idempotent, and retries never recreate media.
+}
+
+/**
+ * Durable per-object outbox, independent of the now-deleted clip. Each claim
+ * commits backoff before storage I/O so a crash or lost response leaves work
+ * eligible later. Concurrent replicas claim disjoint due rows without holding
+ * a database transaction open across a storage request.
+ */
+export async function runClipStorageCleanupBatch(clipId?: number): Promise<number> {
+  const client = await pool.connect();
+  let destroyClient = false;
+  let removed = 0;
+  const deadline = Date.now() + BATCH_DEADLINE_MS;
+  try {
+    await client.query("SET statement_timeout = '5s'");
+    for (let n = 0; n < BATCH_SIZE && Date.now() < deadline; n++) {
+      const { rows } = await client.query<{
+        object_name: string; clip_id: number; attempts: number;
+      }>(`
+        WITH candidate AS (
+          SELECT object_name FROM clip_storage_cleanup
+          WHERE retry_at <= NOW() AND ($1::integer IS NULL OR clip_id=$1)
+          ORDER BY retry_at, object_name
+          LIMIT 1 FOR UPDATE SKIP LOCKED
+        )
+        UPDATE clip_storage_cleanup q
+        SET attempts = q.attempts + 1,
+            retry_at = NOW() + INTERVAL '1 second' *
+              LEAST(86400, 300 * POWER(2, LEAST(q.attempts, 9)))
+        FROM candidate WHERE q.object_name = candidate.object_name
+        RETURNING q.object_name, q.clip_id, q.attempts`, [clipId ?? null]);
+      const item = rows[0];
+      if (!item) break;
+      try {
+        await removeObject(item.object_name);
+      } catch (err) {
+        logger.warn({
+          err, clipId: item.clip_id, objectName: item.object_name, attempt: item.attempts,
+        }, "[clips] storage cleanup deferred");
+        continue;
+      }
+      // Fence a delayed acknowledgement from an older attempt. If DB ack fails,
+      // keep the entry and safely delete the already-missing object next time.
+      const ack = await client.query(
+        `DELETE FROM clip_storage_cleanup WHERE object_name=$1 AND attempts=$2`,
+        [item.object_name, item.attempts],
+      );
+      removed += ack.rowCount ?? 0;
+    }
+    return removed;
+  } catch (err) {
+    destroyClient = true;
+    throw err;
+  } finally {
+    if (!destroyClient) {
+      try { await client.query("RESET statement_timeout"); }
+      catch { destroyClient = true; }
+    }
+    client.release(destroyClient);
+  }
+}
+
+export function startClipStorageCleanupJob(): void {
+  if (timer) return;
+  const tick = async () => {
+    try { await runClipStorageCleanupBatch(); }
+    catch (err) { logger.error({ err }, "[clips] storage cleanup batch failed"); }
+    finally {
+      timer = setTimeout(tick, INTERVAL_MS);
+      timer.unref();
+    }
+  };
+  timer = setTimeout(tick, 30_000);
+  timer.unref();
+}

@@ -38,11 +38,14 @@ export async function clipsFixture(t, database) {
   const globals = [];
   const gates = [];
   const work = [];
+  let replicaNumber = 0;
   let schemaCreated = false;
   const state = {
-    objects: new Map(), writes: [], deletes: [], generations: [], warnings: [],
+    objects: new Map(), writes: [], deletes: [], deleteCalls: [], generations: [], warnings: [],
     generate: async () => Buffer.from([0xff, 0xd8, 1, 2, 0xff, 0xd9]),
     beforeWrite: async () => {},
+    beforeDelete: async () => {},
+    afterDelete: async () => {},
   };
   t.after(async () => {
     for (const barrier of gates) barrier.release();
@@ -101,10 +104,17 @@ export async function clipsFixture(t, database) {
           },
         });
       },
-      async delete() { state.deletes.push(key); state.objects.delete(key); },
+      async delete(options) {
+        state.deleteCalls.push({ key, options });
+        await state.beforeDelete(key, options);
+        state.deletes.push(key);
+        state.objects.delete(key);
+        await state.afterDelete(key, options);
+      },
     };
   }
   async function replica(label) {
+    const instance = replicaNumber++;
     const realPool = pool(label);
     const key = `clipHarness_${randomUUID().replaceAll("-", "")}`;
     globals.push(key);
@@ -120,9 +130,9 @@ export async function clipsFixture(t, database) {
         return state.generate(original);
       },
     };
-    const boundary = path.join(temp, `${label}-boundary.mjs`);
-    const entry = path.join(temp, `${label}-entry.mjs`);
-    const output = path.join(temp, `${label}.cjs`);
+    const boundary = path.join(temp, `${label}-${instance}-boundary.mjs`);
+    const entry = path.join(temp, `${label}-${instance}-entry.mjs`);
+    const output = path.join(temp, `${label}-${instance}.cjs`);
     await writeFile(boundary, `
       const host = globalThis[${JSON.stringify(key)}];
       export const { pool, objectStorageClient, logger, generateClipThumbnail } = host;
@@ -131,6 +141,7 @@ export async function clipsFixture(t, database) {
       import express from "express";
       import router, { ensureClipsTables } from ${JSON.stringify(path.join(apiRoot, "src/routes/clips.ts"))};
       export { runClipThumbnailRetryBatch } from ${JSON.stringify(path.join(apiRoot, "src/jobs/clip-thumbnail-retry.ts"))};
+      export { runClipStorageCleanupBatch } from ${JSON.stringify(path.join(apiRoot, "src/jobs/clip-storage-cleanup.ts"))};
       export { retryThumbnailName } from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-storage.ts"))};
       export { ensureClipsTables };
       const app = express();
@@ -164,20 +175,27 @@ export async function clipsFixture(t, database) {
   // Production DDL, in the private search_path only.
   await a.ensureClipsTables();
   assert.equal((await observer.query("SELECT count(*) FROM clips")).rows[0].count, "0");
-  async function seed(id) {
+  async function seed(id, options = {}) {
     const objectName = `original_${id}.mp4`;
+    const thumbnailObjectName = options.thumbnailObjectName ?? null;
     await observer.query(`
-      INSERT INTO clips (id,user_id,username,title,object_name,content_type,duration_sec,thumbnail_retry_at)
-      VALUES ($1,7,'fixture-owner','Test clip',$2,'video/mp4',61,NOW() - INTERVAL '1 hour')
-    `, [id, objectName]);
+      INSERT INTO clips
+        (id,user_id,username,title,object_name,thumbnail_object_name,content_type,duration_sec,thumbnail_retry_at)
+      VALUES ($1,7,'fixture-owner','Test clip',$2,$3,'video/mp4',61,NOW() - INTERVAL '1 hour')
+    `, [id, objectName, thumbnailObjectName]);
     await observer.query(`
       INSERT INTO content_fingerprints VALUES ($1,'clip',$2,'fixture-owner');
     `, [`fingerprint-${id}`, id]);
     state.objects.set(objectName, Buffer.from(`original-${id}`));
-    return { id, objectName, posterName: a.retryThumbnailName(id, objectName) };
+    if (thumbnailObjectName) state.objects.set(thumbnailObjectName, Buffer.from(`poster-${id}`));
+    return {
+      id, objectName, thumbnailObjectName,
+      posterName: a.retryThumbnailName(id, objectName),
+    };
   }
   return {
     a, b, observer, state, seed, schema,
+    freshReplica(label = `fresh-${replicaNumber}`) { return replica(label); },
     track(promise) { work.push(promise); return promise; },
     gate() { const barrier = gate(); gates.push(barrier); return barrier; },
     async http(replica = a) {

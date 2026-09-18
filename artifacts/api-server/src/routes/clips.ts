@@ -11,6 +11,7 @@ import { createClipsUploadsRouter } from "./clips-uploads.js";
 import { ClipUploads } from "../lib/clip-uploads.js";
 import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js";
 import { clipByteRange } from "../lib/clip-byte-range.js";
+import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
 
 // ─── CLIPS — كليبسز (Reels-style, producer-owned) ────────────────────────────
 // Owner's rules:
@@ -63,6 +64,16 @@ export async function ensureClipsTables(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (clip_id, viewer_ip)
       );
+      -- No foreign key: cleanup must survive deletion of the clip and its owner.
+      CREATE TABLE IF NOT EXISTS clip_storage_cleanup (
+        object_name TEXT PRIMARY KEY,
+        clip_id INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS clip_storage_cleanup_due_idx
+        ON clip_storage_cleanup (retry_at, object_name);
       INSERT INTO monetization_settings (content_type, rate, unit)
         VALUES ('clip', 0.01, 'view') ON CONFLICT (content_type) DO NOTHING;
     `);
@@ -240,6 +251,7 @@ router.delete("/clips/:id", async (req, res): Promise<void> => {
 
   const client = await requirePool().connect();
   let committed = false;
+  let released = false;
   try {
     await client.query("BEGIN");
     const { rows } = await client.query<{
@@ -264,32 +276,43 @@ router.delete("/clips/:id", async (req, res): Promise<void> => {
         return;
       }
     }
+    const storageNames = [...new Set([
+      clip.object_name,
+      clip.thumbnail_object_name,
+      retryThumbnailName(id, clip.object_name),
+    ].filter((name): name is string => Boolean(name)))];
+    // Transactional outbox: never commit a deletion without its cleanup work.
+    // If COMMIT's response is lost, only committed queue rows can touch storage.
+    await client.query(
+      `INSERT INTO clip_storage_cleanup (object_name, clip_id)
+       SELECT name, $1 FROM unnest($2::text[]) AS name
+       ON CONFLICT (object_name) DO NOTHING`, [id, storageNames],
+    );
     await client.query(`DELETE FROM clip_views WHERE clip_id=$1`, [id]);
     const deleted = await client.query(`DELETE FROM clips WHERE id=$1 RETURNING id`, [id]);
     if (!deleted.rows[0]) throw new Error("CLIP_DELETE_RACE");
     // Permanent first-owner rights survive removal of the clip and its objects.
     await client.query("COMMIT");
     committed = true;
+    // Do not retain a transaction connection while cleanup acquires its own:
+    // concurrent DELETE requests must not exhaust the pool waiting on themselves.
+    client.release();
+    released = true;
 
-    const storageNames = new Set([
-      clip.object_name,
-      clip.thumbnail_object_name,
-      retryThumbnailName(id, clip.object_name),
-    ].filter((name): name is string => Boolean(name)));
-    await Promise.all(Array.from(storageNames, async objectName => {
-      try {
-        await clipFile(objectName).delete({ ignoreNotFound: true });
-      } catch (error) {
-        logger.warn({ err: error, clipId: id, objectName }, "[clips] delete storage cleanup failed");
-      }
-    }));
+    try {
+      await runClipStorageCleanupBatch(id);
+    } catch (error) {
+      // The clip is gone and cleanup is durable, even if the immediate DB
+      // claim/acknowledgement fails. Do not report a committed deletion as failed.
+      logger.warn({ err: error, clipId: id }, "[clips] delete cleanup deferred");
+    }
     res.status(204).end();
   } catch (e) {
     if (!committed) await client.query("ROLLBACK").catch(() => {});
     logger.error({ err: e, clipId: id, userId }, "[clips] delete failed");
     res.status(500).json({ error: "تعذر حذف الكليب، عاود المحاولة" });
   } finally {
-    client.release();
+    if (!released) client.release();
   }
 });
 

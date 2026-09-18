@@ -38,10 +38,43 @@ Retry object names are deterministic from the clip ID and original object name.
 A successful storage write followed by a database failure or process restart
 therefore remains associated with its clip even before the pointer commits.
 The next attempt overwrites the same candidate, and deletion always removes the
-candidate as well as any stored thumbnail pointer. Database deletion commits
-before object cleanup. A failed storage deletion is logged, but is not currently
-retried durably; the row is already gone. Do not introduce random retry names or
-delete candidate objects on ambiguous database commits.
+candidate as well as any stored thumbnail pointer. Before committing deletion,
+the same transaction inserts deduplicated object names into
+`clip_storage_cleanup`. This table deliberately has no foreign key to clips or
+users. Failed enqueue rolls back deletion; an ambiguous commit cannot cause
+cleanup of a surviving clip. Do not introduce random retry names or delete
+candidate objects on ambiguous database commits.
+
+After commit, deletion tries the queue immediately. The independent cleanup
+worker starts 30 seconds after API startup and waits one minute between batches.
+It processes at most 12 due objects serially, stops starting work after 90 seconds,
+and uses five-second database statement and ten-second storage wait deadlines.
+Claims atomically advance attempts/backoff before storage access and skip locked
+rows, so replicas, immediate cleanup, and restarts share the same durable state.
+Backoff doubles from five minutes to a maximum of 24 hours. Unlike thumbnail
+generation, **cleanup never exhausts its retries**.
+
+Each successful or already-missing object is acknowledged independently. Partial
+failures retain only unfinished queue entries. A crash after storage success but
+before acknowledgement safely repeats deletion with `ignoreNotFound`; an older
+attempt cannot acknowledge a newer claim. A timed-out storage request may finish
+later, which is safe because clip object names identify immutable uploads and
+cleanup only deletes. Storage/DB failures never recreate clips or remove rights.
+Inspect backlog age and attempts with:
+
+```sql
+SELECT clip_id, object_name, attempts, retry_at, created_at
+FROM clip_storage_cleanup ORDER BY retry_at, object_name;
+```
+
+After fixing an outage, optionally expedite a **specific deleted clip**:
+
+```sql
+UPDATE clip_storage_cleanup SET retry_at = NOW() WHERE clip_id = $1;
+```
+
+Already-deleted clips from before this queue existed cannot be recovered from
+the absent rows; this is not a bucket-wide orphan scan.
 
 Neither the job nor its retry state writes original media, fingerprints, rights,
 duration, views, or earnings. The existing visibility-scoped thumbnail endpoint
@@ -98,3 +131,9 @@ the eight-attempt cap, and deletion waiting on a publication row lock. The
 deletion test observes `pg_blocking_pids`, then checks original/poster removal,
 view cleanup, and preservation of the complete fingerprint row. Authorization
 and cleanup of an interrupted poster without a published pointer are also checked.
+
+Cleanup tests inject deterministic per-object outages and lost delete responses,
+verify independent progress for original/stored/candidate objects, restart fresh
+worker modules and PostgreSQL sessions, and check unbounded retries with capped
+backoff. They also cover concurrent claims, missing objects, authorization, and
+transaction rollback when cleanup enqueue fails.

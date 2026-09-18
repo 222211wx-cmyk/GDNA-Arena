@@ -21,6 +21,7 @@ import { startEventLiveAlertJob } from "./jobs/event-live-alert.js";
 import { getAgoraConfigStatus } from "./lib/agora-config.js";
 import { startFinanceReconciliationJob } from "./jobs/finance-reconciliation";
 import { startClipThumbnailRetryJob } from "./jobs/clip-thumbnail-retry.js";
+import { startClipStorageCleanupJob } from "./jobs/clip-storage-cleanup.js";
 import { FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
 
 const rawPort = process.env["PORT"];
@@ -1425,6 +1426,7 @@ migrateApplicationDatabase()
     startEventLiveAlertJob();
     startFinanceReconciliationJob();
     startClipThumbnailRetryJob();
+    startClipStorageCleanupJob();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);
