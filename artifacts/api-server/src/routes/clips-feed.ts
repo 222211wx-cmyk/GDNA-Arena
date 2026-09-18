@@ -1,3 +1,6 @@
+import type { RequestHandler } from "express";
+import { clipWithThumbnail } from "./clips-thumbnail-response.js";
+
 export const DEFAULT_CLIPS_FEED_LIMIT = 10;
 export const MAX_CLIPS_FEED_LIMIT = 20;
 
@@ -43,5 +46,31 @@ export function clipsFeedPage<T extends { id: number }>(
     clips,
     hasMore,
     nextBefore: hasMore ? clips[clips.length - 1].id : null,
+  };
+}
+
+interface FeedRow {
+  id: number;
+  thumbnail_object_name?: string | null;
+  [key: string]: unknown;
+}
+
+/** The simplified client deliberately receives an empty JSON feed on any failure. */
+export function createClipsFeedHandler(deps: {
+  loadRows(before: number | null, limit: number): Promise<FeedRow[]>;
+  logFailure(error: unknown): void;
+}): RequestHandler {
+  return async (req, res): Promise<void> => {
+    try {
+      const query = parseClipsFeedQuery(req.query);
+      if (query.ok === false) throw new Error(`Invalid ${query.parameter}`);
+      const rows = await deps.loadRows(query.before, query.limit);
+      res.json(clipsFeedPage(rows.map(row => ({
+        ...clipWithThumbnail(row), video_url: `/api/clips/stream/${row.id}`,
+      })), query.limit));
+    } catch (error) {
+      deps.logFailure(error);
+      res.json({ clips: [], hasMore: false });
+    }
   };
 }

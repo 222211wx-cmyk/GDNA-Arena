@@ -86,7 +86,7 @@ app.use(
 
 // Tus endpoints authenticate using the session before consuming any body bytes.
 // Completion installs its small JSON parser after auth; PATCH reads bounded chunks.
-const isClipUploadRequest = (path: string) => /^\/api\/clips\/uploads(?:\/|$)/.test(path);
+const isClipUploadRequest = (path: string) => /^\/api\/clips\/uploads(?:\/|$)/.test(path) || path === "/api/clip/upload";
 const jsonBody = express.json();
 const formBody = express.urlencoded({ extended: true });
 app.use((req, res, next) => isClipUploadRequest(req.path) ? next() : jsonBody(req, res, next));

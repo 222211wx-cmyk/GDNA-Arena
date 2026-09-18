@@ -66,6 +66,7 @@ router.get(
               is_frozen AS "isFrozen"
        FROM clips
        WHERE thumbnail_object_name IS NULL
+         AND content_type LIKE 'video/%'
          AND thumbnail_retry_attempts >= $1
          AND ($2::integer IS NULL OR id < $2)
        ORDER BY id DESC
@@ -117,6 +118,7 @@ router.post(
          SET thumbnail_retry_attempts = 0, thumbnail_retry_at = NOW()
          WHERE id = $1
            AND thumbnail_object_name IS NULL
+           AND content_type LIKE 'video/%'
            AND is_frozen = FALSE
            AND thumbnail_retry_attempts >= $2
          RETURNING id,

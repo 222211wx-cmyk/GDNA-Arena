@@ -68,6 +68,7 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
         WITH candidate AS (
           SELECT id FROM clips
           WHERE thumbnail_object_name IS NULL AND is_frozen = FALSE
+            AND content_type LIKE 'video/%'
             AND thumbnail_retry_attempts < $1 AND thumbnail_retry_at <= NOW()
           ORDER BY thumbnail_retry_at, id
           LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -86,6 +87,7 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
         const { rows } = await client.query<{ object_name: string }>(
           `SELECT object_name FROM clips
            WHERE id=$1 AND thumbnail_object_name IS NULL AND is_frozen=FALSE
+             AND content_type LIKE 'video/%'
            FOR UPDATE SKIP LOCKED`, [candidate.id],
         );
         if (!rows[0]) {
@@ -97,7 +99,7 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
         await storePoster(name, jpeg);
         await client.query(
           `UPDATE clips SET thumbnail_object_name=$2
-           WHERE id=$1 AND thumbnail_object_name IS NULL`, [candidate.id, name],
+           WHERE id=$1 AND thumbnail_object_name IS NULL AND content_type LIKE 'video/%'`, [candidate.id, name],
         );
         await client.query("COMMIT");
         generated++;

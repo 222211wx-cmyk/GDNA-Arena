@@ -5,13 +5,15 @@ import multer from "multer";
 import { pool } from "@workspace/db";
 import type { File as GcsFile } from "@google-cloud/storage";
 import { logger } from "../lib/logger";
-import { clipsFeedPage, parseClipsFeedQuery } from "./clips-feed.js";
+import { createClipsFeedHandler } from "./clips-feed.js";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
 import { createClipsUploadsRouter } from "./clips-uploads.js";
 import { ClipUploads } from "../lib/clip-uploads.js";
 import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js";
 import { clipByteRange } from "../lib/clip-byte-range.js";
 import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
+import { createSimpleClipUploadRouter } from "./clip-simple-upload.js";
+import { CLIP_EXT, resolveClipUploadType, clipDownloadExtension } from "../lib/clip-upload-protocol.js";
 
 // ─── CLIPS — كليبسز (Reels-style, producer-owned) ────────────────────────────
 // Owner's rules:
@@ -26,9 +28,24 @@ import { CLIP_THUMBNAIL_MAX_ATTEMPTS } from "../jobs/clip-thumbnail-retry.js";
 
 const router: IRouter = Router();
 router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));
+router.use(createSimpleClipUploadRouter({
+  file: clipFile,
+  publish: publishClip,
+  log: (err, message) => logger.warn({ err }, `[clips] ${message}`),
+  async cleanup(name) {
+    // Preserve a committed original when a COMMIT acknowledgement was lost.
+    const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1`, [name]);
+    if (rows.length) return;
+    // Persist a delayed sweep before best-effort deletion. This also catches an
+    // SDK request that finishes late after the aborted stream has been destroyed.
+    await requirePool().query(
+      `INSERT INTO clip_storage_cleanup (object_name, clip_id, retry_at)
+       VALUES ($1, 0, NOW() + INTERVAL '5 minutes') ON CONFLICT (object_name) DO NOTHING`, [name],
+    );
+    await clipFile(name).delete({ ignoreNotFound: true });
+  },
+}));
 const MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB per clip
-const ALLOWED = new Set(["video/mp4", "video/webm", "video/quicktime"]);
-const EXT: Record<string, string> = { "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov" };
 
 function requirePool() {
   if (!pool) throw new Error("Database not configured");
@@ -89,8 +106,10 @@ export async function ensureClipsTables(): Promise<void> {
 // no memory buffering; the fingerprint is ready the moment the upload finishes.
 const clipStorage: import("multer").StorageEngine = {
   _handleFile(_req, file, cb) {
-    if (!ALLOWED.has(file.mimetype)) { cb(new Error("UNSUPPORTED_TYPE")); return; }
-    const filename = `clip_${crypto.randomUUID().replace(/-/g, "")}${EXT[file.mimetype]}`;
+    const normalizedType = resolveClipUploadType(file.mimetype, file.originalname);
+    if (!normalizedType) { cb(new Error("UNSUPPORTED_TYPE")); return; }
+    file.mimetype = normalizedType;
+    const filename = `clip_${crypto.randomUUID().replace(/-/g, "")}${CLIP_EXT[file.mimetype]}`;
     let gcs: GcsFile;
     try { gcs = clipFile(filename); } catch (e) { cb(e as Error); return; }
     const hash = crypto.createHash("sha256");
@@ -147,24 +166,18 @@ async function isAdmin(userId: number): Promise<boolean> {
 }
 
 // ─── GET /clips/feed — Reels feed, newest first ──────────────────────────────
-router.get("/clips/feed", async (req, res): Promise<void> => {
-  const feedQuery = parseClipsFeedQuery(req.query);
-  if (!feedQuery.ok) {
-    res.status(400).json({ error: `Invalid ${feedQuery.parameter}` });
-    return;
-  }
-
-  try {
-    const { before, limit } = feedQuery;
+router.get("/clips/feed", createClipsFeedHandler({
+  async loadRows(before, limit) {
     const params = before === null ? [limit + 1] : [before, limit + 1];
     const { rows } = await requirePool().query(
       `SELECT id, user_id, username, title, content_type, duration_sec, views, created_at, thumbnail_object_name
        FROM clips WHERE is_frozen = FALSE AND object_name IS NOT NULL AND object_name <> '' ${before === null ? "" : "AND id < $1"}
        ORDER BY id DESC LIMIT $${params.length}`, params,
     );
-    res.json(clipsFeedPage(rows.map(clipWithThumbnail), limit));
-  } catch (e) { logger.error({ err: e }, "[clips] feed failed"); res.status(500).json({ error: "Failed" }); }
-});
+    return rows;
+  },
+  logFailure: err => logger.error({ err }, "[clips] feed failed"),
+}));
 
 // Publishing is expensive (up to 2GB streamed to the bucket) — cap it hard.
 const uploadLimiter = rateLimit({
@@ -190,7 +203,7 @@ router.post("/clips", uploadLimiter, (req, res): void => {
     try {
       if (err) {
         const msg = (err as Error).message === "UNSUPPORTED_TYPE"
-          ? "صيغة الفيديو غير مدعومة — MP4 / WebM / MOV فقط"
+          ? "صيغة الصوت أو الفيديو غير مدعومة"
           : (err as { code?: string }).code === "LIMIT_FILE_SIZE" ? "الفيديو كبير بزاف — الحد 2GB" : "فشل الرفع";
         res.status(400).json({ error: msg }); return;
       }
@@ -362,8 +375,7 @@ router.get("/clips/stream/:id", async (req, res): Promise<void> => {
     const etag = `"clip-${id}-${size}"`;
     res.setHeader("ETag", etag);
     if (req.query.download === "1") {
-      const extension = clip.content_type === "video/webm" ? "webm" : clip.content_type === "video/quicktime" ? "mov" : "mp4";
-      res.setHeader("Content-Disposition", `attachment; filename="clip-${id}.${extension}"`);
+      res.setHeader("Content-Disposition", `attachment; filename="clip-${id}${clipDownloadExtension(clip.content_type)}"`);
     }
     const range = req.headers.range;
     let bytes: { start: number; end: number } | undefined;

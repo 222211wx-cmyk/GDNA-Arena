@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
-import { ClipUploadError, CLIP_EXT, MAX_CLIP_BYTES } from "./clip-upload-protocol.js";
+import { ClipUploadError, CLIP_EXT, MAX_CLIP_BYTES, normalizeClipContentType } from "./clip-upload-protocol.js";
 
 export const CHUNK_BYTES = 5 * 1024 * 1024;
 export const UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -74,10 +74,11 @@ export function parseUploadMetadata(header: string | undefined): UploadMetadata 
   if (totalSize < partCount || totalSize > MAX_CLIP_BYTES) fail(413, "Video must be between 1 byte and 2 GiB");
   const title = entries.title?.trim();
   if (!title || title.length > 120) fail(400, "Title is required (maximum 120 characters)");
-  if (!Object.hasOwn(CLIP_EXT, entries.contentType ?? "")) fail(415, "Unsupported video contentType");
+  const contentType = normalizeClipContentType(entries.contentType ?? "");
+  if (!contentType) fail(415, "Unsupported media contentType");
   const durationSec = Number(entries.durationSec);
   if (!entries.durationSec?.trim() || !Number.isFinite(durationSec) || durationSec < 0) fail(400, "Invalid durationSec");
-  return { groupId, partIndex, partCount, totalSize, title, contentType: entries.contentType, durationSec };
+  return { groupId, partIndex, partCount, totalSize, title, contentType, durationSec };
 }
 function common(metadata: UploadMetadata) {
   const { partIndex: _partIndex, ...rest } = metadata;

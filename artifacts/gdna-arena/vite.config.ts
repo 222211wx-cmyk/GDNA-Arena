@@ -135,7 +135,6 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname),
   // Keep FFmpeg's relative module-worker URL intact in development.
-  optimizeDeps: { exclude: ["@ffmpeg/ffmpeg"] },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,

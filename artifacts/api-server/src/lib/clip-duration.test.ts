@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import type { File } from "@google-cloud/storage";
 import { ClipProbeBusyError, verifiedDuration } from "./clip-duration.js";
+import { clipDurationSeconds, normalizeClipContentType, clipDownloadExtension, isAudioClip, resolveClipUploadType } from "./clip-upload-protocol.js";
 
 async function withLimits(
   limits: { inputBytes?: number; outputBytes?: number; timeoutMs?: number },
@@ -193,10 +194,104 @@ test("invalid metadata and metadata failures do not open a source", async () => 
 
 test("publishing retains the minimum-only policy and original upload fingerprint", () => {
   const route = readFileSync("src/routes/clips.ts", "utf8");
-  assert.match(route, /MIN_DURATION_SEC = 60/);
-  assert.match(route, /durationSec < MIN_DURATION_SEC/);
-  assert.doesNotMatch(route, /MAX_DURATION|durationSec\s*>/);
+  const publish = readFileSync("src/lib/clip-publish.ts", "utf8");
+  assert.match(publish, /clipDurationSeconds\(verifiedSeconds, contentType\)/);
+  assert.doesNotMatch(publish, /MAX_DURATION|durationSec\s*>/);
+  assert.match(publish, /verifiedDuration.*clip-duration\.js/);
   assert.match(route, /hash\.update\(chunk\)/);
   assert.match(route, /sha256: hash\.digest\("hex"\)/);
-  assert.match(route, /\[f\.sha256, username\]/);
+  assert.match(route, /sha256: f\.sha256/);
+  assert.match(publish, /\[sha256, username\]/);
+});
+
+for (const [extension, codec] of [
+  ["mp3", "libmp3lame"], ["m4a", "aac"], ["aac", "aac"],
+  ["ogg", "libopus"], ["wav", "pcm_s16le"], ["webm", "libopus"], ["flac", "flac"],
+]) {
+  test(`verifies real short ${extension} audio without changing original bytes`, async () => {
+    const directory = mkdtempSync(join(tmpdir(), "clip-audio-"));
+    try {
+      const path = join(directory, `voice.${extension}`);
+      const result = spawnSync("ffmpeg", [
+        "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+        "-t", "1.25", "-threads", "1", "-c:a", codec, path,
+      ]);
+      assert.equal(result.status, 0, result.stderr.toString());
+      const bytes = readFileSync(path);
+      const original = Buffer.from(bytes);
+      const input = source(bytes);
+      const duration = await verifiedDuration(input.file, "audio");
+      assert.ok(duration > 1 && duration < 2, `Unexpected audio duration ${duration}`);
+      assert.equal(clipDurationSeconds(duration, extension === "m4a" ? "audio/mp4" : extension === "mp3" ? "audio/mpeg" : `audio/${extension}`), 1);
+      assert.deepEqual(bytes, original);
+      assert.ok(input.streams.every(stream => stream.destroyed));
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+}
+
+test("audio MIME cannot disguise a short video to evade the 60-second video policy", async () => {
+  await assert.rejects(verifiedDuration(source(fixture("mp4", 2)).file, "audio"), /INVALID_AUDIO_STREAMS/);
+  assert.throws(() => clipDurationSeconds(59.9, "video/mp4"));
+  assert.equal(clipDurationSeconds(60, "video/mp4"), 60);
+  assert.equal(clipDurationSeconds(90001, "video/mp4"), 90001);
+  assert.equal(clipDurationSeconds(0.1, "audio/wav"), 1);
+  assert.equal(clipDurationSeconds(12.9, "audio/ogg"), 12);
+  for (const duration of [0, -1, NaN, Infinity]) assert.throws(() => clipDurationSeconds(duration, "audio/mp4"));
+});
+
+test("MP3 cover artwork is audio, while motion video with an audio track is not", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "clip-stream-kind-"));
+  try {
+    const cover = join(directory, "cover.mp3");
+    const mp3 = spawnSync("ffmpeg", [
+      "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+      "-f", "lavfi", "-i", "color=size=16x16:color=red", "-t", "1.25",
+      "-map", "0:a", "-map", "1:v", "-c:a", "libmp3lame", "-c:v", "mjpeg",
+      "-frames:v", "1", "-disposition:v", "attached_pic", "-threads", "1", cover,
+    ]);
+    assert.equal(mp3.status, 0, mp3.stderr.toString());
+    assert.ok(await verifiedDuration(source(readFileSync(cover)).file, "audio") > 0);
+    const video = join(directory, "motion.mp4");
+    const av = spawnSync("ffmpeg", [
+      "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=32x32:rate=10",
+      "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "1.25",
+      "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-threads", "1", video,
+    ]);
+    assert.equal(av.status, 0, av.stderr.toString());
+    await assert.rejects(verifiedDuration(source(readFileSync(video)).file, "audio"), /INVALID_AUDIO_STREAMS/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("audio MIME aliases share normalized storage types and safe download extensions", () => {
+  for (const [raw, normalized, extension] of [
+    ["audio/mp3", "audio/mpeg", ".mp3"], ["Audio/MPEG; codecs=mp3", "audio/mpeg", ".mp3"],
+    ["audio/x-m4a", "audio/mp4", ".m4a"], ["audio/x-aac", "audio/aac", ".aac"],
+    ["application/ogg", "audio/ogg", ".ogg"], ["audio/opus", "audio/ogg", ".ogg"],
+    ["audio/x-wav", "audio/wav", ".wav"], ["audio/vnd.wave", "audio/wav", ".wav"],
+    ["audio/webm; codecs=opus", "audio/webm", ".webm"], ["audio/x-flac", "audio/flac", ".flac"],
+    ["video/mp4", "video/mp4", ".mp4"], ["video/quicktime", "video/quicktime", ".mov"],
+  ]) {
+    assert.equal(normalizeClipContentType(raw), normalized);
+    assert.equal(clipDownloadExtension(raw), extension);
+    assert.equal(isAudioClip(raw), normalized.startsWith("audio/"));
+  }
+  for (const raw of ["application/octet-stream", "text/html", "__proto__", "audio/not-real"]) {
+    assert.equal(normalizeClipContentType(raw), null);
+    assert.equal(clipDownloadExtension(raw), ".bin");
+  }
+  assert.equal(resolveClipUploadType("", "Voice.MP3"), "audio/mpeg");
+  assert.equal(resolveClipUploadType("application/octet-stream", "recording.m4a"), "audio/mp4");
+  assert.equal(resolveClipUploadType("application/octet-stream", "movie.mp4"), "video/mp4");
+  assert.equal(resolveClipUploadType("application/octet-stream", "unknown.webm"), "video/webm");
+  assert.equal(resolveClipUploadType("text/html", "voice.mp3"), null);
+  assert.equal(resolveClipUploadType("application/octet-stream", "voice.mp3.exe"), null);
+});
+
+test("audio skips initial poster generation and all video-only retry/admin queries", () => {
+  const publish = readFileSync("src/lib/clip-publish.ts", "utf8");
+  assert.match(publish, /if \(!audio\) try \{[\s\S]*?generateClipThumbnail/);
+  const retry = readFileSync("src/jobs/clip-thumbnail-retry.ts", "utf8");
+  assert.equal((retry.match(/content_type LIKE 'video\/%'/g) ?? []).length, 3);
+  const admin = readFileSync("src/routes/admin-clip-thumbnails.ts", "utf8");
+  assert.equal((admin.match(/content_type LIKE 'video\/%'/g) ?? []).length, 2);
 });

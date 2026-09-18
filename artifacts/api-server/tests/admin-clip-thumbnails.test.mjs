@@ -27,7 +27,7 @@ export function addClip(id, overrides = {}) {
     created_at: new Date("2026-01-01T00:00:00.000Z"),
     thumbnail_object_name: null, thumbnail_retry_attempts: 8,
     thumbnail_retry_at: new Date("2026-01-02T00:00:00.000Z"),
-    is_frozen: false, object_name: "private-original-" + id + ".mp4",
+    is_frozen: false, object_name: "private-original-" + id + ".mp4", content_type: "video/mp4",
     ...overrides,
   };
   state.clips.set(id, clip);
@@ -46,6 +46,7 @@ async function query(sql, params = []) {
     const [maxAttempts, before, limit] = params;
     const rows = [...state.clips.values()]
       .filter(c => c.thumbnail_object_name === null && c.thumbnail_retry_attempts >= maxAttempts)
+      .filter(c => !text.includes("content_type LIKE 'video/%'") || c.content_type.startsWith("video/"))
       .filter(c => before === null || c.id < before)
       .sort((a, b) => b.id - a.id).slice(0, limit)
       .map(c => ({
@@ -71,6 +72,7 @@ export const pool = {
         if (text.startsWith("UPDATE clips SET thumbnail_retry_attempts")) {
           const clip = state.clips.get(params[0]);
           if (!clip || clip.thumbnail_object_name !== null || clip.is_frozen ||
+              (text.includes("content_type LIKE 'video/%'") && !clip.content_type.startsWith("video/")) ||
               clip.thumbnail_retry_attempts < params[1]) return result();
           clip.thumbnail_retry_attempts = 0;
           clip.thumbnail_retry_at = new Date("2026-02-01T00:00:00.000Z");
@@ -204,6 +206,17 @@ test("requeue rejects bad IDs, stale states, and active-worker races", async () 
     method: "POST", headers: adminHeaders,
   })).status, 409);
   assert.equal(state.clips.get(34).thumbnail_retry_attempts, 8);
+});
+
+test("audio is absent from failed-poster inspection and cannot be requeued", async () => {
+  reset();
+  addClip(71, { content_type: "audio/mp4", object_name: "voice.m4a" });
+  const response = await fetch(baseUrl + "/admin/clips/thumbnails/exhausted", { headers: adminHeaders });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).clips, []);
+  const requeue = await fetch(baseUrl + "/admin/clips/thumbnails/71/requeue", { method: "POST", headers: adminHeaders });
+  assert.equal(requeue.status, 409);
+  assert.equal(state.clips.get(71).thumbnail_retry_attempts, 8);
 });
 
 test("per-admin inspection and requeue limits are enforced", async () => {

@@ -60,7 +60,7 @@ export function reconcileClipStorage(input: {
     // Also hold historical candidate hashes for an extant clip.
     if (retry && clipIds.has(retry[1])) return ["protected", "retry-for-live-clip"];
     if (queued.has(object.name)) return ["protected", "already-queued"];
-    if (!/^(clip_[0-9a-f]{32}\.(mp4|mov|webm)|thumb_[0-9a-f]{32}\.jpg)$/.test(object.name) && !retry) {
+    if (!/^(clip_[0-9a-f]{32}\.(mp4|mov|webm|mp3|m4a|aac|ogg|wav|flac)|thumb_[0-9a-f]{32}\.jpg)$/.test(object.name) && !retry) {
       return ["held", "unrecognized-name"];
     }
     const created = Date.parse(object.timeCreated ?? "");

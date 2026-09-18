@@ -1,12 +1,13 @@
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
 import type { File } from "@google-cloud/storage";
 import { pool } from "@workspace/db";
 import { objectStorageClient } from "./chatStorage.js";
 import { logger } from "./logger.js";
 import { generateClipThumbnail } from "./clip-thumbnail.js";
 import { clipWithThumbnail } from "../routes/clips-thumbnail-response.js";
-import { ClipUploadError } from "./clip-upload-protocol.js";
+import { ClipUploadError, normalizeClipContentType, isAudioClip, clipDurationSeconds } from "./clip-upload-protocol.js";
+import { verifiedDuration, ClipProbeBusyError } from "./clip-duration.js";
+export { verifiedDuration } from "./clip-duration.js";
 export { ClipUploadError, MAX_CLIP_BYTES, CLIP_EXT } from "./clip-upload-protocol.js";
 const connectDatabase = () => pool.connect();
 export type ClipDatabaseClient = Awaited<ReturnType<typeof connectDatabase>>;
@@ -16,38 +17,6 @@ export function clipFile(name: string): File {
   if (!dir) throw new Error("PRIVATE_OBJECT_DIR not set");
   const parts = `${dir.replace(/\/$/, "")}/clips/${name}`.replace(/^\//, "").split("/");
   return objectStorageClient.bucket(parts[0]).file(parts.slice(1).join("/"));
-}
-
-export async function verifiedDuration(file: File): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = spawn("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", "pipe:0"], { stdio: ["pipe", "pipe", "pipe"] });
-    const input = file.createReadStream();
-    let output = "", errors = "", finished = false;
-    const finish = (error?: Error, duration?: number) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      input.destroy();
-      probe.stdin.destroy();
-      if (probe.exitCode === null) probe.kill("SIGKILL");
-      if (error) reject(error); else resolve(duration!);
-    };
-    const timer = setTimeout(() => finish(new Error("MEDIA_PROBE_TIMEOUT")), 30_000);
-    probe.stdout.on("data", chunk => { output += String(chunk).slice(0, 1024); });
-    probe.stderr.on("data", chunk => { errors = (errors + String(chunk)).slice(0, 4096); });
-    probe.on("error", error => finish(error));
-    probe.stdin.on("error", error => {
-      // ffprobe may close stdin after it has obtained the duration.
-      if ((error as NodeJS.ErrnoException).code !== "EPIPE") finish(error);
-    });
-    input.on("error", error => finish(error));
-    probe.on("close", code => {
-      const duration = Number.parseFloat(output.trim());
-      if (code !== 0 || !Number.isFinite(duration)) finish(new Error(errors || "INVALID_MEDIA_DURATION"));
-      else finish(undefined, duration);
-    });
-    input.pipe(probe.stdin);
-  });
 }
 
 export interface PublishClipInput {
@@ -62,18 +31,25 @@ export interface PublishClipInput {
 /** The caller owns original-file cleanup. Only durable originals reach this function. */
 export async function publishClip(input: PublishClipInput, lockedClient?: ClipDatabaseClient) {
   if (!pool) throw new Error("Database not configured");
-  const { userId, filename, title, contentType, size, sha256 } = input;
+  const { userId, filename, title, size, sha256 } = input;
+  const contentType = normalizeClipContentType(input.contentType);
+  if (!contentType) throw new ClipUploadError(415, "صيغة الصوت أو الفيديو غير مدعومة");
+  const audio = isAudioClip(contentType);
   const [metadata] = await clipFile(filename).getMetadata();
   if (Number(metadata.size) !== size) throw new ClipUploadError(409, "Stored video size does not match");
   let durationSec: number;
-  try { durationSec = Math.floor(await verifiedDuration(clipFile(filename))); }
-  catch { throw new ClipUploadError(400, "تعذّر التحقق من مدة الفيديو — الملف غير صالح أو غير مدعوم"); }
-  if (durationSec < 60) throw new ClipUploadError(400, "أي فيديو أقل من 60 ثانية يتم حظره تلقائياً. الحد الأدنى دقيقة واحدة.");
+  let verifiedSeconds: number;
+  try { verifiedSeconds = await verifiedDuration(clipFile(filename), audio ? "audio" : undefined); }
+  catch (error) {
+    if (error instanceof ClipProbeBusyError) throw new ClipUploadError(503, "Media verification is busy; retry shortly");
+    throw new ClipUploadError(400, "تعذّر التحقق من الملف الصوتي أو الفيديو — الملف غير صالح أو غير مدعوم");
+  }
+  durationSec = clipDurationSeconds(verifiedSeconds, contentType);
   const { rows: users } = await (lockedClient ?? pool).query(`SELECT username FROM users WHERE id=$1`, [userId]);
   if (!users[0]) throw new ClipUploadError(401, "User no longer exists");
   const username = users[0].username;
   let thumbnailName: string | null = null;
-  try {
+  if (!audio) try {
     const jpeg = await generateClipThumbnail(clipFile(filename));
     thumbnailName = `thumb_${crypto.randomUUID().replace(/-/g, "")}.jpg`;
     await clipFile(thumbnailName).save(jpeg, {

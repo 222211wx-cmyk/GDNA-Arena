@@ -18,7 +18,7 @@ export class ClipProbeBusyError extends Error {
  * loopback HTTP ranges let ffprobe seek to MP4/MOV tail metadata without
  * downloading the entire video. Limits bound work, NOT the media's duration.
  */
-export async function verifiedDuration(file: File): Promise<number> {
+export async function verifiedDuration(file: File, expectedKind?: "audio"): Promise<number> {
   if (activeJobs >= 2) throw new ClipProbeBusyError();
   activeJobs++;
   try {
@@ -26,13 +26,13 @@ export async function verifiedDuration(file: File): Promise<number> {
       (globalThis as typeof globalThis & {
         [TEST_LIMITS_KEY]?: Partial<typeof DEFAULT_LIMITS>;
       })[TEST_LIMITS_KEY];
-    return await probe(file, { ...DEFAULT_LIMITS, ...overrides });
+    return await probe(file, { ...DEFAULT_LIMITS, ...overrides }, expectedKind);
   } finally {
     activeJobs--;
   }
 }
 
-async function probe(file: File, limits: typeof DEFAULT_LIMITS): Promise<number> {
+async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "audio"): Promise<number> {
   const secretPath = `/${randomBytes(32).toString("hex")}`;
   const streams = new Set<Readable>();
   const sockets = new Set<Socket>();
@@ -144,11 +144,11 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS): Promise<number>
       "-v", "error", "-threads", "1",
       "-max_alloc", String(32 * 1024 * 1024),
       "-protocol_whitelist", "http,tcp",
-      "-format_whitelist", "mov,matroska,webm",
+      "-format_whitelist", "mov,matroska,webm,mp3,aac,ogg,wav,flac",
       "-rw_timeout", "5000000",
       "-probesize", "5000000", "-analyzeduration", "5000000",
-      "-show_entries", "format=duration",
-      "-of", "default=noprint_wrappers=1:nokey=1",
+      "-show_entries", expectedKind === "audio" ? "format=duration:stream=codec_type:stream_disposition=attached_pic" : "format=duration",
+      "-of", expectedKind === "audio" ? "json" : "default=noprint_wrappers=1:nokey=1",
       `http://127.0.0.1:${address.port}${secretPath}`,
     ], { stdio: ["ignore", "pipe", "pipe"] });
     child = spawned;
@@ -170,7 +170,26 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS): Promise<number>
     childClosed = new Promise<void>((resolve) => spawned.once("close", () => resolve()));
     const result = new Promise<number>((resolve, reject) => {
       spawned.once("close", (code) => {
-        const duration = Number(output.trim());
+        let duration = Number(output.trim());
+        if (expectedKind === "audio" && !failure) {
+          try {
+            const media = JSON.parse(output) as {
+              format?: { duration?: string };
+              streams?: { codec_type?: string; disposition?: { attached_pic?: number } }[];
+            };
+            // Do not let a video evade the one-minute rule by claiming audio MIME.
+            // Embedded album artwork is legitimate audio, not a video clip.
+            if (!media.streams?.some(stream => stream.codec_type === "audio") ||
+                media.streams.some(stream => stream.codec_type === "video" && stream.disposition?.attached_pic !== 1)) {
+              reject(new Error("INVALID_AUDIO_STREAMS"));
+              return;
+            }
+            duration = Number(media.format?.duration);
+          } catch {
+            reject(new Error("INVALID_AUDIO_METADATA"));
+            return;
+          }
+        }
         if (failure) reject(failure);
         else if (code !== 0 || !output.trim() || !Number.isFinite(duration) || duration <= 0) {
           reject(new Error(`INVALID_MEDIA_DURATION: ${errors.trim()}`));

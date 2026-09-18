@@ -21,7 +21,7 @@ let generateResolve;
 export function reset() {
   Object.assign(state, {
     now: Date.parse("2026-01-01T00:00:00Z"),
-    clips: new Map(), objects: new Map(), rights: new Map(),
+    clips: new Map(), objects: new Map(), rights: new Map(), cleanup: new Map(),
     queries: [], deletes: [], writes: [], generateCalls: [],
     generateMode: "ok", jpeg: Buffer.from([0xff, 0xd8, 1, 2, 0xff, 0xd9]),
     advisoryLock: false, rowLockOwner: null, rowLockWaiters: [],
@@ -89,9 +89,26 @@ async function clientQuery(client, sql, params = []) {
     state.advisoryLock = false;
     return result([{ pg_advisory_unlock: true }]);
   }
+  if (text.startsWith("INSERT INTO clip_storage_cleanup")) {
+    for (const name of params[1]) state.cleanup.set(name, { object_name: name, clip_id: params[0], attempts: 0 });
+    return result();
+  }
+  if (text.startsWith("WITH candidate AS") && text.includes("FROM clip_storage_cleanup")) {
+    const item = [...state.cleanup.values()].find(item => params[0] === null || item.clip_id === params[0]);
+    if (!item) return result();
+    item.attempts++;
+    return result([{ ...item }]);
+  }
+  if (text.startsWith("DELETE FROM clip_storage_cleanup")) {
+    const item = state.cleanup.get(params[0]);
+    if (item?.attempts !== params[1]) return result();
+    state.cleanup.delete(params[0]);
+    return result([], 1);
+  }
   if (text.startsWith("WITH candidate AS")) {
     const candidates = [...state.clips.values()].filter(clip =>
       clip.thumbnail_object_name === null && !clip.is_frozen &&
+      (!text.includes("content_type LIKE 'video/%'") || clip.content_type.startsWith("video/")) &&
       clip.thumbnail_retry_attempts < params[0] && clip.thumbnail_retry_at <= state.now
     ).sort((a, b) => a.thumbnail_retry_at - b.thumbnail_retry_at || a.id - b.id);
     const clip = candidates[0];
@@ -103,7 +120,8 @@ async function clientQuery(client, sql, params = []) {
   }
   if (text.startsWith("SELECT object_name FROM clips")) {
     const clip = state.clips.get(params[0]);
-    if (!clip || clip.thumbnail_object_name !== null || clip.is_frozen) return result();
+    if (!clip || clip.thumbnail_object_name !== null || clip.is_frozen ||
+        (text.includes("content_type LIKE 'video/%'") && !clip.content_type.startsWith("video/"))) return result();
     if (state.rowLockOwner !== null && state.rowLockOwner !== client.id) return result();
     await lockRow(client);
     return result([{ object_name: clip.object_name }]);
@@ -335,4 +353,12 @@ test("DELETE waits for the worker row lock and removes the stable candidate", as
   assert.ok(state.queries.some(query =>
     query.sql.startsWith("SELECT user_id, object_name, thumbnail_object_name FROM clips") &&
     query.sql.endsWith("FOR UPDATE")));
+});
+
+test("audio without a poster is never claimed by the thumbnail retry worker", async () => {
+  reset();
+  addClip(50, { content_type: "audio/mpeg", object_name: "voice.mp3" });
+  assert.equal(await runClipThumbnailRetryBatch(), 0);
+  assert.equal(state.generateCalls.length, 0);
+  assert.equal(state.clips.get(50).thumbnail_retry_attempts, 0);
 });
