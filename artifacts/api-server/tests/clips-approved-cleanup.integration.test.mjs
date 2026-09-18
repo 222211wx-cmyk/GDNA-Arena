@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { build } from "esbuild";
 import pg from "pg";
 import { isolatedPostgres } from "./helpers/isolated-postgres.mjs";
@@ -12,6 +14,8 @@ import { isolatedPostgres } from "./helpers/isolated-postgres.mjs";
 let database;
 let pool;
 let runApprovedClipCleanup;
+let getApprovedClipCleanupStatus;
+let statusCli;
 let retryThumbnailName;
 let sha256;
 let temp;
@@ -53,19 +57,41 @@ test.before(async () => {
     export * from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-approved-cleanup.ts"))};
     export * from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-cleanup-approval.ts"))};
     export * from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-storage-names.ts"))};
+    export * from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-approved-cleanup-status.ts"))};
   `);
   await build({
     entryPoints: [entry], outfile: output, bundle: true, platform: "node",
     format: "esm", logLevel: "silent", external: ["pg"],
   });
-  ({ runApprovedClipCleanup, retryThumbnailName, sha256 } =
+  ({ runApprovedClipCleanup, getApprovedClipCleanupStatus, retryThumbnailName, sha256 } =
     await import(pathToFileURL(output).href));
+  // Any import of the executor or storage in status mode fails the subprocess.
+  // The status command must work without even initializing these capabilities.
+  statusCli = path.join(apiRoot, `.status-cli-test-${randomUUID()}.mjs`);
+  await build({
+    entryPoints: [path.join(apiRoot, "src/cli/clip-storage-cleanup-approved.ts")],
+    outfile: statusCli, bundle: true, platform: "node", format: "esm",
+    packages: "external", logLevel: "silent",
+    plugins: [{
+      name: "forbid-status-storage-and-executor",
+      setup(b) {
+        b.onLoad({ filter: /\/(?:clip-storage|clip-approved-cleanup|clip-approved-cleanup-gcs)\.ts$/ }, () => ({
+          contents: `throw new Error("STORAGE_OR_EXECUTOR_LOADED");
+            export const clipFile = () => { throw new Error("STORAGE_CALLED"); };
+            export const runApprovedClipCleanup = () => { throw new Error("EXECUTOR_CALLED"); };
+            export const approvedCleanupStorage = () => { throw new Error("STORAGE_CALLED"); };`,
+          loader: "js",
+        }));
+      },
+    }],
+  });
 });
 
 test.after(async () => {
   await Promise.all(pools.map(value => value.end()));
   await database?.close();
   if (temp) await rm(temp, { recursive: true, force: true });
+  if (statusCli) await rm(statusCli, { force: true });
 });
 
 async function fixture() {
@@ -352,4 +378,161 @@ test("publication and retry row locks block while approved cleanup owns its fenc
   await locker.query("COMMIT");
   locker.release();
   assert.equal((await retry).alreadyDeleted, 1);
+});
+
+async function statusFixture() {
+  const f = await fixture();
+  const approvalId = randomUUID();
+  const expiredId = randomUUID();
+  const rows = [
+    { digit: "1", state: "pending", future: false, event: "approved", outcome: null },
+    { digit: "2", state: "pending", future: true, event: "deferred", outcome: "retryable-error" },
+    { digit: "3", state: "rejected", future: false, event: "rejected", outcome: "safety-hold", expired: true },
+    { digit: "4", state: "deleted", future: false, event: "deleted", outcome: "generation-deleted", expired: true },
+    { digit: "5", state: "pending", future: false, event: "attempt", outcome: null, expired: true },
+  ];
+  for (const row of rows) {
+    const object = exact(name(row.digit), { generation: "90071992547409931234" });
+    f.objects.set(object.name, object);
+    const approval = {
+      approvalId: row.expired ? expiredId : approvalId,
+      expiresAt: new Date(Date.now() + (row.expired ? -3600_000 : 3600_000)).toISOString(),
+      credentials: "SECRET_SENTINEL", approvedBy: "PRIVATE_OPERATOR_SENTINEL",
+    };
+    await pool.query(`
+      INSERT INTO clip_orphan_cleanup
+        (object_name,generation,approval_sha256,report_sha256,approval,expected,state,attempts,retry_at,last_outcome)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW()+$9*INTERVAL '1 hour',$10)
+    `, [object.name, object.generation, (row.expired ? "e" : "a").repeat(64), "f".repeat(64),
+      approval, object, row.state, row.event === "approved" ? 0 : 1, row.future ? 1 : -1, row.outcome]);
+    // Equal timestamps: event sequence ID, not timestamp, determines latest.
+    for (const event of ["approved", row.event]) {
+      await pool.query(`
+        INSERT INTO clip_orphan_cleanup_audit(object_name,approval_sha256,event,details,created_at,db_actor)
+        VALUES ($1,$2,$3,$4,'2026-01-01','PRIVATE_ACTOR_SENTINEL')
+      `, [object.name, (row.expired ? "e" : "a").repeat(64), event,
+        { credentials: "SECRET_SENTINEL", approval }]);
+    }
+    // A different signed approval's event must never mask this approval's result.
+    await pool.query(`INSERT INTO clip_orphan_cleanup_audit(object_name,approval_sha256,event)
+      VALUES ($1,$2,'rejected')`, [object.name, "b".repeat(64)]);
+  }
+  return { ...f, approvalId, expiredId };
+}
+
+async function snapshot() {
+  const tables = ["clips", "clip_storage_cleanup", "clip_orphan_cleanup", "clip_orphan_cleanup_audit"];
+  return Promise.all(tables.map(async table =>
+    (await pool.query(`SELECT * FROM ${table} ORDER BY 1`)).rows));
+}
+
+test("status classifies exact generations, retries and expiry with no database or storage changes", async () => {
+  const f = await statusFixture();
+  const before = await snapshot();
+  const objectsBefore = [...f.objects];
+  const queries = [];
+  const guardedPool = {
+    async connect() {
+      const client = await pool.connect();
+      return {
+        async query(sql, params) {
+          queries.push(sql);
+          if (sql.includes("SELECT CURRENT_TIMESTAMP")) {
+            assert.equal((await client.query("SHOW transaction_read_only")).rows[0].transaction_read_only, "on");
+            // PostgreSQL itself blocks enqueue even with the test superuser.
+            await assert.rejects(client.query("INSERT INTO clip_storage_cleanup(object_name) VALUES ('forbidden')"),
+              error => error.code === "25006");
+            // That deliberate failure aborts the transaction. Restart the same read-only snapshot.
+            await client.query("ROLLBACK");
+            await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+          }
+          return client.query(sql, params);
+        },
+        release: destroy => client.release(destroy),
+      };
+    },
+  };
+  const report = await getApprovedClipCleanupStatus(guardedPool);
+  assert.deepEqual(report.actions.map(a => a.status), ["pending", "deferred", "rejected", "completed", "pending"]);
+  assert.deepEqual({ ...report.summary, nextRetryAt: null }, {
+    total: 5, pending: 2, deferred: 1, rejected: 1, completed: 1, needsAttention: 4,
+    expiredActions: 3, expiredApprovals: 1, unknownExpiryActions: 0, nextRetryAt: null,
+  });
+  assert.equal(report.actions[1].lastOutcome, "retryable-error");
+  assert.equal(report.actions[1].latestEvent, "deferred");
+  assert.equal(report.actions[3].latestEvent, "deleted");
+  assert.equal(report.actions[3].nextRetryAt, null);
+  assert.ok(report.actions.every(a => a.generation === "90071992547409931234"));
+  assert.ok(new Date(report.actions[1].nextRetryAt) > new Date(report.generatedAt));
+  assert.ok(new Date(report.summary.nextRetryAt) < new Date(report.generatedAt));
+  assert.ok(!queries.some(sql => /\b(INSERT|UPDATE|DELETE|LOCK)\b/i.test(sql)));
+  assert.doesNotMatch(JSON.stringify(report), /SECRET_SENTINEL|PRIVATE_OPERATOR_SENTINEL|PRIVATE_ACTOR_SENTINEL|credentials|db_actor/);
+  assert.deepEqual(await snapshot(), before);
+  assert.deepEqual([...f.objects], objectsBefore);
+  assert.deepEqual(f.calls, []);
+});
+
+test("status supports exact combined filters, empty results and safe unknown outcomes", async () => {
+  const f = await statusFixture();
+  const filtered = await getApprovedClipCleanupStatus(pool, { approvalId: f.approvalId.toUpperCase(), objectName: name("2") });
+  assert.equal(filtered.summary.total, 1);
+  assert.equal(filtered.actions[0].status, "deferred");
+  assert.equal((await getApprovedClipCleanupStatus(pool, { approvalId: f.expiredId })).summary.total, 3);
+  assert.equal((await getApprovedClipCleanupStatus(pool, { objectName: "' OR true --" })).summary.total, 0);
+  assert.equal((await getApprovedClipCleanupStatus(pool, { approvalId: randomUUID() })).summary.total, 0);
+  await assert.rejects(getApprovedClipCleanupStatus(pool, { approvalId: "' OR true --" }), /INVALID_APPROVAL_ID/);
+  await pool.query(`UPDATE clip_orphan_cleanup SET last_outcome='SECRET_SENTINEL',
+    approval=jsonb_set(approval,'{expiresAt}','"not a date"') WHERE object_name=$1`, [name("1")]);
+  const unknown = await getApprovedClipCleanupStatus(pool, { objectName: name("1") });
+  assert.equal(unknown.actions[0].lastOutcome, "unknown");
+  assert.equal(unknown.actions[0].approvalExpiry, "unknown");
+  assert.equal(unknown.summary.unknownExpiryActions, 1);
+  assert.doesNotMatch(JSON.stringify(unknown), /SECRET_SENTINEL/);
+});
+
+test("CLI status uses SELECT-only role, exports JSON without storage, rejects mixed modes and never overwrites files", async () => {
+  const f = await statusFixture();
+  await pool.query(`CREATE ROLE status_reader LOGIN;
+    GRANT USAGE ON SCHEMA public TO status_reader;
+    GRANT SELECT ON clip_orphan_cleanup,clip_orphan_cleanup_audit TO status_reader`);
+  const reader = new pg.Pool({ ...database.config, user: "status_reader" });
+  pools.push(reader);
+  assert.equal((await getApprovedClipCleanupStatus(reader)).summary.total, 5);
+  await assert.rejects(reader.query("INSERT INTO clip_orphan_cleanup(object_name) VALUES ('forbidden')"), /permission denied/);
+  await assert.rejects(reader.query("DELETE FROM clip_orphan_cleanup"), /permission denied/);
+  const url = new URL("postgresql://status_reader@localhost/postgres");
+  url.searchParams.set("host", database.config.host);
+  // No inherited storage configuration, signing keys, or real database URL.
+  const env = { PATH: process.env.PATH, DATABASE_URL: url.href };
+  const exec = promisify(execFile);
+  const before = await snapshot();
+  const output = path.join(temp, "status.json");
+  const { stdout, stderr } = await exec(process.execPath, [
+    statusCli, "--status", "--json", "--approval-id", f.approvalId, "--object-name", name("2"), "--output", output,
+  ], { env });
+  const report = JSON.parse(stdout);
+  assert.equal(stderr, "");
+  assert.equal(report.summary.total, 1);
+  assert.equal(report.actions[0].status, "deferred");
+  assert.deepEqual(JSON.parse(await readFile(output, "utf8")), report);
+  const human = await exec(process.execPath, [statusCli, "--status"], { env });
+  assert.match(human.stdout, /Pending: 2.*Deferred: 1.*Rejected: 1.*Completed: 1/);
+  for (const args of [
+    ["--status", "--execute-approved-generations"],
+    ["--status", "--report", "/does-not-exist"],
+    ["--status", "--approval", "/does-not-exist"],
+    ["--json"], ["--status", "--output", output],
+    ["--status", "--approval-id", "invalid"],
+  ]) {
+    await assert.rejects(exec(process.execPath, [statusCli, ...args], { env }), error => {
+      assert.equal(error.code, 1);
+      assert.equal(error.stdout, "");
+      assert.doesNotMatch(error.stderr, /SECRET_SENTINEL|postgresql:|STORAGE_OR_EXECUTOR_LOADED/);
+      return true;
+    });
+  }
+  assert.deepEqual(JSON.parse(await readFile(output, "utf8")), report);
+  assert.deepEqual(await snapshot(), before);
+  assert.equal(f.objects.size, 5);
+  assert.deepEqual(f.calls, []);
 });

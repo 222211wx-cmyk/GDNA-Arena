@@ -188,6 +188,75 @@ expired, execution fails closed. Generate a fresh report and obtain a new
 signature; an operator may reauthorize the same exact object only when it is
 still a candidate in that fresh report.
 
+## Read-only operator status
+
+Inspect recorded approved actions without executing cleanup:
+
+```sh
+pnpm --filter @workspace/api-server run clips:cleanup-approved -- --status
+pnpm --filter @workspace/api-server run clips:cleanup-approved -- \
+  --status --approval-id APPROVAL_UUID --object-name clip_EXACT_NAME.mp4
+pnpm --filter @workspace/api-server run clips:cleanup-approved -- \
+  --status --json --output /tmp/approved-clip-status.json
+```
+
+`--approval-id` matches the **current** approval payload UUID (case-insensitive),
+not its SHA-256 hash. `--object-name` matches the exact relative object name, not
+a prefix, wildcard, or full bucket path. Both filters are combined with AND.
+Reauthorization replaces the current approval: an older approval ID no longer
+matches that action. This command reports current actions, not an audit-history
+export. Latest audit events are scoped to each action's current approval hash
+and ordered by audit sequence ID, including events with identical timestamps.
+
+The report contains exact generation strings (never rounded to numbers), approval
+IDs/hashes, attempts, next retry times, expiry times, last recorded outcomes, and
+latest audit events/timestamps. Summary counts apply only to matching actions:
+
+- **Pending:** a pending queue entry whose recorded retry time has arrived.
+- **Deferred:** a pending entry whose recorded backoff has not yet elapsed.
+- **Rejected:** a terminal safety hold; it is not automatically retried.
+- **Completed:** the queue records deletion or an already-absent generation.
+- **Expired approvals:** distinct expired current signed payloads (by hash),
+  with a separate affected-action count. Expiry is independent of state,
+  including completed actions. Invalid/missing expiry is reported as unknown,
+  never treated as valid. All non-completed actions need operator attention.
+
+The earliest recorded retry can be in the past, and includes expired pending
+approvals. It is **not** a scheduled job, evidence of current storage contents,
+or authorization to execute. No background retry is started. An unexpired
+timestamp does not verify a signature or report freshness. Execution still
+requires the original report, valid signed approval, all ownership/reference
+checks and exact-generation preconditions. Expired approval/report handling and
+permanent name tombstones remain unchanged.
+
+`--json` writes only JSON to stdout; `--output` writes the same JSON to a **new**
+file with mode `0600`, refusing to overwrite existing files. Without `--json`,
+stdout is a human-readable summary and action list. Empty results succeed.
+Status exits 0 even when actions need attention; inspect the summary for alerts.
+Invalid arguments, missing optional tables, insufficient privileges, database
+failures or export failures exit 1 with a generic error and no report on stdout.
+No schema provisioning is performed.
+
+Status rejects `--report`, `--approval` and `--execute-approved-generations`.
+Status-only filters/export flags cannot be used without `--status`. It uses a
+`REPEATABLE READ READ ONLY` transaction, fully qualified table names and
+parameterized filters; it never calls the executor or initializes storage.
+Use a dedicated observer connection in `DATABASE_URL`, with only CONNECT on
+the database, USAGE on `public`, and SELECT on `public.clip_orphan_cleanup` and
+`public.clip_orphan_cleanup_audit`. No ownership-table, sequence, application
+table, DML, storage or signing-key privileges are needed.
+
+Exports deliberately exclude connection strings, keys, signatures, full approval
+payloads, arbitrary audit details, provider errors and actor identities. Only
+known outcome/event codes are emitted; unfamiliar codes appear as `unknown`.
+Treat object names and approval identifiers as operational data and keep exports
+in an operator-controlled location.
+
+Isolated PostgreSQL tests exercise the actual CLI with a SELECT-only observer and
+storage/executor imports that throw if loaded. They verify read-only transaction
+enforcement, unchanged queues/audit rows and fake objects, exact filters,
+backoff/expiry reporting, JSON export and refusal of execution flags.
+
 ## Privileges and audit
 
 The setup script revokes PUBLIC DML on `clip_storage_owner`,
