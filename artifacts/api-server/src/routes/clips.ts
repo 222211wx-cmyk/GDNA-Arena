@@ -21,6 +21,7 @@ import { clipByteRange } from "../lib/clip-byte-range.js";
 //    at upload; first owner wins (same rights system as the rest of the empire).
 //  • Views earn coins via monetization_settings (content_type 'clip').
 import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
+import { verifiedDuration, ClipProbeBusyError } from "../lib/clip-duration.js";
 
 const router: IRouter = Router();
 router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));

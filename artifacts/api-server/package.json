@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test:ppo": "rm -rf .ppo-test-dist && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .ppo-test-dist src/lib/ppo-transaction.ts src/lib/ppo-wallet-allocation.ts src/lib/ppo-payout.test.ts && node --test .ppo-test-dist/ppo-payout.test.js && rm -rf .ppo-test-dist",
     "test:firebase-probe": "node scripts/firebase-call-push-probe.mjs",
+    "test:clip-media": "sh -c 'trap \"rm -rf .clip-media-test-dist\" EXIT; tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .clip-media-test-dist src/lib/clip-duration.test.ts src/lib/clip-thumbnail.test.ts && node --test .clip-media-test-dist/*.test.js'",
     "typecheck": "tsc -b ../../lib/db ../../lib/api-zod && tsc -p tsconfig.json --noEmit",
     "test:integration": "node --test tests/*.integration.test.mjs",
     "test:integration:account-erasure": "node --test tests/auth-delete.integration.test.mjs",

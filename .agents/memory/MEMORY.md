@@ -29,3 +29,4 @@
 - [Drizzle peer alignment](drizzle-peer-alignment.md) — Firebase Admin can split Drizzle type identities through optional OpenTelemetry peers; align consumers, not query casts.
 - [Optional AI policy](optional-ai-policy.md) — keep core availability independent of AI credentials and credits; no automatic paid-provider replacement.
 - [API generator compatibility](api-generator-compatibility.md) — generator defaults can misidentify workspace Zod and React Query versions; keep targets explicit.
+- [Clip media probing](clip-media-probing.md) — seek-related loopback resets are normal; distinguish client disconnects from fatal storage errors.
