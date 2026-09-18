@@ -6,7 +6,8 @@ const page = (ids: number[], hasMore = false, nextBefore: number | null = null) 
   ok: true,
   json: async () => ({
     clips: ids.map(id => ({ id, user_id: 1, username: "creator", title: `Clip ${id}`,
-      content_type: "video/mp4", duration_sec: 60, views: 0, created_at: "" })),
+      content_type: "video/mp4", duration_sec: 60, views: 0, created_at: "",
+      thumb: id % 2 ? null : `/api/clips/thumbnail/${id}` })),
     hasMore, nextBefore,
   }),
 });
@@ -21,12 +22,15 @@ describe("six-at-a-time clips feed", () => {
     const { result } = renderHook(useClipsFeed);
     await waitFor(() => expect(result.current.clips).toHaveLength(6));
     expect(fetch.mock.calls[0][0]).toBe("/api/clips/feed?limit=6");
+    expect(result.current.clips[0].thumb).toBe("/api/clips/thumbnail/20");
+    expect(result.current.clips[1].thumb).toBeNull();
     act(() => { void result.current.loadMore(); void result.current.loadMore(); });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[1][0]).toBe("/api/clips/feed?limit=6&before=15");
     expect(result.current.loadingMore).toBe(true);
     await act(async () => { finish(page([14, 13, 12, 11, 10, 9])); });
     expect(result.current.clips).toHaveLength(12);
+    expect(result.current.clips[6].thumb).toBe("/api/clips/thumbnail/14");
     expect(result.current.hasMore).toBe(false);
   });
 

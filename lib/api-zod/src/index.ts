@@ -8,3 +8,4 @@ export * from "./generated/types/playResult";
 export * from "./generated/types/successResponse";
 export * from "./generated/types/transactionItem";
 export * from "./generated/types/transactionsResponse";
+export * from './generated/types';

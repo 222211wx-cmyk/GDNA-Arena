@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
 
-type Props = Omit<ComponentPropsWithoutRef<"video">, "src" | "preload"> & { src: string };
+type Props = Omit<ComponentPropsWithoutRef<"video">, "src" | "preload" | "autoPlay"> & { src: string };
 
 /** Attach media only near this video, never by querying other videos on the page. */
 export function LazyClipVideo({ src, ...props }: Props) {
@@ -37,6 +37,7 @@ export function LazyClipVideo({ src, ...props }: Props) {
     return () => observer.disconnect();
   }, []);
 
-  return <video {...props} ref={ref} controls playsInline preload="none"
+  // The poster is an independent JPEG. Never preload media to discover a frame.
+  return <video {...props} ref={ref} controls playsInline autoPlay={false} preload="none"
     data-src={src} src={loadedSource === src ? src : undefined} />;
 }

@@ -17,6 +17,49 @@ tags:
   - name: wallet
   - name: globalstar
 paths:
+  /clips/feed:
+    get:
+      operationId: getClipsFeed
+      summary: Paginated visible clips with persistent, clip-scoped poster URLs
+      parameters:
+        - in: query
+          name: before
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+      responses:
+        "200":
+          description: Newest visible clips; null thumb means no poster is available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipsFeedPage"
+        "400":
+          description: Invalid cursor or limit
+        "500":
+          description: Feed unavailable
+  /clips/thumbnail/{id}:
+    get:
+      operationId: getClipThumbnail
+      summary: Small JPEG poster for a non-frozen clip, without downloading video
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Persistent JPEG thumbnail
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+        "400":
+          description: Invalid clip ID
+        "404":
+          description: Clip frozen, deleted, or missing a thumbnail
+        "500":
+          description: Storage unavailable
   /healthz:
     get:
       operationId: healthCheck
@@ -654,6 +697,31 @@ paths:
 
 components:
   schemas:
+    ClipFeedItem:
+      type: object
+      required: [id, user_id, username, title, content_type, duration_sec, views, created_at, thumb]
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        username: { type: string }
+        title: { type: string }
+        content_type: { type: string }
+        duration_sec: { type: integer, minimum: 60 }
+        views: { type: integer }
+        created_at: { type: string, format: date-time }
+        thumb:
+          type: [string, "null"]
+          description: Stable /api/clips/thumbnail/{id} URL, or null for legacy/failed posters
+    ClipsFeedPage:
+      type: object
+      required: [clips, hasMore, nextBefore]
+      properties:
+        clips:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClipFeedItem"
+        hasMore: { type: boolean }
+        nextBefore: { type: [integer, "null"] }
     HealthStatus:
       type: object
       properties:

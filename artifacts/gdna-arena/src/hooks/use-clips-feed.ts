@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ClipFeedItem } from "@workspace/api-client-react";
 
-export interface Clip {
-  id: number; user_id: number; username: string; title: string;
-  content_type: string; duration_sec: number; views: number; created_at: string;
-  thumb?: string;
-}
+// Optional for cached legacy rows; the current feed always returns string | null.
+export type Clip = Omit<ClipFeedItem, "thumb"> & { thumb?: string | null };
 
 export function useClipsFeed() {
   const [clips, setClips] = useState<Clip[]>([]);

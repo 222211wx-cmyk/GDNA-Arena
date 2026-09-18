@@ -150,7 +150,7 @@ function ClipCard({
 
   return (
     <div className="relative aspect-[9/16] rounded-xl overflow-hidden border border-border bg-card min-w-0">
-      <LazyClipVideo src={api(`/clips/stream/${clip.id}`)} poster={clip.thumb} loop muted={muted}
+      <LazyClipVideo src={api(`/clips/stream/${clip.id}`)} poster={clip.thumb ?? undefined} loop muted={muted}
         aria-label={clip.title} className="w-full h-full object-cover bg-background"
         onPlaying={recordPlayback} onPause={() => setPlaying(false)}
         onVolumeChange={event => setMuted(event.currentTarget.muted)} />
