@@ -10,6 +10,7 @@ export interface ClipReference {
 export interface InventoryObject {
   name: string;
   generation?: string;
+  metageneration?: string;
   size?: string;
   timeCreated?: string;
   updated?: string;

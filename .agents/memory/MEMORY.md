@@ -31,3 +31,4 @@
 - [API generator compatibility](api-generator-compatibility.md) — generator defaults can misidentify workspace Zod and React Query versions; keep targets explicit.
 - [Completion merge validation](completion-merge-validation.md) — completion can merge concurrent changes before checks; repair the current merged file, not the previously tested snapshot.
 - [Clip media probing](clip-media-probing.md) — seek-related loopback resets are normal; distinguish client disconnects from fatal storage errors.
+- [Approved orphan cleanup](approved-orphan-cleanup.md) — durable name tombstones fence late deletes; signed orphan approvals stay separate from ordinary deletion.

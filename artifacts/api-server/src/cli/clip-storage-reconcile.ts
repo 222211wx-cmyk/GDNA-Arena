@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import { clipFile } from "../lib/clip-storage.js";
 import { collectClipInventory, readClipReferences } from "../lib/clip-storage-inventory.js";
 import { MIN_ORPHAN_AGE_DAYS, reconcileClipStorage } from "../lib/clip-storage-reconciliation.js";
+import { reportOwnership } from "../lib/clip-cleanup-owner.js";
 
 async function main() {
   const { values } = parseArgs({
@@ -46,6 +47,7 @@ async function main() {
         return {
           name: file.name.slice(scope.prefix.length),
           generation: metadata.generation === undefined ? undefined : String(metadata.generation),
+          metageneration: metadata.metageneration === undefined ? undefined : String(metadata.metageneration),
           size: metadata.size === undefined ? undefined : String(metadata.size),
           timeCreated: metadata.timeCreated,
           updated: metadata.updated,
@@ -64,9 +66,13 @@ async function main() {
   try {
     const client = await pool.connect();
     let references;
-    try { references = await readClipReferences(client); }
+    let ownership;
+    try {
+      references = await readClipReferences(client);
+      ownership = await reportOwnership(client);
+    }
     finally { client.release(); }
-    const report = reconcileClipStorage({ objects, ...references, scope, startedAt, minAgeDays });
+    const report = { ...reconcileClipStorage({ objects, ...references, scope, startedAt, minAgeDays }), ownership };
     // Never overwrite an earlier operator report; restrict access to object names.
     await writeFile(values.output, JSON.stringify(report, null, 2) + "\n", { flag: "wx", mode: 0o600 });
     console.log(JSON.stringify({ mode: report.mode, summary: report.summary }));

@@ -12,6 +12,8 @@
     "test:clip-media": "sh -c 'trap \"rm -rf .clip-media-test-dist\" EXIT; tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .clip-media-test-dist src/lib/clip-duration.test.ts src/lib/clip-thumbnail.test.ts && node --test .clip-media-test-dist/*.test.js'",
     "typecheck": "tsc -b ../../lib/db ../../lib/api-zod && tsc -p tsconfig.json --noEmit",
     "clips:reconcile": "node scripts/clip-storage-reconcile.mjs",
+    "clips:cleanup-approved": "node scripts/clip-storage-cleanup-approved.mjs",
+    "test:clip-approved-cleanup": "node --test tests/clips-approved-cleanup.test.mjs tests/clips-approved-cleanup.integration.test.mjs",
     "test:clip-reconciliation": "node --test tests/clips-storage-reconciliation.test.mjs",
     "test:integration": "node --test tests/*.integration.test.mjs",
     "test:integration:thumbnail-retry": "node --test tests/clips-thumbnail-retry.integration.test.mjs tests/clips-storage-cleanup.integration.test.mjs",
