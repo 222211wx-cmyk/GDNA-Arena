@@ -20,6 +20,7 @@ import { ensureMissionsTables, startSovereignMissionsJob } from "./jobs/sovereig
 import { startEventLiveAlertJob } from "./jobs/event-live-alert.js";
 import { getAgoraConfigStatus } from "./lib/agora-config.js";
 import { startFinanceReconciliationJob } from "./jobs/finance-reconciliation";
+import { startClipThumbnailRetryJob } from "./jobs/clip-thumbnail-retry.js";
 import { FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
 
 const rawPort = process.env["PORT"];
@@ -1423,6 +1424,7 @@ migrateApplicationDatabase()
     startSovereignMissionsJob();
     startEventLiveAlertJob();
     startFinanceReconciliationJob();
+    startClipThumbnailRetryJob();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);

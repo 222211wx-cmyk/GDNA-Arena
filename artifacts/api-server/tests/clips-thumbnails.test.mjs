@@ -182,7 +182,7 @@ await build({
     name: "clips-route-mocks",
     setup(plugin) {
       plugin.onResolve({ filter: /^@workspace\/db$/ }, () => ({ path: mocksPath }));
-      plugin.onResolve({ filter: /\/lib\/chatStorage$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /(?:^|\/)chatStorage$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /\/lib\/logger$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /\/lib\/clip-thumbnail\.js$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /^node:child_process$/ }, () => ({ path: mocksPath }));

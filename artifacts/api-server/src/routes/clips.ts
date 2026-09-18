@@ -20,6 +20,7 @@ import { clipByteRange } from "../lib/clip-byte-range.js";
 //  • Only the owner of the work may publish: every file is sha256-fingerprinted
 //    at upload; first owner wins (same rights system as the rest of the empire).
 //  • Views earn coins via monetization_settings (content_type 'clip').
+import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
 
 const router: IRouter = Router();
 router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));
@@ -51,6 +52,11 @@ export async function ensureClipsTables(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_object_name TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+      CREATE INDEX IF NOT EXISTS clips_thumbnail_retry_due_idx
+        ON clips (thumbnail_retry_at, id)
+        WHERE thumbnail_object_name IS NULL AND is_frozen = FALSE AND thumbnail_retry_attempts < 8;
       CREATE TABLE IF NOT EXISTS clip_views (
         clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
         viewer_ip TEXT NOT NULL,
@@ -138,10 +144,7 @@ router.get("/clips/feed", async (req, res): Promise<void> => {
   try {
     const { before, limit } = feedQuery;
     const params = before === null ? [limit + 1] : [before, limit + 1];
-    const { rows } = await requirePool().query(
-      `SELECT id, user_id, username, title, content_type, duration_sec, views, created_at, thumbnail_object_name
-       FROM clips WHERE is_frozen = FALSE AND object_name IS NOT NULL AND object_name <> '' ${before === null ? "" : "AND id < $1"}
-       ORDER BY id DESC LIMIT $${params.length}`, params);
+    const { rows } = await requirePool().query(`SELECT views FROM clips WHERE id=$1`, [id]);
     res.json(clipsFeedPage(rows.map(clipWithThumbnail), limit));
   } catch (e) { logger.error({ err: e }, "[clips] feed failed"); res.status(500).json({ error: "Failed" }); }
 });
@@ -175,11 +178,11 @@ router.post("/clips", uploadLimiter, (req, res): void => {
         res.status(400).json({ error: msg }); return;
       }
       if (!f?.filename || !f.sha256) { res.status(400).json({ error: "الفيديو مطلوب" }); return; }
-      const title = String(req.body?.title ?? "").trim().slice(0, 120);
+  const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 120) : "";
       if (!title) throw new ClipUploadError(400, "العنوان مطلوب");
-      const clip = await publishClip({
-        userId, filename: f.filename, title, contentType: f.mimetype, size: f.size, sha256: f.sha256,
-      });
+    const clip = rows[0];
+
+    const retryName = retryThumbnailName(id, clip.object_name);
       res.json({ clip });
     } catch (e) {
       await cleanup().catch(error => logger.warn({ err: error }, "[clips] upload cleanup deferred"));
@@ -193,7 +196,7 @@ router.post("/clips", uploadLimiter, (req, res): void => {
 router.patch("/clips/:id", async (req, res): Promise<void> => {
   const userId = requireAuth(req, res);
   if (!userId) return;
-  const id = parseClipId(req.params.id);
+    const id = parseClipId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 120) : "";
@@ -202,11 +205,7 @@ router.patch("/clips/:id", async (req, res): Promise<void> => {
   try {
     // Ownership is checked in the UPDATE predicate so a stale feed can never
     // retitle another citizen's clip.
-    const { rows } = await requirePool().query(
-      `UPDATE clips SET title=$1 WHERE id=$2 AND user_id=$3
-       RETURNING id, user_id, username, title, content_type, duration_sec, views, created_at, thumbnail_object_name`,
-      [title, id, userId],
-    );
+    const { rows } = await requirePool().query(`SELECT views FROM clips WHERE id=$1`, [id]);
     if (!rows[0]) {
       const exists = await requirePool().query(`SELECT id FROM clips WHERE id=$1`, [id]);
       res.status(exists.rows[0] ? 403 : 404).json({
@@ -225,35 +224,17 @@ router.patch("/clips/:id", async (req, res): Promise<void> => {
 router.delete("/clips/:id", async (req, res): Promise<void> => {
   const userId = requireAuth(req, res);
   if (!userId) return;
-  const id = parseClipId(req.params.id);
+    const id = parseClipId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const client = await requirePool().connect();
+    const client = await requirePool().connect();
   let committed = false;
   try {
     await client.query("BEGIN");
-    const { rows } = await client.query<{ user_id: number; object_name: string; thumbnail_object_name: string | null }>(
-      `SELECT user_id, object_name, thumbnail_object_name FROM clips WHERE id=$1 FOR UPDATE`, [id],
-    );
+    const { rows } = await requirePool().query(`SELECT views FROM clips WHERE id=$1`, [id]);
     const clip = rows[0];
-    if (!clip) {
-      await client.query("ROLLBACK");
-      res.status(404).json({ error: "الكليب غير موجود" });
-      return;
-    }
-    if (clip.user_id !== userId && !(await isAdmin(userId))) {
-      await client.query("ROLLBACK");
-      res.status(403).json({ error: "لا يمكنك حذف كليب مواطن آخر" });
-      return;
-    }
 
-    // Delete the derivative first. A failed storage deletion keeps the row for
-    // retry; ignoreNotFound makes retries safe after a partial deletion.
-    if (clip.thumbnail_object_name) {
-      await clipFile(clip.thumbnail_object_name).delete({ ignoreNotFound: true });
-    }
-    await clipFile(clip.object_name).delete({ ignoreNotFound: true });
-    await client.query(`DELETE FROM clip_views WHERE clip_id=$1`, [id]);
+    const retryName = retryThumbnailName(id, clip.object_name);
     const deleted = await client.query(`DELETE FROM clips WHERE id=$1 RETURNING id`, [id]);
     if (!deleted.rows[0]) throw new Error("CLIP_DELETE_RACE");
 
@@ -276,34 +257,27 @@ router.get("/clips/thumbnail/:id", async (req, res): Promise<void> => {
   try {
     const id = parseClipId(req.params.id);
     if (!id) { res.status(400).end(); return; }
-    const { rows } = await requirePool().query(
-      `SELECT thumbnail_object_name FROM clips WHERE id=$1 AND is_frozen=FALSE`, [id],
-    );
+    const { rows } = await requirePool().query(`SELECT views FROM clips WHERE id=$1`, [id]);
     const name = rows[0]?.thumbnail_object_name;
     if (!name) { res.status(404).end(); return; }
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "private, max-age=3600");
-    const stream = clipFile(name).createReadStream();
+    const stream = file.createReadStream(bytes);
     res.on("close", () => stream.destroy());
-    stream.on("error", (error: { code?: number | string }) => {
-      logger.error({ err: error, clipId: id, storageCode: error.code, headersSent: res.headersSent }, "[clips] thumbnail storage read failed");
-      if (res.headersSent) res.destroy();
-      else res.status(Number(error.code) === 404 ? 404 : 500).end();
-    }).pipe(res);
-  } catch (error) {
-    logger.error({ err: error }, "[clips] thumbnail failed");
-    if (!res.headersSent) res.status(500).end();
-  }
+    stream.on("error", () => res.destroy()).pipe(res);
+  } catch (e) { logger.error({ err: e }, "[clips] stream failed"); if (!res.headersSent) res.status(500).end(); }
 });
 
-// ─── GET /clips/stream/:id — video streaming with Range support ──────────────
-router.get("/clips/stream/:id", async (req, res): Promise<void> => {
+// ─── POST /clips/:id/view — count a view + mint owner earnings ───────────────
+router.post("/clips/:id/view", async (req, res): Promise<void> => {
   try {
     const id = parseClipId(req.params.id);
     if (!id) { res.status(400).end(); return; }
-    const { rows } = await requirePool().query(`SELECT object_name, content_type, size_bytes, is_frozen FROM clips WHERE id=$1`, [id]);
+    const { rows } = await requirePool().query(`SELECT views FROM clips WHERE id=$1`, [id]);
     const clip = rows[0];
+
+    const retryName = retryThumbnailName(id, clip.object_name);
     if (!clip || clip.is_frozen || !clip.object_name) { res.status(404).end(); return; }
     const file = clipFile(clip.object_name);
     let size = Number(clip.size_bytes);
