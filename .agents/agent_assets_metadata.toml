@@ -39,6 +39,7 @@ uri = "file://screenshots/gdna-arena-v2-production-home.png"
 type = "image"
 title = "GDNA Arena V2.0 — الصفحة الرئيسية المنشورة"
 description = "لقطة مباشرة من النسخة العامة على helixly.app بعد فحص النشر."
+logical_id = "6c35988d-04c3-4ef5-815d-922ddc854f93"
 
 [[outputs]]
 id = "sFl7w3sj_TRpiXspVCiiN"
@@ -60,6 +61,7 @@ uri = "file://screenshots/gold-dabish.jpg"
 type = "image"
 title = "ظبيش — اللون الذهبي"
 description = "Live Preview بعد حذف زر الاتصال الخارجي وتوحيد الذهب."
+logical_id = "47fa9129-fd32-443e-b65b-de33e14a8a57"
 
 [[outputs]]
 id = "ZpE_152fFiyr9cHQnFeNm"
@@ -67,6 +69,7 @@ uri = "file://screenshots/gold-press.jpg"
 type = "image"
 title = "البلاغ — اللون الذهبي"
 description = "صفحة البلاغ بعد تطبيق اللون الذهبي الرسمي."
+logical_id = "c927805a-7c7f-4702-8b51-e6b0e3937482"
 
 [[outputs]]
 id = "Ej7Md4AgmXP3WWfek5O2x"
@@ -74,6 +77,7 @@ uri = "file://screenshots/gold-tribes.jpg"
 type = "image"
 title = "القبائل — اللون الذهبي"
 description = "صفحة المجتمع والقبائل بعد التحقق البصري."
+logical_id = "6317a49f-ec79-4ae1-a556-ea8586c36f84"
 
 [[outputs]]
 id = "Q6ECpZlHdUYLMetiaULrz"
@@ -81,3 +85,18 @@ uri = "file://screenshots/gold-war-council.jpg"
 type = "image"
 title = "مجلس الحرب — اللون الذهبي"
 description = "صفحة الساحة والألعاب بعد التحقق البصري."
+logical_id = "688f1122-fb34-400b-a3ae-ee6ba88c8774"
+
+[[outputs]]
+id = "zfLKEs3ZLkUL_DKUYm1JY"
+uri = "file://.local/tests/evidence/clip-large-file-selected.png"
+type = "image"
+title = "26 MiB selected — Publish enabled"
+description = "Chrome verification of the file picker with mocked sign-in/feed responses. The filename is retained, the size notice is a warning, and Publish is enabled. No file was published in this test."
+logical_id = "44f0ca23-6001-45bd-833c-b2c4d6792ce1"
+content_hash = "sha256:0f951bdf91de5167470e764a8104b96da925a00424b194104b418ac0537de9a8"
+size = 48759
+mtime_ms = 1789748156219
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/44f0ca23-6001-45bd-833c-b2c4d6792ce1/3a1901c8-8768-46fb-8f48-2e66f5eac895"
+storage_version_token = "1789748187082397"
+content_type = "image/png"

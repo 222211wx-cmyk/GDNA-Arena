@@ -3,11 +3,17 @@ name: Clips upload transport decisions
 description: Owner-directed Clips compression and resumable upload policy, plus integrity constraints
 ---
 
-Keep the citizen Clips page isolated and lightweight: upload original files without browser compression or media decoding. The current limit is 25 MiB.
+Keep the citizen Clips page isolated and lightweight: upload original files without browser compression or media decoding. The 25 MiB limit is server-enforced, not a reason to discard a browser selection.
 
 **Why:** On 2026-09-18 the owner explicitly reversed the earlier 480p compression request after reporting a blank page and indefinite file-selection blocking on Android at 13.7 KB/s with many tabs. The live page also loaded the full application bundle, making even its compressed JavaScript prohibitively slow.
 
 **How to apply:** Do not reintroduce MediaRecorder, ffmpeg, audio decoding, or large-file hashing into file selection. Retain 1 MiB resumable network chunks, native playback on demand, server-side media/rights verification, and visible progress that reaches 100% only after publication. A multipart request is not chunked merely because the storage SDK streams it. Do not promise a two-second load without measuring production-built assets at the requested bandwidth.
+
+Always retain a chosen audio/video file, show its name immediately, and enable Publish regardless of its size. Size notices before submission are advisory.
+
+**Why:** On 2026-09-18 the owner explicitly overrode the earlier client-side 25 MiB rejection: clearing large selections looked like a broken file picker and prevented submission.
+
+**How to apply:** Let the server validate on submission; preserve the selection on rejection or picker cancellation. Do not imply server compression exists merely because the client now accepts a larger selection.
 
 Scope upload retry identities to the exact selected File object unless full content identity is safely established.
 

@@ -2,7 +2,7 @@ import { tokens } from "@workspace/gdna-ds/tokens";
 import { uploadClip, type ClipUploadMetadata } from "./components/clips/clipUpload";
 
 const BASE = import.meta.env.BASE_URL;
-const MAX_BYTES = 25 * 1024 * 1024;
+const SIZE_WARNING_BYTES = 25 * 1024 * 1024;
 const FEED_TIMEOUT_MS = 12_000;
 const root = document.getElementById("root");
 if (!root) throw new Error("Clip root is missing");
@@ -32,11 +32,10 @@ root.innerHTML = `
   <div id="auth" class="muted" aria-live="polite">جارٍ التحقق من تسجيل الدخول…</div>
   <form id="upload" data-testid="clip-upload" hidden>
     <h2>رفع صوت أو فيديو</h2>
-    <label>الملف — 25 MiB كحد أقصى
-      <input id="file" data-testid="clip-file-input" type="file" required
-        accept="video/mp4,video/webm,video/quicktime,audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/webm,audio/flac,.mp3,.m4a,.aac,.ogg,.opus,.wav,.flac">
-    </label>
-    <p id="selection" class="muted">يرفع المتصفح الملف الأصلي مباشرة؛ لا يجري ضغطاً أو تحليلاً للوسائط.</p>
+    <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
+    <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection size-warning">اختيار ملف</button>
+    <p id="selection" class="muted" role="status" aria-live="polite">يرفع المتصفح الملف الأصلي مباشرة؛ لا يجري ضغطاً أو تحليلاً للوسائط.</p>
+    <p id="size-warning" data-testid="clip-size-warning" class="muted" role="status" hidden></p>
     <fieldset>
       <legend>نوع النشر</legend>
       <label><input type="radio" name="purpose" value="story" checked> ستوري / مقطع مواطن</label>
@@ -73,6 +72,8 @@ const element = <T extends HTMLElement>(id: string) => document.getElementById(i
 const auth = element<HTMLDivElement>("auth");
 const form = element<HTMLFormElement>("upload");
 const input = element<HTMLInputElement>("file");
+const chooseFile = element<HTMLButtonElement>("choose-file");
+const sizeWarning = element<HTMLParagraphElement>("size-warning");
 const submit = element<HTMLButtonElement>("submit");
 const cancel = element<HTMLButtonElement>("cancel");
 const selection = element<HTMLParagraphElement>("selection");
@@ -84,7 +85,7 @@ const progress = element<HTMLProgressElement>("progress");
 const status = element<HTMLParagraphElement>("upload-status");
 const uploadError = element<HTMLParagraphElement>("upload-error");
 const feed = element<HTMLDivElement>("feed");
-const mutableControls = Array.from(form.querySelectorAll<HTMLInputElement>("input"));
+const mutableControls = Array.from(form.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, #choose-file"));
 let cachedFile: File | null = null;
 let uploadController: AbortController | null = null;
 
@@ -105,20 +106,22 @@ form.addEventListener("change", event => {
   }
 });
 
+chooseFile.addEventListener("click", () => input.click());
+
 input.addEventListener("change", () => {
-  const selected = input.files?.[0] ?? null;
-  uploadError.textContent = "";
-  if (selected && selected.size > MAX_BYTES) {
-    cachedFile = null;
-    input.value = "";
-    submit.disabled = true;
-    selection.textContent = "لم يتم اختيار ملف";
-    uploadError.textContent = "الفيديو كبير - صغر 720p";
-    return;
-  }
+  const selected = input.files?.[0];
+  // A dismissed picker must not discard the previous selection.
+  if (!selected) return;
   cachedFile = selected;
-  submit.disabled = !selected;
-  selection.textContent = selected ? `${selected.name} — ${formatBytes(selected.size)}` : "لم يتم اختيار ملف";
+  chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MiB`;
+  selection.textContent = `${selected.name} — تم اختيار الملف ✓`;
+  submit.disabled = false;
+  uploadError.textContent = "";
+  progressWrap.hidden = true;
+  status.textContent = "";
+  sizeWarning.hidden = selected.size <= SIZE_WARNING_BYTES;
+  sizeWarning.textContent = sizeWarning.hidden ? "" :
+    "تنبيه: الملف يتجاوز 25 MiB. يمكنك محاولة النشر، لكن الخادم يطبق حد الحجم ولا يضغط الملفات تلقائياً. للفيديو، جرّب تقليل الحجم إلى 720p.";
 });
 
 cancel.addEventListener("click", () => uploadController?.abort(new DOMException("Cancelled", "AbortError")));
@@ -127,10 +130,6 @@ form.addEventListener("submit", async event => {
   event.preventDefault();
   const file = cachedFile;
   if (!file || uploadController) return;
-  if (file.size > MAX_BYTES) {
-    uploadError.textContent = "الفيديو كبير - صغر 720p";
-    return;
-  }
   const purpose = selectedValue("purpose") as "story" | "original";
   if (purpose === "original" && (holder.value.trim().length < 2 || reference.value.trim().length < 3)) {
     uploadError.textContent = "أدخل اسم صاحب الحقوق ومرجع تسجيل الأصل";
@@ -168,6 +167,9 @@ form.addEventListener("submit", async event => {
     });
     cachedFile = null;
     input.value = "";
+    chooseFile.textContent = "اختيار ملف";
+    sizeWarning.hidden = true;
+    sizeWarning.textContent = "";
     selection.textContent = "تم نشر الملف";
     await loadFeed();
   } catch (error) {

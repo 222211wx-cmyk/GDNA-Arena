@@ -34,10 +34,12 @@ describe("ultra-light clip bootstrap", () => {
     expect(clip).toContain('setAttribute("preload", "none")');
   });
 
-  it("enforces 25 MiB before upload and exposes stable automation hooks", () => {
+  it("warns about 25 MiB without blocking selection and exposes stable automation hooks", () => {
     const clip = source("./clip-entry.ts");
     expect(clip).toContain("25 * 1024 * 1024");
-    expect(clip).toContain("الفيديو كبير - صغر 720p");
+    expect(clip).toContain('data-testid="clip-size-warning"');
+    expect(clip).not.toContain("if (file.size >");
+    expect(clip).not.toContain("if (selected && selected.size >");
     for (const id of ["clip-file-input", "clip-submit", "clip-progress", "clip-status", "clip-error"]) {
       expect(clip).toContain(`data-testid="${id}"`);
     }
