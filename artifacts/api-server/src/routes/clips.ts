@@ -3,13 +3,15 @@ import rateLimit from "express-rate-limit";
 import crypto from "crypto";
 import multer from "multer";
 import { pool } from "@workspace/db";
-import { objectStorageClient } from "../lib/chatStorage";
 import type { File as GcsFile } from "@google-cloud/storage";
 import { logger } from "../lib/logger";
-import { spawn } from "node:child_process";
 import { clipsFeedPage, parseClipsFeedQuery } from "./clips-feed.js";
-import { generateClipThumbnail } from "../lib/clip-thumbnail.js";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
+import { clipFile, publishClip, ClipUploadError } from "../lib/clip-publish.js";
+import { createClipsUploadsRouter } from "./clips-uploads.js";
+import { ClipUploads } from "../lib/clip-uploads.js";
+import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js";
+import { clipByteRange } from "../lib/clip-byte-range.js";
 
 // ─── CLIPS — كليبسز (Reels-style, producer-owned) ────────────────────────────
 // Owner's rules:
@@ -20,7 +22,7 @@ import { clipWithThumbnail } from "./clips-thumbnail-response.js";
 //  • Views earn coins via monetization_settings (content_type 'clip').
 
 const router: IRouter = Router();
-const MIN_DURATION_SEC = 60; // owner rule: 1 minute minimum — NO maximum (any chrono above 1 min)
+router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));
 const MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB per clip
 const ALLOWED = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 const EXT: Record<string, string> = { "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov" };
@@ -62,32 +64,6 @@ export async function ensureClipsTables(): Promise<void> {
   } catch (e) {
     logger.error({ err: e }, "[clips] table setup failed");
   }
-}
-
-function clipFile(name: string): GcsFile {
-  const dir = process.env.PRIVATE_OBJECT_DIR || "";
-  if (!dir) throw new Error("PRIVATE_OBJECT_DIR not set");
-  const full = `${dir.replace(/\/$/, "")}/clips/${name}`;
-  const parts = (full.startsWith("/") ? full : `/${full}`).split("/");
-  return objectStorageClient.bucket(parts[1]).file(parts.slice(2).join("/"));
-}
-
-async function verifiedDuration(file: GcsFile): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = spawn("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", "pipe:0"], { stdio: ["pipe", "pipe", "pipe"] });
-    let output = "", errors = "";
-    const timer = setTimeout(() => { probe.kill("SIGKILL"); reject(new Error("MEDIA_PROBE_TIMEOUT")); }, 30_000);
-    probe.stdout.on("data", chunk => { output += String(chunk); });
-    probe.stderr.on("data", chunk => { errors += String(chunk); });
-    probe.on("error", error => { clearTimeout(timer); reject(error); });
-    probe.on("close", code => {
-      clearTimeout(timer);
-      const duration = Number.parseFloat(output.trim());
-      if (code !== 0 || !Number.isFinite(duration)) reject(new Error(errors || "INVALID_MEDIA_DURATION"));
-      else resolve(duration);
-    });
-    file.createReadStream().on("error", error => probe.stdin.destroy(error)).pipe(probe.stdin);
-  });
 }
 
 // Multer engine: stream straight to GCS while computing sha256 — no local disk,
@@ -164,7 +140,7 @@ router.get("/clips/feed", async (req, res): Promise<void> => {
     const params = before === null ? [limit + 1] : [before, limit + 1];
     const { rows } = await requirePool().query(
       `SELECT id, user_id, username, title, content_type, duration_sec, views, created_at, thumbnail_object_name
-       FROM clips WHERE is_frozen = FALSE ${before === null ? "" : "AND id < $1"}
+       FROM clips WHERE is_frozen = FALSE AND object_name IS NOT NULL AND object_name <> '' ${before === null ? "" : "AND id < $1"}
        ORDER BY id DESC LIMIT $${params.length}`, params);
     res.json(clipsFeedPage(rows.map(clipWithThumbnail), limit));
   } catch (e) { logger.error({ err: e }, "[clips] feed failed"); res.status(500).json({ error: "Failed" }); }
@@ -185,13 +161,11 @@ router.post("/clips", uploadLimiter, (req, res): void => {
   if (!userId) return;
   upload.single("video")(req, res, async (err: unknown) => {
     const f = req.file as (Express.Multer.File & { sha256?: string }) | undefined;
-    let thumbnailName: string | null = null;
-    let published = false;
-    const cleanup = () => {
-      for (const name of [f?.filename, thumbnailName]) {
-        if (name) void clipFile(name).delete({ ignoreNotFound: true })
-          .catch(error => logger.warn({ err: error }, "[clips] upload cleanup failed"));
-      }
+    const cleanup = async () => {
+      if (!f?.filename) return;
+      // Also safe after a lost COMMIT acknowledgement: never remove a referenced object.
+      const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1`, [f.filename]);
+      if (!rows.length) await clipFile(f.filename).delete({ ignoreNotFound: true });
     };
     try {
       if (err) {
@@ -202,73 +176,15 @@ router.post("/clips", uploadLimiter, (req, res): void => {
       }
       if (!f?.filename || !f.sha256) { res.status(400).json({ error: "الفيديو مطلوب" }); return; }
       const title = String(req.body?.title ?? "").trim().slice(0, 120);
-       const claimedDurationSec = Math.floor(parseFloat(String(req.body?.durationSec ?? "0")));
-      if (!title) { cleanup(); res.status(400).json({ error: "العنوان مطلوب" }); return; }
-       let durationSec: number;
-       try {
-         durationSec = Math.floor(await verifiedDuration(clipFile(f.filename)));
-       } catch {
-         cleanup();
-         res.status(400).json({ error: "تعذّر التحقق من مدة الفيديو — الملف غير صالح أو غير مدعوم" });
-         return;
-       }
-       if (!Number.isFinite(claimedDurationSec) || durationSec < MIN_DURATION_SEC) {
-        cleanup();
-         res.status(400).json({ error: "أي فيديو أقل من 60 ثانية يتم حظره تلقائياً. الحد الأدنى دقيقة واحدة." });
-        return;
-      }
-      const { rows: urows } = await requirePool().query(`SELECT username FROM users WHERE id=$1`, [userId]);
-      const username = urows[0]?.username ?? "citizen";
-
-      // This derivative never replaces or contributes to the original-file hash.
-      // Finish storage before publishing the row so a returned thumb is durable.
-      try {
-        const jpeg = await generateClipThumbnail(clipFile(f.filename));
-        thumbnailName = `thumb_${crypto.randomUUID().replace(/-/g, "")}.jpg`;
-        await clipFile(thumbnailName).save(jpeg, {
-          resumable: false, timeout: 10_000,
-          metadata: { contentType: "image/jpeg", cacheControl: "private, max-age=3600" },
-        });
-      } catch (error) {
-        logger.warn({ err: error }, "[clips] thumbnail unavailable; publishing original video");
-        if (thumbnailName) {
-          void clipFile(thumbnailName).delete({ ignoreNotFound: true })
-            .catch(error => logger.warn({ err: error }, "[clips] thumbnail cleanup failed"));
-        }
-        thumbnailName = null;
-      }
-
-      // Rights: first owner wins. A duplicate fingerprint = someone else's work.
-      const client = await requirePool().connect();
-      try {
-        await client.query("BEGIN");
-        const fp = await client.query(
-          `INSERT INTO content_fingerprints (fingerprint, content_type, content_id, owner_name)
-           VALUES ($1, 'clip', 0, $2) ON CONFLICT (fingerprint) DO NOTHING RETURNING id`,
-          [f.sha256, username]);
-        if (!fp.rows[0]) {
-          const own = await client.query(`SELECT owner_name FROM content_fingerprints WHERE fingerprint=$1`, [f.sha256]);
-          await client.query("ROLLBACK");
-          cleanup();
-          res.status(409).json({ error: `🛡️ حقوق الملكية الفكرية: هاد العمل مسجل من قبل باسم ${own.rows[0]?.owner_name ?? "مواطن آخر"} — غير صاحب العمل عندو الحق فالنشر` });
-          return;
-        }
-        const { rows } = await client.query(
-          `INSERT INTO clips (user_id, username, title, object_name, content_type, size_bytes, duration_sec, thumbnail_object_name)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, title, duration_sec, created_at, thumbnail_object_name`,
-          [userId, username, title, f.filename, f.mimetype, f.size ?? 0, durationSec, thumbnailName]);
-        await client.query(`UPDATE content_fingerprints SET content_id=$1 WHERE id=$2`, [rows[0].id, fp.rows[0].id]);
-        await client.query("COMMIT");
-        published = true;
-        res.json({ clip: clipWithThumbnail(rows[0]) });
-      } catch (e) {
-        try { await client.query("ROLLBACK"); } catch { /* noop */ }
-        throw e;
-      } finally { client.release(); }
+      if (!title) throw new ClipUploadError(400, "العنوان مطلوب");
+      const clip = await publishClip({
+        userId, filename: f.filename, title, contentType: f.mimetype, size: f.size, sha256: f.sha256,
+      });
+      res.json({ clip });
     } catch (e) {
-      if (!published) cleanup();
+      await cleanup().catch(error => logger.warn({ err: error }, "[clips] upload cleanup deferred"));
       logger.error({ err: e }, "[clips] publish failed");
-      res.status(500).json({ error: "Failed" });
+      res.status(e instanceof ClipUploadError ? e.status : 500).json({ error: e instanceof ClipUploadError ? e.message : "Failed" });
     }
   });
 });
@@ -370,9 +286,10 @@ router.get("/clips/thumbnail/:id", async (req, res): Promise<void> => {
     res.setHeader("Cache-Control", "private, max-age=3600");
     const stream = clipFile(name).createReadStream();
     res.on("close", () => stream.destroy());
-    stream.on("error", (error: { code?: number }) => {
+    stream.on("error", (error: { code?: number | string }) => {
+      logger.error({ err: error, clipId: id, storageCode: error.code, headersSent: res.headersSent }, "[clips] thumbnail storage read failed");
       if (res.headersSent) res.destroy();
-      else res.status(error.code === 404 ? 404 : 500).end();
+      else res.status(Number(error.code) === 404 ? 404 : 500).end();
     }).pipe(res);
   } catch (error) {
     logger.error({ err: error }, "[clips] thumbnail failed");
@@ -387,28 +304,38 @@ router.get("/clips/stream/:id", async (req, res): Promise<void> => {
     if (!id) { res.status(400).end(); return; }
     const { rows } = await requirePool().query(`SELECT object_name, content_type, size_bytes, is_frozen FROM clips WHERE id=$1`, [id]);
     const clip = rows[0];
-    if (!clip || clip.is_frozen) { res.status(404).end(); return; }
+    if (!clip || clip.is_frozen || !clip.object_name) { res.status(404).end(); return; }
     const file = clipFile(clip.object_name);
     let size = Number(clip.size_bytes);
-    if (!size) { const [meta] = await file.getMetadata(); size = Number(meta.size); }
+    if (!Number.isSafeInteger(size) || size <= 0) { const [meta] = await file.getMetadata(); size = Number(meta.size); }
+    if (!Number.isSafeInteger(size) || size <= 0) { res.status(404).end(); return; }
     res.setHeader("Content-Type", clip.content_type);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "private, max-age=3600");
+    const etag = `"clip-${id}-${size}"`;
+    res.setHeader("ETag", etag);
+    if (req.query.download === "1") {
+      const extension = clip.content_type === "video/webm" ? "webm" : clip.content_type === "video/quicktime" ? "mov" : "mp4";
+      res.setHeader("Content-Disposition", `attachment; filename="clip-${id}.${extension}"`);
+    }
     const range = req.headers.range;
-    if (range) {
-      const m = /bytes=(\d*)-(\d*)/.exec(range);
-      const start = m?.[1] ? parseInt(m[1]) : 0;
-      const end = m?.[2] ? Math.min(parseInt(m[2]), size - 1) : size - 1;
-      if (start >= size || start > end) { res.status(416).setHeader("Content-Range", `bytes */${size}`).end(); return; }
+    let bytes: { start: number; end: number } | undefined;
+    if (range && (!req.headers["if-range"] || req.headers["if-range"] === etag)) {
+      const parsed = clipByteRange(range, size);
+      if (!parsed) { res.status(416).setHeader("Content-Range", `bytes */${size}`).end(); return; }
+      bytes = parsed;
+      const { start, end } = bytes;
       res.status(206);
       res.setHeader("Content-Range", `bytes ${start}-${end}/${size}`);
       res.setHeader("Content-Length", end - start + 1);
-      file.createReadStream({ start, end }).on("error", () => res.destroy()).pipe(res);
     } else {
       res.setHeader("Content-Length", size);
-      file.createReadStream().on("error", () => res.destroy()).pipe(res);
     }
+    if (req.method === "HEAD") { res.end(); return; }
+    const stream = file.createReadStream(bytes);
+    res.on("close", () => stream.destroy());
+    stream.on("error", () => res.destroy()).pipe(res);
   } catch (e) { logger.error({ err: e }, "[clips] stream failed"); if (!res.headersSent) res.status(500).end(); }
 });
 

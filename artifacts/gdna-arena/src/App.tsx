@@ -123,6 +123,7 @@ function PageWrapper() {
           <Route path="/legends/:id" component={LegendHubPage} />
           <Route path="/pulse" component={PulsePage} />
           <Route path="/clips" component={ClipsPage} />
+          <Route path="/clip" component={ClipsPage} />
           <Route path="/citizens" component={CitizensPage} />
           <Route path="/citizen/:username" component={CitizenPage} />
           <Route path="/empire-eternal" component={EmpireEternalPage} />

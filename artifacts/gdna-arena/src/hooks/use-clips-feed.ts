@@ -1,67 +1,111 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClipFeedItem } from "@workspace/api-client-react";
+import { useCallback, useMemo, useRef } from "react";
+import {
+  useInfiniteQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
+import { safeClips, type Clip } from "@/components/clips/clip-feed-data";
+export type { Clip } from "@/components/clips/clip-feed-data";
 
-// Optional for cached legacy rows; the current feed always returns string | null.
-export type Clip = Omit<ClipFeedItem, "thumb"> & { thumb?: string | null };
+const PAGE_LIMIT = 5;
+export const CLIPS_FEED_QUERY_KEY = ["clips", "feed"] as const;
 
+interface FeedPage {
+  clips: Clip[];
+  hasMore: boolean;
+  nextBefore: number | null;
+}
+
+const feedUrl = (before?: number) =>
+  `${import.meta.env.BASE_URL}api/clips/feed?limit=${PAGE_LIMIT}${
+    before === undefined ? "" : `&before=${before}`
+  }`;
+
+async function fetchFeedPage(before: number | undefined, signal: AbortSignal): Promise<FeedPage> {
+  const response = await fetch(feedUrl(before), { credentials: "include", signal });
+  if (!response.ok) throw new Error("Clips could not be loaded");
+  const data = (await response.json()) ?? { clips: [], hasMore: false, nextBefore: null };
+  // Reject malformed server responses so a bad page never crashes the feed.
+  if (
+    (data.clips != null && !Array.isArray(data.clips)) ||
+    typeof data.hasMore !== "boolean" ||
+    (data.hasMore && (!Number.isSafeInteger(data.nextBefore) || data.nextBefore <= 0))
+  ) {
+    throw new Error("Invalid clips response");
+  }
+  return {
+    clips: safeClips(data.clips),
+    hasMore: Boolean(data.hasMore),
+    nextBefore: data.hasMore ? (data.nextBefore as number) : null,
+  };
+}
+
+/**
+ * Tanstack v5 useInfiniteQuery behind the stable return contract the page consumes.
+ * Keeps clips/setClips/loading/loadingMore/hasMore/error/refresh/loadMore identical
+ * so the existing page and future virtualized feed need no reshaping.
+ */
 export function useClipsFeed() {
-  const [clips, setClips] = useState<Clip[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [error, setError] = useState(false);
-  const cursor = useRef<number | null>(null);
-  const active = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
 
-  const load = useCallback(async (before?: number) => {
-    if (before !== undefined && active.current) return;
-    active.current?.abort();
-    const controller = new AbortController();
-    active.current = controller;
-    setError(false);
-    if (before === undefined) {
-      setLoading(true);
-      setClips([]);
-      setHasMore(false);
-      cursor.current = null;
-    } else setLoadingMore(true);
-    try {
-      const response = await fetch(
-        `${import.meta.env.BASE_URL}api/clips/feed?limit=6${before === undefined ? "" : `&before=${before}`}`,
-        { credentials: "include", signal: controller.signal },
-      );
-      if (!response.ok) throw new Error("Clips could not be loaded");
-      const data = await response.json();
-      if (!Array.isArray(data.clips) || typeof data.hasMore !== "boolean" ||
-          (data.hasMore && (!Number.isSafeInteger(data.nextBefore) || data.nextBefore <= 0))) {
-        throw new Error("Invalid clips response");
-      }
-      if (active.current !== controller) return;
-      setClips(previous => {
-        const combined: Clip[] = before === undefined ? data.clips : [...previous, ...data.clips];
-        return [...new Map(combined.map(clip => [clip.id, clip])).values()];
+  const query = useInfiniteQuery<FeedPage, Error, InfiniteData<FeedPage>, typeof CLIPS_FEED_QUERY_KEY, number | undefined>({
+    queryKey: CLIPS_FEED_QUERY_KEY,
+    queryFn: ({ pageParam, signal }) => fetchFeedPage(pageParam, signal),
+    initialPageParam: undefined,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextBefore ?? undefined : undefined),
+    staleTime: 30_000,
+  });
+
+  // Flatten + de-dupe across pages; bad rows already filtered by safeClips.
+  const clips = useMemo<Clip[]>(() => {
+    const pages = query.data?.pages ?? [];
+    const combined = pages.flatMap((page) => page.clips);
+    return [...new Map(combined.map((clip) => [clip.id, clip])).values()];
+  }, [query.data]);
+
+  // Patch the infinite cache in place so title edits / deletes survive without refetch.
+  const setClips = useCallback(
+    (updater: (previous: Clip[]) => Clip[]) => {
+      queryClient.setQueryData<InfiniteData<FeedPage>>(CLIPS_FEED_QUERY_KEY, (old) => {
+        if (!old) return old;
+        const flat = old.pages.flatMap((page) => page.clips);
+        const next = updater([...new Map(flat.map((c) => [c.id, c])).values()]);
+        const byId = new Map(next.map((c) => [c.id, c]));
+        const keep = new Set(next.map((c) => c.id));
+        const pages = old.pages.map((page) => ({
+          ...page,
+          clips: page.clips.filter((c) => keep.has(c.id)).map((c) => byId.get(c.id) ?? c),
+        }));
+        return { ...old, pages };
       });
-      cursor.current = data.hasMore ? data.nextBefore : null;
-      setHasMore(data.hasMore);
-    } catch {
-      if (active.current === controller && !controller.signal.aborted) setError(true);
+    },
+    [queryClient],
+  );
+
+  const refresh = useCallback(async () => {
+    await query.refetch();
+  }, [query]);
+
+  // Ref guard: two synchronous loadMore() calls must fire a single request.
+  const inFlight = useRef(false);
+  const loadMore = useCallback(async () => {
+    if (inFlight.current || !query.hasNextPage || query.isFetchingNextPage) return;
+    inFlight.current = true;
+    try {
+      await query.fetchNextPage();
     } finally {
-      if (active.current === controller) {
-        active.current = null;
-        setLoading(false);
-        setLoadingMore(false);
-      }
+      inFlight.current = false;
     }
-  }, []);
+  }, [query]);
 
-  const refresh = useCallback(() => load(), [load]);
-  const loadMore = useCallback(() => {
-    return cursor.current === null ? Promise.resolve() : load(cursor.current);
-  }, [load]);
-  useEffect(() => {
-    void refresh();
-    return () => { active.current?.abort(); active.current = null; };
-  }, [refresh]);
-
-  return { clips, setClips, loading, loadingMore, hasMore, error, refresh, loadMore };
+  return {
+    clips,
+    setClips,
+    loading: query.isLoading,
+    loadingMore: query.isFetchingNextPage,
+    hasMore: Boolean(query.hasNextPage),
+    error: query.isError,
+    refresh,
+    loadMore,
+  };
 }
