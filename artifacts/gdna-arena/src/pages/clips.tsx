@@ -1,7 +1,7 @@
-// CLIPS — كليبسز: Reels-style vertical feed.
-// Owner rules: min duration 2:00 (no upper limit — even 25h);
+// CLIPS — كليبسز: lazy-loaded, paginated video grid.
+// Owner rules: min duration 1:00 (no upper limit);
 // only the owner of the work may publish (sha256 first-owner rights guard).
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clapperboard, Upload, Eye, Play, Volume2, VolumeX, ShieldCheck, X, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +17,9 @@ import {
 import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
 import { useLang } from "@/contexts/LangContext";
 import { finalLabelText } from "@/i18n/final-labels-copy";
+import { Skeleton } from "@workspace/gdna-ds/components/ui/skeleton";
+import { LazyClipVideo } from "@/components/clips/LazyClipVideo";
+import { useClipsFeed, type Clip } from "@/hooks/use-clips-feed";
 
 const BASE = import.meta.env.BASE_URL;
 const api = (p: string) => `${BASE}api${p}`;
@@ -47,20 +50,16 @@ const clipCopy = (lang: string) => {
     durationGuide: ar ? "المدة: دقيقة واحدة على الأقل · بلا حد أقصى." : fr ? "Durée : 1 minute minimum · Aucune limite maximale." : es ? "Duración: mínimo 1 minuto · Sin límite máximo." : "Duration: 1 minute minimum · No maximum limit.",
     duration: ar ? "المدة" : fr ? "Durée" : es ? "Duración" : "Duration",
     rightsGuide: ar ? "المدة: دقيقة واحدة على الأقل · بلا حد أقصى · حقوق المؤلف محفوظة لصاحب العمل" : fr ? "Durée : 1 minute minimum · Aucune limite maximale · Droits d’auteur réservés au propriétaire de l’œuvre" : es ? "Duración: mínimo 1 minuto · Sin límite máximo · Derechos de autor reservados al propietario de la obra" : "Duration: 1 minute minimum · No maximum limit · Copyright reserved by the owner of the work",
+    loadMore: ar ? "تحميل المزيد" : fr ? "Charger plus" : es ? "Cargar más" : lang === "de" ? "Mehr laden" : "Load more",
   };
 };
-
-interface Clip {
-  id: number; user_id: number; username: string; title: string;
-  content_type: string; duration_sec: number; views: number; created_at: string;
-}
 
 function fmtDur(s: number) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-// ── One clip card (autoplays when scrolled into view) ────────────────────────
+// ── One clip card (loads near the viewport; plays on demand) ─────────────────
 function ClipCard({
   clip, canManage, onUpdated, onDeleted,
 }: {
@@ -71,8 +70,6 @@ function ClipCard({
 }) {
   const { lang } = useLang();
   const copy = clipCopy(lang);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [views, setViews] = useState(clip.views);
@@ -84,22 +81,18 @@ function ClipCard({
   const counted = useRef(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const el = wrapRef.current, v = videoRef.current;
-    if (!el || !v) return;
-    const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && e.intersectionRatio > 0.6) {
-        v.play().catch(() => {});
-        if (!counted.current) {
-          counted.current = true;
-          fetch(api(`/clips/${clip.id}/view`), { method: "POST", credentials: "include" })
-            .then(r => r.json()).then(d => typeof d.views === "number" && setViews(d.views)).catch(() => {});
-        }
-      } else v.pause();
-    }, { threshold: [0, 0.6] });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [clip.id]);
+  const recordPlayback = () => {
+    setPlaying(true);
+    if (counted.current) return;
+    counted.current = true;
+    fetch(api(`/clips/${clip.id}/view`), { method: "POST", credentials: "include" })
+      .then(response => {
+        if (!response.ok) throw new Error("View could not be recorded");
+        return response.json();
+      })
+      .then(data => { if (typeof data.views === "number") setViews(data.views); })
+      .catch(() => { counted.current = false; });
+  };
 
   const saveTitle = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -156,17 +149,15 @@ function ClipCard({
   };
 
   return (
-    <div ref={wrapRef} className="relative h-[80vh] snap-start rounded-2xl overflow-hidden border shrink-0"
-      style={{ background: "#050505", borderColor: "#C9A84C30" }}>
-      <video ref={videoRef} src={api(`/clips/stream/${clip.id}`)} playsInline loop muted={muted}
-        className="w-full h-full object-contain bg-black"
-        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
-        onClick={() => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause(); }} />
+    <div className="relative aspect-[9/16] rounded-xl overflow-hidden border border-border bg-card min-w-0">
+      <LazyClipVideo src={api(`/clips/stream/${clip.id}`)} poster={clip.thumb} loop muted={muted}
+        aria-label={clip.title} className="w-full h-full object-cover bg-background"
+        onPlaying={recordPlayback} onPause={() => setPlaying(false)}
+        onVolumeChange={event => setMuted(event.currentTarget.muted)} />
       {/* Overlay info */}
-      <div className="absolute bottom-0 inset-x-0 p-4 pointer-events-none"
-        style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.85))" }}>
-        <p className="font-black text-white text-lg leading-tight" dir="auto">{clip.title}</p>
-        <div className="flex items-center gap-3 mt-1.5 text-xs font-mono" style={{ color: "#C9A84C" }}>
+      <div className="absolute bottom-12 inset-x-0 p-4 pointer-events-none bg-gradient-to-t from-background/90 to-transparent">
+        <p className="font-black text-foreground text-sm md:text-lg leading-tight break-words" dir="auto">{clip.title}</p>
+        <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs font-mono text-primary">
           <span>👑 {clip.username}</span>
           <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {views}</span>
           <span>⏱️ {fmtDur(clip.duration_sec)}</span>
@@ -193,8 +184,8 @@ function ClipCard({
       )}
       {!playing && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center bg-black/50 border" style={{ borderColor: "#C9A84C" }}>
-            <Play className="w-7 h-7 ml-1" style={{ color: "#C9A84C" }} />
+          <div className="w-16 h-16 rounded-full flex items-center justify-center bg-background/50 border border-primary">
+            <Play className="w-7 h-7 ml-1 text-primary" />
           </div>
         </div>
       )}
@@ -333,23 +324,8 @@ export default function ClipsPage() {
   const { lang } = useLang();
   const copy = clipCopy(lang);
   const { user } = useAuth();
-  const [clips, setClips] = useState<Clip[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { clips, setClips, loading, loadingMore, hasMore, error, refresh, loadMore } = useClipsFeed();
   const [showUpload, setShowUpload] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-
-  const load = useCallback(async (before?: number) => {
-    try {
-      const r = await fetch(api(`/clips/feed${before ? `?before=${before}` : ""}`), { credentials: "include" });
-      const d = await r.json();
-      const batch: Clip[] = d.clips ?? [];
-      setClips(prev => before ? [...prev, ...batch] : batch);
-      setHasMore(batch.length === 10);
-    } catch { /* keep prior state */ }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
 
   const updateClipTitle = useCallback((id: number, title: string) => {
     setClips(previous => previous.map(clip => clip.id === id ? { ...clip, title } : clip));
@@ -360,50 +336,56 @@ export default function ClipsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen pt-20 pb-12" dir={lang === "ar" ? "rtl" : "ltr"} style={{ background: "#050505" }}>
-      <div className="max-w-lg mx-auto px-4 space-y-4">
+    <div className="min-h-screen pt-20 pb-12 bg-background" dir={lang === "ar" ? "rtl" : "ltr"}>
+      <div className="max-w-6xl mx-auto px-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="font-black text-2xl flex items-center gap-2 text-white">
-            <Clapperboard className="w-6 h-6" style={{ color: "#C9A84C" }} /> {finalLabelText(lang, "clipsHeading")}
+          <h1 className="font-black text-2xl flex items-center gap-2 text-foreground">
+            <Clapperboard className="w-6 h-6 text-primary" /> {finalLabelText(lang, "clipsHeading")}
           </h1>
           {user && (
-            <button onClick={() => setShowUpload(true)}
-              className="px-4 py-2 rounded-xl font-bold text-sm text-black flex items-center gap-1.5"
-              style={{ background: "linear-gradient(135deg,#C9A84C,#FFD700)" }}>
+            <Button onClick={() => setShowUpload(true)}>
               <Upload className="w-4 h-4" /> {finalLabelText(lang, "publish")}
-            </button>
+            </Button>
           )}
         </div>
-        <p className="text-[11px] font-mono" style={{ color: "#C9A84C99" }}>
+        <p className="text-xs font-mono text-muted-foreground">
           {copy.rightsGuide}
         </p>
 
         {loading ? (
-          <div className="h-[60vh] rounded-2xl animate-pulse" style={{ background: "#111" }} />
-        ) : clips.length === 0 ? (
-          <div className="h-[50vh] rounded-2xl border flex flex-col items-center justify-center gap-3 text-center px-6"
-            style={{ borderColor: "#C9A84C30" }}>
-            <Clapperboard className="w-10 h-10" style={{ color: "#C9A84C" }} />
-            <p className="text-white font-bold">{finalLabelText(lang, "noClips")}</p>
-            <p className="text-xs text-gray-400">{finalLabelText(lang, "noClipsDescription")}</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4" aria-busy="true">
+            {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="aspect-[9/16] rounded-xl" />)}
+          </div>
+        ) : clips.length === 0 && !error ? (
+          <div className="h-[50vh] rounded-xl border border-border flex flex-col items-center justify-center gap-3 text-center px-6">
+            <Clapperboard className="w-10 h-10 text-primary" />
+            <p className="text-foreground font-bold">{finalLabelText(lang, "noClips")}</p>
+            <p className="text-xs text-muted-foreground">{finalLabelText(lang, "noClipsDescription")}</p>
           </div>
         ) : (
-          <div className="space-y-6 snap-y snap-mandatory">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4" data-testid="clips-grid">
             {clips.map(c => (
               <ClipCard key={c.id} clip={c} canManage={c.user_id === user?.id}
                 onUpdated={updateClipTitle} onDeleted={removeClip} />
             ))}
-            {hasMore && (
-              <button onClick={() => load(clips[clips.length - 1]?.id)}
-                className="w-full py-3 rounded-xl border font-bold text-sm" style={{ borderColor: "#C9A84C40", color: "#C9A84C" }}>
-                {finalLabelText(lang, "showMore")}
-              </button>
-            )}
           </div>
+        )}
+        {error && (
+          <div role="alert" className="text-center space-y-3">
+            <p className="text-destructive">{copy.networkError}</p>
+            {!hasMore && <Button variant="outline" onClick={() => void refresh()}>{copy.retry}</Button>}
+          </div>
+        )}
+        {!loading && hasMore && (
+          <Button variant="outline" className="mx-auto flex rounded-full" disabled={loadingMore}
+            onClick={() => void loadMore()} data-testid="clips-load-more">
+            {loadingMore && <Loader2 className="animate-spin" />}
+            {error ? copy.retry : copy.loadMore}
+          </Button>
         )}
       </div>
       <AnimatePresence>
-        {showUpload && <UploadModal onClose={() => setShowUpload(false)} onDone={() => { setLoading(true); void load(); }} />}
+        {showUpload && <UploadModal onClose={() => setShowUpload(false)} onDone={() => { void refresh(); }} />}
       </AnimatePresence>
     </div>
   );

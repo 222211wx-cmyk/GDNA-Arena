@@ -7,6 +7,7 @@ import { objectStorageClient } from "../lib/chatStorage";
 import type { File as GcsFile } from "@google-cloud/storage";
 import { logger } from "../lib/logger";
 import { spawn } from "node:child_process";
+import { clipsFeedPage, parseClipsFeedQuery } from "./clips-feed.js";
 
 // ─── CLIPS — كليبسز (Reels-style, producer-owned) ────────────────────────────
 // Owner's rules:
@@ -148,13 +149,20 @@ async function isAdmin(userId: number): Promise<boolean> {
 
 // ─── GET /clips/feed — Reels feed, newest first ──────────────────────────────
 router.get("/clips/feed", async (req, res): Promise<void> => {
+  const feedQuery = parseClipsFeedQuery(req.query);
+  if (!feedQuery.ok) {
+    res.status(400).json({ error: `Invalid ${feedQuery.parameter}` });
+    return;
+  }
+
   try {
-    const before = parseInt(String(req.query.before ?? "")) || null;
+    const { before, limit } = feedQuery;
+    const params = before === null ? [limit + 1] : [before, limit + 1];
     const { rows } = await requirePool().query(
       `SELECT id, user_id, username, title, content_type, duration_sec, views, created_at
-       FROM clips WHERE is_frozen = FALSE ${before ? "AND id < $1" : ""}
-       ORDER BY id DESC LIMIT 10`, before ? [before] : []);
-    res.json({ clips: rows });
+       FROM clips WHERE is_frozen = FALSE ${before === null ? "" : "AND id < $1"}
+       ORDER BY id DESC LIMIT $${params.length}`, params);
+    res.json(clipsFeedPage(rows, limit));
   } catch (e) { logger.error({ err: e }, "[clips] feed failed"); res.status(500).json({ error: "Failed" }); }
 });
 
