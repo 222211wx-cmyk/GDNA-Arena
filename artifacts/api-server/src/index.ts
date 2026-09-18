@@ -18,6 +18,7 @@ import { getAgoraConfigStatus } from "./lib/agora-config.js";
 import { startFinanceReconciliationJob } from "./jobs/finance-reconciliation";
 import { startClipThumbnailRetryJob } from "./jobs/clip-thumbnail-retry.js";
 import { startClipStorageCleanupJob } from "./jobs/clip-storage-cleanup.js";
+import { startClipCompressionJob } from "./jobs/clip-compression.js";
 import { FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
 
 const rawPort = process.env["PORT"];
@@ -1408,9 +1409,28 @@ prepareDevelopmentDatabase()
     startFinanceReconciliationJob();
     startClipThumbnailRetryJob();
     startClipStorageCleanupJob();
+    startClipCompressionJob();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);
+    // Large streamed multipart requests may take hours. Socket inactivity,
+    // bounded body parsers and authenticated Tus chunks remain enforced.
+    httpServer.requestTimeout = 0;
+    httpServer.on("request", (req, res) => {
+      const path = (req.url ?? "").split("?", 1)[0];
+      const longUpload = req.method === "POST" &&
+        ["/api/clip/upload-final", "/api/clip/upload-simple", "/api/clip/upload", "/api/clips"].includes(path) &&
+        req.headers["content-type"]?.startsWith("multipart/form-data");
+      if (longUpload || req.complete) return;
+      // Preserve Node's former five-minute body-receive deadline everywhere
+      // else; only streamed multipart uploads receive the long-transfer exemption.
+      const deadline = setTimeout(() => req.destroy(), 5 * 60_000);
+      deadline.unref();
+      const clear = () => clearTimeout(deadline);
+      req.once("end", clear);
+      req.once("close", clear);
+      res.once("finish", clear);
+    });
     attachSignalingServer(httpServer, sessionMiddleware);
 
     httpServer.listen(port, (err?: Error) => {

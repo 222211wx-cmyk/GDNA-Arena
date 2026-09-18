@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { upload } = vi.hoisted(() => ({ upload: vi.fn() }));
+const { upload, duration } = vi.hoisted(() => ({ upload: vi.fn(), duration: vi.fn() }));
 vi.mock("./components/clips/clipUpload", () => ({ uploadClip: upload }));
-
+vi.mock("./components/clips/readClipDuration", () => ({ readClipDuration: duration }));
 const input = () => document.getElementById("file") as HTMLInputElement;
 const submit = () => document.getElementById("submit") as HTMLButtonElement;
 const chooser = () => document.getElementById("choose-file") as HTMLButtonElement;
@@ -17,10 +17,12 @@ function media(name: string, type: string, size: number) {
   Object.defineProperty(file, "size", { value: size });
   return file;
 }
+const receipt = { id: 1, code: "HELX-123456", name: "voice", duration: 61, url: "/api/clips/stream/1" };
 
 beforeEach(async () => {
   vi.resetModules();
   upload.mockReset();
+  duration.mockReset().mockResolvedValue(61);
   document.body.innerHTML = '<div id="root"></div>';
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ clips: [] }), {
     status: 200, headers: { "Content-Type": "application/json" },
@@ -28,82 +30,100 @@ beforeEach(async () => {
   await import("./clip-entry");
   await vi.waitFor(() => expect(form().hidden).toBe(false));
 });
-
 afterEach(() => {
   document.head.querySelectorAll("style").forEach(style => style.remove());
   vi.unstubAllGlobals();
 });
 
-describe("light Clip file selection", () => {
+describe("final simple Clip selection", () => {
   it.each([
-    ["recording.mp3", "audio/mpeg", 1024],
-    ["video.mp4", "video/mp4", 25 * 1024 * 1024],
-    ["selfie.mov", "video/quicktime", 80 * 1024 * 1024],
-    ["large-audio.wav", "audio/wav", 26 * 1024 * 1024],
-  ])("immediately retains %s and enables Publish at any size", (name, type, size) => {
-    expect(submit().disabled).toBe(true);
+    ["recording.mp3", "audio/mpeg", 1024, 60],
+    ["video.mp4", "video/mp4", 500 * 1024 * 1024, 61],
+    ["selfie.mov", "video/quicktime", 2 * 1024 ** 3, 24 * 3600],
+    ["long-film.mp4", "video/mp4", 3 * 1024 ** 3, 30 * 3600],
+  ])("retains %s at any size and accepts duration >=60 without an upper bound", async (name, type, size, seconds) => {
+    duration.mockResolvedValueOnce(seconds);
     const file = media(name, type, size);
     select(file);
-    expect(input().files?.[0]).toBe(file);
     expect(chooser().textContent).toContain(`${name} — ${(size / 1024 / 1024).toFixed(2)} MiB`);
-    expect(text("selection")).toContain(name);
-    expect(submit().disabled).toBe(false);
+    expect(submit().disabled).toBe(true);
+    await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    expect(input().files?.[0]).toBe(file);
+    expect(text("duration-status")).toContain(":");
     expect(text("upload-error")).toBe("");
-    expect(document.getElementById("size-warning")!.hidden).toBe(size <= 25 * 1024 * 1024);
+    expect(form().querySelectorAll('input[type="radio"], input[type="checkbox"]')).toHaveLength(0);
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it("opens the native picker without submitting the form", () => {
+  it.each(["audio/mpeg", "video/mp4"])("blocks a short %s with the exact requested message", async type => {
+    duration.mockResolvedValueOnce(59.99);
+    select(media("short", type, 100));
+    await vi.waitFor(() => expect(text("upload-error")).toBe("خاص دقيقة الفوق"));
+    expect(submit().disabled).toBe(true);
+    form().requestSubmit();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("opens the native picker without submitting", () => {
     const click = vi.spyOn(input(), "click").mockImplementation(() => {});
     chooser().click();
     expect(click).toHaveBeenCalledOnce();
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it("does not erase the last selection when the picker is cancelled", () => {
+  it("retains the previous selection after picker cancellation", async () => {
     select(media("selfie.mp4", "video/mp4", 1024));
+    await vi.waitFor(() => expect(submit().disabled).toBe(false));
     select();
     expect(text("selection")).toContain("selfie.mp4");
     expect(submit().disabled).toBe(false);
   });
 
-  it("submits a large file to the server and retains it after server rejection", async () => {
-    const file = media("large.mp4", "video/mp4", 80 * 1024 * 1024);
-    upload.mockRejectedValueOnce(new Error("Server size limit: 25 MiB"));
+  it("ignores metadata from an earlier replaced selection", async () => {
+    let resolveOld!: (seconds: number) => void;
+    duration.mockReturnValueOnce(new Promise<number>(resolve => { resolveOld = resolve; }));
+    select(media("old.mp4", "video/mp4", 1024));
+    duration.mockResolvedValueOnce(59);
+    select(media("new.mp3", "audio/mpeg", 1024));
+    await vi.waitFor(() => expect(text("upload-error")).toBe("خاص دقيقة الفوق"));
+    resolveOld(65);
+    await Promise.resolve();
+    expect(submit().disabled).toBe(true);
+    expect(text("selection")).toContain("new.mp3");
+  });
+
+  it("shows metadata failure explicitly without erasing the filename", async () => {
+    duration.mockRejectedValueOnce(new Error("Unsupported codec"));
+    select(media("camera.mov", "video/quicktime", 1024));
+    await vi.waitFor(() => expect(text("upload-error")).toBe("Unsupported codec"));
+    expect(submit().disabled).toBe(true);
+    expect(chooser().textContent).toContain("camera.mov");
+  });
+
+  it("submits only file metadata and retains the selection on failure", async () => {
+    const file = media("large.mp4", "video/mp4", 2 * 1024 ** 3);
+    upload.mockRejectedValueOnce(new Error("Network interrupted"));
     select(file);
+    await vi.waitFor(() => expect(submit().disabled).toBe(false));
     form().requestSubmit();
-    await vi.waitFor(() => expect(text("upload-error")).toContain("Server size limit"));
+    await vi.waitFor(() => expect(text("upload-error")).toBe("Network interrupted"));
     expect(upload.mock.calls[0][0]).toBe(file);
-    expect(input().files?.[0]).toBe(file);
+    expect(upload.mock.calls[0][1]).toEqual({ title: "large.mp4", contentType: "video/mp4", durationSec: 61 });
     expect(chooser().textContent).toContain("large.mp4");
     expect(submit().disabled).toBe(false);
-    expect(chooser().disabled).toBe(false);
   });
 
-  it("replaces large-file warnings and old errors when another file is selected", async () => {
-    upload.mockRejectedValueOnce(new Error("Server rejection"));
-    select(media("large.mp4", "video/mp4", 80 * 1024 * 1024));
-    form().requestSubmit();
-    await vi.waitFor(() => expect(text("upload-error")).toBe("Server rejection"));
+  it("shows the name and server-generated code only after successful publication", async () => {
+    let complete!: (value: typeof receipt) => void;
+    upload.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
     select(media("voice.mp3", "audio/mpeg", 1024));
-    expect(text("upload-error")).toBe("");
-    expect(document.getElementById("size-warning")!.hidden).toBe(true);
-    expect(text("size-warning")).toBe("");
-    expect(chooser().textContent).toContain("voice.mp3");
-    expect(submit().disabled).toBe(false);
-  });
-
-  it("clears the filename only after successful publication", async () => {
-    let complete!: () => void;
-    upload.mockReturnValueOnce(new Promise<void>(resolve => { complete = resolve; }));
-    select(media("voice.mp3", "audio/mpeg", 1024));
+    await vi.waitFor(() => expect(submit().disabled).toBe(false));
     form().requestSubmit();
-    expect(chooser().textContent).toContain("voice.mp3");
-    expect(submit().disabled).toBe(true);
     expect(chooser().disabled).toBe(true);
-    complete();
+    complete(receipt);
     await vi.waitFor(() => expect(text("selection")).toBe("تم نشر الملف"));
-    expect(chooser().textContent).toBe("اختيار ملف");
+    expect(text("receipt")).toContain("HELX-123456");
+    expect(text("receipt")).toContain("voice");
     expect(submit().disabled).toBe(true);
     expect(chooser().disabled).toBe(false);
   });

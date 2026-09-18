@@ -1,17 +1,32 @@
 import { pool } from "@workspace/db";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { clipFile, publishClip, type ClipDatabaseClient } from "./clip-publish.js";
 import { ClipUploadError } from "./clip-upload-protocol.js";
 import { clipWithThumbnail } from "../routes/clips-thumbnail-response.js";
 import type { UploadPublisher, UploadStore, Versioned } from "./clip-uploads.js";
+import { createClipManifestWriter } from "./clip-manifest-write.js";
 
-function storageError(error: unknown): never {
-  if (Number((error as { code?: number }).code) === 412) throw new ClipUploadError(409, "Upload changed concurrently; resume with HEAD");
-  throw error;
-}
+const writeManifest = createClipManifestWriter({
+  async save(name, json, generation) {
+    // Direct bounded stream avoids nesting File.save's automatic retry loop
+    // inside our provider-aware CAS retry loop. Abort tears down the writer.
+    await pipeline(Readable.from([json]), clipFile(name).createWriteStream({
+      resumable: false,
+      timeout: 15_000,
+      preconditionOpts: { ifGenerationMatch: generation },
+      metadata: { contentType: "application/json", cacheControl: "private, no-store" },
+    }), { signal: AbortSignal.timeout(15_000) });
+  },
+});
 
 /** All paths are server-generated beneath PRIVATE_OBJECT_DIR, never public ACLs. */
 export const gcsUploadStore: UploadStore = {
+  async size(name) {
+    const [metadata] = await clipFile(name).getMetadata();
+    return Number(metadata.size);
+  },
   async read<T>(name: string): Promise<Versioned<T> | null> {
     const file = clipFile(name);
     // Pin the download to the metadata generation; never pair stale JSON with a
@@ -36,15 +51,7 @@ export const gcsUploadStore: UploadStore = {
     }
     throw new ClipUploadError(409, "Upload changed concurrently; retry");
   },
-  async write(name, value, generation) {
-    try {
-      await clipFile(name).save(JSON.stringify(value), {
-        resumable: false,
-        preconditionOpts: { ifGenerationMatch: generation },
-        metadata: { contentType: "application/json", cacheControl: "private, no-store" },
-      });
-    } catch (error) { storageError(error); }
-  },
+  write: writeManifest,
   async put(name, bytes, contentType) {
     await clipFile(name).save(bytes, {
       resumable: false, preconditionOpts: { ifGenerationMatch: 0 },
@@ -90,35 +97,11 @@ export const clipUploadPublisher: UploadPublisher = {
   async find(userId, objectName) {
     const { rows } = await (groupConnection.getStore() ?? pool).query(
       `SELECT c.id, c.title, c.duration_sec, c.created_at, c.thumbnail_object_name,
-              CASE WHEN r.id IS NULL THEN 'story' ELSE 'original' END AS rights_purpose,
-              r.id AS rights_registration_id, r.created_at AS rights_registered_at,
-              r.rights_holder_name, r.rights_holder_role
-       FROM clips c JOIN content_fingerprints f ON f.content_id=c.id AND f.content_type='clip'
-       LEFT JOIN clip_original_registrations r ON r.clip_id=c.id
-       WHERE c.user_id=$1 AND c.object_name=$2 LIMIT 1`, [userId, objectName]);
+              c.code, c.processing_status
+       FROM clips c
+       WHERE c.user_id=$1 AND (c.object_name=$2 OR c.upload_object_name=$2) LIMIT 1`, [userId, objectName]);
     if (!rows[0]) return null;
-    const row = rows[0];
-    const {
-      rights_purpose: rightsPurpose,
-      rights_registration_id: registrationId,
-      rights_registered_at: registeredAt,
-      rights_holder_name: rightsHolderName,
-      rights_holder_role: rightsHolderRole,
-      ...publicRow
-    } = row;
-    return {
-      ...clipWithThumbnail(publicRow),
-      rights: rightsPurpose === "original"
-        ? {
-            purpose: "original",
-            registrationId,
-            registeredAt,
-            rightsHolderName,
-            rightsHolderRole,
-            status: "declared",
-          }
-        : { purpose: "story" },
-    };
+    return clipWithThumbnail(rows[0]);
   },
   publish: input => publishClip({ ...input, deferThumbnail: true }, groupConnection.getStore()),
 };

@@ -46,6 +46,8 @@ export async function clipsFixture(t, database) {
     beforeWrite: async () => {},
     beforeDelete: async () => {},
     afterDelete: async () => {},
+    duration: 61,
+    compress: async () => null,
   };
   t.after(async () => {
     for (const barrier of gates) barrier.release();
@@ -73,7 +75,7 @@ export async function clipsFixture(t, database) {
   }
   const observer = pool("observer");
   await observer.query(`
-    CREATE TABLE users (id INTEGER PRIMARY KEY, is_admin BOOLEAN NOT NULL DEFAULT FALSE);
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL DEFAULT 'fixture-owner', password_hash TEXT NOT NULL DEFAULT 'fixture-hash', is_admin BOOLEAN NOT NULL DEFAULT FALSE);
     CREATE TABLE monetization_settings (content_type TEXT PRIMARY KEY, rate NUMERIC, unit TEXT);
     CREATE TABLE content_fingerprints (
       fingerprint TEXT PRIMARY KEY, content_type TEXT NOT NULL,
@@ -129,19 +131,27 @@ export async function clipsFixture(t, database) {
         state.generations.push(original.name);
         return state.generate(original);
       },
+      verifiedDuration: async () => state.duration,
+      compressStoredClip: input => state.compress(input),
+      ClipProbeBusyError: class extends Error {},
+      ClipCompressionCleanupError: class extends Error {},
     };
     const boundary = path.join(temp, `${label}-${instance}-boundary.mjs`);
     const entry = path.join(temp, `${label}-${instance}-entry.mjs`);
     const output = path.join(temp, `${label}-${instance}.cjs`);
     await writeFile(boundary, `
       const host = globalThis[${JSON.stringify(key)}];
-      export const { pool, objectStorageClient, logger, generateClipThumbnail } = host;
+      export const { pool, objectStorageClient, logger, generateClipThumbnail,
+        verifiedDuration, ClipProbeBusyError, compressStoredClip, ClipCompressionCleanupError } = host;
     `);
     await writeFile(entry, `
       import express from "express";
       import router, { ensureClipsTables } from ${JSON.stringify(path.join(apiRoot, "src/routes/clips.ts"))};
       export { runClipThumbnailRetryBatch } from ${JSON.stringify(path.join(apiRoot, "src/jobs/clip-thumbnail-retry.ts"))};
       export { runClipStorageCleanupBatch } from ${JSON.stringify(path.join(apiRoot, "src/jobs/clip-storage-cleanup.ts"))};
+      export { runClipCompressionBatch } from ${JSON.stringify(path.join(apiRoot, "src/jobs/clip-compression.ts"))};
+      export { publishClip } from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-publish.ts"))};
+      export { deleteAccountClips } from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-account-delete.ts"))};
       export { retryThumbnailName } from ${JSON.stringify(path.join(apiRoot, "src/lib/clip-storage.ts"))};
       export { ensureClipsTables };
       const app = express();
@@ -164,6 +174,8 @@ export async function clipsFixture(t, database) {
           plugin.onResolve({ filter: /(?:^|\/)chatStorage(?:\.js)?$/ }, () => ({ path: boundary }));
           plugin.onResolve({ filter: /\/(?:lib\/)?logger(?:\.js)?$/ }, () => ({ path: boundary }));
           plugin.onResolve({ filter: /\/clip-thumbnail\.js$/ }, () => ({ path: boundary }));
+          plugin.onResolve({ filter: /\/clip-duration\.js$/ }, () => ({ path: boundary }));
+          plugin.onResolve({ filter: /\/clip-server-compression\.js$/ }, () => ({ path: boundary }));
         },
       }],
     });
@@ -184,7 +196,13 @@ export async function clipsFixture(t, database) {
       visual_signature JSONB, audio_signature JSONB,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    ALTER TABLE clips ADD COLUMN is_original_footage BOOLEAN NOT NULL DEFAULT TRUE
+    ALTER TABLE clips ADD COLUMN is_original_footage BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE clips ADD COLUMN code TEXT UNIQUE;
+    ALTER TABLE clips ADD COLUMN upload_object_name TEXT;
+    ALTER TABLE clips ADD COLUMN processing_status TEXT NOT NULL DEFAULT 'ready';
+    ALTER TABLE clips ADD COLUMN processing_attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE clips ADD COLUMN processing_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    ALTER TABLE clips ADD COLUMN processing_output_object TEXT
   `);
   assert.equal((await observer.query("SELECT count(*) FROM clips")).rows[0].count, "0");
   async function seed(id, options = {}) {

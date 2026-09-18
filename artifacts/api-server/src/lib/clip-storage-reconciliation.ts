@@ -6,6 +6,8 @@ export interface ClipReference {
   id: number;
   object_name: string;
   thumbnail_object_name: string | null;
+  upload_object_name?: string | null;
+  processing_output_object?: string | null;
 }
 export interface InventoryObject {
   name: string;
@@ -43,6 +45,8 @@ export function reconcileClipStorage(input: {
   for (const clip of input.clips) {
     clipIds.add(String(clip.id));
     protectedNames.set(clip.object_name, "live-original");
+    if (clip.upload_object_name) protectedNames.set(clip.upload_object_name, "retained-original");
+    if (clip.processing_output_object) protectedNames.set(clip.processing_output_object, "pending-compression-output");
     if (clip.thumbnail_object_name) protectedNames.set(clip.thumbnail_object_name, "stored-thumbnail");
     protectedNames.set(retryThumbnailName(clip.id, clip.object_name), "deterministic-retry-candidate");
   }

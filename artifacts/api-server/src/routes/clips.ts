@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import rateLimit from "express-rate-limit";
 import crypto from "crypto";
 import multer from "multer";
 import { pool } from "@workspace/db";
@@ -12,6 +11,7 @@ import { ClipUploads } from "../lib/clip-uploads.js";
 import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js";
 import { clipByteRange } from "../lib/clip-byte-range.js";
 import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
+import { clipCompressionLock } from "../jobs/clip-compression.js";
 import { createSimpleClipUploadRouter } from "./clip-simple-upload.js";
 import {
   CLIP_EXT, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, resolveClipUploadType, clipDownloadExtension,
@@ -36,7 +36,7 @@ router.use(createSimpleClipUploadRouter({
   log: (err, message) => logger.warn({ err }, `[clips] ${message}`),
   async cleanup(name) {
     // Preserve a committed original when a COMMIT acknowledgement was lost.
-    const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1`, [name]);
+    const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1 OR upload_object_name=$1 OR processing_output_object=$1`, [name]);
     if (rows.length) return;
     // Persist a delayed sweep before best-effort deletion. This also catches an
     // SDK request that finishes late after the aborted stream has been destroyed.
@@ -47,7 +47,6 @@ router.use(createSimpleClipUploadRouter({
     await clipFile(name).delete({ ignoreNotFound: true });
   },
 }));
-const MAX_BYTES = MAX_NEW_CLIP_BYTES;
 
 function requirePool() {
   if (!pool) throw new Error("Database not configured");
@@ -141,7 +140,7 @@ const clipStorage: import("multer").StorageEngine = {
     const normalizedType = resolveClipUploadType(file.mimetype, file.originalname);
     if (!normalizedType) { cb(new Error("UNSUPPORTED_TYPE")); return; }
     file.mimetype = normalizedType;
-    const filename = `clip_${crypto.randomUUID().replace(/-/g, "")}${CLIP_EXT[file.mimetype]}`;
+    const filename = `clip_${crypto.randomUUID().replace(/-/g, "")}${CLIP_EXT[file.mimetype] ?? ".bin"}`;
     let gcs: GcsFile;
     try { gcs = clipFile(filename); } catch (e) { cb(e as Error); return; }
     const hash = crypto.createHash("sha256");
@@ -175,7 +174,7 @@ const clipStorage: import("multer").StorageEngine = {
     clipFile(file.filename).delete({ ignoreNotFound: true }).then(() => cb(null), (e) => cb(e));
   },
 };
-const upload = multer({ storage: clipStorage, limits: { fileSize: MAX_BYTES, files: 1 } });
+const upload = multer({ storage: clipStorage, limits: { files: 1 } });
 
 function requireAuth(req: any, res: any): number | null {
   const userId = (req.session as any)?.userId;
@@ -210,13 +209,9 @@ router.get("/clips/feed", createClipsFeedHandler({
       await client.query("SET LOCAL lock_timeout = '80ms'");
       const params = before === null ? [limit + 1] : [before, limit + 1];
       const { rows } = await client.query(
-        `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec,
-                c.views, c.created_at, c.thumbnail_object_name, c.is_original_footage,
-                CASE WHEN r.id IS NULL THEN 'story' ELSE 'original' END AS rights_purpose,
-                r.created_at AS rights_registered_at,
-                r.rights_holder_name, r.rights_holder_role
+        `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec, c.code, c.processing_status,
+                c.views, c.created_at, c.thumbnail_object_name
          FROM clips c
-         LEFT JOIN clip_original_registrations r ON r.clip_id=c.id
          WHERE c.is_frozen = FALSE AND c.object_name IS NOT NULL AND c.object_name <> ''
            ${before === null ? "" : "AND c.id < $1"}
          ORDER BY c.id DESC LIMIT $${params.length}`, params,
@@ -233,17 +228,8 @@ router.get("/clips/feed", createClipsFeedHandler({
   logFailure: err => logger.error({ err }, "[clips] feed failed"),
 }));
 
-// Publishing is expensive (up to 2GB streamed to the bucket) — cap it hard.
-const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 6, // 6 publishes per hour per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "بزاف ديال الكليبات فساعة وحدة — تسنى شوية وعاود" },
-});
-
-// ─── POST /clips — publish (owner-only via fingerprint, ≥1min, no maximum) ───
-router.post("/clips", uploadLimiter, (req, res): void => {
+// ─── POST /clips — compatibility publication (actual media ≥1min, no maximum) ───
+router.post("/clips", (req, res): void => {
   const userId = requireAuth(req, res);
   if (!userId) return;
   upload.single("video")(req, res, async (err: unknown) => {
@@ -251,7 +237,7 @@ router.post("/clips", uploadLimiter, (req, res): void => {
     const cleanup = async () => {
       if (!f?.filename) return;
       // Also safe after a lost COMMIT acknowledgement: never remove a referenced object.
-      const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1`, [f.filename]);
+       const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1 OR upload_object_name=$1 OR processing_output_object=$1`, [f.filename]);
       if (!rows.length) await clipFile(f.filename).delete({ ignoreNotFound: true });
     };
     try {
@@ -262,8 +248,7 @@ router.post("/clips", uploadLimiter, (req, res): void => {
         res.status((err as { code?: string }).code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error: msg }); return;
       }
       if (!f?.filename || !f.sha256) { res.status(400).json({ error: "الفيديو مطلوب" }); return; }
-      const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 120) : "";
-      if (!title) throw new ClipUploadError(400, "العنوان مطلوب");
+      const title = f.originalname;
       const clip = await publishClip({
         userId, filename: f.filename, title, contentType: f.mimetype,
         size: f.size, sha256: f.sha256,
@@ -327,9 +312,9 @@ router.delete("/clips/:id", async (req, res): Promise<void> => {
   try {
     await client.query("BEGIN");
     const { rows } = await client.query<{
-      user_id: number; object_name: string; thumbnail_object_name: string | null;
+      user_id: number; object_name: string; upload_object_name: string | null; thumbnail_object_name: string | null; processing_output_object: string | null;
     }>(
-      `SELECT user_id, object_name, thumbnail_object_name
+      `SELECT user_id, object_name, upload_object_name, thumbnail_object_name, processing_output_object
        FROM clips WHERE id=$1 FOR UPDATE`, [id],
     );
     const clip = rows[0];
@@ -350,9 +335,19 @@ router.delete("/clips/:id", async (req, res): Promise<void> => {
     }
     const storageNames = [...new Set([
       clip.object_name,
+      clip.upload_object_name,
       clip.thumbnail_object_name,
+      clip.processing_output_object,
       retryThumbnailName(id, clip.object_name),
     ].filter((name): name is string => Boolean(name)))];
+    const encoding = await client.query(
+      "SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired", [clipCompressionLock(id)],
+    );
+    if (encoding.rows[0]?.acquired !== true) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "Compression is active; retry deletion after processing finishes" });
+      return;
+    }
     // Transactional outbox: never commit a deletion without its cleanup work.
     // If COMMIT's response is lost, only committed queue rows can touch storage.
     await client.query(

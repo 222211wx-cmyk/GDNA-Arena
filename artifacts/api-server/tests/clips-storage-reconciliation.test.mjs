@@ -51,6 +51,25 @@ const valid = (name, overrides = {}) => ({
   ...overrides,
 });
 
+test("reconciliation protects retained originals and reserved compression outputs", () => {
+  const source = `clip_${hex(40)}.mp4`;
+  const derived = `clip_${hex(41)}.mp4`;
+  const pending = `clip_${hex(42)}.mp4`;
+  const report = reconcileClipStorage({
+    objects: [valid(source), valid(derived), valid(pending)],
+    clips: [{
+      id: 40, object_name: derived, upload_object_name: source,
+      processing_output_object: pending, thumbnail_object_name: null,
+    }],
+    queuedNames: [source],
+    scope: { bucket: "private", prefix: "app/clips/" },
+    startedAt: "2026-06-01T00:00:00.000Z", now,
+  });
+  assert.equal(report.candidates.length, 0);
+  assert.equal(report.inventory.find(item => item.name === source).reason, "retained-original");
+  assert.equal(report.inventory.find(item => item.name === pending).reason, "pending-compression-output");
+});
+
 test("reconciliation protects every live reference and conservatively classifies inventory", () => {
   const liveOriginal = `clip_${hex(1)}.mp4`;
   const frozenOriginal = `clip_${hex(2)}.mov`;
@@ -235,7 +254,7 @@ test("reference reader uses a read-only snapshot, reads every clip and queue, an
   assert.deepEqual(queries, [
     "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
     "SET LOCAL statement_timeout = '30s'",
-    "SELECT id, object_name, thumbnail_object_name FROM clips",
+    "SELECT id, object_name, thumbnail_object_name, upload_object_name, processing_output_object FROM clips",
     "SELECT object_name FROM clip_storage_cleanup",
     "COMMIT",
   ]);

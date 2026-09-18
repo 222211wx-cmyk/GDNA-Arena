@@ -89,7 +89,8 @@ app.use(
 const isClipUploadRequest = (path: string) =>
   /^\/api\/clips\/uploads(?:\/|$)/.test(path) ||
   path === "/api/clip/upload" ||
-  path === "/api/clip/upload-simple";
+  path === "/api/clip/upload-simple" ||
+  path === "/api/clip/upload-final";
 const jsonBody = express.json();
 const formBody = express.urlencoded({ extended: true });
 app.use((req, res, next) => isClipUploadRequest(req.path) ? next() : jsonBody(req, res, next));
@@ -201,12 +202,18 @@ const globalLimiter = rateLimit({
   limit: 600,
   standardHeaders: true,
   legacyHeaders: false,
+  // A multi-GB resumable transfer legitimately uses thousands of bounded PATCH
+  // requests. Session ownership and per-chunk byte/offset checks still apply.
+  skip: req => Boolean((req.session as { userId?: number } | undefined)?.userId) &&
+    (req.method === "PATCH" || req.method === "HEAD") &&
+    /^\/api\/clips\/uploads\/[0-9a-f-]+(?:\?|$)/i.test(req.originalUrl),
   message: { error: "الكثير من الطلبات — تمهّل قليلاً" },
 });
 app.use("/api", globalLimiter);
 
 // Update last_seen_at for authenticated users on every request
 app.use("/api", (req, _res, next) => {
+  if (req.method === "PATCH" && req.path.startsWith("/clips/uploads/")) { next(); return; }
   const userId = (req.session as any)?.userId;
   if (userId) {
     // fire-and-forget — don't await so it never slows down requests

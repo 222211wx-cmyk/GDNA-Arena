@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe("resumable clip upload protocol", () => {
-  it("sends 1 MiB chunks, resumes a lost PATCH acknowledgement, and commits the declaration", async () => {
+  it("sends 1 MiB chunks, resumes a lost acknowledgement, and publishes a final name/code", async () => {
     const file = new File([
       new Uint8Array(UPLOAD_CHUNK_BYTES),
       new Uint8Array(17),
@@ -24,7 +24,7 @@ describe("resumable clip upload protocol", () => {
       if (init?.method === "HEAD") {
         return new Response(null, { status: 200, headers: { "Upload-Offset": String(UPLOAD_CHUNK_BYTES) } });
       }
-      return new Response(JSON.stringify({ clip: { id: 9 } }), {
+      return new Response(JSON.stringify({ clip: { id: 9 }, code: "HELX-123456", name: "camera" }), {
         status: 200, headers: { "Content-Type": "application/json" },
       });
     });
@@ -71,26 +71,28 @@ describe("resumable clip upload protocol", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("XMLHttpRequest", TestXhr);
     const progress: number[] = [];
-    await uploadClip(file, {
+    const published = await uploadClip(file, {
       title: file.name,
       contentType: file.type,
       durationSec: 67,
-      purpose: "story",
-      isOriginalFootage: true,
     }, new AbortController().signal, value => progress.push(value));
 
     const creation = calls.find(([, init]) => init?.method === "POST" && !String(init.body ?? "").includes("uploadIds"))![1]!;
-    expect(new Headers(creation.headers).get("Upload-Metadata")).toContain("isOriginalFootage ");
+    expect(new Headers(creation.headers).get("Upload-Metadata")).not.toContain("isOriginalFootage");
+    expect(new Headers(creation.headers).get("Upload-Metadata")).not.toContain("purpose");
     expect(patches[0].body?.size).toBe(UPLOAD_CHUNK_BYTES);
     expect(patches[0].withCredentials).toBe(true);
     expect(patches[0].timeout).toBe(300_000);
     expect(patches[1].headers.get("Upload-Offset")).toBe(String(UPLOAD_CHUNK_BYTES));
     expect(progress.some(value => value > 0 && value < 50)).toBe(true);
     const completion = calls.at(-1)![1]!;
+    expect(calls.at(-1)![0]).toBe("/api/clip/upload-final");
     expect(JSON.parse(String(completion.body))).toEqual({
       uploadIds: ["11111111-1111-4111-8111-111111111111"],
-      isOriginalFootage: true,
+      groupId: expect.any(String),
     });
+    expect(published.code).toBe("HELX-123456");
+    expect(published.name).toBe("camera");
     expect(progress.at(-1)).toBe(100);
     expect(localStorage.length).toBe(0);
   });
@@ -112,8 +114,6 @@ describe("resumable clip upload protocol", () => {
         title: "cancelled.mp4",
         contentType: "video/mp4",
         durationSec: 1,
-        purpose: "story",
-        isOriginalFootage: true,
       },
       controller.signal,
       vi.fn(),

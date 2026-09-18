@@ -79,7 +79,7 @@ for (const extension of ["mp4", "mov", "webm"]) {
     assert.ok(Math.abs(await verifiedDuration(input.file) - 60) < 0.1);
     if (extension !== "webm") {
       assert.ok(input.ranges.some(range => range.start > 0), "must seek to tail metadata");
-      assert.ok(input.bytes() < data.length, "must not download the full original");
+      assert.ok(input.bytes() <= 64 * 1024 * 1024, "probe remains bounded even if a small original fits in read-ahead");
     }
     assert.ok(input.streams.every(stream => stream.destroyed));
     assert.deepEqual(data, original, "verification must not mutate original bytes");
@@ -192,7 +192,7 @@ test("invalid metadata and metadata failures do not open a source", async () => 
   } as unknown as File), /GCS_METADATA_FAILED/);
 });
 
-test("publishing retains the minimum-only policy and original upload fingerprint", () => {
+test("publishing enforces minimum-only media duration without fingerprint restrictions", () => {
   const route = readFileSync("src/routes/clips.ts", "utf8");
   const publish = readFileSync("src/lib/clip-publish.ts", "utf8");
   assert.match(publish, /clipDurationSeconds\(verifiedSeconds, contentType\)/);
@@ -201,7 +201,7 @@ test("publishing retains the minimum-only policy and original upload fingerprint
   assert.match(route, /hash\.update\(chunk\)/);
   assert.match(route, /sha256: hash\.digest\("hex"\)/);
   assert.match(route, /sha256: f\.sha256/);
-  assert.match(publish, /\[sha256, username\]/);
+  assert.doesNotMatch(publish, /INSERT INTO content_fingerprints|clip_original_registrations|shouldBlockForProtectedAudio/);
 });
 
 for (const [extension, codec] of [
@@ -222,7 +222,7 @@ for (const [extension, codec] of [
       const input = source(bytes);
       const duration = await verifiedDuration(input.file, "audio");
       assert.ok(duration > 1 && duration < 2, `Unexpected audio duration ${duration}`);
-      assert.equal(clipDurationSeconds(duration, extension === "m4a" ? "audio/mp4" : extension === "mp3" ? "audio/mpeg" : `audio/${extension}`), 1);
+      assert.throws(() => clipDurationSeconds(duration, extension === "m4a" ? "audio/mp4" : extension === "mp3" ? "audio/mpeg" : `audio/${extension}`));
       assert.deepEqual(bytes, original);
       assert.ok(input.streams.every(stream => stream.destroyed));
     } finally { rmSync(directory, { recursive: true, force: true }); }
@@ -234,8 +234,10 @@ test("audio MIME cannot disguise a short video to evade the 60-second video poli
   assert.throws(() => clipDurationSeconds(59.9, "video/mp4"));
   assert.equal(clipDurationSeconds(60, "video/mp4"), 60);
   assert.equal(clipDurationSeconds(90001, "video/mp4"), 90001);
-  assert.equal(clipDurationSeconds(0.1, "audio/wav"), 1);
-  assert.equal(clipDurationSeconds(12.9, "audio/ogg"), 12);
+  assert.throws(() => clipDurationSeconds(0.1, "audio/wav"), /خاص دقيقة الفوق/);
+  assert.throws(() => clipDurationSeconds(12.9, "audio/ogg"), /خاص دقيقة الفوق/);
+  assert.equal(clipDurationSeconds(60, "audio/wav"), 60);
+  assert.equal(clipDurationSeconds(90001, "audio/ogg"), 90001);
   for (const duration of [0, -1, NaN, Infinity]) assert.throws(() => clipDurationSeconds(duration, "audio/mp4"));
 });
 
@@ -293,10 +295,12 @@ test("audio MIME aliases share normalized storage types and safe download extens
     assert.equal(clipDownloadExtension(raw), extension);
     assert.equal(isAudioClip(raw), normalized.startsWith("audio/"));
   }
-  for (const raw of ["application/octet-stream", "text/html", "__proto__", "audio/not-real"]) {
+  for (const raw of ["application/octet-stream", "text/html", "__proto__"]) {
     assert.equal(normalizeClipContentType(raw), null);
     assert.equal(clipDownloadExtension(raw), ".bin");
   }
+  assert.equal(normalizeClipContentType("audio/not-real"), "audio/not-real", "MIME family is only a hint; actual streams are verified on publish");
+  assert.equal(clipDownloadExtension("audio/not-real"), ".bin");
   assert.equal(resolveClipUploadType("", "Voice.MP3"), "audio/mpeg");
   assert.equal(resolveClipUploadType("application/octet-stream", "recording.m4a"), "audio/mp4");
   assert.equal(resolveClipUploadType("application/octet-stream", "movie.mp4"), "video/mp4");
@@ -307,7 +311,7 @@ test("audio MIME aliases share normalized storage types and safe download extens
 
 test("audio skips initial poster generation and all video-only retry/admin queries", () => {
   const publish = readFileSync("src/lib/clip-publish.ts", "utf8");
-  assert.match(publish, /if \(!audio\) try \{[\s\S]*?generateClipThumbnail/);
+  assert.doesNotMatch(publish, /generateClipThumbnail/, "all thumbnail work is deferred");
   const retry = readFileSync("src/jobs/clip-thumbnail-retry.ts", "utf8");
   assert.equal((retry.match(/content_type LIKE 'video\/%'/g) ?? []).length, 3);
   const admin = readFileSync("src/routes/admin-clip-thumbnails.ts", "utf8");

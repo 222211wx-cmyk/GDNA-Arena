@@ -36,7 +36,8 @@ test.before(async () => {
   await pool.query(`
     CREATE TABLE public.clips (
       id integer PRIMARY KEY, object_name text NOT NULL,
-      thumbnail_object_name text, is_frozen boolean NOT NULL DEFAULT false
+      thumbnail_object_name text, is_frozen boolean NOT NULL DEFAULT false,
+      upload_object_name text, processing_output_object text
     );
     CREATE TABLE public.clip_storage_cleanup (
       object_name text PRIMARY KEY, clip_id integer, attempts integer NOT NULL DEFAULT 0,
@@ -222,11 +223,12 @@ test("fresh references protect live, frozen, thumbnail, deterministic and histor
     INSERT INTO clips(id,object_name,thumbnail_object_name,is_frozen)
       VALUES (41,$1,$2,false),(42,$3,NULL,true)
   `, [original, thumbnail, name("8")]);
+  await pool.query("UPDATE clips SET upload_object_name=$1, processing_output_object=$2 WHERE id=41", [name("b"), name("c")]);
   await pool.query(
     "INSERT INTO clip_storage_cleanup(object_name,clip_id) VALUES ($1,42)",
     [queued],
   );
-  for (const objectName of [original, thumbnail, deterministic, historical, queued, name("8")]) {
+  for (const objectName of [original, thumbnail, deterministic, historical, queued, name("8"), name("b"), name("c")]) {
     const object = exact(objectName);
     f.objects.set(objectName, object);
     await assert.rejects(run(f, [object]), /FRESH_REFERENCE_CHECK_HELD/, objectName);

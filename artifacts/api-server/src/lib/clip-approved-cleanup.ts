@@ -28,7 +28,7 @@ async function audit(client: PoolClient, name: string, hash: string, event: stri
   );
 }
 async function checkReferences(client: PoolClient, object: ExactObject, owner: StorageOwner, minAgeDays: number) {
-  const clips = await client.query("SELECT id, object_name, thumbnail_object_name FROM clips");
+  const clips = await client.query("SELECT id, object_name, thumbnail_object_name, upload_object_name, processing_output_object FROM clips");
   const queue = await client.query("SELECT object_name FROM clip_storage_cleanup");
   const report = reconcileClipStorage({
     objects: [object], clips: clips.rows, queuedNames: queue.rows.map(row => row.object_name),

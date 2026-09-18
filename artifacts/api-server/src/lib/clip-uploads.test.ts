@@ -74,7 +74,7 @@ export function metadata(overrides: Partial<UploadMetadata> = {}): UploadMetadat
   return {
     groupId: randomUUID(), partIndex: 0, partCount: 1, totalSize: 6,
     title: "عنوان الفيديو", contentType: "video/mp4", durationSec: 61,
-    purpose: "story", isOriginalFootage: true, ...overrides,
+    purpose: "story", isOriginalFootage: false, ...overrides,
   };
 }
 export function metadataHeader(values: Record<string, unknown>): string {
@@ -94,7 +94,7 @@ test("Tus metadata decodes UTF-8 and validates all bounds without trusting durat
   for (const update of [
     { groupId: "not-a-uuid" }, { partIndex: -1 }, { partIndex: 1 }, { partCount: 0 },
     { partCount: 4 }, { totalSize: 0 }, { totalSize: MAX_CLIP_BYTES + 1 },
-    { title: "" }, { title: "x".repeat(121) }, { contentType: "text/html" },
+    { title: "" }, { title: "x".repeat(1025) }, { contentType: "text/html" },
     { durationSec: "NaN" }, { durationSec: -1 },
   ]) {
     assert.throws(() => parseUploadMetadata(metadataHeader({ ...valid, ...update })), ClipUploadError);
@@ -108,57 +108,65 @@ test("Tus metadata decodes UTF-8 and validates all bounds without trusting durat
   assert.throws(
     () => parseUploadMetadata(metadataHeader({ ...valid, totalSize: MAX_NEW_CLIP_BYTES + 1 })),
     (error: unknown) => error instanceof ClipUploadError &&
-      error.status === 413 && error.message === NEW_CLIP_TOO_LARGE,
+      error.status === 400,
   );
 });
 
-test("rights metadata defaults legacy callers to story and validates original declarations", () => {
+test("500 MiB, 2 GiB and larger declarations create resumable sessions without a product size cap", async () => {
+  for (const size of [500 * 1024 * 1024, 2 ** 31, 2 ** 31 + 1, 5 * 1024 ** 3]) {
+    const { service } = fixture();
+    const parsed = parseUploadMetadata(metadataHeader({
+      groupId: randomUUID(), partIndex: 0, partCount: 1, totalSize: size,
+      title: "feature.movie.mkv", contentType: "video/x-matroska", durationSec: 90001,
+    }));
+    assert.equal((await service.create(1, parsed, size)).length, size);
+  }
+});
+
+test("legacy rights metadata no longer restricts final publication", () => {
   const valid = metadata();
   const legacy = { ...valid } as Partial<UploadMetadata>;
   delete legacy.purpose;
   assert.equal(parseUploadMetadata(metadataHeader(legacy)).purpose, "story");
-  assert.throws(
-    () => parseUploadMetadata(metadataHeader({ ...legacy, purpose: "original" })),
-    (error: unknown) => error instanceof ClipUploadError && error.status === 400,
-  );
+  assert.equal(parseUploadMetadata(metadataHeader({ ...legacy, purpose: "original" })).purpose, "story");
   const original = parseUploadMetadata(metadataHeader({
     ...legacy, purpose: "original", originalReference: "  catalog ref 123  ",
     rightsHolderName: "  Producer Name  ", rightsHolderRole: "producer",
   }));
-  assert.equal(original.purpose, "original");
-  assert.equal(original.originalReference, "catalog ref 123");
-  assert.equal(original.rightsHolderName, "Producer Name");
-  assert.equal(original.rightsHolderRole, "producer");
+  assert.equal(original.purpose, "story");
+  assert.equal(original.originalReference, undefined);
+  assert.equal(original.rightsHolderName, undefined);
+  assert.equal(original.rightsHolderRole, undefined);
   for (const originalReference of ["  ", "x".repeat(201)]) {
-    assert.throws(
-      () => parseUploadMetadata(metadataHeader({
+    assert.equal(
+      parseUploadMetadata(metadataHeader({
         ...legacy, purpose: "original", originalReference,
         rightsHolderName: "Owner Name", rightsHolderRole: "owner",
-      })),
-      ClipUploadError,
+      })).purpose,
+      "story",
     );
   }
   for (const update of [
     { rightsHolderName: " " }, { rightsHolderRole: "uploader" },
   ]) {
-    assert.throws(() => parseUploadMetadata(metadataHeader({
+    assert.equal(parseUploadMetadata(metadataHeader({
       ...legacy, purpose: "original", originalReference: "catalog ref",
       rightsHolderName: "Owner Name", rightsHolderRole: "owner", ...update,
-    })), ClipUploadError);
+    })).purpose, "story");
   }
 });
 
-test("original-footage metadata is strict, durable, and completion cannot override it", async () => {
+test("footage declarations are ignored and are never a publication requirement", async () => {
   const legacy = metadata() as Partial<UploadMetadata>;
   delete legacy.isOriginalFootage;
-  assert.equal(parseUploadMetadata(metadataHeader(legacy)).isOriginalFootage, true);
+  assert.equal(parseUploadMetadata(metadataHeader(legacy)).isOriginalFootage, false);
   assert.equal(parseUploadMetadata(metadataHeader({ ...legacy, isOriginalFootage: "false" })).isOriginalFootage, false);
-  assert.throws(() => parseUploadMetadata(metadataHeader({ ...legacy, isOriginalFootage: "yes" })), ClipUploadError);
+  assert.equal(parseUploadMetadata(metadataHeader({ ...legacy, isOriginalFootage: "yes" })).isOriginalFootage, false);
 
   const { service } = fixture();
   const session = await service.create(1, metadata({ isOriginalFootage: false }), 6);
   await service.append(await service.checkPatch(session.id, 1, 0), Buffer.from("abcdef"));
-  await rejectsStatus(service.complete(1, [session.id], true), 409);
+  await service.complete(1, [session.id], true);
   await service.complete(1, [session.id], false);
 });
 
@@ -227,7 +235,7 @@ test("a lost manifest acknowledgement preserves a committed chunk for HEAD recov
   assert.equal([...store.objects.values()][0].toString(), "abc");
 });
 
-test("ordered multipart completion recursively composes <=32 sources and hashes actual bytes", async () => {
+test("ordered multipart completion recursively composes <=32 sources without whole-file buffering", async () => {
   const { service, store, publisher } = fixture();
   const base = metadata({ partCount: 3, totalSize: 70 });
   const lengths = [20, 30, 20];
@@ -246,11 +254,13 @@ test("ordered multipart completion recursively composes <=32 sources and hashes 
   await rejectsStatus(service.complete(1, [ids[0], ids[0]]), 400);
   const result = await service.complete(1, ids);
   const original = Buffer.concat(actual);
-  assert.equal(publisher.publishedInputs[0].sha256, createHash("sha256").update(original).digest("hex"));
+  assert.equal(publisher.publishedInputs[0].sha256, "", "fingerprints are no longer a publication restriction");
   assert.deepEqual(store.objects.get(publisher.publishedInputs[0].filename), original);
   assert.equal(store.compositions.length, 4);
   assert.equal(store.objects.size, 1, "only original video remains after finalization");
   assert.deepEqual(await new ClipUploads(store, publisher).complete(1, ids), result);
+  assert.deepEqual(await service.completeGroup(1, base.groupId), result);
+  await rejectsStatus(service.completeGroup(2, base.groupId), 404);
   assert.equal(publisher.publishedInputs.length, 1);
 });
 

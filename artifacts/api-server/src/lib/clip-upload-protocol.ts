@@ -1,7 +1,7 @@
-export const MAX_CLIP_BYTES = 2 * 1024 * 1024 * 1024;
-/** New mobile/resumable clip intake. Legacy multipart publishing keeps its 2 GiB ceiling. */
-export const MAX_NEW_CLIP_BYTES = 25 * 1024 * 1024;
-export const NEW_CLIP_TOO_LARGE = "الفيديو كبير - صغر 720p";
+/** Numeric protocol safety, not a product upload-size limit. */
+export const MAX_CLIP_BYTES = Number.MAX_SAFE_INTEGER;
+export const MAX_NEW_CLIP_BYTES = Number.MAX_SAFE_INTEGER;
+export const NEW_CLIP_TOO_LARGE = "Invalid upload byte count";
 export const CLIP_EXT: Record<string, string> = {
   "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
   "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac",
@@ -18,13 +18,17 @@ const CLIP_MIME_ALIASES: Record<string, string> = {
 export function normalizeClipContentType(value: string): string | null {
   const raw = value.split(";", 1)[0].trim().toLowerCase();
   const normalized = Object.hasOwn(CLIP_MIME_ALIASES, raw) ? CLIP_MIME_ALIASES[raw] : raw;
-  return Object.hasOwn(CLIP_EXT, normalized) ? normalized : null;
+  return /^(audio|video)\/[a-z0-9.+-]+$/.test(normalized) ? normalized : null;
 }
 const CLIP_EXTENSION_TYPES: Record<string, string> = {
   mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac",
   ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg",
   wav: "audio/wav", flac: "audio/flac",
   mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm",
+  mkv: "video/x-matroska", avi: "video/x-msvideo", mpg: "video/mpeg", mpeg: "video/mpeg",
+  ts: "video/mp2t", m2ts: "video/mp2t", wmv: "video/x-ms-wmv", flv: "video/x-flv",
+  wma: "audio/x-ms-wma", aiff: "audio/aiff", aif: "audio/aiff", ac3: "audio/ac3",
+  "3gp": "video/3gpp", "3g2": "video/3gpp2", mka: "audio/x-matroska",
 };
 /** Only mobile-provider empty/generic MIME may fall back to a strict extension. */
 export function resolveClipUploadType(contentType: string, filename: string): string | null {
@@ -37,7 +41,7 @@ export function resolveClipUploadType(contentType: string, filename: string): st
 }
 export function clipDownloadExtension(contentType: string): string {
   const normalized = normalizeClipContentType(contentType);
-  return normalized ? CLIP_EXT[normalized] : ".bin";
+  return normalized ? CLIP_EXT[normalized] ?? ".bin" : ".bin";
 }
 export const isAudioClip = (contentType: string): boolean =>
   normalizeClipContentType(contentType)?.startsWith("audio/") === true;
@@ -110,7 +114,6 @@ export function validateClipRightsInput(
 }
 export function clipDurationSeconds(seconds: number, contentType: string): number {
   if (!Number.isFinite(seconds) || seconds <= 0) throw new ClipUploadError(400, "مدة الملف غير صالحة");
-  if (isAudioClip(contentType)) return Math.max(1, Math.floor(seconds));
-  if (seconds < 60) throw new ClipUploadError(400, "أي فيديو أقل من 60 ثانية يتم حظره تلقائياً. الحد الأدنى دقيقة واحدة.");
+  if (seconds < 60) throw new ClipUploadError(400, "خاص دقيقة الفوق");
   return Math.floor(seconds);
 }

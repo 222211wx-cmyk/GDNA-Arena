@@ -18,7 +18,7 @@ export class ClipProbeBusyError extends Error {
  * loopback HTTP ranges let ffprobe seek to MP4/MOV tail metadata without
  * downloading the entire video. Limits bound work, NOT the media's duration.
  */
-export async function verifiedDuration(file: File, expectedKind?: "audio" | "video"): Promise<number> {
+export async function verifiedDuration(file: File, expectedKind?: "audio" | "video" | "media"): Promise<number> {
   if (activeJobs >= 2) throw new ClipProbeBusyError();
   activeJobs++;
   try {
@@ -32,7 +32,7 @@ export async function verifiedDuration(file: File, expectedKind?: "audio" | "vid
   }
 }
 
-async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "audio" | "video"): Promise<number> {
+async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "audio" | "video" | "media"): Promise<number> {
   const secretPath = `/${randomBytes(32).toString("hex")}`;
   const streams = new Set<Readable>();
   const sockets = new Set<Socket>();
@@ -144,7 +144,9 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "
       "-v", "error", "-threads", "1",
       "-max_alloc", String(32 * 1024 * 1024),
       "-protocol_whitelist", "http,tcp",
-      "-format_whitelist", "mov,matroska,webm,mp3,aac,ogg,wav,flac",
+      // Real media containers, never playlists/concat scripts capable of
+      // redirecting the probe to attacker-selected network addresses.
+      "-format_whitelist", "mov,matroska,webm,mp3,aac,ogg,wav,flac,avi,mpeg,mpegts,asf,flv,aiff,ac3,eac3,amr,ape,au,tta,wv,rm,h264,hevc,av1,m4v,mjpeg",
       "-rw_timeout", "5000000",
       "-probesize", "5000000", "-analyzeduration", "5000000",
       "-show_entries", expectedKind ? "format=duration:stream=codec_type:stream_disposition=attached_pic" : "format=duration",
@@ -184,7 +186,8 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "
             // MIME is merely upload metadata. Require the corresponding stream
             // kind so audio-only MP4/MP3 bytes cannot opt into footage policy,
             // and album artwork cannot be treated as moving video.
-            if ((expectedKind === "audio" && (!hasAudio || hasRealVideo)) ||
+            if ((expectedKind === "media" && !hasAudio && !hasRealVideo) ||
+                (expectedKind === "audio" && (!hasAudio || hasRealVideo)) ||
                 (expectedKind === "video" && !hasRealVideo)) {
               reject(new Error(expectedKind === "audio" ? "INVALID_AUDIO_STREAMS" : "INVALID_VIDEO_STREAMS"));
               return;

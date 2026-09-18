@@ -7,11 +7,6 @@ export type ClipUploadMetadata = {
   title: string;
   contentType: string;
   durationSec: number;
-  purpose: "story" | "original";
-  originalReference?: string;
-  rightsHolderName?: string;
-  rightsHolderRole?: "owner" | "producer";
-  isOriginalFootage: boolean;
 };
 
 type SavedUpload = { location: string; id: string; groupId: string };
@@ -249,15 +244,25 @@ export async function uploadClip(
     onProgress(Math.min(99, offset / file.size * 100), offset);
   }
 
-  const completion = await request(`${ROOT}/complete`, {
+  const completion = await request(`${import.meta.env.BASE_URL}api/clip/upload-final`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ uploadIds: [saved.id], isOriginalFootage: metadata.isOriginalFootage }),
+    body: JSON.stringify({ groupId: saved.groupId, uploadIds: [saved.id] }),
   }, signal);
   if (!completion.ok) throw new Error(await errorMessage(completion));
   const body = await completion.json();
   if (!body?.clip || !Number.isSafeInteger(body.clip.id)) throw new Error("لم يؤكد الخادم نشر الكليب");
+  const code = body.code ?? body.clip.code;
+  if (typeof code !== "string" || !/^HELX-\d{6}$/.test(code)) throw new Error("لم يؤكد الخادم كود الكليب");
   resumableSessions.delete(key);
   onProgress(100, file.size);
-  return body.clip;
+  return {
+    ...body.clip,
+    code,
+    name: body.name ?? body.clip.name ?? body.clip.title,
+    duration: body.duration ?? body.clip.duration ?? body.clip.duration_sec,
+    url: body.url ?? body.clip.url ?? body.clip.video_url,
+    created_at: body.created_at ?? body.clip.created_at,
+    processingStatus: body.processingStatus ?? body.clip.processingStatus ?? body.clip.compression_status,
+  };
 }

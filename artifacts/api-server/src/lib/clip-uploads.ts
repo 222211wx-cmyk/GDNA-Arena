@@ -1,8 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
-  ClipUploadError, CLIP_EXT, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, normalizeClipContentType,
-  validateClipRightsInput, parseIsOriginalFootage, type ClipPublishPurpose,
+  ClipUploadError, clipDownloadExtension, resolveClipUploadType, type ClipPublishPurpose,
 } from "./clip-upload-protocol.js";
 
 export const CHUNK_BYTES = 5 * 1024 * 1024;
@@ -43,6 +42,7 @@ interface UploadGroup {
 }
 export interface Versioned<T> { value: T; generation: string }
 export interface UploadStore {
+  size?(name: string): Promise<number>;
   read<T>(name: string): Promise<Versioned<T> | null>;
   write(name: string, value: unknown, generation: string | 0): Promise<void>;
   put(name: string, bytes: Buffer, contentType: string): Promise<void>;
@@ -84,18 +84,13 @@ export function parseUploadMetadata(header: string | undefined): UploadMetadata 
   const totalSize = unsignedInteger(entries.totalSize, "totalSize");
   if (partCount < 1 || partCount > 3 || partIndex >= partCount) fail(400, "Invalid part bounds");
   if (totalSize < partCount) fail(400, "Invalid totalSize");
-  if (totalSize > MAX_NEW_CLIP_BYTES) fail(413, NEW_CLIP_TOO_LARGE);
   const title = entries.title?.trim();
-  if (!title || title.length > 120) fail(400, "Title is required (maximum 120 characters)");
-  const contentType = normalizeClipContentType(entries.contentType ?? "");
+  if (!title || title.length > 1024) fail(400, "Filename is required (maximum 1024 characters)");
+  const contentType = resolveClipUploadType(entries.contentType ?? "", title);
   if (!contentType) fail(415, "Unsupported media contentType");
   const durationSec = Number(entries.durationSec);
   if (!entries.durationSec?.trim() || !Number.isFinite(durationSec) || durationSec < 0) fail(400, "Invalid durationSec");
-  const rights = validateClipRightsInput(
-    entries.purpose, entries.originalReference, entries.rightsHolderName, entries.rightsHolderRole,
-  );
-  const isOriginalFootage = parseIsOriginalFootage(entries.isOriginalFootage);
-  return { groupId, partIndex, partCount, totalSize, title, contentType, durationSec, isOriginalFootage, ...rights };
+  return { groupId, partIndex, partCount, totalSize, title, contentType, durationSec, isOriginalFootage: false, purpose: "story" };
 }
 function common(metadata: UploadMetadata) {
   const { partIndex: _partIndex, ...rest } = metadata;
@@ -220,16 +215,19 @@ export class ClipUploads {
   }
 
   private objectName(session: UploadSession) {
-    return `clip_upload_${session.userId}_${session.metadata.groupId}${CLIP_EXT[session.metadata.contentType]}`;
+    return `clip_upload_${session.userId}_${session.metadata.groupId}${clipDownloadExtension(session.metadata.contentType)}`;
+  }
+
+  async completeGroup(userId: number, groupId: unknown): Promise<Record<string, unknown>> {
+    if (!validUploadId(groupId)) fail(400, "Invalid groupId");
+    const group = await this.store.read<UploadGroup>(groupKey(userId, groupId));
+    if (!group || group.value.userId !== userId) fail(404, "Upload group not found");
+    return this.complete(userId, group.value.slots);
   }
 
   async complete(userId: number, ids: unknown, completionOriginalFootage?: unknown): Promise<Record<string, unknown>> {
     if (!Array.isArray(ids) || ids.length < 1 || ids.length > 3 || ids.some(id => !validUploadId(id)) || new Set(ids).size !== ids.length) fail(400, "uploadIds must contain 1–3 unique IDs in part order");
     const first = (await this.session(ids[0], userId)).value;
-    if (completionOriginalFootage !== undefined &&
-        parseIsOriginalFootage(completionOriginalFootage) !== first.metadata.isOriginalFootage) {
-      fail(409, "Completion metadata differs from durable upload metadata");
-    }
     return this.publisher.lock(lockKey(userId, first.metadata.groupId), async () => {
       const key = groupKey(userId, first.metadata.groupId);
       let group = await this.store.read<UploadGroup>(key);
@@ -243,10 +241,13 @@ export class ClipUploads {
             session.chunks.reduce((sum, chunk) => sum + chunk.size, 0) !== session.length) fail(409, "Parts are incomplete or inconsistent");
         size += session.length;
       }
-      if (size > MAX_NEW_CLIP_BYTES) fail(413, NEW_CLIP_TOO_LARGE);
       if (size !== first.metadata.totalSize) fail(409, "Completed size differs from totalSize");
-      if (group.value.result) return group.value.result;
       const filename = this.objectName(first);
+      if (group.value.result) {
+        const current = await this.publisher.find(userId, filename);
+        if (!current) fail(410, "Published clip was removed");
+        return current;
+      }
       // Recover a crash/lost acknowledgement between PG COMMIT and GCS result save.
       const existing = await this.publisher.find(userId, filename);
       if (existing) {
@@ -273,17 +274,18 @@ export class ClipUploads {
         sources = next; level++;
       }
       await this.store.compose(sources, filename, first.metadata.contentType);
-      const hash = createHash("sha256");
       let actualSize = 0;
-      for await (const bytes of this.store.stream(filename)) {
-        actualSize += bytes.length;
-        if (actualSize > size) fail(409, "Stored video exceeds expected size");
-        hash.update(bytes);
+      if (this.store.size) actualSize = await this.store.size(filename);
+      else {
+        for await (const bytes of this.store.stream(filename)) {
+          actualSize += bytes.length;
+          if (actualSize > size) fail(409, "Stored video exceeds expected size");
+        }
       }
       if (actualSize !== size) fail(409, "Stored video is incomplete");
       const result = await this.publisher.publish({
         userId, filename, title: first.metadata.title, contentType: first.metadata.contentType,
-        size, sha256: hash.digest("hex"), purpose: first.metadata.purpose,
+        size, sha256: "", purpose: first.metadata.purpose,
         originalReference: first.metadata.originalReference,
         rightsHolderName: first.metadata.rightsHolderName,
         rightsHolderRole: first.metadata.rightsHolderRole,

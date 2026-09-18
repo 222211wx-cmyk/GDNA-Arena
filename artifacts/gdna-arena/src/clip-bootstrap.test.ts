@@ -23,7 +23,7 @@ describe("ultra-light clip bootstrap", () => {
     expect(appEntry).toContain('addEventListener("load", registerServiceWorker, { once: true })');
   });
 
-  it("has an immediate clip shell and never eagerly decodes or compresses media", () => {
+  it("has an immediate shell, no browser compression, and no eager feed playback", () => {
     const html = source("../index.html");
     const clip = source("./clip-entry.ts");
     expect(html).toContain('data-testid="clip-shell"');
@@ -34,10 +34,12 @@ describe("ultra-light clip bootstrap", () => {
     expect(clip).toContain('setAttribute("preload", "none")');
   });
 
-  it("warns about 25 MiB without blocking selection and exposes stable automation hooks", () => {
+  it("has only a minimum-duration gate with no size or publication-type UI", () => {
     const clip = source("./clip-entry.ts");
-    expect(clip).toContain("25 * 1024 * 1024");
-    expect(clip).toContain('data-testid="clip-size-warning"');
+    expect(clip).not.toContain("25 * 1024 * 1024");
+    expect(clip).not.toMatch(/size-warning|name="purpose"|original-footage|id="rights"/);
+    expect(clip).toContain("خاص دقيقة الفوق");
+    expect(clip).toContain("readClipDuration");
     expect(clip).not.toContain("if (file.size >");
     expect(clip).not.toContain("if (selected && selected.size >");
     for (const id of ["clip-file-input", "clip-submit", "clip-progress", "clip-status", "clip-error"]) {

@@ -81,7 +81,9 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
     assert.equal(options.length, 0, "anonymous bodies must never reach storage");
     const success = await post(1024, { title: "Uploaded original" });
     assert.equal(success.status, 200);
-    assert.deepEqual(success.body, { ok: true, url: "/api/clips/stream/1", clip: { id: 1, title: "Uploaded original", duration_sec: 61, thumb: null } });
+    assert.deepEqual(success.body, { ok: true, name: "original.mp4", duration: 61,
+      processingStatus: "ready", url: "/api/clips/stream/1",
+      clip: { id: 1, title: "original.mp4", duration_sec: 61, thumb: null } });
     assert.equal(options[0].resumable, true);
     assert.equal(options[0].chunkSize, 5 * 1024 * 1024);
     assert.equal(options[0].timeout, 300_000);
@@ -90,10 +92,10 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
     endpoint = `${origin}/api/clip/upload-simple`;
     assert.equal((await post(1024, { auth: false })).status, 401);
     assert.equal(options.length, 1, "the new alias authenticates before reading upload bytes");
-    const exact = await post(SIMPLE_CLIP_MAX_BYTES);
+    const exact = await post(26 * 1024 * 1024);
     assert.equal(exact.status, 200, JSON.stringify(exact.body));
-    assert.equal(published.at(-1)?.size, SIMPLE_CLIP_MAX_BYTES);
-    assert.equal(published.at(-1)?.title, "كليب", "title is optional");
+    assert.equal(published.at(-1)?.size, 26 * 1024 * 1024);
+    assert.equal(published.at(-1)?.title, "original.mp4", "filename, not a classification, provides the title");
     const declared = await post(1024, {
       purpose: "original", originalReference: "  archive registration  ",
       rightsHolderName: "  Studio Producer  ", rightsHolderRole: "producer",
@@ -104,30 +106,29 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
       "the route forwards declarations for server-side trimming and validation");
     assert.equal(published.at(-1)?.rightsHolderName, "  Studio Producer  ");
     assert.equal(published.at(-1)?.rightsHolderRole, "producer");
-    const tooLarge = await post(SIMPLE_CLIP_MAX_BYTES + 1);
-    assert.equal(tooLarge.status, 413);
-    assert.deepEqual(tooLarge.body, { error: "الفيديو كبير - صغر 720p" });
-    assert.equal(objects.size, 3, "oversize bytes are not retained or published");
+    endpoint = `${origin}/api/clip/upload-final`;
+    const large = await post(26 * 1024 * 1024 + 1);
+    assert.equal(large.status, 200);
+    const storedCount = objects.size;
     assert.equal((await post(10, { type: "text/plain" })).status, 415);
     assert.equal((await post(10, { field: "video" })).status, 400);
     assert.equal((await post(0)).status, 400);
     publishError = new ClipUploadError(400, "Duration below 60 seconds");
     assert.equal((await post(1024)).status, 400);
-    assert.equal(objects.size, 3);
-    publishError = new ClipUploadError(409, "First-owner registry rejected duplicate");
+    assert.equal(objects.size, storedCount);
+    publishError = new ClipUploadError(409, "Stored media changed");
     assert.equal((await post(1024)).status, 409);
-    assert.equal(objects.size, 3);
+    assert.equal(objects.size, storedCount);
     publishError = undefined;
     streamError = true;
     assert.equal((await post(1024)).status, 500);
     streamError = false;
     committedThenError = true;
     assert.equal((await post(1024)).status, 500);
-    assert.equal(objects.size, 4, "ambiguous commit cleanup preserves published original");
+    assert.equal(objects.size, storedCount + 1, "ambiguous commit cleanup preserves published original");
     committedThenError = false;
-    const audioTooLarge = await post(SIMPLE_CLIP_MAX_BYTES + 1, { type: "audio/wav" });
-    assert.equal(audioTooLarge.status, 413);
-    assert.deepEqual(audioTooLarge.body, { error: "الفيديو كبير - صغر 720p" });
+    const largeAudio = await post(26 * 1024 * 1024, { type: "audio/wav" });
+    assert.equal(largeAudio.status, 200);
     assert.equal((await post(512, { type: "", filename: "voice.mp3" })).status, 200);
     assert.equal(published.at(-1)?.contentType, "audio/mpeg");
     for (const [type, normalized, extension] of [

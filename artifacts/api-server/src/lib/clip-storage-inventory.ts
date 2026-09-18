@@ -34,7 +34,7 @@ export async function readClipReferences(client: ReadClient) {
   await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   try {
     await client.query("SET LOCAL statement_timeout = '30s'");
-    const clips = await client.query("SELECT id, object_name, thumbnail_object_name FROM clips");
+    const clips = await client.query("SELECT id, object_name, thumbnail_object_name, upload_object_name, processing_output_object FROM clips");
     const queue = await client.query("SELECT object_name FROM clip_storage_cleanup");
     await client.query("COMMIT");
     return {

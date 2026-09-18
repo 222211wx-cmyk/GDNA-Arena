@@ -9,6 +9,8 @@ import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signalin
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { isAdultForGames, normalizeBirthDate } from "../lib/age";
 import { revokeAllCallPushSessions, revokeCallPushSession } from "../lib/firebase-call-push";
+import { deleteAccountClips } from "../lib/clip-account-delete.js";
+import { ClipUploadError } from "../lib/clip-upload-protocol.js";
 
 const pool = nullablePool!;
 
@@ -399,8 +401,8 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
   }
 
   try {
-    // Anonymise all user content instead of hard-deleting rows
-    // (preserves referential integrity while erasing PII)
+    // Anonymise account/identity snapshots while preserving financial history.
+    // This explicit erasure also releases owned clip media via a durable outbox.
     const anonymousName = `deleted_user_${userId}`;
     const client = await pool.connect();
     let revokedSessionIds: string[] = [];
@@ -412,6 +414,7 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
             birth_date = NULL, last_seen_at = NOW()
         WHERE id = $3
       `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
+      await deleteAccountClips(client, userId);
       // Only erase display names from records with an immutable ownership link.
       // Never match historical snapshots by username: bots, stars, and seeded
       // records can legitimately reuse a citizen's display name.
@@ -480,6 +483,10 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
     });
   } catch (err) {
     logger.error(err, "GDPR erasure error");
+    if (err instanceof ClipUploadError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
     res.status(500).json({ error: "Erasure failed. Contact legal@gdna-arena.com." });
   }
 });

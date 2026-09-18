@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request } from "express";
 import multer from "multer";
 import { createHash, randomUUID } from "node:crypto";
+import { finalClipReceipt } from "./clips-thumbnail-response.js";
 import type { File, CreateWriteStreamOptions } from "@google-cloud/storage";
 import {
   CLIP_EXT, ClipUploadError, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, resolveClipUploadType,
@@ -8,8 +9,7 @@ import {
 
 export const SIMPLE_CLIP_MAX_BYTES = MAX_NEW_CLIP_BYTES;
 export const SIMPLE_CLIP_CHUNK_BYTES = 5 * 1024 * 1024;
-export const SIMPLE_CLIP_MAX_DURATION_SECONDS = 300;
-export const SIMPLE_CLIP_TIMEOUT_MS = SIMPLE_CLIP_MAX_DURATION_SECONDS * 1000;
+export const SIMPLE_CLIP_TIMEOUT_MS = 5 * 60 * 1000; // Inactivity only, never a media/upload-duration limit.
 export const SIMPLE_CLIP_TOO_LARGE = NEW_CLIP_TOO_LARGE;
 export const SIMPLE_AUDIO_TOO_LARGE = NEW_CLIP_TOO_LARGE;
 export const SIMPLE_CLIP_WRITE_OPTIONS: CreateWriteStreamOptions = {
@@ -43,7 +43,7 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
       file.mimetype = normalizedType;
       contentTypes.set(req, normalizedType);
       const sizeMessage = SIMPLE_CLIP_TOO_LARGE;
-      const filename = `clip_${randomUUID().replace(/-/g, "")}${CLIP_EXT[file.mimetype]}`;
+      const filename = `clip_${randomUUID().replace(/-/g, "")}${CLIP_EXT[file.mimetype] ?? ".bin"}`;
       let stream: ReturnType<File["createWriteStream"]>;
       try {
         stream = deps.file(filename).createWriteStream({
@@ -76,7 +76,6 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
       file.stream.on("data", (chunk: Buffer) => {
         if (settled) return;
         size += chunk.length;
-        if (size > SIMPLE_CLIP_MAX_BYTES) { fail(new ClipUploadError(413, sizeMessage)); return; }
         hash.update(chunk);
       });
       file.stream.on("error", fail);
@@ -95,10 +94,9 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
       deps.cleanup(file.filename).then(() => cb(null), error => cb(error));
     },
   };
-  // Busboy emits "limit" at equality, so reserve one sentinel byte and enforce
-  // the actual 25 MiB bound ourselves. Exactly 25 MiB remains valid.
-  const upload = multer({ storage, limits: { fileSize: SIMPLE_CLIP_MAX_BYTES + 1, files: 1, fields: 6, fieldSize: 1024, parts: 8 } });
-  router.post(["/clip/upload", "/clip/upload-simple"], (req, res) => {
+  // Bound only multipart metadata/counts; the streamed file has no product-size cap.
+  const upload = multer({ storage, limits: { files: 1, fields: 6, fieldSize: 1024, parts: 8 } });
+  router.post(["/clip/upload", "/clip/upload-simple", "/clip/upload-final"], (req, res) => {
     const userId = (req.session as { userId?: number } | undefined)?.userId;
     if (!userId) { res.status(401).json({ error: "يجب تسجيل الدخول" }); return; }
     if (!req.is("multipart/form-data")) { res.status(415).json({ error: "Expected multipart/form-data with file" }); return; }
@@ -112,10 +110,7 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
     res.setTimeout(SIMPLE_CLIP_TIMEOUT_MS);
     req.once("timeout", onTimeout);
     res.once("timeout", onTimeout);
-    const deadline = setTimeout(onTimeout, SIMPLE_CLIP_TIMEOUT_MS);
-    deadline.unref();
     const finish = () => {
-      clearTimeout(deadline);
       signals.delete(req);
       contentTypes.delete(req);
       req.off("timeout", onTimeout);
@@ -130,7 +125,7 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
         if (error) throw error;
         if (controller.signal.aborted) throw new ClipUploadError(408, "Upload timed out");
         if (!file?.filename || !file.sha256 || !file.size) throw new ClipUploadError(400, "الفيديو مطلوب");
-        const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 120) : "";
+        const title = file.originalname;
         const clip = await deps.publish({
           userId, filename: file.filename, title: title || "كليب",
           contentType: file.mimetype, size: file.size, sha256: file.sha256,
@@ -138,7 +133,7 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
           rightsHolderName: req.body?.rightsHolderName, rightsHolderRole: req.body?.rightsHolderRole,
           isOriginalFootage: req.body?.isOriginalFootage,
         });
-        if (!res.headersSent && !res.destroyed) res.json({ url: `/api/clips/stream/${clip.id}`, ok: true, clip });
+        if (!res.headersSent && !res.destroyed) res.json(finalClipReceipt(clip));
       } catch (caught) {
         if (file?.filename) await deps.cleanup(file.filename).catch(cleanupError => deps.log(cleanupError, "Simple clip cleanup deferred"));
         const isLimit = (caught as { code?: string }).code === "LIMIT_FILE_SIZE";

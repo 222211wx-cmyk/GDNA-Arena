@@ -43,9 +43,15 @@ export async function runClipStorageCleanupBatch(clipId?: number): Promise<numbe
         object_name: string; clip_id: number; attempts: number;
       }>(`
         WITH candidate AS (
-          SELECT object_name FROM clip_storage_cleanup
-          WHERE retry_at <= NOW() AND ($1::integer IS NULL OR clip_id=$1)
-          ORDER BY retry_at, object_name
+          SELECT pending.object_name FROM clip_storage_cleanup pending
+          WHERE pending.retry_at <= NOW() AND ($1::integer IS NULL OR pending.clip_id=$1)
+            AND NOT EXISTS (
+              SELECT 1 FROM clips c WHERE c.object_name=pending.object_name
+                OR c.upload_object_name=pending.object_name
+                OR c.thumbnail_object_name=pending.object_name
+                OR c.processing_output_object=pending.object_name
+            )
+          ORDER BY pending.retry_at, pending.object_name
           LIMIT 1 FOR UPDATE SKIP LOCKED
         )
         UPDATE clip_storage_cleanup q

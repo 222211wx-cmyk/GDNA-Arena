@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { ClipUploads, CHUNK_BYTES, parseUploadMetadata, unsignedInteger } from "../lib/clip-uploads.js";
 import { ClipUploadError, MAX_NEW_CLIP_BYTES } from "../lib/clip-upload-protocol.js";
 import { logger } from "../lib/logger.js";
+import { finalClipReceipt } from "./clips-thumbnail-response.js";
 
 export function uploadAuth(req: Request, res: Response, next: NextFunction): void {
   if (!(req.session as { userId?: number } | undefined)?.userId) {
@@ -24,8 +25,15 @@ export function createClipsUploadsRouter(service: ClipUploads): IRouter {
     next();
   }, uploadAuth);
   router.options("/clips/uploads{/:id}", (_req, res) => {
-    res.set({ "Tus-Version": "1.0.0", "Tus-Extension": "creation,termination,expiration", "Tus-Max-Size": String(MAX_NEW_CLIP_BYTES) }).status(204).end();
+    res.set({ "Tus-Version": "1.0.0", "Tus-Extension": "creation,termination,expiration" }).status(204).end();
   });
+  router.post("/clip/upload-final", uploadAuth, (req, res, next) => {
+    if (!req.is("application/json")) { next("route"); return; }
+    json({ limit: "4kb" })(req, res, next);
+  }, asyncRoute(async (req, res) => {
+    const clip = await service.completeGroup(userId(req), req.body?.groupId);
+    res.json(finalClipReceipt(clip));
+  }));
   // Completion is JSON, not a Tus concatenation extension.
   router.post("/clips/uploads/complete", json({ limit: "4kb" }), asyncRoute(async (req, res) => {
     const clip = await service.complete(userId(req), req.body?.uploadIds, req.body?.isOriginalFootage);
@@ -87,8 +95,9 @@ export function createClipsUploadsRouter(service: ClipUploads): IRouter {
     await service.cancel(paramId(req), userId(req));
     res.status(204).end();
   }));
-  router.use("/clips/uploads", (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  router.use(["/clips/uploads", "/clip/upload-final"], (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const status = error instanceof ClipUploadError ? error.status : Number((error as { status?: number }).status) || 500;
+    if (status === 503) res.set("Retry-After", "2");
     if (status >= 500) logger.error({ err: error }, "[clips] resumable upload failed");
     if (!res.headersSent) res.status(status).json({ error: error instanceof ClipUploadError ? error.message : status < 500 ? "Invalid request body" : "Upload failed; retry or resume with HEAD" });
   });

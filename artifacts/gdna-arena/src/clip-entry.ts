@@ -1,8 +1,8 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
 import { uploadClip, type ClipUploadMetadata } from "./components/clips/clipUpload";
+import { readClipDuration } from "./components/clips/readClipDuration";
 
 const BASE = import.meta.env.BASE_URL;
-const SIZE_WARNING_BYTES = 25 * 1024 * 1024;
 const FEED_TIMEOUT_MS = 12_000;
 const root = document.getElementById("root");
 if (!root) throw new Error("Clip root is missing");
@@ -33,25 +33,9 @@ root.innerHTML = `
   <form id="upload" data-testid="clip-upload" hidden>
     <h2>رفع صوت أو فيديو</h2>
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
-    <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection size-warning">اختيار ملف</button>
-    <p id="selection" class="muted" role="status" aria-live="polite">يرفع المتصفح الملف الأصلي مباشرة؛ لا يجري ضغطاً أو تحليلاً للوسائط.</p>
-    <p id="size-warning" data-testid="clip-size-warning" class="muted" role="status" hidden></p>
-    <fieldset>
-      <legend>نوع النشر</legend>
-      <label><input type="radio" name="purpose" value="story" checked> ستوري / مقطع مواطن</label>
-      <label><input type="radio" name="purpose" value="original"> إيداع أصل لديّ حقوقه</label>
-    </fieldset>
-    <label><input id="original-footage" name="is_original_footage" type="checkbox" checked> أصرّح أن هذا التسجيل مصوّر من هاتفي أو كاميرتي</label>
-    <div id="rights" hidden>
-      <label>اسم صاحب الحقوق أو المنتج المخوّل<input id="holder" maxlength="120"></label>
-      <fieldset>
-        <legend>صفة صاحب الحقوق</legend>
-        <label><input type="radio" name="role" value="owner" checked> صاحب العمل</label>
-        <label><input type="radio" name="role" value="producer"> منتج مخوّل</label>
-      </fieldset>
-      <label>مرجع تسجيل الأصل أو وثيقة الحقوق<input id="reference" maxlength="200"></label>
-      <p class="muted">هذا تصريح وإيداع داخل المنصة، وليس تحققاً قانونياً من الملكية.</p>
-    </div>
+    <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
+    <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — دون حد أقصى للمدة</p>
+    <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
     <div>
       <button id="submit" data-testid="clip-submit" type="submit" disabled>نشر</button>
       <button id="cancel" class="secondary" type="button" hidden>إلغاء</button>
@@ -61,6 +45,7 @@ root.innerHTML = `
       <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p>
     </div>
     <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p>
+    <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div>
   </form>
   <section aria-labelledby="feed-title">
     <h2 id="feed-title">أحدث الكليبز</h2>
@@ -73,13 +58,11 @@ const auth = element<HTMLDivElement>("auth");
 const form = element<HTMLFormElement>("upload");
 const input = element<HTMLInputElement>("file");
 const chooseFile = element<HTMLButtonElement>("choose-file");
-const sizeWarning = element<HTMLParagraphElement>("size-warning");
+const durationStatus = element<HTMLParagraphElement>("duration-status");
+const receipt = element<HTMLDivElement>("receipt");
 const submit = element<HTMLButtonElement>("submit");
 const cancel = element<HTMLButtonElement>("cancel");
 const selection = element<HTMLParagraphElement>("selection");
-const rights = element<HTMLDivElement>("rights");
-const holder = element<HTMLInputElement>("holder");
-const reference = element<HTMLInputElement>("reference");
 const progressWrap = element<HTMLDivElement>("progress-wrap");
 const progress = element<HTMLProgressElement>("progress");
 const status = element<HTMLParagraphElement>("upload-status");
@@ -87,41 +70,51 @@ const uploadError = element<HTMLParagraphElement>("upload-error");
 const feed = element<HTMLDivElement>("feed");
 const mutableControls = Array.from(form.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, #choose-file"));
 let cachedFile: File | null = null;
+let selectedDuration: number | null = null;
+let durationController: AbortController | null = null;
 let uploadController: AbortController | null = null;
 
 function formatBytes(bytes: number) {
   return new Intl.NumberFormat("ar").format(bytes) + " بايت";
 }
 
-function selectedValue(name: string) {
-  return (form.elements.namedItem(name) as RadioNodeList).value;
+function formatDuration(seconds: number) {
+  const whole = Math.floor(seconds);
+  return `${Math.floor(whole / 3600).toString().padStart(2, "0")}:${Math.floor(whole / 60 % 60).toString().padStart(2, "0")}:${(whole % 60).toString().padStart(2, "0")}`;
 }
-
-form.addEventListener("change", event => {
-  if ((event.target as HTMLInputElement).name === "purpose") {
-    const original = selectedValue("purpose") === "original";
-    rights.hidden = !original;
-    holder.required = original;
-    reference.required = original;
-  }
-});
 
 chooseFile.addEventListener("click", () => input.click());
 
-input.addEventListener("change", () => {
+input.addEventListener("change", async () => {
   const selected = input.files?.[0];
   // A dismissed picker must not discard the previous selection.
   if (!selected) return;
+  durationController?.abort();
+  const probing = new AbortController();
+  durationController = probing;
   cachedFile = selected;
+  selectedDuration = null;
   chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MiB`;
   selection.textContent = `${selected.name} — تم اختيار الملف ✓`;
-  submit.disabled = false;
+  submit.disabled = true;
   uploadError.textContent = "";
   progressWrap.hidden = true;
   status.textContent = "";
-  sizeWarning.hidden = selected.size <= SIZE_WARNING_BYTES;
-  sizeWarning.textContent = sizeWarning.hidden ? "" :
-    "تنبيه: الملف يتجاوز 25 MiB. يمكنك محاولة النشر، لكن الخادم يطبق حد الحجم ولا يضغط الملفات تلقائياً. للفيديو، جرّب تقليل الحجم إلى 720p.";
+  receipt.hidden = true;
+  receipt.replaceChildren();
+  durationStatus.textContent = "المدة: جارٍ القراءة…";
+  try {
+    const duration = await readClipDuration(selected, probing.signal);
+    if (probing.signal.aborted || cachedFile !== selected) return;
+    selectedDuration = duration;
+    durationStatus.textContent = `المدة: ${formatDuration(duration)}`;
+    if (duration < 60) uploadError.textContent = "خاص دقيقة الفوق";
+    else submit.disabled = false;
+  } catch (error) {
+    if (probing.signal.aborted || cachedFile !== selected) return;
+    durationStatus.textContent = "المدة غير متاحة";
+    uploadError.textContent = error instanceof Error ? error.message : "تعذر قراءة مدة الملف";
+  }
 });
 
 cancel.addEventListener("click", () => uploadController?.abort(new DOMException("Cancelled", "AbortError")));
@@ -130,22 +123,14 @@ form.addEventListener("submit", async event => {
   event.preventDefault();
   const file = cachedFile;
   if (!file || uploadController) return;
-  const purpose = selectedValue("purpose") as "story" | "original";
-  if (purpose === "original" && (holder.value.trim().length < 2 || reference.value.trim().length < 3)) {
-    uploadError.textContent = "أدخل اسم صاحب الحقوق ومرجع تسجيل الأصل";
+  if (selectedDuration === null || selectedDuration < 60) {
+    uploadError.textContent = "خاص دقيقة الفوق";
     return;
   }
   const metadata: ClipUploadMetadata = {
     title: file.name,
     contentType: file.type || "application/octet-stream",
-    durationSec: 0,
-    purpose,
-    isOriginalFootage: element<HTMLInputElement>("original-footage").checked,
-    ...(purpose === "original" ? {
-      originalReference: reference.value.trim(),
-      rightsHolderName: holder.value.trim(),
-      rightsHolderRole: selectedValue("role") as "owner" | "producer",
-    } : {}),
+    durationSec: selectedDuration,
   };
   uploadController = new AbortController();
   mutableControls.forEach(control => { control.disabled = true; });
@@ -157,8 +142,8 @@ form.addEventListener("submit", async event => {
   status.textContent = `0 من ${formatBytes(file.size)}`;
   uploadError.textContent = "";
   try {
-    await uploadClip(file, metadata, uploadController.signal, percent => {
-      const uploaded = Math.min(file.size, Math.round(file.size * percent / 100));
+    const published = await uploadClip(file, metadata, uploadController.signal, (percent, uploadedBytes) => {
+      const uploaded = uploadedBytes ?? Math.min(file.size, Math.round(file.size * percent / 100));
       const displayPercent = Math.floor(percent);
       progress.value = percent;
       status.textContent = percent === 100
@@ -166,11 +151,25 @@ form.addEventListener("submit", async event => {
         : `${formatBytes(uploaded)} من ${formatBytes(file.size)} — ${displayPercent}%`;
     });
     cachedFile = null;
+    selectedDuration = null;
     input.value = "";
-    chooseFile.textContent = "اختيار ملف";
-    sizeWarning.hidden = true;
-    sizeWarning.textContent = "";
+    chooseFile.textContent = "Choisir un fichier — فيديو / أوديو";
+    durationStatus.textContent = "";
     selection.textContent = "تم نشر الملف";
+    receipt.replaceChildren();
+    const name = document.createElement("p");
+    name.textContent = published.name;
+    const code = document.createElement("p");
+    code.textContent = published.code;
+    code.dir = "ltr";
+    receipt.append(name, code);
+    if (published.url) {
+      const link = document.createElement("a");
+      link.href = published.url;
+      link.textContent = "فتح الملف";
+      receipt.append(link);
+    }
+    receipt.hidden = false;
     await loadFeed();
   } catch (error) {
     const cancelled = uploadController.signal.aborted;
@@ -180,12 +179,12 @@ form.addEventListener("submit", async event => {
   } finally {
     uploadController = null;
     mutableControls.forEach(control => { control.disabled = false; });
-    submit.disabled = !cachedFile;
+    submit.disabled = !cachedFile || selectedDuration === null || selectedDuration < 60;
     cancel.hidden = true;
   }
 });
 
-type Clip = { id: number; video_url: string; content_type?: string; title?: string; rights_purpose?: string };
+type Clip = { id: number; video_url: string; content_type?: string; title?: string; name?: string; code?: string };
 
 function renderClips(clips: Clip[]) {
   feed.replaceChildren();
@@ -196,18 +195,18 @@ function renderClips(clips: Clip[]) {
   for (const clip of clips.slice(0, 3)) {
     const article = document.createElement("article");
     const title = document.createElement("p");
-    title.textContent = clip.title || (clip.content_type?.startsWith("audio/") ? "مقطع صوتي" : "فيديو");
+    title.textContent = clip.name || clip.title || (clip.content_type?.startsWith("audio/") ? "مقطع صوتي" : "فيديو");
     const media = document.createElement(clip.content_type?.startsWith("audio/") ? "audio" : "video");
     media.setAttribute("controls", "");
     media.setAttribute("preload", "none");
     if (media instanceof HTMLVideoElement) media.playsInline = true;
     media.src = clip.video_url;
     article.append(title, media);
-    if (clip.rights_purpose === "original") {
-      const deposit = document.createElement("p");
-      deposit.className = "muted";
-      deposit.textContent = "أصل مودَع — تصريح بالحقوق، غير محقّق قانونياً";
-      article.append(deposit);
+    if (clip.code) {
+      const code = document.createElement("p");
+      code.textContent = clip.code;
+      code.dir = "ltr";
+      article.append(code);
     }
     feed.append(article);
   }
