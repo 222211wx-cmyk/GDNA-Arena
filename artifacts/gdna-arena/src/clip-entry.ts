@@ -5,6 +5,7 @@ import {
   type ClipUploadMetadata,
 } from "./components/clips/clipUpload";
 import { readClipDuration } from "./components/clips/readClipDuration";
+import { mountVideoActions } from "./components/clips/VideoActions";
 
 const BASE = import.meta.env.BASE_URL;
 const FEED_TIMEOUT_MS = 12_000;
@@ -26,6 +27,11 @@ style.textContent = `
   fieldset{display:grid;gap:calc(${space} * 3);border:1px solid ${palette.border};border-radius:${tokens.radius}}
   fieldset label{display:flex;align-items:center;gap:calc(${space} * 2)}
   progress{inline-size:100%;accent-color:${palette.primary}}video,audio{inline-size:100%;max-block-size:60vh;background:${palette.background}}
+  .video-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(calc(${space} * 24),1fr));gap:calc(${space} * 2);padding-block:calc(${space} * 2)}
+  .clip-action{display:grid;justify-items:center;gap:calc(${space} * 1);min-inline-size:0;white-space:nowrap;padding:calc(${space} * 2)}.clip-action.active{color:${palette.primary};border-color:${palette.primary}}
+  .clip-action strong{font-size:.75rem}.clip-comments,.comment-list{display:grid;gap:calc(${space} * 2)}.comment-form,.title-edit{display:flex;gap:calc(${space} * 2)}.comment-form input,.title-edit input{min-inline-size:0;flex:1}
+  .copy-link-fallback{inline-size:min(100%,28rem)}.clip-media-frame{overflow:hidden}
+  .clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}article{overflow:visible}
   a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
 `;
 document.head.appendChild(style);
@@ -219,14 +225,26 @@ function renderClips(clips: Clip[]) {
   }
   for (const clip of clips.slice(0, 3)) {
     const article = document.createElement("article");
-    const title = document.createElement("p");
+    article.id = `clip-${clip.id}`;
+    const title = document.createElement("h3");
     title.textContent = clip.name || clip.title || (clip.content_type?.startsWith("audio/") ? "مقطع صوتي" : "فيديو");
     const media = document.createElement(clip.content_type?.startsWith("audio/") ? "audio" : "video");
     media.setAttribute("controls", "");
     media.setAttribute("preload", "none");
     if (media instanceof HTMLVideoElement) media.playsInline = true;
     media.src = clip.video_url;
-    article.append(title, media);
+    const mediaFrame = document.createElement("div");
+    mediaFrame.className = "clip-media-frame";
+    mediaFrame.append(media);
+    const actions = document.createElement("div");
+    article.append(title, mediaFrame, actions);
+    void mountVideoActions({
+      host: actions,
+      media,
+      titleElement: title,
+      clipId: clip.id,
+      code: clip.code,
+    });
     if (clip.code) {
       const code = document.createElement("p");
       const link = document.createElement("a");

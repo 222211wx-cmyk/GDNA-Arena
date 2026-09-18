@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   foreignKey,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
@@ -59,4 +60,22 @@ export const clipsTable = pgTable("clips", {
     .where(sql`${table.thumbnailObjectName} IS NULL AND ${table.isFrozen} = FALSE AND ${table.thumbnailRetryAttempts} < 8`),
   processingDue: index("clips_processing_due_idx").on(table.processingRetryAt, table.id)
     .where(sql`${table.processingStatus} IN ('queued', 'processing')`),
+}));
+
+export const clipLikesTable = pgTable("clip_likes", {
+  clipId: integer("clip_id").notNull().references(() => clipsTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  primaryKey: primaryKey({ columns: [table.clipId, table.userId] }),
+}));
+
+export const clipCommentsTable = pgTable("clip_comments", {
+  id: serial("id").primaryKey(),
+  clipId: integer("clip_id").notNull().references(() => clipsTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clipCreatedAt: index("clip_comments_clip_created_idx").on(table.clipId, table.createdAt, table.id),
 }));

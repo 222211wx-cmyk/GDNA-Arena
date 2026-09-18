@@ -11,12 +11,13 @@ test("code playback exposes pending state then a direct URL, never private objec
     id: 12, code: "HELX-123456", title: "A song", original_name: "A song.mp3",
     duration_sec: 86400, size_bytes: "2147483648", created_at: "2026-09-18T12:00:00Z",
     content_type: "audio/mp4", processing_status: "queued", object_name: "private-original",
+    user_id: 8, username: "producer", like_count: "3", comment_count: "2", liked_by_viewer: false,
   };
   let signed = 0, lookup = 0, unavailable = false;
   const warnings: unknown[] = [];
   const app = express();
   app.use("/api", createClipPlaybackRouter({
-    async find(code) { lookup++; assert.equal(code, "HELX-123456"); return row; },
+    async find(code, viewerId) { lookup++; assert.equal(code, "HELX-123456"); assert.equal(viewerId, null); return row; },
     async sign(filename) {
       signed++; assert.equal(filename, "private-original");
       if (unavailable) throw new Error("Signing offline");
@@ -38,6 +39,10 @@ test("code playback exposes pending state then a direct URL, never private objec
     assert.equal(pending.clip.size, 2147483648);
     assert.equal(pending.clip.originalName, "A song.mp3");
     assert.equal(pending.clip.id, 12);
+    assert.deepEqual(pending.clip.author, { id: 8, username: "producer" });
+    assert.equal(pending.clip.isOwner, false);
+    assert.equal(pending.clip.likeCount, 3);
+    assert.equal(pending.clip.commentCount, 2);
     assert.equal("object_name" in pending.clip, false);
     assert.equal(signed, 0);
     row.processing_status = "ready";

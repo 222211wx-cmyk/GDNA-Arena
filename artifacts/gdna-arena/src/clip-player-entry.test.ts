@@ -14,6 +14,7 @@ describe("code-based clip player", () => {
   it("loads a direct URL and uses the correct native media element", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       clip: {
+        id: 42,
         code: "HELX-123456",
         name: "My song",
         originalName: "song.mp3",
@@ -23,6 +24,11 @@ describe("code-based clip player", () => {
         contentType: "audio/mpeg",
         processingStatus: "ready",
         url: "https://storage.example/song.mp3",
+        author: { id: 7, username: "producer" },
+        isOwner: false,
+        liked: false,
+        likeCount: 4,
+        commentCount: 2,
       },
     }), { status: 200, headers: { "Content-Type": "application/json" } })));
     const { renderClipPlayer } = await import("./clip-player-entry");
@@ -30,6 +36,10 @@ describe("code-based clip player", () => {
     await vi.waitFor(() => expect(document.querySelector("audio")).not.toBeNull());
     expect((document.querySelector("audio") as HTMLAudioElement).src).toBe("https://storage.example/song.mp3");
     expect(document.getElementById("player-name")?.textContent).toBe("My song");
+    expect(document.querySelector('[aria-label="Like"]')?.textContent).toContain("4");
+    expect(document.querySelector('[aria-label="Comments"]')?.textContent).toContain("2");
+    expect(document.querySelector('[aria-label="Message"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Fullscreen"]')).not.toBeNull();
     expect(document.body.dataset.clipReady).toBe("true");
   });
 

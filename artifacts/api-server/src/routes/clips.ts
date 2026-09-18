@@ -18,6 +18,7 @@ import { createSimpleClipUploadRouter } from "./clip-simple-upload.js";
 import {
   CLIP_EXT, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, resolveClipUploadType, clipDownloadExtension,
 } from "../lib/clip-upload-protocol.js";
+import { validateContent } from "../lib/moderate.js";
 
 // ─── CLIPS — كليبسز (Reels-style stories and original declarations) ──────────
 // Publishing rules:
@@ -32,11 +33,15 @@ import { CLIP_THUMBNAIL_MAX_ATTEMPTS } from "../jobs/clip-thumbnail-retry.js";
 
 const router: IRouter = Router();
 router.use(createClipPlaybackRouter({
-  async find(code) {
+  async find(code, viewerId) {
     const { rows } = await pool.query(
-      `SELECT id,code,title,original_name,duration_sec,size_bytes,created_at,content_type,
-              processing_status,object_name FROM clips WHERE code=$1 AND is_frozen=FALSE`,
-      [code],
+      `SELECT c.id,c.code,c.title,c.original_name,c.duration_sec,c.size_bytes,c.created_at,c.content_type,
+              c.processing_status,c.object_name,c.user_id,c.username,
+              (SELECT COUNT(*) FROM clip_likes l WHERE l.clip_id=c.id) AS like_count,
+              (SELECT COUNT(*) FROM clip_comments m WHERE m.clip_id=c.id) AS comment_count,
+              EXISTS(SELECT 1 FROM clip_likes l WHERE l.clip_id=c.id AND l.user_id=$2) AS liked_by_viewer
+       FROM clips c WHERE c.code=$1 AND c.is_frozen=FALSE`,
+      [code, viewerId],
     );
     return rows[0] ?? null;
   },
@@ -128,6 +133,21 @@ export async function ensureClipsTables(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (clip_id, viewer_ip)
       );
+      CREATE TABLE IF NOT EXISTS clip_likes (
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clip_id, user_id)
+      );
+      CREATE TABLE IF NOT EXISTS clip_comments (
+        id SERIAL PRIMARY KEY,
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS clip_comments_clip_created_idx
+        ON clip_comments (clip_id, created_at, id);
       -- No foreign key: cleanup must survive deletion of the clip and its owner.
       CREATE TABLE IF NOT EXISTS clip_storage_cleanup (
         object_name TEXT PRIMARY KEY,
@@ -311,6 +331,106 @@ router.patch("/clips/:id", async (req, res): Promise<void> => {
     logger.error({ err: e, clipId: id, userId }, "[clips] title update failed");
     res.status(500).json({ error: "Failed" });
   }
+});
+
+router.get("/clips/:id/engagement", async (req, res): Promise<void> => {
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const viewerId = (req.session as { userId?: number } | undefined)?.userId ?? null;
+  const { rows } = await requirePool().query(
+    `SELECT c.id,c.user_id,c.username,c.title,c.code,
+            (SELECT COUNT(*) FROM clip_likes l WHERE l.clip_id=c.id)::text AS like_count,
+            (SELECT COUNT(*) FROM clip_comments m WHERE m.clip_id=c.id)::text AS comment_count,
+            EXISTS(SELECT 1 FROM clip_likes l WHERE l.clip_id=c.id AND l.user_id=$2) AS liked
+     FROM clips c WHERE c.id=$1 AND c.is_frozen=FALSE`, [id, viewerId],
+  );
+  const row = rows[0];
+  if (!row) { res.status(404).json({ error: "Clip not found" }); return; }
+  res.json({
+    engagement: {
+      id: row.id,
+      title: row.title,
+      code: row.code,
+      author: { id: row.user_id, username: row.username },
+      isOwner: viewerId === row.user_id,
+      liked: row.liked,
+      likeCount: Number(row.like_count),
+      commentCount: Number(row.comment_count),
+    },
+  });
+});
+
+// ─── POST /clips/:id/like — one persisted heart per citizen ──────────────────
+router.post("/clips/:id/like", async (req, res): Promise<void> => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const client = await requirePool().connect();
+  try {
+    await client.query("BEGIN");
+    const visible = await client.query(`SELECT id FROM clips WHERE id=$1 AND is_frozen=FALSE FOR UPDATE`, [id]);
+    if (!visible.rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Clip not found" });
+      return;
+    }
+    const inserted = await client.query(
+      `INSERT INTO clip_likes (clip_id,user_id) VALUES ($1,$2)
+       ON CONFLICT DO NOTHING RETURNING clip_id`, [id, userId],
+    );
+    const liked = Boolean(inserted.rows[0]);
+    if (!liked) await client.query(`DELETE FROM clip_likes WHERE clip_id=$1 AND user_id=$2`, [id, userId]);
+    const count = await client.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM clip_likes WHERE clip_id=$1`, [id]);
+    await client.query("COMMIT");
+    res.json({ liked, likeCount: Number(count.rows[0]?.count ?? 0) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    logger.error({ err: error, clipId: id, userId }, "[clips] like failed");
+    res.status(500).json({ error: "Failed to update like" });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── GET/POST /clips/:id/comments — public list, authenticated creation ──────
+router.get("/clips/:id/comments", async (req, res): Promise<void> => {
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const visible = await requirePool().query(`SELECT id FROM clips WHERE id=$1 AND is_frozen=FALSE`, [id]);
+  if (!visible.rows[0]) { res.status(404).json({ error: "Clip not found" }); return; }
+  const { rows } = await requirePool().query(
+    `SELECT recent.id,recent.content,recent.created_at,recent.user_id,u.username
+     FROM (
+       SELECT id,content,created_at,user_id FROM clip_comments
+       WHERE clip_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100
+     ) recent
+     JOIN users u ON u.id=recent.user_id
+     ORDER BY recent.created_at ASC,recent.id ASC`, [id],
+  );
+  res.json({ comments: rows });
+});
+
+router.post("/clips/:id/comments", async (req, res): Promise<void> => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+  if (!content || content.length > 500) {
+    res.status(400).json({ error: "Comment must be between 1 and 500 characters" });
+    return;
+  }
+  const moderation = await validateContent(content, { allowTrivial: true });
+  if (!moderation.ok) { res.status(400).json({ error: moderation.reason }); return; }
+  const { rows } = await requirePool().query(
+    `INSERT INTO clip_comments (clip_id,user_id,content)
+     SELECT $1,$2,$3 WHERE EXISTS(SELECT 1 FROM clips WHERE id=$1 AND is_frozen=FALSE)
+     RETURNING id,content,created_at,user_id`, [id, userId, content],
+  );
+  if (!rows[0]) { res.status(404).json({ error: "Clip not found" }); return; }
+  const user = await requirePool().query<{ username: string }>(`SELECT username FROM users WHERE id=$1`, [userId]);
+  res.status(201).json({ comment: { ...rows[0], username: user.rows[0]?.username } });
 });
 
 // ─── DELETE /clips/:id — owner or admin removes the clip permanently ──────────

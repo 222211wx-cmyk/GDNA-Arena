@@ -35,3 +35,4 @@
 - [Completion merge validation](completion-merge-validation.md) — completion can merge concurrent changes before checks; repair the current merged file, not the previously tested snapshot.
 - [Clip media probing](clip-media-probing.md) — seek-related loopback resets are normal; distinguish client disconnects from fatal storage errors.
 - [Approved orphan cleanup](approved-orphan-cleanup.md) — durable name tombstones fence late deletes; signed orphan approvals stay separate from ordinary deletion.
+- [Workflow restart serialization](workflow-restart-serialization.md) — restart artifact services serially; parallel restarts have left duplicate processes and misleading success responses.

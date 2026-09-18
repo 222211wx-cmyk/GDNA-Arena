@@ -1,4 +1,5 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
+import { mountVideoActions, type VideoActionState } from "./components/clips/VideoActions";
 
 const BASE = import.meta.env.BASE_URL;
 const FETCH_TIMEOUT_MS = 12_000;
@@ -15,6 +16,12 @@ type ClipByCode = {
   contentType: string;
   processingStatus: string;
   url: string | null;
+  id: number;
+  author: { id: number; username: string };
+  isOwner: boolean;
+  liked: boolean;
+  likeCount: number;
+  commentCount: number;
 };
 
 const palette = tokens.color.dark;
@@ -27,8 +34,13 @@ function addStyles() {
     *{box-sizing:border-box}body{margin:0;background:${palette.background};color:${palette.foreground}}
     main{padding:calc(${space} * 4);margin:auto;max-width:48rem}header{display:flex;align-items:center;justify-content:space-between}
     section{display:grid;gap:calc(${space} * 3);padding:calc(${space} * 4);margin-block:calc(${space} * 4);background:${palette.card};border:1px solid ${palette.border};border-radius:${tokens.radius}}
-    h1,p{margin-block:calc(${space} * 2)}button{font:inherit;color:${palette.primaryForeground};background:${palette.primary};border:1px solid ${palette.input};border-radius:${tokens.radius};padding:calc(${space} * 3);cursor:pointer;font-weight:700}
-    video,audio{inline-size:100%;max-block-size:72vh;background:${palette.background}}a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
+    h1,p{margin-block:calc(${space} * 2)}button,input{font:inherit;color:${palette.foreground};background:${palette.secondary};border:1px solid ${palette.input};border-radius:${tokens.radius};padding:calc(${space} * 3)}
+    button{cursor:pointer;font-weight:700}button:disabled{opacity:.55}.video-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(calc(${space} * 24),1fr));gap:calc(${space} * 2);padding-block:calc(${space} * 2)}
+    .clip-action{display:grid;justify-items:center;gap:calc(${space} * 1);min-inline-size:0;white-space:nowrap;padding:calc(${space} * 2)}.clip-action.active{color:${palette.primary};border-color:${palette.primary}}
+    .clip-action strong{font-size:.75rem}.clip-comments,.comment-list{display:grid;gap:calc(${space} * 2)}.comment-form,.title-edit{display:flex;gap:calc(${space} * 2)}.comment-form input,.title-edit input{min-inline-size:0;flex:1}
+    .copy-link-fallback{inline-size:min(100%,28rem)}
+    video,audio{inline-size:100%;max-block-size:72vh;background:${palette.background}}.clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}
+    #player-media{overflow:hidden}a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
   `;
   document.head.append(style);
 }
@@ -90,6 +102,7 @@ export function renderClipPlayer(code: string) {
         <p id="player-code" dir="ltr">${code}</p>
         <h1 id="player-name">جارٍ تحميل الكليب…</h1>
         <div id="player-media"></div>
+        <div id="player-actions"></div>
         <p id="player-status" class="muted" role="status" aria-live="polite"></p>
         <p id="player-error" class="error" role="alert" aria-live="assertive"></p>
         <button id="player-retry" type="button" hidden>إعادة المحاولة</button>
@@ -99,6 +112,7 @@ export function renderClipPlayer(code: string) {
   const name = document.getElementById("player-name") as HTMLHeadingElement;
   const mediaRoot = document.getElementById("player-media") as HTMLDivElement;
   const status = document.getElementById("player-status") as HTMLParagraphElement;
+  const actions = document.getElementById("player-actions") as HTMLDivElement;
   const error = document.getElementById("player-error") as HTMLParagraphElement;
   const retry = document.getElementById("player-retry") as HTMLButtonElement;
   let loadController: AbortController | null = null;
@@ -110,6 +124,7 @@ export function renderClipPlayer(code: string) {
     retry.hidden = true;
     error.textContent = "";
     mediaRoot.replaceChildren();
+    actions.replaceChildren();
     let polls = 0;
     try {
       while (!controller.signal.aborted) {
@@ -133,6 +148,23 @@ export function renderClipPlayer(code: string) {
           mediaRoot.replaceChildren(media);
           status.textContent = "التشغيل في الخلفية أو مع قفل الشاشة يعتمد على نظام الهاتف والمتصفح.";
           configureMediaSession(clip, media);
+          await mountVideoActions({
+            host: actions,
+            media,
+            titleElement: name,
+            clipId: clip.id,
+            code: clip.code,
+            initial: {
+              id: clip.id,
+              code: clip.code,
+              title: clip.name,
+              author: clip.author,
+              isOwner: clip.isOwner,
+              liked: clip.liked,
+              likeCount: clip.likeCount,
+              commentCount: clip.commentCount,
+            } satisfies VideoActionState,
+          });
           document.title = `${name.textContent} — HELIXLY`;
           return;
         }
