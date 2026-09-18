@@ -69,6 +69,7 @@ import CinemaPage   from "@/pages/cinema";
 import AdminRevenuePage from "@/pages/admin-revenue";
 import FinanceOnboarding from "@/pages/finance-onboarding";
 import AdminFinance from "@/pages/admin-finance";
+import AdminClipThumbnailsPage from "@/pages/admin-clip-thumbnails";
 import RoyalVerificationPage from "@/pages/royal-verification";
 
 const queryClient = new QueryClient();
@@ -148,6 +149,7 @@ function PageWrapper() {
           <Route path="/royal-verification" component={RoyalVerificationPage} />
           <Route path="/admin/revenue" component={AdminRevenuePage} />
           <Route path="/admin/finance" component={AdminFinance} />
+          <Route path="/admin/clips/thumbnails" component={AdminClipThumbnailsPage} />
           <Route component={NotFound} />
         </Switch>
       </ErrorBoundary>

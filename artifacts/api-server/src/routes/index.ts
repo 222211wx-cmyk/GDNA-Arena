@@ -47,6 +47,7 @@ import turnConfigRouter from "./turn-config";
 import callPushRouter from "./call-push";
 import communicationGroupsRouter from "./communication-groups";
 import browserPushRouter from "./browser-push";
+import adminClipThumbnailsRouter from "./admin-clip-thumbnails";
 
 const router: IRouter = Router();
 
@@ -79,6 +80,7 @@ router.use(empireMediaRouter);
 router.use(rightsRouter);
 router.use(ppoRouter);
 router.use(clipsRouter);
+router.use(adminClipThumbnailsRouter);
 router.use(levelsRouter);
 router.use(rtcRouter);
 router.use(turnConfigRouter);

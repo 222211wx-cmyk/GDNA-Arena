@@ -22,6 +22,7 @@ import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
 //  • Views earn coins via monetization_settings (content_type 'clip').
 import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
 import { publishClip, ClipUploadError } from "../lib/clip-publish.js";
+import { CLIP_THUMBNAIL_MAX_ATTEMPTS } from "../jobs/clip-thumbnail-retry.js";
 
 const router: IRouter = Router();
 router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));
@@ -57,7 +58,8 @@ export async function ensureClipsTables(): Promise<void> {
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
       CREATE INDEX IF NOT EXISTS clips_thumbnail_retry_due_idx
         ON clips (thumbnail_retry_at, id)
-        WHERE thumbnail_object_name IS NULL AND is_frozen = FALSE AND thumbnail_retry_attempts < 8;
+        WHERE thumbnail_object_name IS NULL AND is_frozen = FALSE
+          AND thumbnail_retry_attempts < ${CLIP_THUMBNAIL_MAX_ATTEMPTS};
       CREATE TABLE IF NOT EXISTS clip_views (
         clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
         viewer_ip TEXT NOT NULL,

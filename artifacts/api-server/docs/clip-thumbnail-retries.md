@@ -86,27 +86,30 @@ serves completed JPEGs; private object names are not returned to the feed.
 
 ## Inspect or requeue exhausted clips
 
-After correcting a storage/processing problem, an operator can inspect:
+Open `/admin/clips/thumbnails` to inspect clips that have a null poster after
+exhausting all eight attempts. The admin API lists them newest-first with a
+bounded page size (default 25, maximum 100) and an ID cursor. Inspection is
+limited to 60 requests per minute per authenticated admin.
 
-```sql
-SELECT id, thumbnail_retry_attempts, thumbnail_retry_at
-FROM clips
-WHERE thumbnail_object_name IS NULL
-ORDER BY thumbnail_retry_at, id;
-```
+Always fix the cause first: confirm storage access, generator dependencies,
+supported source media, and current worker health before requeueing. In the UI,
+review the clip ID/title/owner, attempt count, last scheduled retry, and frozen
+state, then use the targeted confirmation for that one clip.
 
-Explicitly requeue a **specific** clip (use a bound parameter, never user SQL):
+Requeue is limited to 10 requests per minute per authenticated admin. It only
+resets the attempt counter and schedules the existing worker; HTTP never runs
+generation. The next worker starts 30 seconds after API startup and otherwise
+runs five minutes after each completed batch, so a successful requeue is not a
+promise of immediate processing.
 
-```sql
-UPDATE clips
-SET thumbnail_retry_attempts = 0, thumbnail_retry_at = NOW()
-WHERE id = $1 AND thumbnail_object_name IS NULL AND is_frozen = FALSE;
-```
+The server atomically accepts a requeue only when the specific row still has no
+thumbnail, is unfrozen, and remains at or above the shared eight-attempt limit.
+It refuses stale rows and refuses while the thumbnail worker holds its advisory
+lock. Every accepted requeue logs the admin actor ID and clip ID. Object names
+and storage paths are never exposed by the admin API, including error responses.
 
 Do not reset every exhausted clip periodically: permanently unsupported media
-must not create an unlimited processing loop. No public/admin HTTP trigger is
-added by this worker.
-
+must not create an unlimited processing loop.
 ## Isolated PostgreSQL regression tests
 
 From the workspace root:

@@ -39,7 +39,9 @@ import type {
   DailyRewardResult,
   DeclineCallParams,
   ErrorResponse,
+  ExhaustedClipThumbnailsPage,
   GetClipsFeedParams,
+  GetExhaustedClipThumbnailsParams,
   GetGsFiguresParams,
   GetGsNewsParams,
   GetGsTraditionsParams,
@@ -58,6 +60,7 @@ import type {
   MissedCallsSeenInput,
   PlayResult,
   RegistrationInput,
+  RequeuedClipThumbnail,
   SuccessResponse,
   TransactionsResponse
 } from './api.schemas';
@@ -88,6 +91,188 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetExhaustedClipThumbnailsUrl = (params?: GetExhaustedClipThumbnailsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/clips/thumbnails/exhausted?${stringifiedParams}` : `/api/admin/clips/thumbnails/exhausted`
+}
+
+/**
+ * @summary Inspect exhausted null-thumbnail clips
+ */
+export const getExhaustedClipThumbnails = async (params?: GetExhaustedClipThumbnailsParams, options?: Parameters<typeof customFetch>[1]): Promise<ExhaustedClipThumbnailsPage> => {
+
+  return customFetch<ExhaustedClipThumbnailsPage>(getGetExhaustedClipThumbnailsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetExhaustedClipThumbnailsQueryKey = (params?: GetExhaustedClipThumbnailsParams,) => {
+    return [
+    `/api/admin/clips/thumbnails/exhausted`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetExhaustedClipThumbnailsQueryOptions = <TData = Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError = ErrorType<ErrorResponse>>(params?: GetExhaustedClipThumbnailsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExhaustedClipThumbnailsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>> = ({ signal }) => getExhaustedClipThumbnails(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetExhaustedClipThumbnailsQueryResult = NonNullable<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>>
+export type GetExhaustedClipThumbnailsQueryError = ErrorType<ErrorResponse>
+
+
+export function useGetExhaustedClipThumbnails<TData = Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError = ErrorType<ErrorResponse>>(
+ params: undefined |  GetExhaustedClipThumbnailsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExhaustedClipThumbnails>>,
+          TError,
+          Awaited<ReturnType<typeof getExhaustedClipThumbnails>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExhaustedClipThumbnails<TData = Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetExhaustedClipThumbnailsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExhaustedClipThumbnails>>,
+          TError,
+          Awaited<ReturnType<typeof getExhaustedClipThumbnails>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExhaustedClipThumbnails<TData = Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetExhaustedClipThumbnailsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Inspect exhausted null-thumbnail clips
+ */
+
+export function useGetExhaustedClipThumbnails<TData = Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetExhaustedClipThumbnailsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExhaustedClipThumbnails>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetExhaustedClipThumbnailsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRequeueClipThumbnailUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/clips/thumbnails/${id}/requeue`
+}
+
+/**
+ * @summary Requeue one eligible exhausted clip thumbnail
+ */
+export const requeueClipThumbnail = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<RequeuedClipThumbnail> => {
+
+  return customFetch<RequeuedClipThumbnail>(getRequeueClipThumbnailUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRequeueClipThumbnailMutationKey = () => ['requeueClipThumbnail'] as const;
+
+export const getRequeueClipThumbnailMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requeueClipThumbnail>>, TError,RequeueClipThumbnailMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requeueClipThumbnail>>, TError,RequeueClipThumbnailMutationVariables, TContext> => {
+
+const mutationKey = getRequeueClipThumbnailMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requeueClipThumbnail>>, RequeueClipThumbnailMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  requeueClipThumbnail(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequeueClipThumbnailMutationResult = NonNullable<Awaited<ReturnType<typeof requeueClipThumbnail>>>
+
+    export type RequeueClipThumbnailMutationError = ErrorType<ErrorResponse>
+    export type RequeueClipThumbnailMutationVariables = {id: number}
+
+    /**
+ * @summary Requeue one eligible exhausted clip thumbnail
+ */
+export const useRequeueClipThumbnail = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requeueClipThumbnail>>, TError,RequeueClipThumbnailMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof requeueClipThumbnail>>,
+        TError,
+        RequeueClipThumbnailMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRequeueClipThumbnailMutationOptions(options), queryClient);
+    }
 
 export const getGetClipsFeedUrl = (params?: GetClipsFeedParams,) => {
   const normalizedParams = new URLSearchParams();

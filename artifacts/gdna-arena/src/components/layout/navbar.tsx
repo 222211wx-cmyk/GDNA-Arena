@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Search, Trophy, Music, Film, Newspaper, Landmark,
   Gamepad2, LogOut, Globe, LayoutDashboard, Wallet,
-  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User, ShoppingBag
+  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User, ShoppingBag, ImageOff
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
@@ -222,6 +222,22 @@ export function Navbar() {
             <Mic2 size={14} />
             {t("press")}
           </Link>
+
+          {/* Admin-only: clip thumbnail repair tool */}
+          {user?.isAdmin && (
+            <Link
+              href="/admin/clips/thumbnails"
+              data-testid="nav-admin-clip-thumbnails"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                isActive("/admin/clips/thumbnails")
+                  ? "text-primary bg-primary/10 border-b-2 border-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              }`}
+            >
+              <ImageOff size={15} />
+              Clip Thumbnails
+            </Link>
+          )}
         </nav>
 
         {/* ── Right controls ── */}
@@ -469,6 +485,21 @@ export function Navbar() {
                 </Link>
               );
             })}
+            {user?.isAdmin && (
+              <Link
+                href="/admin/clips/thumbnails"
+                onClick={() => setMobileOpen(false)}
+                data-testid="nav-admin-clip-thumbnails-menu"
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
+                  isActive("/admin/clips/thumbnails")
+                    ? "text-primary bg-primary/10"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                }`}
+              >
+                <ImageOff size={16} />
+                Clip Thumbnails
+              </Link>
+            )}
           </div>
 
           {/* Growth / AI */}

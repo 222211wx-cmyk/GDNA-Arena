@@ -9,6 +9,52 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Inspect exhausted null-thumbnail clips
+ */
+
+export const getExhaustedClipThumbnailsQueryLimitDefault = 25;
+export const getExhaustedClipThumbnailsQueryLimitMax = 100;
+
+
+
+export const GetExhaustedClipThumbnailsQueryParams = zod.object({
+  "before": zod.coerce.number().int().min(1).optional(),
+  "limit": zod.coerce.number().int().min(1).max(getExhaustedClipThumbnailsQueryLimitMax).default(getExhaustedClipThumbnailsQueryLimitDefault)
+})
+
+export const GetExhaustedClipThumbnailsResponse = zod.object({
+  "clips": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "username": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "thumbnailRetryAttempts": zod.number().int(),
+  "thumbnailRetryAt": zod.coerce.date(),
+  "isFrozen": zod.boolean()
+})),
+  "nextBefore": zod.number().int().nullable(),
+  "maxAttempts": zod.literal(8)
+})
+
+
+/**
+ * @summary Requeue one eligible exhausted clip thumbnail
+ */
+
+
+
+export const RequeueClipThumbnailParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const RequeueClipThumbnailResponse = zod.object({
+  "id": zod.number().int(),
+  "thumbnailRetryAttempts": zod.literal(0),
+  "thumbnailRetryAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Paginated visible clips with persistent, clip-scoped poster URLs
  */
 

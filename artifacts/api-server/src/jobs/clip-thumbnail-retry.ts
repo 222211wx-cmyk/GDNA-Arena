@@ -5,13 +5,13 @@ import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
 import { generateClipThumbnail } from "../lib/clip-thumbnail.js";
 import { logger } from "../lib/logger";
 
-const INTERVAL_MS = 5 * 60_000;
-const BATCH_SIZE = 3;
-const BATCH_DEADLINE_MS = 90_000;
-const MAX_ATTEMPTS = 8;
+export const CLIP_THUMBNAIL_RETRY_INTERVAL_MS = 5 * 60_000;
+export const CLIP_THUMBNAIL_RETRY_BATCH_SIZE = 3;
+export const CLIP_THUMBNAIL_RETRY_BATCH_DEADLINE_MS = 90_000;
+export const CLIP_THUMBNAIL_MAX_ATTEMPTS = 8;
 // Dedicated two-int advisory-lock namespace, shared by all API replicas.
-const LOCK_NAMESPACE = 19183721;
-const LOCK_KEY = 1;
+export const CLIP_THUMBNAIL_LOCK_NAMESPACE = 19183721;
+export const CLIP_THUMBNAIL_LOCK_KEY = 1;
 let running = false;
 let timer: NodeJS.Timeout | undefined;
 
@@ -51,16 +51,17 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
   let locked = false;
   let destroyClient = false;
   let generated = 0;
-  const deadline = Date.now() + BATCH_DEADLINE_MS;
+  const deadline = Date.now() + CLIP_THUMBNAIL_RETRY_BATCH_DEADLINE_MS;
   try {
     await client.query("SET statement_timeout = '5s'");
     const lock = await client.query(
-      "SELECT pg_try_advisory_lock($1, $2) AS acquired", [LOCK_NAMESPACE, LOCK_KEY],
+      "SELECT pg_try_advisory_lock($1, $2) AS acquired",
+      [CLIP_THUMBNAIL_LOCK_NAMESPACE, CLIP_THUMBNAIL_LOCK_KEY],
     );
     locked = lock.rows[0]?.acquired === true;
     if (!locked) return 0;
 
-    for (let n = 0; n < BATCH_SIZE && Date.now() < deadline; n++) {
+    for (let n = 0; n < CLIP_THUMBNAIL_RETRY_BATCH_SIZE && Date.now() < deadline; n++) {
       // One autocommitted statement reserves work and durably advances backoff.
       // Failed/poison files cannot starve unattempted older clips.
       const claim = await client.query<{ id: number; thumbnail_retry_attempts: number }>(`
@@ -76,7 +77,7 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
             thumbnail_retry_at = NOW() + INTERVAL '5 minutes' *
               POWER(2, c.thumbnail_retry_attempts)
         FROM candidate WHERE c.id = candidate.id
-        RETURNING c.id, c.thumbnail_retry_attempts`, [MAX_ATTEMPTS]);
+        RETURNING c.id, c.thumbnail_retry_attempts`, [CLIP_THUMBNAIL_MAX_ATTEMPTS]);
       const candidate = claim.rows[0];
       if (!candidate) break;
 
@@ -109,7 +110,7 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
         // Retry overwrites it; deletion removes it even if the pointer is null.
         logger.warn({
           err, clipId: candidate.id, attempt: candidate.thumbnail_retry_attempts,
-          exhausted: candidate.thumbnail_retry_attempts >= MAX_ATTEMPTS,
+          exhausted: candidate.thumbnail_retry_attempts >= CLIP_THUMBNAIL_MAX_ATTEMPTS,
         }, "[clips] retry poster failed");
       }
     }
@@ -122,7 +123,12 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
   } finally {
     if (client) {
       if (locked && !destroyClient) {
-        try { await client.query("SELECT pg_advisory_unlock($1, $2)", [LOCK_NAMESPACE, LOCK_KEY]); }
+        try {
+          await client.query(
+            "SELECT pg_advisory_unlock($1, $2)",
+            [CLIP_THUMBNAIL_LOCK_NAMESPACE, CLIP_THUMBNAIL_LOCK_KEY],
+          );
+        }
         catch { destroyClient = true; }
       }
       if (!destroyClient) {
@@ -141,7 +147,7 @@ export function startClipThumbnailRetryJob(): void {
     try { await runClipThumbnailRetryBatch(); }
     catch (err) { logger.error({ err }, "[clips] poster retry batch failed"); }
     finally {
-      timer = setTimeout(tick, INTERVAL_MS);
+      timer = setTimeout(tick, CLIP_THUMBNAIL_RETRY_INTERVAL_MS);
       timer.unref();
     }
   };

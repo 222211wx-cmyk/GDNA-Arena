@@ -5,6 +5,43 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface ExhaustedClipThumbnail {
+  id: number;
+  title: string;
+  username: string;
+  createdAt: string;
+  thumbnailRetryAttempts: number;
+  thumbnailRetryAt: string;
+  isFrozen: boolean;
+}
+
+export type ExhaustedClipThumbnailsPageMaxAttempts = typeof ExhaustedClipThumbnailsPageMaxAttempts[keyof typeof ExhaustedClipThumbnailsPageMaxAttempts];
+
+
+export const ExhaustedClipThumbnailsPageMaxAttempts = {
+  NUMBER_8: 8,
+} as const;
+
+export interface ExhaustedClipThumbnailsPage {
+  clips: ExhaustedClipThumbnail[];
+  /** @nullable */
+  nextBefore: number | null;
+  maxAttempts: ExhaustedClipThumbnailsPageMaxAttempts;
+}
+
+export type RequeuedClipThumbnailThumbnailRetryAttempts = typeof RequeuedClipThumbnailThumbnailRetryAttempts[keyof typeof RequeuedClipThumbnailThumbnailRetryAttempts];
+
+
+export const RequeuedClipThumbnailThumbnailRetryAttempts = {
+  NUMBER_0: 0,
+} as const;
+
+export interface RequeuedClipThumbnail {
+  id: number;
+  thumbnailRetryAttempts: RequeuedClipThumbnailThumbnailRetryAttempts;
+  thumbnailRetryAt: string;
+}
+
 export interface ClipFeedItem {
   id: number;
   user_id: number;
@@ -362,6 +399,18 @@ export interface TransactionsResponse {
   transactions: TransactionItem[];
   balance: number;
 }
+
+export type GetExhaustedClipThumbnailsParams = {
+/**
+ * @minimum 1
+ */
+before?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
 
 export type GetClipsFeedParams = {
 /**
