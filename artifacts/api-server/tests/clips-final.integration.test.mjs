@@ -19,6 +19,8 @@ test("final publication: server code/name, duplicate content allowed, audio and 
   const f = await clipsFixture(t, database);
   const input = { userId: 7, filename: "uploaded.mp4", title: "movie.part.one.mp4",
     size: 3, sha256: "same-bytes", contentType: "video/mp4" };
+  await assert.rejects(f.a.publishClip({ ...input, size: 2 ** 31 + 1 }),
+    error => error.status === 413 && /2 GiB/.test(error.message));
   f.state.objects.set(input.filename, Buffer.from("abc"));
   f.state.duration = 59.999;
   for (const contentType of ["video/mp4", "audio/mpeg"]) {
@@ -29,7 +31,8 @@ test("final publication: server code/name, duplicate content allowed, audio and 
   assert.match(first.code, /^HELX-\d{6}$/);
   assert.equal(first.name, "movie.part.one");
   assert.equal(first.duration, 60);
-  assert.equal(first.processingStatus, "ready");
+  assert.equal(first.processingStatus, "queued");
+  assert.equal((await f.observer.query("SELECT original_name FROM clips WHERE id=$1", [first.id])).rows[0].original_name, "movie.part.one.mp4");
   f.state.duration = 90001;
   const second = await f.a.publishClip({ ...input, contentType: "audio/mpeg", purpose: "anything" });
   assert.equal(second.duration, 90001);
@@ -50,6 +53,7 @@ test("compression: durable reserved output, replica exclusion, deletion fence an
     upload_object_name=object_name, processing_status='queued' WHERE id=1`);
   const entered = f.gate(), release = f.gate();
   f.state.compress = async input => {
+    assert.equal(input.force, true, "every new job transcodes, including small uploads");
     assert.equal(input.size, 2147483648, "size is BIGINT, not int32");
     const row = (await f.observer.query("SELECT processing_output_object FROM clips WHERE id=1")).rows[0];
     assert.equal(row.processing_output_object, input.outputFilename, "pending output is durable BEFORE encoder");

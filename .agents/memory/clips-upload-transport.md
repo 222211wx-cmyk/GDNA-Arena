@@ -9,17 +9,17 @@ Keep the citizen Clips page isolated and lightweight: no browser compression, wh
 
 **How to apply:** Do not reintroduce browser MediaRecorder, ffmpeg, audio decoding, or large-file hashing. Retain resumable chunks, playback on demand, and server-side duration verification. Native metadata reading must have cancellation and a visible timeout/error, not an indefinite blocked selection. A multipart request is not chunked merely because storage streams it.
 
-Always retain a chosen audio/video file and show its name/size immediately. Enable Publish once its detected duration is at least 60 seconds, regardless of file size; apply no upper duration cap.
+Always retain a chosen audio/video file and show its name/size immediately. The latest upload specification allows files through 2 GiB with duration at least 60 seconds; apply no upper duration cap.
 
-**Why:** The owner's final specification on 2026-09-18 explicitly superseded both the 25 MiB restriction and the short-audio exception. The intended interaction is simply file → duration → generated name/code.
+**Why:** The owner's later architecture specification on 2026-09-18 explicitly replaced unrestricted size with a 2 GB maximum and requested 5 MB Tus chunks. The intended interaction remains file → duration → generated name/code, without the old 25 MiB restriction or short-audio exception.
 
-**How to apply:** No file-size gate or publication-type/rights/footage declarations in the form. Preserve selection on failure/cancellation, enforce the minimum again on the server, and show “خاص دقيقة الفوق” for short files.
+**How to apply:** No publication-type/rights/footage declarations. Enforce only the requested 2 GiB file maximum, preserve selection on failure/cancellation, enforce duration again on the server, and show “خاص دقيقة الفوق” for short files.
 
-Compression belongs on the server only for files over 100 MiB; video targets 720p, while audio uses audio encoding.
+All new clips are transcoded on the server; video targets at most 720p, while audio uses AAC. Browser compression remains forbidden.
 
-**Why:** The owner explicitly requested this in the final simple-publishing specification. It does not reduce the original upload transfer, and no transfer can progress at zero bandwidth.
+**Why:** The later architecture specification superseded the earlier above-100-MiB-only rule. Transcoding does not reduce the original upload transfer, and no transfer can progress at zero bandwidth.
 
-**How to apply:** Keep large transfers resumable and processing durable. Do not promise that server compression makes uploading the original faster or that audio has a video resolution.
+**How to apply:** Keep large transfers resumable and processing durable with bounded concurrency. Do not promise that server compression makes uploading the original faster, that audio has a video resolution, or that an Autoscale instance will stay alive for a long background encode.
 
 Scope upload retry identities to the exact selected File object unless full content identity is safely established.
 

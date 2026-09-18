@@ -1,5 +1,5 @@
 import type { File } from "@google-cloud/storage";
-import { objectStorageClient } from "./chatStorage";
+import { objectStorageClient } from "./chatStorage.js";
 export { retryThumbnailName } from "./clip-storage-names.js";
 
 export function clipFile(name: string): File {

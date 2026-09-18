@@ -7,6 +7,8 @@ import { logger } from "../lib/logger";
 import { createClipsFeedHandler } from "./clips-feed.js";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
 import { createClipsUploadsRouter } from "./clips-uploads.js";
+import { createClipPlaybackRouter } from "./clip-playback.js";
+import { signClipPlayback } from "../lib/clip-playback.js";
 import { ClipUploads } from "../lib/clip-uploads.js";
 import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js";
 import { clipByteRange } from "../lib/clip-byte-range.js";
@@ -29,6 +31,18 @@ import { publishClip, ClipUploadError } from "../lib/clip-publish.js";
 import { CLIP_THUMBNAIL_MAX_ATTEMPTS } from "../jobs/clip-thumbnail-retry.js";
 
 const router: IRouter = Router();
+router.use(createClipPlaybackRouter({
+  async find(code) {
+    const { rows } = await pool.query(
+      `SELECT id,code,title,original_name,duration_sec,size_bytes,created_at,content_type,
+              processing_status,object_name FROM clips WHERE code=$1 AND is_frozen=FALSE`,
+      [code],
+    );
+    return rows[0] ?? null;
+  },
+  sign: signClipPlayback,
+  log: error => logger.warn({ err: error }, "[clips] playback metadata unavailable"),
+}));
 router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));
 router.use(createSimpleClipUploadRouter({
   file: clipFile,
@@ -174,7 +188,7 @@ const clipStorage: import("multer").StorageEngine = {
     clipFile(file.filename).delete({ ignoreNotFound: true }).then(() => cb(null), (e) => cb(e));
   },
 };
-const upload = multer({ storage: clipStorage, limits: { files: 1 } });
+const upload = multer({ storage: clipStorage, limits: { files: 1, fileSize: MAX_NEW_CLIP_BYTES } });
 
 function requireAuth(req: any, res: any): number | null {
   const userId = (req.session as any)?.userId;

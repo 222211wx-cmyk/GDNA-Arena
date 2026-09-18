@@ -1,5 +1,9 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
-import { uploadClip, type ClipUploadMetadata } from "./components/clips/clipUpload";
+import {
+  MAX_CLIP_BYTES,
+  uploadClip,
+  type ClipUploadMetadata,
+} from "./components/clips/clipUpload";
 import { readClipDuration } from "./components/clips/readClipDuration";
 
 const BASE = import.meta.env.BASE_URL;
@@ -34,7 +38,7 @@ root.innerHTML = `
     <h2>رفع صوت أو فيديو</h2>
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
-    <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — دون حد أقصى للمدة</p>
+    <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 2GB</p>
     <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
     <div>
       <button id="submit" data-testid="clip-submit" type="submit" disabled>نشر</button>
@@ -78,6 +82,12 @@ function formatBytes(bytes: number) {
   return new Intl.NumberFormat("ar").format(bytes) + " بايت";
 }
 
+function formatSpeed(bytesPerSecond: number) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return "جارٍ حساب السرعة";
+  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`;
+  return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+}
+
 function formatDuration(seconds: number) {
   const whole = Math.floor(seconds);
   return `${Math.floor(whole / 3600).toString().padStart(2, "0")}:${Math.floor(whole / 60 % 60).toString().padStart(2, "0")}:${(whole % 60).toString().padStart(2, "0")}`;
@@ -94,14 +104,19 @@ input.addEventListener("change", async () => {
   durationController = probing;
   cachedFile = selected;
   selectedDuration = null;
-  chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MiB`;
-  selection.textContent = `${selected.name} — تم اختيار الملف ✓`;
+  chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MB`;
+  selection.textContent = "✓ Fichier sélectionné";
   submit.disabled = true;
   uploadError.textContent = "";
   progressWrap.hidden = true;
   status.textContent = "";
   receipt.hidden = true;
   receipt.replaceChildren();
+  if (selected.size > MAX_CLIP_BYTES) {
+    durationStatus.textContent = "";
+    uploadError.textContent = "الحد الأقصى للملف هو 2GB";
+    return;
+  }
   durationStatus.textContent = "المدة: جارٍ القراءة…";
   try {
     const duration = await readClipDuration(selected, probing.signal);
@@ -123,6 +138,10 @@ form.addEventListener("submit", async event => {
   event.preventDefault();
   const file = cachedFile;
   if (!file || uploadController) return;
+  if (file.size > MAX_CLIP_BYTES) {
+    uploadError.textContent = "الحد الأقصى للملف هو 2GB";
+    return;
+  }
   if (selectedDuration === null || selectedDuration < 60) {
     uploadError.textContent = "خاص دقيقة الفوق";
     return;
@@ -142,13 +161,20 @@ form.addEventListener("submit", async event => {
   status.textContent = `0 من ${formatBytes(file.size)}`;
   uploadError.textContent = "";
   try {
-    const published = await uploadClip(file, metadata, uploadController.signal, (percent, uploadedBytes) => {
+    const published = await uploadClip(file, metadata, uploadController.signal, (
+      percent,
+      uploadedBytes,
+      speedBytesPerSecond,
+      uploadState,
+    ) => {
       const uploaded = uploadedBytes ?? Math.min(file.size, Math.round(file.size * percent / 100));
       const displayPercent = Math.floor(percent);
       progress.value = percent;
       status.textContent = percent === 100
         ? `تم النشر — ${formatBytes(file.size)}`
-        : `${formatBytes(uploaded)} من ${formatBytes(file.size)} — ${displayPercent}%`;
+        : uploadState === "offline"
+          ? `${formatBytes(uploaded)} من ${formatBytes(file.size)} — متوقف مؤقتاً؛ يكمل الى تقطع عند رجوع الاتصال`
+          : `${formatBytes(uploaded)} من ${formatBytes(file.size)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)} — يكمل الى تقطع`;
     });
     cachedFile = null;
     selectedDuration = null;
@@ -163,12 +189,10 @@ form.addEventListener("submit", async event => {
     code.textContent = published.code;
     code.dir = "ltr";
     receipt.append(name, code);
-    if (published.url) {
-      const link = document.createElement("a");
-      link.href = published.url;
-      link.textContent = "فتح الملف";
-      receipt.append(link);
-    }
+    const link = document.createElement("a");
+    link.href = `${BASE}clip/${published.code}`;
+    link.textContent = "فتح الملف";
+    receipt.append(link);
     receipt.hidden = false;
     await loadFeed();
   } catch (error) {
@@ -179,7 +203,8 @@ form.addEventListener("submit", async event => {
   } finally {
     uploadController = null;
     mutableControls.forEach(control => { control.disabled = false; });
-    submit.disabled = !cachedFile || selectedDuration === null || selectedDuration < 60;
+    submit.disabled = !cachedFile || cachedFile.size > MAX_CLIP_BYTES ||
+      selectedDuration === null || selectedDuration < 60;
     cancel.hidden = true;
   }
 });
@@ -204,7 +229,10 @@ function renderClips(clips: Clip[]) {
     article.append(title, media);
     if (clip.code) {
       const code = document.createElement("p");
-      code.textContent = clip.code;
+      const link = document.createElement("a");
+      link.href = `${BASE}clip/${clip.code}`;
+      link.textContent = clip.code;
+      code.append(link);
       code.dir = "ltr";
       article.append(code);
     }

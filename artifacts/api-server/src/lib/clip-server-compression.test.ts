@@ -8,7 +8,7 @@ import { Readable, Writable } from "node:stream";
 import test from "node:test";
 import type { File, CreateWriteStreamOptions } from "@google-cloud/storage";
 import {
-  COMPRESS_ABOVE_BYTES, ClipCompressionCleanupError, compressStoredClip,
+  COMPRESS_ABOVE_BYTES, FFMPEG_NICE_LEVEL, ClipCompressionCleanupError, compressStoredClip,
   createStoredClipCompressor, transcodeClipFile,
 } from "./clip-server-compression.js";
 
@@ -104,6 +104,32 @@ test("100 MiB and smaller bypass storage initialization and media processing", a
   assert.equal(touched, false);
 });
 
+test("force transcodes below the legacy threshold and retains an encoded result even when larger", async () => {
+  await temporary(async directory => {
+    const storage = store();
+    let transcoded = false;
+    const compress = createStoredClipCompressor({
+      file: storage.file,
+      temporaryRoot: directory,
+      async transcode(_source, destination) {
+        transcoded = true;
+        await writeFile(destination, Buffer.alloc(2048, 3));
+      },
+    });
+    const result = await compress({
+      ...largeInput,
+      size: 1024,
+      force: true,
+      outputFilename: reservedName,
+    });
+    assert.equal(transcoded, true);
+    assert.equal(result?.filename, reservedName);
+    assert.equal(result?.size, 2048);
+    assert.equal(storage.saved.get(reservedName)?.length, 2048);
+    assert.deepEqual(await readdir(directory), []);
+  });
+});
+
 test("real 61s video compresses to <=720p with its audio and duration preserved", async () => {
   await temporary(async directory => {
     const input = join(directory, "source.mkv"), output = join(directory, "output.mp4");
@@ -120,6 +146,7 @@ test("real 61s video compresses to <=720p with its audio and duration preserved"
     assert.ok(Math.abs(Number(encoded.format.duration) - Number(original.format.duration)) < 0.15);
     assert.ok(Math.abs(Number(audio.duration) - 61) < 0.15, "audio should remain present through the recording");
     assert.ok((await stat(output)).size < (await stat(input)).size);
+    assert.equal(FFMPEG_NICE_LEVEL, 10);
   });
 });
 

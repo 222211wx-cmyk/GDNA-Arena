@@ -97,7 +97,7 @@ export async function runClipCompressionBatch(): Promise<number> {
     await client.query("COMMIT");
     const compressionInput = {
       filename: candidate.object_name, contentType: candidate.content_type, size: Number(candidate.size_bytes),
-      outputFilename: outputName, signal: controller.signal,
+      outputFilename: outputName, signal: controller.signal, force: true,
     };
     const output = await compressStoredClip(compressionInput);
     if (controller.signal.aborted) throw controller.signal.reason;

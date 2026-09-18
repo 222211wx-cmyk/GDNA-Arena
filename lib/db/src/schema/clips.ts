@@ -26,6 +26,7 @@ export const clipsTable = pgTable("clips", {
   userId: integer("user_id").notNull(),
   username: text("username").notNull(),
   title: text("title").notNull(),
+  originalName: text("original_name"),
   code: text("code"),
   // Retained immutable ORIGINAL plus finalization identity after derived swaps.
   // Only explicit clip/account deletion is allowed to release this reference.

@@ -25,7 +25,10 @@ export function createClipsUploadsRouter(service: ClipUploads): IRouter {
     next();
   }, uploadAuth);
   router.options("/clips/uploads{/:id}", (_req, res) => {
-    res.set({ "Tus-Version": "1.0.0", "Tus-Extension": "creation,termination,expiration" }).status(204).end();
+    res.set({
+      "Tus-Version": "1.0.0", "Tus-Extension": "creation,termination,expiration",
+      "Tus-Max-Size": String(MAX_NEW_CLIP_BYTES),
+    }).status(204).end();
   });
   router.post("/clip/upload-final", uploadAuth, (req, res, next) => {
     if (!req.is("application/json")) { next("route"); return; }
@@ -72,6 +75,10 @@ export function createClipsUploadsRouter(service: ClipUploads): IRouter {
   }));
   router.patch("/clips/uploads/:id", asyncRoute(async (req, res) => {
     if (req.header("Content-Type") !== "application/offset+octet-stream") throw new ClipUploadError(415, "Expected application/offset+octet-stream");
+    // At 13.7 KiB/s one 5 MiB chunk takes over six minutes. A total five-minute
+    // deadline would make progress impossible: bound inactivity, not elapsed time.
+    req.setTimeout(5 * 60_000, () => req.destroy());
+    res.once("finish", () => req.setTimeout(0));
     const stored = await service.checkPatch(paramId(req), userId(req), unsignedInteger(req.header("Upload-Offset"), "Upload-Offset"));
     const lengthHeader = req.header("Content-Length");
     const declared = lengthHeader === undefined ? undefined : unsignedInteger(lengthHeader, "Content-Length");

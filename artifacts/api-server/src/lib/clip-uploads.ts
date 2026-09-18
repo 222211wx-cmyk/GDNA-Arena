@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
-  ClipUploadError, clipDownloadExtension, resolveClipUploadType, type ClipPublishPurpose,
+  ClipUploadError, clipDownloadExtension, resolveClipUploadType, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, type ClipPublishPurpose,
 } from "./clip-upload-protocol.js";
 
 export const CHUNK_BYTES = 5 * 1024 * 1024;
@@ -84,6 +84,7 @@ export function parseUploadMetadata(header: string | undefined): UploadMetadata 
   const totalSize = unsignedInteger(entries.totalSize, "totalSize");
   if (partCount < 1 || partCount > 3 || partIndex >= partCount) fail(400, "Invalid part bounds");
   if (totalSize < partCount) fail(400, "Invalid totalSize");
+  if (totalSize > MAX_NEW_CLIP_BYTES) fail(413, NEW_CLIP_TOO_LARGE);
   const title = entries.title?.trim();
   if (!title || title.length > 1024) fail(400, "Filename is required (maximum 1024 characters)");
   const contentType = resolveClipUploadType(entries.contentType ?? "", title);
@@ -119,6 +120,7 @@ export class ClipUploads {
   }
 
   async create(userId: number, metadata: UploadMetadata, length: number): Promise<UploadSession> {
+    if (metadata.totalSize > MAX_NEW_CLIP_BYTES || length > MAX_NEW_CLIP_BYTES) fail(413, NEW_CLIP_TOO_LARGE);
     if (!Number.isSafeInteger(length) || length <= 0 || length > metadata.totalSize) fail(400, "Invalid Upload-Length");
     return this.publisher.lock(lockKey(userId, metadata.groupId), async () => {
       const key = groupKey(userId, metadata.groupId);

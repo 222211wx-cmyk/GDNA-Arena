@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { pool } from "@workspace/db";
 import { clipFile } from "./clip-storage.js";
 import { clipWithThumbnail } from "../routes/clips-thumbnail-response.js";
-import { ClipUploadError, normalizeClipContentType, clipDurationSeconds } from "./clip-upload-protocol.js";
+import { ClipUploadError, normalizeClipContentType, clipDurationSeconds, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "./clip-upload-protocol.js";
 import { verifiedDuration, ClipProbeBusyError } from "./clip-duration.js";
 
 export { clipFile } from "./clip-storage.js";
@@ -10,7 +10,7 @@ export { verifiedDuration } from "./clip-duration.js";
 export { ClipUploadError, MAX_CLIP_BYTES, CLIP_EXT, validateClipRightsInput } from "./clip-upload-protocol.js";
 const connectDatabase = () => pool.connect();
 export type ClipDatabaseClient = Awaited<ReturnType<typeof connectDatabase>>;
-export const CLIP_COMPRESSION_THRESHOLD = 100 * 1024 * 1024;
+export const CLIP_COMPRESSION_THRESHOLD = 0;
 
 export interface PublishClipInput {
   userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
@@ -29,6 +29,7 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
   const contentType = normalizeClipContentType(input.contentType);
   if (!contentType) throw new ClipUploadError(415, "صيغة الصوت أو الفيديو غير مدعومة");
   if (!Number.isSafeInteger(input.size) || input.size <= 0) throw new ClipUploadError(400, "Invalid media size");
+  if (input.size > MAX_NEW_CLIP_BYTES) throw new ClipUploadError(413, NEW_CLIP_TOO_LARGE);
   const [metadata] = await clipFile(input.filename).getMetadata();
   if (Number(metadata.size) !== input.size) throw new ClipUploadError(409, "Stored media size does not match");
   let verifiedSeconds: number;
@@ -49,7 +50,7 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
       "SELECT username FROM users WHERE id=$1 AND password_hash IS DISTINCT FROM 'DELETED' FOR SHARE", [input.userId],
     );
     if (!users[0]) throw new ClipUploadError(401, "User no longer exists");
-    const processingStatus = input.size > CLIP_COMPRESSION_THRESHOLD ? "queued" : "ready";
+    const processingStatus = "queued";
     // ON CONFLICT keeps collisions non-fatal within the transaction. No code
     // supplied by a client is trusted. The namespace has one million entries.
     for (let attempt = 0; attempt < 32; attempt++) {
@@ -57,13 +58,13 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
       const { rows } = await client.query(
         `INSERT INTO clips
            (user_id, username, title, object_name, upload_object_name, content_type,
-            size_bytes, duration_sec, code, processing_status)
-         VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9)
+            size_bytes, duration_sec, code, processing_status, original_name)
+         VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (code) DO NOTHING
          RETURNING id, title, content_type, duration_sec, code, created_at,
                    thumbnail_object_name, processing_status`,
         [input.userId, users[0].username, name, input.filename, contentType,
-          input.size, duration, code, processingStatus],
+          input.size, duration, code, processingStatus, input.title.split(/[\\/]/).pop() || input.title],
       );
       if (!rows[0]) continue;
       await client.query("COMMIT");

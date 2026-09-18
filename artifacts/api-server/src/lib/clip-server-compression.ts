@@ -2,13 +2,18 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Transform, type Readable, type Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { File } from "@google-cloud/storage";
+import {
+  DEFAULT_CLIP_TEMP_ROOT,
+  ensureClipTempRoot,
+  markActiveClipTempDirectory,
+} from "./clip-temp-cleanup.js";
 
 export const COMPRESS_ABOVE_BYTES = 100 * 1024 * 1024;
+export const FFMPEG_NICE_LEVEL = 10;
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 const STORAGE_CHUNK_BYTES = 5 * 1024 * 1024;
 
@@ -23,6 +28,8 @@ export interface ClipCompressionInput extends StoredClipMedia {
   outputFilename?: string;
   /** Abort when the queue owner loses its database/advisory-lock connection. */
   signal?: AbortSignal;
+  /** New publication jobs transcode every clip; legacy callers retain the size/savings policy. */
+  force?: boolean;
 }
 
 /**
@@ -95,8 +102,8 @@ export async function transcodeClipFile(
     ...(kind === "video" ? [
       "-map", "0:v:0", "-map", "0:a?",
       "-vf", "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
-      "-filter_threads", "1", "-c:v", "libx264", "-preset", "veryfast",
-      "-crf", "27", "-pix_fmt", "yuv420p", "-threads", "2",
+      "-filter_threads", "1", "-c:v", "libx264", "-preset", "fast",
+      "-crf", "28", "-pix_fmt", "yuv420p", "-threads", "2",
     ] : ["-map", "0:a", "-vn"]),
     "-c:a", "aac", "-b:a", "128k",
     "-map_metadata", "-1", "-map_chapters", "-1",
@@ -104,7 +111,12 @@ export async function transcodeClipFile(
     "-nostats", "-y", destinationPath,
   ];
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+    // Lower CPU scheduling priority without weakening the queue's global
+    // concurrency lock. `nice` uses execvp, so ffmpeg still receives args
+    // directly (there is no shell or uploaded-data interpolation).
+    const child = spawn("nice", ["-n", String(FFMPEG_NICE_LEVEL), "ffmpeg", ...args], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let stderr = "";
     let progress = "";
     let failure: unknown;
@@ -158,7 +170,7 @@ export async function transcodeClipFile(
 export function createStoredClipCompressor(deps: ClipCompressionDependencies) {
   return async (input: ClipCompressionInput): Promise<StoredClipMedia | null> => {
     input.signal?.throwIfAborted();
-    if (input.size <= COMPRESS_ABOVE_BYTES) return null;
+    if (!input.force && input.size <= COMPRESS_ABOVE_BYTES) return null;
     if (!Number.isSafeInteger(input.size) || input.size < 0) throw new Error("Invalid clip size");
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(input.filename)) throw new Error("Invalid stored clip filename");
     const kind = input.contentType.startsWith("audio/") ? "audio" :
@@ -171,7 +183,14 @@ export function createStoredClipCompressor(deps: ClipCompressionDependencies) {
       !input.outputFilename.endsWith(extension) ||
       input.outputFilename === input.filename
     )) throw new Error("Invalid reserved clip output filename");
-    const directory = await mkdtemp(join(deps.temporaryRoot ?? tmpdir(), "clip-compress-"));
+    const temporaryRoot = await ensureClipTempRoot(deps.temporaryRoot ?? DEFAULT_CLIP_TEMP_ROOT);
+    const directory = await mkdtemp(join(temporaryRoot, "clip-compress-"));
+    try {
+      await markActiveClipTempDirectory(directory);
+    } catch (error) {
+      await rm(directory, { recursive: true, force: true });
+      throw error;
+    }
     const source = join(directory, "source");
     const encoded = join(directory, `encoded${extension}`);
     let target: CompressionFile | undefined;
@@ -198,7 +217,7 @@ export function createStoredClipCompressor(deps: ClipCompressionDependencies) {
         if (!output.size) throw new Error("ffmpeg produced an empty clip");
         // Compare actual bytes, not an untrusted declared size. Never publish a
         // larger alternative or a synthetic URL when compression is ineffective.
-        if (output.size >= original.size) return null;
+        if (!input.force && output.size >= original.size) return null;
         // Follow the existing clip object-name contract used by reconciliation.
         filename = input.outputFilename ?? `clip_${randomUUID().replaceAll("-", "")}${extension}`;
         target = deps.file(filename);
@@ -245,7 +264,7 @@ export function createStoredClipCompressor(deps: ClipCompressionDependencies) {
 export async function compressStoredClip(input: ClipCompressionInput): Promise<StoredClipMedia | null> {
   input.signal?.throwIfAborted();
   // Bypass even storage initialization for ordinary uploads.
-  if (input.size <= COMPRESS_ABOVE_BYTES) return null;
+  if (!input.force && input.size <= COMPRESS_ABOVE_BYTES) return null;
   const { clipFile } = await import("./clip-storage.js");
   return createStoredClipCompressor({ file: clipFile })(input);
 }

@@ -108,18 +108,25 @@ test("Tus metadata decodes UTF-8 and validates all bounds without trusting durat
   assert.throws(
     () => parseUploadMetadata(metadataHeader({ ...valid, totalSize: MAX_NEW_CLIP_BYTES + 1 })),
     (error: unknown) => error instanceof ClipUploadError &&
-      error.status === 400,
+      error.status === 413,
   );
 });
 
-test("500 MiB, 2 GiB and larger declarations create resumable sessions without a product size cap", async () => {
-  for (const size of [500 * 1024 * 1024, 2 ** 31, 2 ** 31 + 1, 5 * 1024 ** 3]) {
+test("500 MiB and 2 GiB declarations succeed; larger new files are rejected", async () => {
+  for (const size of [500 * 1024 * 1024, 2 ** 31]) {
     const { service } = fixture();
     const parsed = parseUploadMetadata(metadataHeader({
       groupId: randomUUID(), partIndex: 0, partCount: 1, totalSize: size,
       title: "feature.movie.mkv", contentType: "video/x-matroska", durationSec: 90001,
     }));
     assert.equal((await service.create(1, parsed, size)).length, size);
+  }
+  const { service } = fixture();
+  for (const size of [2 ** 31 + 1, 5 * 1024 ** 3]) {
+    const input = { ...metadata(), totalSize: size };
+    assert.throws(() => parseUploadMetadata(metadataHeader(input)), error =>
+      error instanceof ClipUploadError && error.status === 413 && error.message === NEW_CLIP_TOO_LARGE);
+    await rejectsStatus(service.create(1, input, size), 413);
   }
 });
 

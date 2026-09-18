@@ -200,6 +200,7 @@ export async function clipsFixture(t, database) {
     ALTER TABLE clips ADD COLUMN code TEXT UNIQUE;
     ALTER TABLE clips ADD COLUMN upload_object_name TEXT;
     ALTER TABLE clips ADD COLUMN processing_status TEXT NOT NULL DEFAULT 'ready';
+    ALTER TABLE clips ADD COLUMN original_name TEXT;
     ALTER TABLE clips ADD COLUMN processing_attempts INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE clips ADD COLUMN processing_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
     ALTER TABLE clips ADD COLUMN processing_output_object TEXT

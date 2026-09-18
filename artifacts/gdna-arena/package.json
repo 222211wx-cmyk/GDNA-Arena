@@ -84,6 +84,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "agora-rtc-sdk-ng": "^4.24.7"
+    "agora-rtc-sdk-ng": "^4.24.7",
+    "tus-js-client": "^4.3.1"
   }
 }

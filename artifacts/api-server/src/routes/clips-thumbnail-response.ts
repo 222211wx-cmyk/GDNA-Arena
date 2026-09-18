@@ -22,7 +22,7 @@ export function finalClipReceipt(clip: Record<string, unknown>) {
     code: clip.code,
     name: clip.name ?? clip.title,
     duration: clip.duration ?? clip.duration_sec,
-    url: `/api/clips/stream/${clip.id}`,
+    url: typeof clip.code === "string" ? `/clip/${clip.code}` : `/api/clips/stream/${clip.id}`,
     created_at: clip.created_at,
     processingStatus: clip.processingStatus ?? clip.processing_status ?? "ready",
     clip,

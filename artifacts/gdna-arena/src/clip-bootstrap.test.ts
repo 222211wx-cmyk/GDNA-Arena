@@ -40,8 +40,7 @@ describe("ultra-light clip bootstrap", () => {
     expect(clip).not.toMatch(/size-warning|name="purpose"|original-footage|id="rights"/);
     expect(clip).toContain("خاص دقيقة الفوق");
     expect(clip).toContain("readClipDuration");
-    expect(clip).not.toContain("if (file.size >");
-    expect(clip).not.toContain("if (selected && selected.size >");
+    expect(clip).toContain("MAX_CLIP_BYTES");
     for (const id of ["clip-file-input", "clip-submit", "clip-progress", "clip-status", "clip-error"]) {
       expect(clip).toContain(`data-testid="${id}"`);
     }
@@ -54,6 +53,8 @@ describe("ultra-light clip bootstrap", () => {
     expect(transport).toContain("new WeakMap<File, string>()");
     expect(transport).not.toContain("localStorage");
     expect(transport).not.toContain("contentHash");
+    expect(transport).toContain("storeFingerprintForResuming: false");
+    expect(transport).toContain("5 * 1024 * 1024");
     expect(clip).toContain("mutableControls.forEach(control => { control.disabled = true; })");
     expect(clip).toContain("mutableControls.forEach(control => { control.disabled = false; })");
   });

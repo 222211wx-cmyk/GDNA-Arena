@@ -17,7 +17,7 @@
 - [AMIS unified messenger](amis-messenger.md) — one shared Messenger component (full/embedded/widget) powers all 3 chat surfaces; mute/settings in raw SQL columns; call-history logs only in useCall.
 - [Realtime messenger delivery](realtime-messenger-delivery.md) — authenticated room pushes fan out to every active user socket; direct-message moderation has a bounded fail-open latency budget.
 - [Empire CLIPS rules](empire-clips.md) — simple name/code publishing; all media ≥60s with no upper duration, no rights gates; preserve historical data and view accounting.
-- [Clips upload transport](clips-upload-transport.md) — resumable large files, native duration metadata, no browser compression; server compression only above 100 MiB.
+- [Clips upload transport](clips-upload-transport.md) — latest policy: 2 GiB maximum, 5 MiB Tus chunks, native duration metadata, server-only transcoding for all new clips.
 - [Clips storage mutations](clips-storage-mutations.md) — fast multi-chunk uploads hit independent per-object storage quotas; preserve CAS safety when retrying.
 - [Light route bundling](light-route-bundling.md) — Vite can merge conditional-import preload lists; measure actual cold requests, not just bundle sizes.
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.

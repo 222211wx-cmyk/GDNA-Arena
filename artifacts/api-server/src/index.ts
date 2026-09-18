@@ -19,6 +19,7 @@ import { startFinanceReconciliationJob } from "./jobs/finance-reconciliation";
 import { startClipThumbnailRetryJob } from "./jobs/clip-thumbnail-retry.js";
 import { startClipStorageCleanupJob } from "./jobs/clip-storage-cleanup.js";
 import { startClipCompressionJob } from "./jobs/clip-compression.js";
+import { startClipTempCleanupWorker } from "./lib/clip-temp-cleanup.js";
 import { FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
 
 const rawPort = process.env["PORT"];
@@ -1410,6 +1411,7 @@ prepareDevelopmentDatabase()
     startClipThumbnailRetryJob();
     startClipStorageCleanupJob();
     startClipCompressionJob();
+    startClipTempCleanupWorker();
 
     // ── HTTP + WebSocket server ──────────────────────────────────────────────
     const httpServer = http.createServer(app);
@@ -1421,9 +1423,10 @@ prepareDevelopmentDatabase()
       const longUpload = req.method === "POST" &&
         ["/api/clip/upload-final", "/api/clip/upload-simple", "/api/clip/upload", "/api/clips"].includes(path) &&
         req.headers["content-type"]?.startsWith("multipart/form-data");
-      if (longUpload || req.complete) return;
+      const tusChunk = req.method === "PATCH" && /^\/api\/clips\/uploads\/[a-f0-9-]+$/i.test(path);
+      if (longUpload || tusChunk || req.complete) return;
       // Preserve Node's former five-minute body-receive deadline everywhere
-      // else; only streamed multipart uploads receive the long-transfer exemption.
+      // else; streamed multipart and authenticated, bounded Tus chunks use inactivity.
       const deadline = setTimeout(() => req.destroy(), 5 * 60_000);
       deadline.unref();
       const clear = () => clearTimeout(deadline);

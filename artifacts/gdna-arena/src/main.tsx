@@ -1,6 +1,7 @@
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const rawRoute = window.location.pathname.slice(base.length) || "/";
 const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
+const clipCode = route.match(/^\/clip\/(HELX-\d{6})$/)?.[1];
 const isClipRoute = route === "/clip" || route === "/clips";
 
 function showClipStartupError() {
@@ -24,7 +25,9 @@ function showClipStartupError() {
 
 // Keep these imports in distinct branches. A conditional import expression makes
 // Vite merge both dependency lists and eagerly fetch the App stylesheet.
-if (isClipRoute) {
+if (clipCode) {
+  void import("./clip-player-entry").then(module => module.renderClipPlayer(clipCode)).catch(showClipStartupError);
+} else if (isClipRoute) {
   void import("./clip-entry").catch(showClipStartupError);
 } else {
   void import("./app-entry");
