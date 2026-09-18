@@ -1,13 +1,10 @@
-import crypto from "node:crypto";
 import type { File } from "@google-cloud/storage";
 import { pool } from "@workspace/db";
 import { objectStorageClient } from "./chatStorage.js";
-import { logger } from "./logger.js";
-import { generateClipThumbnail } from "./clip-thumbnail.js";
 import { clipWithThumbnail } from "../routes/clips-thumbnail-response.js";
 import {
   ClipUploadError, normalizeClipContentType, isAudioClip, clipDurationSeconds,
-  validateClipRightsInput,
+  validateClipRightsInput, parseIsOriginalFootage, shouldBlockForProtectedAudio,
 } from "./clip-upload-protocol.js";
 import { verifiedDuration, ClipProbeBusyError } from "./clip-duration.js";
 import {
@@ -15,6 +12,9 @@ import {
   matchesOriginalVideo,
   type ClipVisualSignature,
 } from "./clip-original-signature.js";
+import {
+  extractClipAudioSignature, originalAudioCoverage, type ClipAudioSignature,
+} from "./clip-acoustic-signature.js";
 export { verifiedDuration } from "./clip-duration.js";
 export {
   ClipUploadError, MAX_CLIP_BYTES, CLIP_EXT, validateClipRightsInput,
@@ -40,6 +40,7 @@ export interface PublishClipInput {
   originalReference?: unknown;
   rightsHolderName?: unknown;
   rightsHolderRole?: unknown;
+  isOriginalFootage?: unknown;
   /** Server-only optimization for the bounded simple route; rights checks remain synchronous. */
   deferThumbnail?: boolean;
 }
@@ -54,11 +55,14 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
   const contentType = normalizeClipContentType(input.contentType);
   if (!contentType) throw new ClipUploadError(415, "صيغة الصوت أو الفيديو غير مدعومة");
   const audio = isAudioClip(contentType);
+  // Audio MIME is established from the upload and independently verified by
+  // ffmpeg below; a client flag can never turn an audio file into footage.
+  const isOriginalFootage = audio ? false : parseIsOriginalFootage(input.isOriginalFootage);
   const [metadata] = await clipFile(filename).getMetadata();
   if (Number(metadata.size) !== size) throw new ClipUploadError(409, "Stored video size does not match");
   let durationSec: number;
   let verifiedSeconds: number;
-  try { verifiedSeconds = await verifiedDuration(clipFile(filename), audio ? "audio" : undefined); }
+  try { verifiedSeconds = await verifiedDuration(clipFile(filename), audio ? "audio" : "video"); }
   catch (error) {
     if (error instanceof ClipProbeBusyError) throw new ClipUploadError(503, "Media verification is busy; retry shortly");
     throw new ClipUploadError(400, "تعذّر التحقق من الملف الصوتي أو الفيديو — الملف غير صالح أو غير مدعوم");
@@ -69,11 +73,16 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
     duration_seconds: string | number;
     visual_signature: ClipVisualSignature;
   };
+  type AudioCandidate = {
+    user_id: number;
+    audio_signature: ClipAudioSignature;
+  };
   const candidateSql = `SELECT user_id, duration_seconds, visual_signature
     FROM clip_original_registrations
     WHERE visual_signature IS NOT NULL
       AND duration_seconds BETWEEN $1::numeric - 0.5 AND $1::numeric + 0.5`;
   let visualSignature: ClipVisualSignature | null = null;
+  let audioSignature: ClipAudioSignature | null = null;
   const extractSignature = async () => {
     try {
       return await extractClipVisualSignature(clipFile(filename), verifiedSeconds);
@@ -94,23 +103,64 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
       visualSignature = await extractSignature();
     }
   }
-  let thumbnailName: string | null = null;
-  if (!audio && !input.deferThumbnail) try {
-    const jpeg = await generateClipThumbnail(clipFile(filename));
-    thumbnailName = `thumb_${crypto.randomUUID().replace(/-/g, "")}.jpg`;
-    await clipFile(thumbnailName).save(jpeg, {
-      resumable: false, timeout: 10_000,
-      metadata: { contentType: "image/jpeg", cacheControl: "private, max-age=3600" },
-    });
-  } catch (error) {
-    logger.warn({ err: error }, "[clips] thumbnail unavailable; publishing original video");
-    if (thumbnailName) await clipFile(thumbnailName).delete({ ignoreNotFound: true }).catch(() => {});
-    thumbnailName = null;
+  const audioPreflight = await (lockedClient ?? pool).query<{ exists: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM clip_original_registrations WHERE audio_signature IS NOT NULL) AS exists",
+  );
+  const mustCheckAudio = audio || !isOriginalFootage;
+  let audioExtractionAttempted = false;
+  const extractAudio = async (): Promise<ClipAudioSignature | null> => {
+    audioExtractionAttempted = true;
+    try {
+      return await extractClipAudioSignature(clipFile(filename));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "";
+      // Silence and videos without an audio stream have no acoustic work to
+      // register or match. Operational/limit failures fail closed only when an
+      // existing registration must be protected.
+      if (!detail.includes("UNUSABLE") && mustCheckAudio) {
+        throw new ClipUploadError(503, "Audio rights verification could not complete; retry the upload");
+      }
+      return null;
+    }
+  };
+  if (rightsInput.purpose === "original" || (mustCheckAudio && audioPreflight.rows[0]?.exists)) {
+    audioSignature = await extractAudio();
   }
+  // Thumbnail generation is intentionally deferred for every publish path.
+  // The durable retry worker fills this nullable field after publication.
+  const thumbnailName: string | null = null;
   const client = lockedClient ?? await connectDatabase();
   let commitAttempted = false;
   try {
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["clip-original-audio:v1"]);
+    let audioCandidates = mustCheckAudio
+      ? (await client.query<AudioCandidate>(
+          `SELECT user_id, audio_signature FROM clip_original_registrations
+           WHERE audio_signature IS NOT NULL`,
+        )).rows
+      : [];
+    // Close the preflight/registration race without doing ffmpeg work while a
+    // transaction or registry advisory lock is held.
+    if (audioCandidates.length > 0 && !audioExtractionAttempted) {
+      await client.query("ROLLBACK");
+      audioSignature = await extractAudio();
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["clip-original-audio:v1"]);
+      audioCandidates = (await client.query<AudioCandidate>(
+        `SELECT user_id, audio_signature FROM clip_original_registrations
+         WHERE audio_signature IS NOT NULL`,
+      )).rows;
+    }
+    if (audioSignature && audioCandidates.some(candidate =>
+      candidate.user_id !== userId &&
+      shouldBlockForProtectedAudio(
+        contentType,
+        isOriginalFootage,
+        originalAudioCoverage(candidate.audio_signature, audioSignature!),
+      ))) {
+      throw new ClipUploadError(409, "حقوق الملكية الفكرية محمية");
+    }
     let candidates: Candidate[] = [];
     if (!audio) {
       const buckets = [...new Set([
@@ -160,21 +210,21 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
       throw new ClipUploadError(409, "Exact-byte duplicate: an identical file was already uploaded");
     }
     const { rows } = await client.query(
-      `INSERT INTO clips (user_id, username, title, object_name, content_type, size_bytes, duration_sec, thumbnail_object_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, title, duration_sec, created_at, thumbnail_object_name`,
-      [userId, username, title, filename, contentType, size, durationSec, thumbnailName]);
+       `INSERT INTO clips (user_id, username, title, object_name, content_type, size_bytes, duration_sec, thumbnail_object_name, is_original_footage)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, title, duration_sec, created_at, thumbnail_object_name, is_original_footage`,
+       [userId, username, title, filename, contentType, size, durationSec, thumbnailName, isOriginalFootage]);
     await client.query(`UPDATE content_fingerprints SET content_id=$1 WHERE id=$2`, [rows[0].id, fp.rows[0].id]);
     let registration: { id: number; created_at: Date } | undefined;
     if (rightsInput.purpose === "original") {
       const result = await client.query<{ id: number; created_at: Date }>(
         `INSERT INTO clip_original_registrations
            (clip_id, user_id, original_reference, rights_holder_name, rights_holder_role,
-            duration_seconds, visual_signature)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at`,
+             duration_seconds, visual_signature, audio_signature)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, created_at`,
         [
           rows[0].id, userId, rightsInput.originalReference,
           rightsInput.rightsHolderName, rightsInput.rightsHolderRole,
-          verifiedSeconds, visualSignature,
+           verifiedSeconds, visualSignature, audioSignature,
         ],
       );
       registration = result.rows[0];
@@ -197,7 +247,6 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     // An ambiguous COMMIT must never cause deletion of a possibly published file.
-    if (!commitAttempted && thumbnailName) await clipFile(thumbnailName).delete({ ignoreNotFound: true }).catch(() => {});
     throw error;
   } finally { if (!lockedClient) client.release(); }
 }

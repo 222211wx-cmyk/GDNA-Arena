@@ -39,10 +39,26 @@ export function clipDownloadExtension(contentType: string): string {
 export const isAudioClip = (contentType: string): boolean =>
   normalizeClipContentType(contentType)?.startsWith("audio/") === true;
 
+/** Audio overlap alone protects audio/music-only uploads, never citizen footage. */
+export function shouldBlockForProtectedAudio(
+  contentType: string,
+  isOriginalFootage: boolean,
+  registeredCoverage: number,
+): boolean {
+  return (isAudioClip(contentType) || !isOriginalFootage) &&
+    Number.isFinite(registeredCoverage) && registeredCoverage >= 0.9;
+}
+
 export class ClipUploadError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 export type ClipPublishPurpose = "story" | "original";
+export function parseIsOriginalFootage(value: unknown): boolean {
+  if (value === undefined || value === null || value === "") return true;
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  throw new ClipUploadError(400, "isOriginalFootage must be true or false");
+}
 export type ClipRightsInput =
   | { purpose: "story"; originalReference?: undefined }
   | {

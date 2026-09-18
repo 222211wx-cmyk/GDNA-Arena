@@ -18,8 +18,8 @@ Future work must update and improve the existing product while preserving its or
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run generate --name=<change-name>` — generate a versioned migration after editing `lib/db/src/schema/`
-- `pnpm --filter @workspace/db run migrate` — apply pending migrations to the development database. This also runs automatically after merged code when `DATABASE_URL` is available.
+- `pnpm --filter @workspace/db run validate:history` — statically verify that committed migration SQL and the Drizzle journal still match
+- `pnpm --filter @workspace/db run push` — transactionally apply only the allowlisted additive clips repair; never substitute raw `drizzle-kit push`
 - Required env: `DATABASE_URL` — Postgres connection string, `OPENAI_API_KEY` — for GDN-AI chat, `SESSION_SECRET` — express-session secret
 
 ## Stack
@@ -84,6 +84,6 @@ Future work must update and improve the existing product while preserving its or
 
 ## Gotchas
 
-- Every Drizzle schema change must include a generated migration. Run `pnpm --filter @workspace/db run generate --name=<change-name>` after editing the schema, then `pnpm --filter @workspace/db run migrate`. The post-merge script applies committed migrations automatically in development.
+- The emergency clips repair is push-only: create no new migration, preserve SQL history, run `validate:history`, then use the bounded additive `push` executor. The post-merge script never mutates the database.
 - Do NOT run `pnpm dev` at workspace root — use workflow names via WorkflowsRestart tool
 - The 401 in browser console on home page is expected — `/api/me` returns 401 when not logged in; AuthContext handles it silently

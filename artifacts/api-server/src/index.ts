@@ -2,10 +2,6 @@ import http from "http";
 import app, { sessionMiddleware } from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
-import { db } from "@workspace/db";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import path from "node:path";
-import { existsSync } from "node:fs";
 import { attachSignalingServer } from "./lib/signaling.js";
 import { smartFortress } from "./server.js";
 import { startHonorAlertJob } from "./jobs/honor-alert.js";
@@ -32,28 +28,20 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 logger.info(getAgoraConfigStatus(), "Agora environment configuration loaded from process.env");
 logger.info({ financeSimulationMode: FINANCE_SIMULATION_MODE }, "Finance operating mode selected");
 
-async function migrateApplicationDatabase(): Promise<void> {
-  // Replit applies the development-to-production schema diff before starting
-  // an artifact deployment. Re-running Drizzle migrations during production
-  // startup can then attempt to add columns that already exist and crash the
-  // service before its health check opens.
+async function prepareDevelopmentDatabase(): Promise<void> {
   if (process.env.NODE_ENV === "production") {
-    logger.info("Application database migrations skipped: production schema is managed by Publish");
+    logger.info("Startup schema DDL skipped: production schema is managed by Publish");
     return;
   }
 
-  // Development applies the application migrations locally. Finance tables
-  // remain part of the application schema and are never provider-managed.
-  const candidates = [
-    path.resolve(process.cwd(), "../../lib/db/drizzle"),
-    path.resolve(process.cwd(), "lib/db/drizzle"),
-  ];
-  const migrationsFolder = candidates.find((candidate) => existsSync(candidate));
-  if (!migrationsFolder) {
-    throw new Error("Application migration directory not found");
-  }
-  await migrate(db, { migrationsFolder });
-  logger.info("Application database migrations applied");
+  await ensureTables();
+  await ensureNeuralTables();
+  await ensureGenomeTables();
+  await ensureMissionsTables();
+  await import("./routes/stars").then(m => m.ensureStarsSystem());
+  await import("./routes/rights").then(m => m.ensureRightsTables());
+  await import("./routes/ppo").then(m => m.ensurePpoTables());
+  await import("./routes/clips").then(m => m.ensureClipsTables());
 }
 
 const SPORT_LEGEND_IMAGE_URLS: Record<string, string> = {
@@ -1399,17 +1387,10 @@ async function autoSeedTestUsers() {
   } catch (e) { console.warn("[SEED] warn:", e); }
 }
 
-// Apply public and finance migrations before starting the application.
-migrateApplicationDatabase()
-  .then(() => ensureTables())
-  .then(() => ensureNeuralTables())
-  .then(() => ensureGenomeTables())
-  .then(() => ensureMissionsTables())
+// Development may retain legacy table initializers. Production startup never
+// performs schema DDL; Publish owns the production schema.
+prepareDevelopmentDatabase()
   .then(() => autoSeedTestUsers())
-  .then(() => import("./routes/stars").then(m => m.ensureStarsSystem()))
-  .then(() => import("./routes/rights").then(m => m.ensureRightsTables()))
-  .then(() => import("./routes/ppo").then(m => m.ensurePpoTables()))
-  .then(() => import("./routes/clips").then(m => m.ensureClipsTables()))
   .then(() => {
     const fortress = smartFortress.START();
     logger.info(

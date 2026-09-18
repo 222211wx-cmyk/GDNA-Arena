@@ -55,7 +55,7 @@ interface FeedRow {
   [key: string]: unknown;
 }
 
-/** The simplified client deliberately receives an empty JSON feed on any failure. */
+/** Preserve the feed envelope on failure, but distinguish downtime from an empty feed. */
 export function createClipsFeedHandler(deps: {
   loadRows(before: number | null, limit: number): Promise<FeedRow[]>;
   logFailure(error: unknown): void;
@@ -70,7 +70,7 @@ export function createClipsFeedHandler(deps: {
       })), query.limit));
     } catch (error) {
       deps.logFailure(error);
-      res.json({ clips: [], hasMore: false });
+      res.json({ clips: [], hasMore: false, degraded: true });
     }
   };
 }

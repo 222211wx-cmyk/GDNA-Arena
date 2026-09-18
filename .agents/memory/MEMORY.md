@@ -9,6 +9,7 @@
 - [API hardening](api-hardening.md) — helmet + tiered rate limits (auth 10/15min, AI 30/5min, global 600/5min) on api-server; trust proxy 1; secure cookies auto in prod.
 - [AMIS call system](amis-calls.md) — call signaling must ride /api/ws (prod router only forwards /api/*); WS upgrades session-authenticated, identity never trusted from client.
 - [Browser call verification](browser-call-verification.md) — test fresh recipients outside Messages; real Web Push needs a normal profile and exact-call notification checks.
+- [Browser media verification](browser-media-verification.md) — upload success does not prove audio preservation, timing or cross-browser codec compatibility.
 - [Stars Hall + AI Council](stars-hall.md) — star = roster username + reserved email; AI replies gated on invite; daily council report idempotent via unique report_date.
 - [Chat attachments](chat-attachments.md) — persistent encrypted uploads; the 5 MB image policy must preserve E2EE and other attachment limits.
 - [Rights & Monetization](rights-monetization.md) — content earnings per view/like, sha256 first-owner fingerprints, piracy freeze; only authed non-self likes mint coins; earnings updates must be raw SQL.
@@ -16,7 +17,7 @@
 - [AMIS unified messenger](amis-messenger.md) — one shared Messenger component (full/embedded/widget) powers all 3 chat surfaces; mute/settings in raw SQL columns; call-history logs only in useCall.
 - [Realtime messenger delivery](realtime-messenger-delivery.md) — authenticated room pushes fan out to every active user socket; direct-message moderation has a bounded fail-open latency budget.
 - [Empire CLIPS rules](empire-clips.md) — Reels tab at /clips: min 1:00 / no maximum (French copy), sha256 first-owner publishing, GCS storage, req.ip-only view minting into PPO pool.
-- [Clips upload transport](clips-upload-transport.md) — owner rejected browser FFmpeg/virtualization; keep native videos and direct 20 MB uploads, with legacy Tus compatibility separate.
+- [Clips upload transport](clips-upload-transport.md) — latest request authorizes 480p compression and 1 MiB resumable uploads; preserve source files and server-owned fingerprints.
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.
 - [Games age policy](games-age-policy.md) — registration and all non-game sections are open to every age; only Games is 18+, enforced by persisted DOB on both UI and API.
 - [Expo native module boundaries](expo-native-module-boundaries.md) — native-only Expo dependencies need web façades; use architecture-compatible package lines.

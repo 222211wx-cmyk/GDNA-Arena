@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ClipsPage from "./clips";
-import { SimpleClipUpload } from "@/components/clips/SimpleClipUpload";
+import { LegacySimpleClipUpload } from "@/components/clips/SimpleClipUpload";
 
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("wouter", () => ({ Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span> }));
@@ -21,15 +21,22 @@ describe("minimal Clips page", () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => body }));
       const { container } = render(<ClipsPage />);
       await act(async () => {});
-      expect(screen.getByText("لا يوجد كليبز - كن أول من ينشر")).toBeTruthy();
+      expect(screen.getByText("الكليبز غير متاحة حالياً. حاول مرة أخرى.")).toBeTruthy();
       expect(container.querySelector("video")).toBeNull();
     },
   );
-  it("keeps the empty page on network failure", async () => {
+  it("distinguishes a network failure from a genuine empty feed and permits retry", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     render(<ClipsPage />);
     await act(async () => {});
-    expect(screen.getByText("لا يوجد كليبز - كن أول من ينشر")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("غير متاحة");
+    expect(screen.getByRole("button", { name: "إعادة المحاولة" })).toBeTruthy();
+  });
+  it("does not claim a degraded fallback is a genuine empty feed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ clips: [], hasMore: false, degraded: true }) }));
+    render(<ClipsPage />);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("غير متاحة"));
+    expect(screen.queryByText("لا يوجد كليبز - كن أول من ينشر")).toBeNull();
   });
   it("renders five native video controls without autoplay or virtualization", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({
@@ -80,7 +87,7 @@ describe("direct Clips upload", () => {
   it("rejects files over 20 MB before uploading", () => {
     const file = new File(["x"], "big.mp4", { type: "video/mp4" });
     Object.defineProperty(file, "size", { value: 20 * 1024 * 1024 + 1 });
-    const { container } = render(<SimpleClipUpload onPublished={vi.fn()} />);
+    const { container } = render(<LegacySimpleClipUpload onPublished={vi.fn()} />);
     fireEvent.change(container.querySelector("input")!, { target: { files: [file] } });
     expect(screen.getByRole("alert").textContent).toBe("صغر الفيديو");
     expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
@@ -89,7 +96,7 @@ describe("direct Clips upload", () => {
     vi.stubGlobal("XMLHttpRequest", UploadRequest);
     const published = vi.fn();
     const file = new File(["original"], "small.mp4", { type: "video/mp4" });
-    const { container } = render(<SimpleClipUpload onPublished={published} />);
+    const { container } = render(<LegacySimpleClipUpload onPublished={published} />);
     fireEvent.change(container.querySelector("input")!, { target: { files: [file] } });
     fireEvent.submit(container.querySelector("form")!);
     const xhr = UploadRequest.latest;
@@ -110,7 +117,7 @@ describe("direct Clips upload", () => {
   it("shows API errors without reporting success and permits retry", () => {
     vi.stubGlobal("XMLHttpRequest", UploadRequest);
     const published = vi.fn();
-    const { container } = render(<SimpleClipUpload onPublished={published} />);
+    const { container } = render(<LegacySimpleClipUpload onPublished={published} />);
     fireEvent.change(container.querySelector("input")!, { target: { files: [new File(["x"], "small.mp4")] } });
     fireEvent.submit(container.querySelector("form")!);
     const xhr = UploadRequest.latest;
@@ -124,7 +131,7 @@ describe("direct Clips upload", () => {
   it("uploads original audio without conversion", () => {
     vi.stubGlobal("XMLHttpRequest", UploadRequest);
     const file = new File(["audio"], "recording.mp3", { type: "audio/mpeg" });
-    const { container } = render(<SimpleClipUpload onPublished={vi.fn()} />);
+    const { container } = render(<LegacySimpleClipUpload onPublished={vi.fn()} />);
     fireEvent.change(container.querySelector("input")!, { target: { files: [file] } });
     fireEvent.submit(container.querySelector("form")!);
     expect((UploadRequest.latest.send.mock.calls[0][0] as FormData).get("file")).toBe(file);
@@ -133,7 +140,7 @@ describe("direct Clips upload", () => {
   it("requires an original reference, sends the declaration, and shows the server-dated receipt", () => {
     vi.stubGlobal("XMLHttpRequest", UploadRequest);
     const published = vi.fn();
-    const { container } = render(<SimpleClipUpload onPublished={published} />);
+    const { container } = render(<LegacySimpleClipUpload onPublished={published} />);
     fireEvent.change(container.querySelector("#clip-upload-file")!, { target: { files: [new File(["video"], "original.mp4")] } });
     fireEvent.click(screen.getByRole("radio", { name: "إيداع أصل لديّ حقوقه" }));
     fireEvent.submit(container.querySelector("form")!);
@@ -160,7 +167,7 @@ describe("direct Clips upload", () => {
   });
   it("does not send a stale original reference when switching back to a citizen clip", () => {
     vi.stubGlobal("XMLHttpRequest", UploadRequest);
-    const { container } = render(<SimpleClipUpload onPublished={vi.fn()} />);
+    const { container } = render(<LegacySimpleClipUpload onPublished={vi.fn()} />);
     fireEvent.change(container.querySelector("#clip-upload-file")!, { target: { files: [new File(["video"], "story.mp4")] } });
     fireEvent.click(screen.getByRole("radio", { name: "إيداع أصل لديّ حقوقه" }));
     fireEvent.change(screen.getByLabelText("مرجع تسجيل الأصل أو وثيقة الحقوق"), { target: { value: "REF-123" } });

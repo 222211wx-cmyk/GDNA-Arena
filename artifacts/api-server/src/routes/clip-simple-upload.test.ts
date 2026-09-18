@@ -166,18 +166,18 @@ test("simplified feed always returns empty JSON on parsing, database and mapping
     assert.equal(body.clips[0].video_url, "/api/clips/stream/42");
     assert.equal(body.clips[0].thumb, "/api/clips/thumbnail/42");
     assert.equal(body.clips[0].thumbnail_object_name, undefined);
-    assert.deepEqual(await (await fetch(`${base}?limit=invalid`)).json(), { clips: [], hasMore: false });
+    assert.deepEqual(await (await fetch(`${base}?limit=invalid`)).json(), { clips: [], hasMore: false, degraded: true });
     fail = "database";
-    assert.deepEqual(await (await fetch(base)).json(), { clips: [], hasMore: false });
+    assert.deepEqual(await (await fetch(base)).json(), { clips: [], hasMore: false, degraded: true });
     fail = "mapping";
-    assert.deepEqual(await (await fetch(base)).json(), { clips: [], hasMore: false });
+    assert.deepEqual(await (await fetch(base)).json(), { clips: [], hasMore: false, degraded: true });
     let fallback: unknown;
     await handler(
       { get query() { throw new Error("Query parsing failed"); } } as unknown as Request,
       { json(value: unknown) { fallback = value; } } as Response,
       () => { throw new Error("Unexpected next"); },
     );
-    assert.deepEqual(fallback, { clips: [], hasMore: false });
+    assert.deepEqual(fallback, { clips: [], hasMore: false, degraded: true });
     assert.equal(failures.length, 4);
   } finally {
     server.closeAllConnections();

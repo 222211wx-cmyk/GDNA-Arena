@@ -8,7 +8,8 @@ import { RadioGroup, RadioGroupItem } from "@workspace/gdna-ds/components/ui/rad
 const MAX_BYTES = 20 * 1024 * 1024;
 const BASE = import.meta.env.BASE_URL;
 
-export function SimpleClipUpload({ onPublished }: { onPublished: () => void }) {
+/** Kept as a small legacy helper for callers which still need the multipart endpoint. */
+export function LegacySimpleClipUpload({ onPublished }: { onPublished: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -107,7 +108,7 @@ export function SimpleClipUpload({ onPublished }: { onPublished: () => void }) {
   return (
     <form onSubmit={upload} className="mb-4 space-y-3" dir="rtl" data-testid="clips-upload">
       <Label htmlFor="clip-upload-file">رفع صوت أو فيديو — 20 MB كحد أقصى</Label>
-      <p className="text-sm text-muted-foreground">الفيديو: دقيقة واحدة على الأقل. يمكن رفع مقاطع صوتية قصيرة. تُرفع الملفات الأصلية دون ضغط.</p>
+      <p className="text-sm text-muted-foreground">الفيديو: دقيقة واحدة على الأقل. يمكن رفع مقاطع صوتية قصيرة.</p>
       <Input ref={input} id="clip-upload-file" type="file" accept="video/mp4,video/webm,video/quicktime,audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/webm,audio/flac,.mp3,.m4a,.aac,.ogg,.opus,.wav,.flac" disabled={busy}
         onChange={event => {
           const selected = event.target.files?.[0] ?? null;
@@ -154,9 +155,7 @@ export function SimpleClipUpload({ onPublished }: { onPublished: () => void }) {
           <p className="text-sm text-muted-foreground">
             باختيار هذا النوع تصرّح بأنك صاحب الحقوق أو مخوّل بالإيداع نيابةً عنه. يُحفظ الاسم والمرجع وتاريخ الإيداع؛ هذا توثيق داخل المنصة، وليس تحققاً قانونياً من الملكية.
           </p>
-        </div> : <p className="text-sm text-muted-foreground">
-          تشابه الموسيقى وحده لا يمنع النشر. لا تُعد نشر فيديو مطابق لمدّة وصور أصل مودَع. تبقى تراخيص الاستخدام مسؤولية الناشر.
-        </p>}
+        </div> : <p className="text-sm text-muted-foreground">يمكن نشر التسجيلات المصورة بهاتفك أو كاميرتك بشرط ألا تكون نسخة مطابقة للأصل .</p>}
       </fieldset>
       <Button type="submit" disabled={!file || busy}>{busy ? "جارٍ الرفع…" : error && file ? "إعادة المحاولة" : "نشر"}</Button>
       {(busy || done) && <div role="status" aria-live="polite">
@@ -170,3 +169,5 @@ export function SimpleClipUpload({ onPublished }: { onPublished: () => void }) {
     </form>
   );
 }
+
+export { ResumableClipUpload as SimpleClipUpload } from "./ResumableClipUpload";

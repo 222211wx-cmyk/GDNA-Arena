@@ -28,7 +28,7 @@ export function createClipsUploadsRouter(service: ClipUploads): IRouter {
   });
   // Completion is JSON, not a Tus concatenation extension.
   router.post("/clips/uploads/complete", json({ limit: "4kb" }), asyncRoute(async (req, res) => {
-    const clip = await service.complete(userId(req), req.body?.uploadIds);
+    const clip = await service.complete(userId(req), req.body?.uploadIds, req.body?.isOriginalFootage);
     res.json({ clip });
   }));
   router.use("/clips/uploads", (req, res, next) => {

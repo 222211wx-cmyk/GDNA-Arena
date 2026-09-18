@@ -10,7 +10,8 @@
   "scripts": {
     "generate": "drizzle-kit generate --config=drizzle.config.ts",
     "migrate": "drizzle-kit migrate --config=drizzle.config.ts",
-    "push": "pnpm run migrate"
+    "push": "node scripts/push-clips-additive.mjs",
+    "validate:history": "node scripts/validate-migration-history.mjs"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",

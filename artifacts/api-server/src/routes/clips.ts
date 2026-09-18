@@ -171,7 +171,7 @@ router.get("/clips/feed", createClipsFeedHandler({
     const params = before === null ? [limit + 1] : [before, limit + 1];
     const { rows } = await requirePool().query(
       `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec,
-              c.views, c.created_at, c.thumbnail_object_name,
+              c.views, c.created_at, c.thumbnail_object_name, c.is_original_footage,
               CASE WHEN r.id IS NULL THEN 'story' ELSE 'original' END AS rights_purpose,
               r.created_at AS rights_registered_at,
               r.rights_holder_name, r.rights_holder_role
@@ -222,6 +222,7 @@ router.post("/clips", uploadLimiter, (req, res): void => {
         size: f.size, sha256: f.sha256,
         purpose: req.body?.purpose, originalReference: req.body?.originalReference,
         rightsHolderName: req.body?.rightsHolderName, rightsHolderRole: req.body?.rightsHolderRole,
+        isOriginalFootage: req.body?.isOriginalFootage,
       });
       res.json({ clip });
     } catch (e) {

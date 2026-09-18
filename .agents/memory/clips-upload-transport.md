@@ -1,13 +1,13 @@
 ---
 name: Clips upload transport decisions
-description: Owner-directed simplification of the Clips flow and constraints for legacy resumable uploads
+description: Owner-directed Clips compression and resumable upload policy, plus integrity constraints
 ---
 
-Keep the citizen Clips page and uploader simple; do not reintroduce browser FFmpeg, virtualization, or the parallel Tus client without a new request.
+Keep the citizen Clips page simple, but permit browser video compression and resumable upload.
 
-**Why:** On 2026-09-18 the owner explicitly rejected that complexity after reporting mobile browser failures and uploads stuck at 0%. They requested native video controls and direct original-file uploads capped at 20 MB.
+**Why:** On 2026-09-18 the owner's subsequent emergency request explicitly superseded the earlier direct-upload-only decision: reduce large videos to 480p at approximately 800 kbps and upload in 1 MiB chunks with retry/resume. This is authorization for compression and resumability, not for deleting the original.
 
-**How to apply:** Preserve this product decision when improving Clips. The existing storage provider, server-side duration checks, and ownership protections remain required. Legacy resumable APIs can remain for compatibility but must not drive the new page.
+**How to apply:** Preserve the selected source file and create a derivative. Distinguish preparation progress from transferred bytes and committed publication. Retain native playback, existing storage, server-side media verification, and legacy upload compatibility. Do not promise a fixed output size or universal browser codec support.
 
 Treat the historical one-minute minimum as a video rule, not a restriction on newly supported audio uploads.
 

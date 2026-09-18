@@ -8,6 +8,7 @@ type Clip = {
   id: number; video_url: string; content_type?: string; title?: string;
   rights_purpose?: "story" | "original"; rights_registered_at?: string | null;
   rights_holder_name?: string | null; rights_holder_role?: "owner" | "producer" | null;
+  is_original_footage?: boolean;
 };
 const BASE = import.meta.env.BASE_URL;
 
@@ -36,18 +37,33 @@ function ClipPlayer({ clip }: { clip: Clip }) {
 
 export default function ClipsPage() {
   const [clips, setClips] = useState<Clip[]>([]);
+  const [feedState, setFeedState] = useState<"loading" | "ready" | "unavailable">("loading");
   const { user } = useAuth();
   const refresh = useCallback(async (signal?: AbortSignal) => {
+    setFeedState("loading");
     try {
       const response = await fetch(`${BASE}api/clips/feed?limit=5`, { signal, cache: "no-store" });
-      const data = response.ok ? await response.json() : null;
+      if (!response.ok) throw new Error("Feed request failed");
+      const data = await response.json();
       if (!signal?.aborted) {
-        setClips(Array.isArray(data?.clips) ? data.clips.filter((clip: Clip | null) =>
-          clip && Number.isSafeInteger(clip.id) && typeof clip.video_url === "string" && clip.video_url.length > 0,
-        ).slice(0, 5) : []);
+        const validClip = (clip: unknown): clip is Clip => {
+          if (!clip || typeof clip !== "object") return false;
+          const candidate = clip as Partial<Clip>;
+          return Number.isSafeInteger(candidate.id) && typeof candidate.video_url === "string" && candidate.video_url.length > 0;
+        };
+        if (!data || !Array.isArray(data.clips) || data.degraded === true || !data.clips.every(validClip)) {
+          setClips([]);
+          setFeedState("unavailable");
+          return;
+        }
+        setClips(data.clips.slice(0, 5));
+        setFeedState("ready");
       }
     } catch {
-      if (!signal?.aborted) setClips([]);
+      if (!signal?.aborted) {
+        setClips([]);
+        setFeedState("unavailable");
+      }
     }
   }, []);
 
@@ -61,7 +77,11 @@ export default function ClipsPage() {
     <div className="p-4 pt-20 text-foreground">
       {user ? <SimpleClipUpload key={user.id} onPublished={() => void refresh()} /> :
         <Link href="/login" className="mb-4 block text-primary">سجل الدخول لرفع الصوت أو الفيديو</Link>}
-      {clips.length === 0 ? <p dir="rtl">لا يوجد كليبز - كن أول من ينشر</p> :
+      {feedState === "unavailable" ? <div dir="rtl" role="alert" className="space-y-2">
+        <p>الكليبز غير متاحة حالياً. حاول مرة أخرى.</p>
+        <Button type="button" variant="outline" onClick={() => void refresh()}>إعادة المحاولة</Button>
+      </div> : feedState === "loading" ? <p dir="rtl">جارٍ تحميل الكليبز…</p> :
+        clips.length === 0 ? <p dir="rtl">لا يوجد كليبز - كن أول من ينشر</p> :
         clips.map(clip => <ClipPlayer key={clip.id} clip={clip} />)}
     </div>
   );

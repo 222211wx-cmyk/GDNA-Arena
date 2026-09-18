@@ -18,7 +18,7 @@ export class ClipProbeBusyError extends Error {
  * loopback HTTP ranges let ffprobe seek to MP4/MOV tail metadata without
  * downloading the entire video. Limits bound work, NOT the media's duration.
  */
-export async function verifiedDuration(file: File, expectedKind?: "audio"): Promise<number> {
+export async function verifiedDuration(file: File, expectedKind?: "audio" | "video"): Promise<number> {
   if (activeJobs >= 2) throw new ClipProbeBusyError();
   activeJobs++;
   try {
@@ -32,7 +32,7 @@ export async function verifiedDuration(file: File, expectedKind?: "audio"): Prom
   }
 }
 
-async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "audio"): Promise<number> {
+async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "audio" | "video"): Promise<number> {
   const secretPath = `/${randomBytes(32).toString("hex")}`;
   const streams = new Set<Readable>();
   const sockets = new Set<Socket>();
@@ -147,8 +147,8 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "
       "-format_whitelist", "mov,matroska,webm,mp3,aac,ogg,wav,flac",
       "-rw_timeout", "5000000",
       "-probesize", "5000000", "-analyzeduration", "5000000",
-      "-show_entries", expectedKind === "audio" ? "format=duration:stream=codec_type:stream_disposition=attached_pic" : "format=duration",
-      "-of", expectedKind === "audio" ? "json" : "default=noprint_wrappers=1:nokey=1",
+      "-show_entries", expectedKind ? "format=duration:stream=codec_type:stream_disposition=attached_pic" : "format=duration",
+      "-of", expectedKind ? "json" : "default=noprint_wrappers=1:nokey=1",
       `http://127.0.0.1:${address.port}${secretPath}`,
     ], { stdio: ["ignore", "pipe", "pipe"] });
     child = spawned;
@@ -171,17 +171,22 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "
     const result = new Promise<number>((resolve, reject) => {
       spawned.once("close", (code) => {
         let duration = Number(output.trim());
-        if (expectedKind === "audio" && !failure) {
+        if (expectedKind && !failure) {
           try {
             const media = JSON.parse(output) as {
               format?: { duration?: string };
               streams?: { codec_type?: string; disposition?: { attached_pic?: number } }[];
             };
-            // Do not let a video evade the one-minute rule by claiming audio MIME.
-            // Embedded album artwork is legitimate audio, not a video clip.
-            if (!media.streams?.some(stream => stream.codec_type === "audio") ||
-                media.streams.some(stream => stream.codec_type === "video" && stream.disposition?.attached_pic !== 1)) {
-              reject(new Error("INVALID_AUDIO_STREAMS"));
+            const hasAudio = media.streams?.some(stream => stream.codec_type === "audio") === true;
+            const hasRealVideo = media.streams?.some(
+              stream => stream.codec_type === "video" && stream.disposition?.attached_pic !== 1,
+            ) === true;
+            // MIME is merely upload metadata. Require the corresponding stream
+            // kind so audio-only MP4/MP3 bytes cannot opt into footage policy,
+            // and album artwork cannot be treated as moving video.
+            if ((expectedKind === "audio" && (!hasAudio || hasRealVideo)) ||
+                (expectedKind === "video" && !hasRealVideo)) {
+              reject(new Error(expectedKind === "audio" ? "INVALID_AUDIO_STREAMS" : "INVALID_VIDEO_STREAMS"));
               return;
             }
             duration = Number(media.format?.duration);

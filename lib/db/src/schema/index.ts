@@ -17,4 +17,5 @@ export * from "./finance";
 export * from "./call-state";
 export * from "./browser-push";
 export * from "./clip-original-registrations";
+export * from "./clips";
 

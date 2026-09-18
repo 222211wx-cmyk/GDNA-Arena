@@ -2,7 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
   ClipUploadError, CLIP_EXT, MAX_CLIP_BYTES, normalizeClipContentType,
-  validateClipRightsInput, type ClipPublishPurpose,
+  validateClipRightsInput, parseIsOriginalFootage, type ClipPublishPurpose,
 } from "./clip-upload-protocol.js";
 
 export const CHUNK_BYTES = 5 * 1024 * 1024;
@@ -17,6 +17,7 @@ export interface UploadMetadata {
   title: string;
   contentType: string;
   durationSec: number;
+  isOriginalFootage: boolean;
   purpose: ClipPublishPurpose;
   originalReference?: string;
   rightsHolderName?: string;
@@ -55,7 +56,7 @@ export interface UploadPublisher {
   publish(input: {
     userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
     purpose: ClipPublishPurpose; originalReference?: string;
-    rightsHolderName?: string; rightsHolderRole?: "owner" | "producer";
+    rightsHolderName?: string; rightsHolderRole?: "owner" | "producer"; isOriginalFootage: boolean;
   }): Promise<Record<string, unknown>>;
 }
 function fail(status: number, message: string): never { throw new ClipUploadError(status, message); }
@@ -92,7 +93,8 @@ export function parseUploadMetadata(header: string | undefined): UploadMetadata 
   const rights = validateClipRightsInput(
     entries.purpose, entries.originalReference, entries.rightsHolderName, entries.rightsHolderRole,
   );
-  return { groupId, partIndex, partCount, totalSize, title, contentType, durationSec, ...rights };
+  const isOriginalFootage = parseIsOriginalFootage(entries.isOriginalFootage);
+  return { groupId, partIndex, partCount, totalSize, title, contentType, durationSec, isOriginalFootage, ...rights };
 }
 function common(metadata: UploadMetadata) {
   const { partIndex: _partIndex, ...rest } = metadata;
@@ -220,9 +222,13 @@ export class ClipUploads {
     return `clip_upload_${session.userId}_${session.metadata.groupId}${CLIP_EXT[session.metadata.contentType]}`;
   }
 
-  async complete(userId: number, ids: unknown): Promise<Record<string, unknown>> {
+  async complete(userId: number, ids: unknown, completionOriginalFootage?: unknown): Promise<Record<string, unknown>> {
     if (!Array.isArray(ids) || ids.length < 1 || ids.length > 3 || ids.some(id => !validUploadId(id)) || new Set(ids).size !== ids.length) fail(400, "uploadIds must contain 1–3 unique IDs in part order");
     const first = (await this.session(ids[0], userId)).value;
+    if (completionOriginalFootage !== undefined &&
+        parseIsOriginalFootage(completionOriginalFootage) !== first.metadata.isOriginalFootage) {
+      fail(409, "Completion metadata differs from durable upload metadata");
+    }
     return this.publisher.lock(lockKey(userId, first.metadata.groupId), async () => {
       const key = groupKey(userId, first.metadata.groupId);
       let group = await this.store.read<UploadGroup>(key);
@@ -279,6 +285,7 @@ export class ClipUploads {
         originalReference: first.metadata.originalReference,
         rightsHolderName: first.metadata.rightsHolderName,
         rightsHolderRole: first.metadata.rightsHolderRole,
+        isOriginalFootage: first.metadata.isOriginalFootage,
       });
       await this.store.write(key, { ...group.value, state: "published", result }, group.generation);
       // Only temporary bytes are removed, after both the publication and result are durable.

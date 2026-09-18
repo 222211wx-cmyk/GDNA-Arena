@@ -7,6 +7,8 @@ export interface StoredClipVisualSignature {
   frames: string[];
 }
 
+export type StoredClipAudioSignature = Record<string, unknown>;
+
 /**
  * A citizen's durable declaration that a clip is an original work.
  *
@@ -22,6 +24,7 @@ export const clipOriginalRegistrationsTable = pgTable("clip_original_registratio
   rightsHolderRole: text("rights_holder_role").notNull(),
   durationSeconds: numeric("duration_seconds", { precision: 12, scale: 3, mode: "number" }).notNull(),
   visualSignature: jsonb("visual_signature").$type<StoredClipVisualSignature | null>(),
+  audioSignature: jsonb("audio_signature").$type<StoredClipAudioSignature | null>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   clipUnique: uniqueIndex("clip_original_registrations_clip_id_uniq").on(table.clipId),

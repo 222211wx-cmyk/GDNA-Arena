@@ -19,8 +19,14 @@ Ordinary citizens may register and publish without royal verification. Payout ve
 
 **How to apply:** Distinguish the submitting account from the named rights holder/producer. Store declarations and their chronology without claiming that a user-supplied registration reference has been legally verified. Preserve historical fingerprints and financial protections.
 
-For Clips, music overlap alone must not reject a citizen's video. Full-video matching requires both matching duration and visual sequence; audio exact-file duplicate protection is distinct from recognizing songs across re-encodings.
+For Clips, music overlap alone must not reject a citizen's video. Full-video matching requires both matching duration and visual sequence. The subsequent emergency request also requires blocking audio-only copies matching at least 90% of a registered original recording; shorter excerpts are not automatically full copies.
 
 **Why:** The owner explicitly allows citizens' music-backed stories while protecting complete originals. Conservative matching avoids treating shared music, static backgrounds, or a similar runtime as proof of copying.
 
 **How to apply:** Keep technical permission separate from legal licensing. Do not claim that shortening or changing imagery grants copyright permission, or that a declared deposit proves legal ownership. The video minimum does not apply to short audio.
+
+Match against registered originals, not an assumed worldwide music catalogue, and verify actual server-detected media tracks rather than trusting an original-footage checkbox or MIME label.
+
+**Why:** A client declaration cannot establish camera provenance or ownership, and relabeling audio as video must not evade music protection.
+
+**How to apply:** Treat acoustic matching as bounded recording comparison, not legal certification or universal song recognition.

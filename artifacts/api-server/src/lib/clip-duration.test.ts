@@ -239,6 +239,24 @@ test("audio MIME cannot disguise a short video to evade the 60-second video poli
   for (const duration of [0, -1, NaN, Infinity]) assert.throws(() => clipDurationSeconds(duration, "audio/mp4"));
 });
 
+test("video MIME cannot disguise audio-only media as citizen footage", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "clip-video-masquerade-"));
+  try {
+    const path = join(directory, "audio-only.mp4");
+    const result = spawnSync("ffmpeg", [
+      "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+      "-t", "61", "-c:a", "aac", "-vn", path,
+    ]);
+    assert.equal(result.status, 0, result.stderr.toString());
+    await assert.rejects(
+      verifiedDuration(source(readFileSync(path)).file, "video"),
+      /INVALID_VIDEO_STREAMS/,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("MP3 cover artwork is audio, while motion video with an audio track is not", async () => {
   const directory = mkdtempSync(join(tmpdir(), "clip-stream-kind-"));
   try {

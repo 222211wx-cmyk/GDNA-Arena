@@ -72,7 +72,7 @@ export function metadata(overrides: Partial<UploadMetadata> = {}): UploadMetadat
   return {
     groupId: randomUUID(), partIndex: 0, partCount: 1, totalSize: 6,
     title: "عنوان الفيديو", contentType: "video/mp4", durationSec: 61,
-    purpose: "story", ...overrides,
+    purpose: "story", isOriginalFootage: true, ...overrides,
   };
 }
 export function metadataHeader(values: Record<string, unknown>): string {
@@ -136,6 +136,20 @@ test("rights metadata defaults legacy callers to story and validates original de
       rightsHolderName: "Owner Name", rightsHolderRole: "owner", ...update,
     })), ClipUploadError);
   }
+});
+
+test("original-footage metadata is strict, durable, and completion cannot override it", async () => {
+  const legacy = metadata() as Partial<UploadMetadata>;
+  delete legacy.isOriginalFootage;
+  assert.equal(parseUploadMetadata(metadataHeader(legacy)).isOriginalFootage, true);
+  assert.equal(parseUploadMetadata(metadataHeader({ ...legacy, isOriginalFootage: "false" })).isOriginalFootage, false);
+  assert.throws(() => parseUploadMetadata(metadataHeader({ ...legacy, isOriginalFootage: "yes" })), ClipUploadError);
+
+  const { service } = fixture();
+  const session = await service.create(1, metadata({ isOriginalFootage: false }), 6);
+  await service.append(await service.checkPatch(session.id, 1, 0), Buffer.from("abcdef"));
+  await rejectsStatus(service.complete(1, [session.id], true), 409);
+  await service.complete(1, [session.id], false);
 });
 
 test("part lengths and metadata must be consistent for an entire group", async () => {

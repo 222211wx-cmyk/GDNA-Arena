@@ -120,5 +120,5 @@ export const clipUploadPublisher: UploadPublisher = {
         : { purpose: "story" },
     };
   },
-  publish: input => publishClip(input, groupConnection.getStore()),
+  publish: input => publishClip({ ...input, deferThumbnail: true }, groupConnection.getStore()),
 };
