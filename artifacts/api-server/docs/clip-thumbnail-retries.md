@@ -38,9 +38,10 @@ Retry object names are deterministic from the clip ID and original object name.
 A successful storage write followed by a database failure or process restart
 therefore remains associated with its clip even before the pointer commits.
 The next attempt overwrites the same candidate, and deletion always removes the
-candidate as well as any stored thumbnail pointer. A failed storage deletion
-keeps the row available for another deletion attempt. Do not introduce random
-retry names or delete candidate objects on ambiguous database commits.
+candidate as well as any stored thumbnail pointer. Database deletion commits
+before object cleanup. A failed storage deletion is logged, but is not currently
+retried durably; the row is already gone. Do not introduce random retry names or
+delete candidate objects on ambiguous database commits.
 
 Neither the job nor its retry state writes original media, fingerprints, rights,
 duration, views, or earnings. The existing visibility-scoped thumbnail endpoint
@@ -68,3 +69,32 @@ WHERE id = $1 AND thumbnail_object_name IS NULL AND is_frozen = FALSE;
 Do not reset every exhausted clip periodically: permanently unsupported media
 must not create an unlimited processing loop. No public/admin HTTP trigger is
 added by this worker.
+
+## Isolated PostgreSQL regression tests
+
+From the workspace root:
+
+```sh
+pnpm --filter @workspace/api-server run test:integration:thumbnail-retry
+```
+
+Requires PostgreSQL's `initdb` and `pg_ctl` on `PATH` and an unprivileged OS
+user (as in this workspace). No running API, cloud bucket, ffmpeg, or database
+credentials are needed. Missing PostgreSQL binaries fail the suite, not skip it.
+
+The suite starts a disposable local PostgreSQL cluster on a private Unix socket,
+with TCP disabled. It never reads `DATABASE_URL` or connects to project databases.
+Each test creates a random schema and uses a search path without `public`, then
+drops it and closes every pool. Teardown verifies schema removal and stops and
+removes the cluster. A separate cluster also isolates advisory locks, which cannot
+be isolated by schema alone.
+
+Two separately bundled workers have independent module state and real `pg`
+connections. Only media generation, object storage, and logging are substituted;
+the worker SQL, route SQL, locking, transactions, and clip-table DDL are real.
+Coverage includes replica exclusion and handoff, skipping locked eligible rows,
+persisted exponential backoff after destroying/reconnecting PostgreSQL sessions,
+the eight-attempt cap, and deletion waiting on a publication row lock. The
+deletion test observes `pg_blocking_pids`, then checks original/poster removal,
+view cleanup, and preservation of the complete fingerprint row. Authorization
+and cleanup of an interrupted poster without a published pointer are also checked.

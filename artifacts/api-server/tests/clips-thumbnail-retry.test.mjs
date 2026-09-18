@@ -193,6 +193,7 @@ export async function generateClipThumbnail(original) {
   if (state.generateMode === "wait") await waitForGeneration();
   return Buffer.from(state.jpeg);
 }
+export const objectStorageClient = { bucket() { return { file: clipFile }; } };
 export const logger = { info() {}, warn() {}, error() {} };
 export function spawn() { throw new Error("spawn should not be called"); }
 `);
@@ -225,9 +226,9 @@ await build({
     name: "clip-thumbnail-retry-mocks",
     setup(plugin) {
       plugin.onResolve({ filter: /^@workspace\/db$/ }, () => ({ path: mocksPath }));
-      plugin.onResolve({ filter: /(?:^|\/)chatStorage$/ }, () => ({ path: mocksPath }));
-      plugin.onResolve({ filter: /\/lib\/logger$/ }, () => ({ path: mocksPath }));
-      plugin.onResolve({ filter: /\/lib\/clip-thumbnail\.js$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /(?:^|\/)chatStorage(?:\.js)?$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /\/(?:lib\/)?logger(?:\.js)?$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /\/clip-thumbnail\.js$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /\/lib\/clip-storage\.js$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /^node:child_process$/ }, () => ({ path: mocksPath }));
     },

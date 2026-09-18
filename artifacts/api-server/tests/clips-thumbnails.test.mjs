@@ -77,6 +77,11 @@ async function query(sql, params = []) {
   const compact = sql.replace(/\\s+/g, " ").trim();
   state.queries.push({ sql: compact, params: [...params] });
   if (compact === "BEGIN" || compact === "COMMIT" || compact === "ROLLBACK") return result();
+  if (compact.startsWith("SELECT pg_advisory_xact_lock")) return result([{ pg_advisory_xact_lock: null }]);
+  if (compact.startsWith("SELECT count(*)::int AS count FROM clips")) {
+    const count = [...state.clips.values()].filter(clip => clip.user_id === params[0]).length;
+    return result([{ count }]);
+  }
   if (compact.startsWith("SELECT username FROM users")) return result([{ username: "rights-owner" }]);
   if (compact.startsWith("SELECT is_admin FROM users")) return result([{ is_admin: false }]);
   if (compact.startsWith("INSERT INTO content_fingerprints")) {
@@ -87,6 +92,10 @@ async function query(sql, params = []) {
   }
   if (compact.startsWith("SELECT owner_name FROM content_fingerprints"))
     return result([state.fingerprints.get(params[0])].filter(Boolean));
+  if (compact.startsWith("SELECT id FROM clips WHERE object_name")) {
+    const clip = [...state.clips.values()].find(value => value.object_name === params[0]);
+    return result(clip ? [{ id: clip.id }] : []);
+  }
   if (compact.startsWith("INSERT INTO clips ")) {
     if (state.failClipInsert) throw new Error("DB_PUBLISH_FAILED");
     const id = state.nextClipId++;
@@ -182,9 +191,9 @@ await build({
     name: "clips-route-mocks",
     setup(plugin) {
       plugin.onResolve({ filter: /^@workspace\/db$/ }, () => ({ path: mocksPath }));
-      plugin.onResolve({ filter: /(?:^|\/)chatStorage$/ }, () => ({ path: mocksPath }));
-      plugin.onResolve({ filter: /\/lib\/logger$/ }, () => ({ path: mocksPath }));
-      plugin.onResolve({ filter: /\/lib\/clip-thumbnail\.js$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /(?:^|\/)chatStorage(?:\.js)?$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /\/(?:lib\/)?logger(?:\.js)?$/ }, () => ({ path: mocksPath }));
+      plugin.onResolve({ filter: /\/clip-thumbnail\.js$/ }, () => ({ path: mocksPath }));
       plugin.onResolve({ filter: /^node:child_process$/ }, () => ({ path: mocksPath }));
     },
   }],

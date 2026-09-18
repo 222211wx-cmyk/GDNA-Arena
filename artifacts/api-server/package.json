@@ -12,6 +12,7 @@
     "test:clip-media": "sh -c 'trap \"rm -rf .clip-media-test-dist\" EXIT; tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .clip-media-test-dist src/lib/clip-duration.test.ts src/lib/clip-thumbnail.test.ts && node --test .clip-media-test-dist/*.test.js'",
     "typecheck": "tsc -b ../../lib/db ../../lib/api-zod && tsc -p tsconfig.json --noEmit",
     "test:integration": "node --test tests/*.integration.test.mjs",
+    "test:integration:thumbnail-retry": "node --test tests/clips-thumbnail-retry.integration.test.mjs",
     "test:integration:account-erasure": "node --test tests/auth-delete.integration.test.mjs",
     "test:integration:conversation-exit": "node --test tests/messages-room-exit.integration.test.mjs",
     "test:integration:citizens-list": "node --test tests/citizens-list.integration.test.mjs",
