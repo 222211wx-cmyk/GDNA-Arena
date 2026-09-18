@@ -23,6 +23,7 @@ import {
   MapPin, Link2, Share2,
 } from "lucide-react";
 import SolidarityRelay from "./SolidarityRelay";
+import { attachmentSizeError, attachmentUploadQuery } from "./attachment-policy";
 import type { GroupRoom } from "../social/social-types";
 import Avatar from "../social/Avatar";
 import { Switch } from "@workspace/gdna-ds/components/ui/switch";
@@ -67,10 +68,12 @@ const UPLOAD_BATCH_LIMIT = 15;
 // A file staged in the pre-send preview strip.
 interface PendingFile {
   id: string;
+  roomId: number;
   file: File;
   previewUrl: string | null;
   status: "staged" | "uploading" | "error";
   progress: number; // 0–100 (upload phase only)
+  autoSend?: boolean;
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -1112,7 +1115,12 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   }, [blockOffline, call, groupCall.busy, isOnline]);
 
   const pendingRef = useRef<PendingFile[]>([]);
-  useEffect(() => { pendingRef.current = pending; }, [pending]);
+  const updatePending = useCallback((update: PendingFile[] | ((previous: PendingFile[]) => PendingFile[])) => {
+    const next = typeof update === "function" ? update(pendingRef.current) : update;
+    pendingRef.current = next;
+    setPending(next);
+  }, []);
+  const uploadingRef = useRef(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const fileRef    = useRef<HTMLInputElement>(null);
@@ -1578,7 +1586,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     }
   }
 
-  async function sendMessage(override?: object): Promise<boolean> {
+  async function sendMessage(override?: object, shouldSend: () => boolean = () => true): Promise<boolean> {
     if (!activeRoom || (!text.trim() && !override) || sending) return false;
     if (!isOnline) { blockOffline(); return false; }
     setSending(true);
@@ -1614,6 +1622,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
           ...baseBody,
           content: await encryptMessagePayload(payload, keyData.keys),
         };
+        if (!mountedRef.current || !shouldSend()) return false;
         r = await fetch(api(`/api/messages/rooms/${roomId}/send`), {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body), credentials: "include",
@@ -1757,6 +1766,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     fallbackName: string,
     onProgress: (pct: number) => void,
     onXhr: (xhr: XMLHttpRequest) => void,
+    uploadQuery: string,
   ) {
     if (!isOnline) return Promise.resolve({ ok: false, status: 0, json: {}, aborted: false });
     return new Promise<{ ok: boolean; status: number; json: any; aborted: boolean }>((resolve) => {
@@ -1765,13 +1775,16 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       const xhr = new XMLHttpRequest();
       onXhr(xhr);
       activeUploadsRef.current.add(xhr);
-      xhr.open("POST", api("/api/messages/upload"));
+      xhr.open("POST", api(`/api/messages/upload${uploadQuery}`));
       xhr.withCredentials = true;
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
       xhr.onload = () => {
         activeUploadsRef.current.delete(xhr);
         let json: any = {};
-        try { json = JSON.parse(xhr.responseText); } catch { /* non-JSON error body */ }
+        try {
+          const parsed = JSON.parse(xhr.responseText);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) json = parsed;
+        } catch { /* non-JSON error body */ }
         resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json, aborted: false });
       };
       xhr.onerror = () => {
@@ -1794,7 +1807,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   ): Promise<"sent" | "failed" | "cancelled"> {
     if (!activeRoom) return "failed";
     if (!isOnline) { blockOffline(); return "failed"; }
-    const roomId = activeRoom.id;
+    const sizeError = attachmentSizeError(file);
+    if (sizeError) { setToast(st[sizeError]); return "failed"; }
+    const item = pendingRef.current.find(p => p.id === pendingId);
+    if (!item || item.roomId !== activeRoom.id) return "cancelled";
+    const roomId = item.roomId;
+    const stillActive = () => mountedRef.current && activeRoomIdRef.current === roomId &&
+      !cancelledUploadIdsRef.current.has(pendingId) && pendingRef.current.some(p => p.id === pendingId);
     let encryptedAttachment: Awaited<ReturnType<typeof encryptAttachmentBlob>>;
     try {
       const originalName = file instanceof File ? file.name : `${fallbackName}.webm`;
@@ -1803,13 +1822,17 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       setToast(`🔐 ${st.encrypt_attachment_failed}`);
       return "failed";
     }
+    if (!mountedRef.current || activeRoomIdRef.current !== roomId ||
+        cancelledUploadIdsRef.current.has(pendingId) || !pendingRef.current.some(p => p.id === pendingId)) {
+      return "cancelled";
+    }
     const r = await uploadWithProgress(encryptedAttachment.blob, `${fallbackName}.enc`, onProgress, (xhr) => {
       xhrMapRef.current.set(pendingId, xhr);
-    });
+    }, attachmentUploadQuery(roomId, encryptedAttachment.metadata.kind));
     xhrMapRef.current.delete(pendingId);
     if (r.aborted || cancelledUploadIdsRef.current.has(pendingId)) return "cancelled";
     if (!mountedRef.current) return "cancelled";
-    if (!r.ok) {
+    if (!r.ok || typeof r.json.url !== "string" || !r.json.url.startsWith("/api/messages/files/")) {
       setToast(r.status === 429
         ? (r.json.error ?? (st.upload_limit ?? "Upload limit reached — please wait a moment"))
         : (r.json.error ?? st.upload_failed));
@@ -1828,28 +1851,32 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       // Item was removed by the user while uploading — do NOT send the message.
       return "cancelled";
     }
-    return await sendMessage(body) ? "sent" : "failed";
+    const sent = await sendMessage(body, stillActive);
+    return sent ? "sent" : stillActive() ? "failed" : "cancelled";
   }
 
   // Stage one or more files into the pre-send preview strip.
-  function stageFiles(files: File[]) {
+  function stageFiles(files: File[], autoSendImages = false) {
     if (!isOnline) { blockOffline(); return; }
-    if (!files.length) return;
+    if (!files.length || !activeRoom) return;
     const staged: PendingFile[] = [];
-    let tooBig = 0;
+    let sizeError: ReturnType<typeof attachmentSizeError> = null;
     for (const f of files) {
-      if (f.size > 25 * 1024 * 1024) { tooBig++; continue; }
+      const error = attachmentSizeError(f);
+      if (error) { sizeError = error; continue; }
       const isMedia = f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/");
       staged.push({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        roomId: activeRoom.id,
         file: f,
         previewUrl: isMedia ? URL.createObjectURL(f) : null,
         status: "staged",
         progress: 0,
+        autoSend: autoSendImages && f.type.startsWith("image/"),
       });
     }
-    if (tooBig) setToast(st.max_file_size);
-    setPending(prev => {
+    if (sizeError) setToast(st[sizeError]);
+    updatePending(prev => {
       const room = UPLOAD_BATCH_LIMIT - prev.length;
       if (staged.length > room) {
         setToast(st.upload_limit_batch ?? `Max ${UPLOAD_BATCH_LIMIT} files per batch`);
@@ -1862,7 +1889,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    stageFiles(files);
+    stageFiles(files, true);
     setShowAttachTray(false);
   }
 
@@ -1962,41 +1989,56 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   }
 
   // Upload every staged file sequentially with per-file progress, then clear.
-  async function confirmPending() {
-    if (uploading) return;
+  async function confirmPending(automaticOnly = false) {
+    if (uploadingRef.current) return;
     if (!isOnline) { blockOffline(); return; }
+    uploadingRef.current = true;
     setUploading(true);
     try {
       // Snapshot the queue; new stages during upload wait for the next batch.
-      const queue = pendingRef.current.filter(p => p.status !== "uploading");
+      const queue = pendingRef.current.filter(p => automaticOnly
+        ? p.autoSend && p.status === "staged"
+        : p.status !== "uploading");
       for (const item of queue) {
         // Skip files the user removed while earlier ones were uploading.
         if (!pendingRef.current.some(p => p.id === item.id)) continue;
-        setPending(prev => prev.map(p => p.id === item.id ? { ...p, status: "uploading", progress: 0 } : p));
+        updatePending(prev => prev.map(p => p.id === item.id ? { ...p, status: "uploading", progress: 0 } : p));
         const result = await uploadAndSend(
           item.file,
           item.id,
           "attachment",
-          pct => setPending(prev => prev.map(p => p.id === item.id ? { ...p, progress: pct } : p)),
+          pct => updatePending(prev => prev.map(p => p.id === item.id ? { ...p, progress: pct } : p)),
         );
         if (result === "sent") {
           cancelledUploadIdsRef.current.delete(item.id);
           if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-          setPending(prev => prev.filter(p => p.id !== item.id));
+          updatePending(prev => prev.filter(p => p.id !== item.id));
         } else if (result === "cancelled") {
           cancelledUploadIdsRef.current.delete(item.id);
+          const remaining = pendingRef.current.find(p => p.id === item.id);
+          if (remaining?.previewUrl) URL.revokeObjectURL(remaining.previewUrl);
+          updatePending(prev => prev.filter(p => p.id !== item.id));
           continue;
         } else {
           // If the item was removed/cancelled during upload it's already gone — don't mark error.
           if (pendingRef.current.some(p => p.id === item.id)) {
-            setPending(prev => prev.map(p => p.id === item.id ? { ...p, status: "error", progress: 0 } : p));
+            updatePending(prev => prev.map(p => p.id === item.id ? { ...p, status: "error", progress: 0 } : p));
           }
+          // Failed batches require an explicit retry, never an automatic retry loop.
+          const ids = new Set(queue.map(p => p.id));
+          updatePending(prev => prev.map(p => ids.has(p.id) ? { ...p, autoSend: false } : p));
           // Rate-limited: stop hammering the server; remaining files stay staged.
           break;
         }
       }
-    } finally { setUploading(false); }
+    } finally { uploadingRef.current = false; setUploading(false); }
   }
+
+  useEffect(() => {
+    if (isOnline && !uploading && pending.some(p => p.autoSend && p.status === "staged")) {
+      void confirmPending(true);
+    }
+  }, [pending, uploading, isOnline]);
 
   // Remove a staged item. If it is actively uploading, abort the XHR first
   // so the server never completes and no late message is sent.
@@ -2008,7 +2050,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     if (xhr) xhr.abort();
     xhrMapRef.current.delete(id);
     if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-    setPending(prev => prev.filter(p => p.id !== id));
+    updatePending(prev => prev.filter(p => p.id !== id));
   }
 
   function cancelPending() {
@@ -2019,7 +2061,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       xhrMapRef.current.delete(p.id);
       if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
     });
-    setPending([]);
+    updatePending([]);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -2727,7 +2769,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                 ? `${st.uploading ?? "Uploading…"} (${pending.findIndex(p => p.status === "uploading") + 1}/${pending.length})`
                 : `${pending.length} file${pending.length !== 1 ? "s" : ""} ready`}
             </div>
-            <button onClick={confirmPending} disabled={!isOnline || uploading || pending.every(p => p.status === "uploading")} title={st.send}
+            <button onClick={() => void confirmPending()} disabled={!isOnline || uploading || pending.every(p => p.status === "uploading")} title={st.send}
               style={{ width: 42, height: 42, borderRadius: "50%", background: uploading ? "#1c1c1c" : GOLD, border: "none", color: uploading ? "#555" : "#000", cursor: uploading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Send size={18} />
             </button>
@@ -2741,7 +2783,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 
       {/* Hidden pickers */}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
-      <input ref={galleryRef} type="file" multiple accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
+      <input ref={galleryRef} data-testid="messenger-gallery-input" type="file" multiple accept="image/*,video/*" style={{ display: "none" }} onChange={onPickFile} />
       <input ref={fileRef}    type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx,.xls,.xlsx" style={{ display: "none" }} onChange={onPickFile} />
 
       {/* ── Composer ── */}

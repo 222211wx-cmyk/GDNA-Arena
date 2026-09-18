@@ -17,6 +17,13 @@ import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from ".
 import { broadcastMessageToRoom, broadcastRoomEvent } from "../lib/signaling";
 import { notifyMessageRecipients } from "../lib/message-push";
 import {
+  authorizeMessageUpload,
+  MAX_ENCRYPTED_ATTACHMENT_BYTES,
+  messageUploadByteLimit,
+  MessageUploadPolicyError,
+  type MessageUploadIntent,
+} from "../lib/message-upload-policy";
+import {
   SendArenaWithdrawRequestBody,
   SendArenaWithdrawRequestResponse,
 } from "@workspace/api-zod";
@@ -99,17 +106,24 @@ migrateLegacyChatUploads(legacyChatUploadsDir, mimeForExt).catch(e =>
 
 // Uploads STREAM directly into the bucket (no memory buffering, no local disk).
 // Filename/extension is ALWAYS server-chosen from MIME_EXT — never the client name.
-const chatUpload = multer({
-  storage: gcsChatStorage((mimetype) => {
-    const ext = MIME_EXT[mimetype] ?? ".bin";
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
-  }),
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
-  fileFilter: (_req, file, cb) => {
-    if (MIME_EXT[file.mimetype]) cb(null, true);
-    else cb(new Error("نوع الملف غير مسموح"));
-  },
-});
+function chatUploadFor(intent: MessageUploadIntent) {
+  return multer({
+    storage: gcsChatStorage(
+      (mimetype) => {
+        const ext = MIME_EXT[mimetype] ?? ".bin";
+        return `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+      },
+      (mimetype) => messageUploadByteLimit(intent, mimetype),
+    ),
+    // The storage engine applies the narrower MIME/declared-kind bound while
+    // streaming. This outer cap is defense-in-depth for all attachment types.
+    limits: { fileSize: MAX_ENCRYPTED_ATTACHMENT_BYTES },
+    fileFilter: (_req, file, cb) => {
+      if (MIME_EXT[file.mimetype]) cb(null, true);
+      else cb(new Error("نوع الملف غير مسموح"));
+    },
+  });
+}
 
 // Per-user upload rate limit (in-memory): max 15 uploads / 10 minutes
 const uploadHistory = new Map<number, number[]>();
@@ -123,22 +137,34 @@ function uploadAllowed(userId: number): boolean {
 }
 
 // POST /messages/upload — upload one attachment, returns its URL + kind
-router.post("/messages/upload", (req, res): void => {
+router.post("/messages/upload", async (req, res): Promise<void> => {
   const uploaderId = req.session?.userId;
   if (!uploaderId) { res.status(401).json({ error: "Login required" }); return; }
+  let intent: MessageUploadIntent;
+  try {
+    intent = await authorizeMessageUpload(req.query, uploaderId, getMembership);
+  } catch (error) {
+    if (error instanceof MessageUploadPolicyError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
   if (!uploadAllowed(uploaderId)) {
     res.status(429).json({ error: "تجاوزت الحد المسموح من الملفات — حاول بعد قليل ⏳" }); return;
   }
-  chatUpload.single("file")(req, res, (err) => {
+  chatUploadFor(intent).single("file")(req, res, (err) => {
     if (err) {
-      const status = err.code === "LIMIT_FILE_SIZE" || err.message?.includes("غير مسموح") ? 400 : 500;
+      const status = err.code === "LIMIT_FILE_SIZE"
+        ? 413
+        : err.message?.includes("غير مسموح") ? 400 : 500;
       if (status === 500) console.error("Chat attachment upload to object storage failed:", err);
       res.status(status).json({ error: status === 500 ? "فشل رفع الملف — حاول مرة أخرى" : (err.message ?? "Upload failed") });
       return;
     }
     if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
     const mime = req.file.mimetype;
-    const kind = mime.startsWith("image/") ? "image"
+    const kind = intent.encryptedImage || mime.startsWith("image/") ? "image"
       : mime.startsWith("video/") ? "video"
       : mime.startsWith("audio/") ? "audio" : "file";
     res.json({

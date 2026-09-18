@@ -52,7 +52,10 @@ export async function saveChatObject(name: string, buffer: Buffer, contentType: 
  * concurrent uploads cannot OOM the API process.
  * The stored filename/extension is ALWAYS server-chosen via `chooseName`.
  */
-export function gcsChatStorage(chooseName: (mimetype: string) => string): import("multer").StorageEngine {
+export function gcsChatStorage(
+  chooseName: (mimetype: string) => string,
+  maxBytes?: (mimetype: string) => number,
+): import("multer").StorageEngine {
   return {
     _handleFile(_req, file, cb) {
       let filename: string;
@@ -62,14 +65,44 @@ export function gcsChatStorage(chooseName: (mimetype: string) => string): import
         gcsFile = chatObjectFile(filename);
       } catch (e) { cb(e as Error); return; }
       let size = 0;
-      file.stream.on("data", (chunk: Buffer) => { size += chunk.length; });
+      let settled = false;
+      const limit = maxBytes?.(file.mimetype);
       const ws = gcsFile.createWriteStream({
         resumable: false,
         metadata: { contentType: file.mimetype },
       });
-      ws.on("error", (e) => cb(e));
-      ws.on("finish", () => cb(null, { filename, size } as Partial<Express.Multer.File>));
-      file.stream.on("error", (e) => { ws.destroy(e); cb(e); });
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        file.stream.unpipe(ws);
+        ws.destroy();
+        file.stream.resume();
+        gcsFile.delete({ ignoreNotFound: true })
+          .then(
+            () => cb(error),
+            (cleanupError) => {
+              console.error("Failed to clean up rejected chat upload:", cleanupError);
+              cb(error);
+            },
+          );
+      };
+      file.stream.on("data", (chunk: Buffer) => {
+        if (settled) return;
+        if (limit !== undefined && size + chunk.length > limit) {
+          const error = new Error("File too large") as Error & { code: string };
+          error.code = "LIMIT_FILE_SIZE";
+          fail(error);
+          return;
+        }
+        size += chunk.length;
+      });
+      ws.on("error", (e) => fail(e));
+      ws.on("finish", () => {
+        if (settled) return;
+        settled = true;
+        cb(null, { filename, size } as Partial<Express.Multer.File>);
+      });
+      file.stream.on("error", (e) => fail(e));
       file.stream.pipe(ws);
     },
     _removeFile(_req, file, cb) {
