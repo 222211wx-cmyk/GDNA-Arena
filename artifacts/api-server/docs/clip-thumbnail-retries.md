@@ -74,7 +74,11 @@ UPDATE clip_storage_cleanup SET retry_at = NOW() WHERE clip_id = $1;
 ```
 
 Already-deleted clips from before this queue existed cannot be recovered from
-the absent rows; this is not a bucket-wide orphan scan.
+the absent rows. The separate [clip storage reconciliation](clip-storage-reconciliation.md)
+command can produce a conservative, read-only inventory for operator review, but
+it is not a bucket-wide garbage collector and cannot enqueue or delete objects.
+In particular, resumable-upload paths are intentionally held rather than inferred
+to be abandoned.
 
 Neither the job nor its retry state writes original media, fingerprints, rights,
 duration, views, or earnings. The existing visibility-scoped thumbnail endpoint
