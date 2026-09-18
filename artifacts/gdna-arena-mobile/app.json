@@ -43,6 +43,12 @@
         }
       ],
       "expo-font",
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true
+        }
+      ],
       "expo-secure-store",
       [
         "expo-image-picker",

@@ -11,6 +11,12 @@ Verify the native mobile production build before declaring a shared release read
 
 Standalone Expo production export can validate native bundle transforms without starting another HTTP Metro server.
 
+Background media capabilities require an installed native build and physical-phone checks; Expo Go, browser screenshots, and Hermes exports are not evidence of locked-screen playback.
+
+**Why:** Background entitlements and Android media services are native build configuration, while operating systems govern interruptions and lock-screen behavior.
+
+**How to apply:** Report bundle, emulator, and physical-device results separately. Rebuild the native app after media plugin changes and verify lock, app switching, system controls, and interrupted/expired-source recovery on both platforms before promising phone behavior.
+
 **Why:** The custom publishing build can collide with a different managed service's development port, although native compilation itself is valid. Avoid stopping unrelated services just to clear that port.
 
 **How to apply:** Distinguish a port/startup failure in local release tooling from an actual bundle error. An iOS/Android production export validates native bundles, but does not prove the complete custom publishing process succeeded.

@@ -179,6 +179,7 @@ export default function HomeScreen() {
           { label: 'Vote', icon: 'star', color: nativeTheme.colors.dark.chart1, route: '/(tabs)/globalstar' },
           { label: 'Leaderboard', icon: 'bar-chart', color: colors.primary, route: '/(tabs)/leaderboard' },
           { label: 'GDN-AI Chat', icon: 'chatbubble-ellipses', color: nativeTheme.colors.dark.chart3, route: '/chat' },
+          { label: 'Open Clip', icon: 'play-circle', color: colors.primary, route: '/clips' },
         ].map(a => (
           <TouchableOpacity
             key={a.label}

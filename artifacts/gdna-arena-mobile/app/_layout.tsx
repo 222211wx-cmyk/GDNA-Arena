@@ -10,6 +10,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { OfflineBanner, OnlineProvider } from '@/contexts/OnlineContext';
+import { ClipPlaybackProvider } from '@/contexts/ClipPlaybackContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -25,7 +26,8 @@ function AuthGate() {
   useEffect(() => {
     if (isLoading) return;
     const inAuth = segments[0] === '(auth)';
-    if (!user && !inAuth) {
+    const inPublicClip = ['clip', 'clips'].includes(segments[0] as string);
+    if (!user && !inAuth && !inPublicClip) {
       router.replace('/(auth)/login');
     } else if (user && inAuth) {
       router.replace('/(tabs)');
@@ -46,6 +48,8 @@ function RootLayoutNav() {
         <Stack.Screen name="chat" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="conversation/[roomId]" options={{ headerShown: false }} />
         <Stack.Screen name="finance" options={{ headerShown: false }} />
+        <Stack.Screen name="clips" options={{ headerShown: false }} />
+        <Stack.Screen name="clip/[code]" options={{ headerShown: false }} />
       </Stack>
     </>
   );
@@ -72,7 +76,9 @@ export default function RootLayout() {
               <OfflineBanner />
               <KeyboardProvider>
                 <AuthProvider>
-                  <RootLayoutNav />
+                  <ClipPlaybackProvider>
+                    <RootLayoutNav />
+                  </ClipPlaybackProvider>
                 </AuthProvider>
               </KeyboardProvider>
             </GestureHandlerRootView>
