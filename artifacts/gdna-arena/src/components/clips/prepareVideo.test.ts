@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { videoOutputSize, webmWithDuration } from "./prepareVideo";
+import {
+  browserCompressionUnavailableReason,
+  compressionCandidateError,
+  MAX_BROWSER_COMPRESSION_SOURCE_BYTES,
+  videoOutputSize,
+  webmWithDuration,
+} from "./prepareVideo";
 
 describe("video preparation metadata", () => {
   it("uses 480p on the short edge and preserves aspect ratio with even dimensions", () => {
@@ -20,5 +26,20 @@ describe("video preparation metadata", () => {
     expect([...fixed.slice(12, 15)]).toEqual([0x44, 0x89, 0x88]);
     expect(new DataView(fixed.buffer).getFloat64(15, false)).toBe(67_000);
     expect([...fixed.slice(-6)]).toEqual([0x1f, 0x43, 0xb6, 0x75, 0xff, 0xaa]);
+  });
+
+  it("refuses unbounded browser work and non-video input before decoding", () => {
+    const large = new File(["x"], "large.mp4", { type: "video/mp4" });
+    Object.defineProperty(large, "size", { value: MAX_BROWSER_COMPRESSION_SOURCE_BYTES + 1 });
+    expect(browserCompressionUnavailableReason(large)).toContain("كبير");
+    expect(browserCompressionUnavailableReason(
+      new File(["x"], "audio.m4a", { type: "audio/mp4" }),
+    )).toContain("للفيديو فقط");
+  });
+
+  it("rejects a candidate that would upload as many or more bytes than the original", () => {
+    expect(compressionCandidateError(100, 100)).toContain("ليست أصغر");
+    expect(compressionCandidateError(100, 101)).toContain("ليست أصغر");
+    expect(compressionCandidateError(100, 99)).toBeNull();
   });
 });

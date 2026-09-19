@@ -14,7 +14,11 @@ describe("ultra-light clip bootstrap", () => {
     expect(main).toContain('rawRoute.replace(/\\/+$/');
     expect(main).toContain('data-testid", "clip-startup-retry"');
     expect(main).toContain("window.location.reload()");
-    expect(clip).not.toMatch(/from\s+["']react|from\s+["'].\/App|index\.css|AuthProvider|prepareVideo/i);
+    expect(clip).not.toMatch(/from\s+["']react|from\s+["'].\/App|index\.css|AuthProvider/i);
+    // The heavy compression graph must never be a static import; it is only ever
+    // pulled in lazily via dynamic import() when the user opts into compression.
+    expect(clip).not.toMatch(/from\s+["'][^"']*prepareVideo/);
+    expect(clip).toMatch(/import\(\s*["']\.\/components\/clips\/prepareVideo["']\s*\)/);
   });
 
   it("registers the service worker even when the dynamic App entry arrives after load", () => {
@@ -23,13 +27,15 @@ describe("ultra-light clip bootstrap", () => {
     expect(appEntry).toContain('addEventListener("load", registerServiceWorker, { once: true })');
   });
 
-  it("has an immediate shell, no browser compression, and no eager feed playback", () => {
+  it("has an immediate shell, lazy compression only, and no eager feed playback", () => {
     const html = source("../index.html");
     const clip = source("./clip-entry.ts");
     expect(html).toContain('data-testid="clip-shell"');
     expect(html).toContain("جارٍ تجهيز الرفع");
     expect(html).toContain('route === "/clip" || route === "/clips"');
     expect(html).not.toContain('endsWith("/clip")');
+    // No recorder/ffmpeg/eager-playback code lives in the thin entry itself; the
+    // recorder graph is confined to the lazily imported compression module.
     expect(clip).not.toMatch(/MediaRecorder|ffmpeg|preload\s*=\s*["']metadata|autoplay/i);
     expect(clip).toContain('setAttribute("preload", "none")');
   });

@@ -29,6 +29,7 @@ vi.mock("tus-js-client", () => ({
 import {
   MAX_CLIP_BYTES,
   uploadClip,
+  uploadPreparedClip,
   UPLOAD_CHUNK_BYTES,
 } from "./clipUpload";
 
@@ -93,5 +94,27 @@ describe("tus resumable clip upload", () => {
       vi.fn(),
     )).rejects.toMatchObject({ name: "AbortError" });
     expect(tus.instances).toHaveLength(0);
+  });
+
+  it("uploads a verified prepared file but keeps the original name as metadata", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      clip: { id: 10, code: "HELX-654321", name: "camera", url: null },
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const originalFile = new File(["original"], "camera-original.mov", { type: "video/quicktime" });
+    const uploadFile = new File(["prepared"], "camera-original-480p.webm", { type: "video/webm" });
+
+    await uploadPreparedClip({
+      originalFile,
+      uploadFile,
+      outputDuration: 67.2,
+    }, new AbortController().signal, vi.fn());
+
+    expect(tus.instances[0].options.metadata).toMatchObject({
+      title: "camera-original.mov",
+      contentType: "video/webm",
+      durationSec: "67.2",
+      totalSize: String(uploadFile.size),
+    });
   });
 });

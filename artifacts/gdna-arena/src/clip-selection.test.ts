@@ -3,9 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { upload, duration } = vi.hoisted(() => ({ upload: vi.fn(), duration: vi.fn() }));
 vi.mock("./components/clips/clipUpload", () => ({
   uploadClip: upload,
+  uploadPreparedClip: vi.fn(),
   MAX_CLIP_BYTES: 2 * 1024 * 1024 * 1024,
 }));
 vi.mock("./components/clips/readClipDuration", () => ({ readClipDuration: duration }));
+// Deterministically model browser-compression support in jsdom: video <=512MiB
+// and <=30min is compressible; everything else reports an explicit reason.
+vi.mock("./components/clips/prepareVideo", () => ({
+  prepareClipForUpload: vi.fn(),
+  VideoPreparationUnsupportedError: class extends Error {},
+  browserCompressionUnavailableReason: (file: File, durationSeconds?: number) => {
+    if (!file.type.startsWith("video/")) return "ضغط المتصفح متاح للفيديو فقط";
+    if (file.size > 512 * 1024 * 1024) return "كبير جداً للضغط";
+    if (durationSeconds !== undefined && durationSeconds > 30 * 60) return "طويل جداً للضغط";
+    return null;
+  },
+}));
 const input = () => document.getElementById("file") as HTMLInputElement;
 const submit = () => document.getElementById("submit") as HTMLButtonElement;
 const chooser = () => document.getElementById("choose-file") as HTMLButtonElement;
@@ -53,7 +66,16 @@ describe("final simple Clip selection", () => {
     expect(input().files?.[0]).toBe(file);
     expect(text("duration-status")).toContain(":");
     expect(text("upload-error")).toBe("");
-    expect(form().querySelectorAll('input[type="radio"], input[type="checkbox"]')).toHaveLength(0);
+    // Compression is the only optional control and it is always OFF by default;
+    // there are no radios and no legacy quality toggles.
+    expect(form().querySelectorAll('input[type="radio"]')).toHaveLength(0);
+    const checkbox = document.getElementById("compress") as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    const isVideo = type.startsWith("video/");
+    const compressibleVideo = isVideo && size <= 512 * 1024 * 1024;
+    // Audio hides the row; oversized/long video keeps it visible but disabled.
+    expect((document.getElementById("compress-row") as HTMLDivElement).hidden).toBe(!isVideo);
+    expect(checkbox.disabled).toBe(!compressibleVideo);
     expect(upload).not.toHaveBeenCalled();
   });
 

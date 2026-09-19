@@ -3,11 +3,11 @@ name: Clips upload transport decisions
 description: Owner-directed Clips compression and resumable upload policy, plus integrity constraints
 ---
 
-Keep the citizen Clips page isolated and lightweight: no browser compression, whole-file hashing, or full media decoding. Native container-metadata reading is required for duration.
+Keep the default citizen Clips upload lightweight. Optional, bounded client compression is now allowed; do not make whole-file hashing, full media decoding, or a large WASM download mandatory.
 
-**Why:** On 2026-09-18 the owner explicitly reversed the earlier 480p compression request after reporting a blank page and indefinite file-selection blocking on Android at 13.7 KB/s with many tabs. The live page also loaded the full application bundle, making even its compressed JavaScript prohibitively slow.
+**Why:** After rejecting browser compression on 2026-09-18 because of Android hangs, the owner explicitly requested client compression again on 2026-09-19. The latest request supersedes the prohibition, but real-time browser recording can increase total waiting time and can enlarge already-compressed videos.
 
-**How to apply:** Do not reintroduce browser MediaRecorder, ffmpeg, audio decoding, or large-file hashing. Retain resumable chunks, playback on demand, and server-side duration verification. Native metadata reading must have cancellation and a visible timeout/error, not an indefinite blocked selection. A multipart request is not chunked merely because storage streams it.
+**How to apply:** Lazy-load optional compression, retain the selected original, label preparation separately from transfer, and reject larger or unverifiable outputs without silently uploading the original. Keep cancellation, bounded metadata waits, foreground-only capture, resumable chunks, and server-side duration verification. Never promise a universal sub-minute transfer from duration alone.
 
 Always retain a chosen audio/video file and show its name/size immediately. The latest upload specification allows files through 2 GiB with duration at least 60 seconds; apply no upper duration cap.
 
@@ -15,7 +15,7 @@ Always retain a chosen audio/video file and show its name/size immediately. The 
 
 **How to apply:** No publication-type/rights/footage declarations. Enforce only the requested 2 GiB file maximum, preserve selection on failure/cancellation, enforce duration again on the server, and show “خاص دقيقة الفوق” for short files.
 
-All new clips are transcoded on the server; video targets at most 720p, while audio uses AAC. Browser compression remains forbidden.
+All new clips still undergo server transcoding; video targets at most 720p, while audio uses AAC. Optional client compression does not replace server validation.
 
 **Why:** The later architecture specification superseded the earlier above-100-MiB-only rule. Transcoding does not reduce the original upload transfer, and no transfer can progress at zero bandwidth.
 

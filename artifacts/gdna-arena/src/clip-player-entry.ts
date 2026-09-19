@@ -1,5 +1,6 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
 import { mountVideoActions, type VideoActionState } from "./components/clips/VideoActions";
+import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
 
 const BASE = import.meta.env.BASE_URL;
 const FETCH_TIMEOUT_MS = 12_000;
@@ -35,12 +36,13 @@ function addStyles() {
     main{padding:calc(${space} * 4);margin:auto;max-width:48rem}header{display:flex;align-items:center;justify-content:space-between}
     section{display:grid;gap:calc(${space} * 3);padding:calc(${space} * 4);margin-block:calc(${space} * 4);background:${palette.card};border:1px solid ${palette.border};border-radius:${tokens.radius}}
     h1,p{margin-block:calc(${space} * 2)}button,input{font:inherit;color:${palette.foreground};background:${palette.secondary};border:1px solid ${palette.input};border-radius:${tokens.radius};padding:calc(${space} * 3)}
-    button{cursor:pointer;font-weight:700}button:disabled{opacity:.55}.video-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(calc(${space} * 24),1fr));gap:calc(${space} * 2);padding-block:calc(${space} * 2)}
-    .clip-action{display:grid;justify-items:center;gap:calc(${space} * 1);min-inline-size:0;white-space:nowrap;padding:calc(${space} * 2)}.clip-action.active{color:${palette.primary};border-color:${palette.primary}}
-    .clip-action strong{font-size:.75rem}.clip-comments,.comment-list{display:grid;gap:calc(${space} * 2)}.comment-form,.title-edit{display:flex;gap:calc(${space} * 2)}.comment-form input,.title-edit input{min-inline-size:0;flex:1}
+    button{cursor:pointer;font-weight:700}button:disabled{opacity:.55}
+    .comment-form,.title-edit{display:flex;gap:calc(${space} * 2)}.comment-form input,.title-edit input{min-inline-size:0;flex:1}
     .copy-link-fallback{inline-size:min(100%,28rem)}
-    video,audio{inline-size:100%;max-block-size:72vh;background:${palette.background}}.clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}
-    #player-media{overflow:hidden}a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
+    video,audio{inline-size:100%;max-block-size:72vh;background:${palette.background};display:block}.clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}
+    #player-media{overflow:hidden;position:relative;border-radius:${tokens.radius}}
+    ${clipOverlayCss(palette, space)}
+    a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
   `;
   document.head.append(style);
 }
@@ -91,10 +93,45 @@ function configureMediaSession(clip: ClipByCode, media: HTMLMediaElement) {
   }
 }
 
+const IDENTITY_TIMEOUT_MS = 8_000;
+
+type Identity =
+  | { status: "authenticated"; accountId: number }
+  | { status: "anonymous" }
+  | { status: "unknown" };
+
+/**
+ * Resolve the viewer identity with a bounded timeout. Only a 401 confirms an
+ * anonymous viewer (safe to scope saves to the anonymous bucket). Any other
+ * failure (network/timeout/5xx) returns "unknown" so the caller disables saving
+ * instead of writing a logged-in user's save into the anonymous bucket.
+ */
+async function resolveIdentity(): Promise<Identity> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), IDENTITY_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${BASE}api/auth/me`, {
+      credentials: "include", cache: "no-store", signal: controller.signal,
+    });
+    if (response.status === 401) return { status: "anonymous" };
+    if (!response.ok) return { status: "unknown" };
+    const me = await response.json().catch(() => null);
+    if (me && Number.isSafeInteger(me.id)) return { status: "authenticated", accountId: me.id };
+    return { status: "unknown" };
+  } catch {
+    return { status: "unknown" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function renderClipPlayer(code: string) {
   const root = document.getElementById("root");
   if (!root) throw new Error("Clip root is missing");
   addStyles();
+  // Start identity resolution immediately, but the video may render before it
+  // settles; we await it right before mounting actions to avoid a save race.
+  const identityPromise = resolveIdentity();
   root.innerHTML = `
     <main dir="rtl" data-testid="clip-player-shell">
       <header><h1>الكليبز</h1><a href="${BASE}clip">رجوع</a></header>
@@ -148,12 +185,18 @@ export function renderClipPlayer(code: string) {
           mediaRoot.replaceChildren(media);
           status.textContent = "التشغيل في الخلفية أو مع قفل الشاشة يعتمد على نظام الهاتف والمتصفح.";
           configureMediaSession(clip, media);
+          // Wait for identity before mounting actions so device-only saves are
+          // scoped correctly (or disabled when identity is unknown).
+          const identity = await identityPromise;
           await mountVideoActions({
             host: actions,
             media,
             titleElement: name,
             clipId: clip.id,
             code: clip.code,
+            accountId: identity.status === "authenticated" ? identity.accountId : null,
+            saveDisabled: identity.status === "unknown",
+            contentType: clip.contentType,
             initial: {
               id: clip.id,
               code: clip.code,

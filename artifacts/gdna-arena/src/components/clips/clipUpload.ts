@@ -12,6 +12,12 @@ export type ClipUploadMetadata = {
   durationSec: number;
 };
 
+export type PreparedClipUpload = {
+  originalFile: File;
+  uploadFile: File;
+  outputDuration: number;
+};
+
 export type ClipUploadState = "uploading" | "offline";
 export type ClipUploadProgress = (
   percent: number,
@@ -250,4 +256,22 @@ export async function uploadClip(
     processingStatus:
       body.processingStatus ?? body.clip.processingStatus ?? body.clip.compression_status,
   };
+}
+
+/**
+ * Entry-point adapter for prepareClipForUpload(). It preserves the citizen's
+ * original filename as publication metadata while sending only the verified
+ * prepared File. The original File remains available to the caller for an
+ * explicit fallback; this function never retries with it implicitly.
+ */
+export function uploadPreparedClip(
+  prepared: PreparedClipUpload,
+  signal: AbortSignal,
+  onProgress: ClipUploadProgress,
+) {
+  return uploadClip(prepared.uploadFile, {
+    title: prepared.originalFile.name,
+    contentType: prepared.uploadFile.type,
+    durationSec: prepared.outputDuration,
+  }, signal, onProgress);
 }
