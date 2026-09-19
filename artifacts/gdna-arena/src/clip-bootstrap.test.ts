@@ -30,14 +30,21 @@ describe("ultra-light clip bootstrap", () => {
   it("has an immediate shell, lazy compression only, and no eager feed playback", () => {
     const html = source("../index.html");
     const clip = source("./clip-entry.ts");
+    const feed = source("./components/clips/reelsFeed.ts");
     expect(html).toContain('data-testid="clip-shell"');
     expect(html).toContain("جارٍ تجهيز الرفع");
     expect(html).toContain('route === "/clip" || route === "/clips"');
     expect(html).not.toContain('endsWith("/clip")');
     // No recorder/ffmpeg/eager-playback code lives in the thin entry itself; the
     // recorder graph is confined to the lazily imported compression module.
-    expect(clip).not.toMatch(/MediaRecorder|ffmpeg|preload\s*=\s*["']metadata|autoplay/i);
-    expect(clip).toContain('setAttribute("preload", "none")');
+    expect(clip).not.toMatch(/MediaRecorder|ffmpeg|autoplay/i);
+    // The Reels feed loads playback URLs lazily: a <video> element is created
+    // (and its src assigned) only when a slide is activated by the observer —
+    // never eagerly for every clip, and never with a broad preload.
+    expect(feed).toContain("function loadPlayback()");
+    expect(feed).toContain("if (playbackRequested) return");
+    expect(feed).toContain("IntersectionObserver");
+    expect(feed).not.toMatch(/autoplay/i);
   });
 
   it("has only a minimum-duration gate with no size or publication-type UI", () => {
@@ -53,14 +60,22 @@ describe("ultra-light clip bootstrap", () => {
     expect(clip).toContain('dataset.clipReady = "true"');
   });
 
-  it("resumes only the same selected File object and locks metadata while uploading", () => {
+  it("uploads directly to R2 (presigned multipart), resumes only the same File, and locks metadata", () => {
     const transport = source("./components/clips/clipUpload.ts");
     const clip = source("./clip-entry.ts");
+    // Direct-to-R2 invariant: presigned multipart PUTs, never a proxied/Tus path.
+    expect(transport).toContain("api/r2/presign");
+    expect(transport).toContain('method: "PUT"');
+    expect(transport).not.toMatch(/tus-js-client|new tus\.Upload|storeFingerprintForResuming/i);
+    // Resume is scoped to the exact same in-memory File object only — no
+    // persisted fingerprint, content hash, or localStorage cross-session state.
     expect(transport).toContain("new WeakMap<File, string>()");
     expect(transport).not.toContain("localStorage");
     expect(transport).not.toContain("contentHash");
-    expect(transport).toContain("storeFingerprintForResuming: false");
-    expect(transport).toContain("5 * 1024 * 1024");
+    // Fixed 5MiB parts and the explicit 2GiB transport ceiling.
+    expect(transport).toContain("UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024");
+    expect(transport).toContain("MAX_CLIP_BYTES = 2 * 1024 * 1024 * 1024");
+    // Metadata controls stay locked for the duration of an upload.
     expect(clip).toContain("mutableControls.forEach(control => { control.disabled = true; })");
     expect(clip).toContain("mutableControls.forEach(control => { control.disabled = false; })");
   });

@@ -148,7 +148,7 @@ test("simple original upload: auth, GCS resumable chunk options, exact limit, cl
   }
 });
 
-test("simplified feed always returns empty JSON on parsing, database and mapping errors", async () => {
+test("feed reports invalid input and service failures with explicit HTTP errors", async () => {
   let fail: "none" | "database" | "mapping" = "none";
   const failures: unknown[] = [];
   const app = express();
@@ -171,19 +171,34 @@ test("simplified feed always returns empty JSON on parsing, database and mapping
     assert.equal(body.clips[0].video_url, "/api/clips/stream/42");
     assert.equal(body.clips[0].thumb, "/api/clips/thumbnail/42");
     assert.equal(body.clips[0].thumbnail_object_name, undefined);
-    assert.deepEqual(await (await fetch(`${base}?limit=invalid`)).json(), { clips: [], hasMore: false, degraded: true });
+    const invalid = await fetch(`${base}?limit=invalid`);
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(await invalid.json(), { error: "Invalid limit" });
     fail = "database";
-    assert.deepEqual(await (await fetch(base)).json(), { clips: [], hasMore: false, degraded: true });
+    const databaseFailure = await fetch(base);
+    assert.equal(databaseFailure.status, 503);
+    assert.equal(databaseFailure.headers.get("retry-after"), "2");
+    assert.deepEqual(await databaseFailure.json(), {
+      clips: [], hasMore: false, degraded: true,
+      error: "Clips feed is temporarily unavailable",
+    });
     fail = "mapping";
-    assert.deepEqual(await (await fetch(base)).json(), { clips: [], hasMore: false, degraded: true });
+    assert.equal((await fetch(base)).status, 503);
     let fallback: unknown;
     await handler(
       { get query() { throw new Error("Query parsing failed"); } } as unknown as Request,
-      { json(value: unknown) { fallback = value; } } as Response,
+      {
+        set() { return this; },
+        status() { return this; },
+        json(value: unknown) { fallback = value; },
+      } as unknown as Response,
       () => { throw new Error("Unexpected next"); },
     );
-    assert.deepEqual(fallback, { clips: [], hasMore: false, degraded: true });
-    assert.equal(failures.length, 4);
+    assert.deepEqual(fallback, {
+      clips: [], hasMore: false, degraded: true,
+      error: "Clips feed is temporarily unavailable",
+    });
+    assert.equal(failures.length, 3);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -203,6 +218,7 @@ test("public feed meets its deadline and never resurrects a previous snapshot", 
       return [{ id: before === null ? 9 : before - 1, thumbnail_object_name: null }];
     },
     logFailure() {},
+    deadlineMs: 40,
   });
   app.get("/clips/feed", handler);
   const server = app.listen(0, "127.0.0.1");
@@ -216,12 +232,18 @@ test("public feed meets its deadline and never resurrects a previous snapshot", 
     hang = true;
     const started = Date.now();
     const response = await fetch(`${base}?limit=3`);
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 503);
     const body = await response.json() as { clips: { id: number }[]; degraded: boolean };
     assert.ok(Date.now() - started < 300, "deadline response must stay tightly bounded");
-    assert.deepEqual(body, { clips: [], hasMore: false, degraded: true });
+    assert.deepEqual(body, {
+      clips: [], hasMore: false, degraded: true,
+      error: "Clips feed is temporarily unavailable",
+    });
     const otherPage = await (await fetch(`${base}?before=9&limit=3`)).json();
-    assert.deepEqual(otherPage, { clips: [], hasMore: false, degraded: true },
+    assert.deepEqual(otherPage, {
+      clips: [], hasMore: false, degraded: true,
+      error: "Clips feed is temporarily unavailable",
+    },
       "failures must not reuse any older page");
   } finally {
     server.closeAllConnections();

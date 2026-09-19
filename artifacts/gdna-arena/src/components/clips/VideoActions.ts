@@ -7,12 +7,22 @@ export type VideoActionState = {
   id: number;
   code?: string | null;
   title: string;
-  author: { id: number; username: string };
+  author: { id: number; username: string; avatarUrl?: string | null };
   isOwner: boolean;
   liked: boolean;
   likeCount: number;
   commentCount: number;
+  /** Persisted bookmark state (from engagement/by-code/feed). */
+  saved?: boolean;
+  saveCount?: number;
+  /** Persisted share count (from engagement/by-code/feed). */
+  shareCount?: number;
 };
+
+/** Formats an integer count with French (fr-FR) grouping. */
+export function formatCount(value: number): string {
+  return new Intl.NumberFormat("fr-FR").format(Number.isFinite(value) ? value : 0);
+}
 
 type MountOptions = {
   host: HTMLElement;
@@ -31,6 +41,18 @@ type MountOptions = {
   saveDisabled?: boolean;
   /** Content type label shown next to the audio/video badge. */
   contentType?: string | null;
+};
+
+/**
+ * Handle returned by mountVideoActions so callers can hydrate the like/comment
+ * controls after mount (the feed row lacks those fields and fetches them from
+ * /engagement asynchronously). Hydration NEVER clobbers a value the viewer has
+ * already mutated in this session — an in-flight or completed user like/comment
+ * takes precedence over a late server snapshot.
+ */
+export type VideoActionsHandle = {
+  /** Merge a later engagement snapshot into the rendered like/comment controls. */
+  hydrate(snapshot: Partial<Pick<VideoActionState, "liked" | "likeCount" | "commentCount">>): void;
 };
 
 async function apiJson(path: string, init?: RequestInit) {
@@ -81,7 +103,7 @@ function setCount(control: HTMLButtonElement, value: number) {
     count.className = "clip-rail-count";
     control.append(count);
   }
-  count.textContent = String(value);
+  count.textContent = formatCount(value);
 }
 
 function showMessage(status: HTMLElement, message: string, error = false) {
@@ -134,8 +156,15 @@ function showSelectableLink(status: HTMLElement, url: string) {
   input.select();
 }
 
-export async function mountVideoActions(options: MountOptions): Promise<void> {
+export async function mountVideoActions(options: MountOptions): Promise<VideoActionsHandle> {
   let state = options.initial;
+  // Tracks whether the viewer has mutated like/comment this session. Once true,
+  // a late /engagement hydration must not overwrite the user's own value.
+  let userChangedLike = false;
+  let userChangedComment = false;
+  // Filled in once the like/comment controls are built; lets hydrate() re-render.
+  let applyHydration: VideoActionsHandle["hydrate"] = () => {};
+  const noopHandle: VideoActionsHandle = { hydrate: snapshot => applyHydration(snapshot) };
   const shell = document.createElement("div");
   shell.className = "video-actions-shell";
   shell.innerHTML = `
@@ -173,7 +202,7 @@ export async function mountVideoActions(options: MountOptions): Promise<void> {
     }
   } catch (error) {
     showMessage(status, error instanceof Error ? error.message : "Actions unavailable", true);
-    return;
+    return noopHandle;
   }
   const current = state;
 
@@ -203,6 +232,7 @@ export async function mountVideoActions(options: MountOptions): Promise<void> {
   };
   heart.addEventListener("click", async () => {
     heart.disabled = true;
+    userChangedLike = true; // viewer intent wins over any late hydration
     try {
       const data = await apiJson(`/clips/${current.id}/like`, { method: "POST" });
       current.liked = Boolean(data.liked);
@@ -254,6 +284,7 @@ export async function mountVideoActions(options: MountOptions): Promise<void> {
     form.addEventListener("submit", async event => {
       event.preventDefault();
       submit.disabled = true;
+      userChangedComment = true; // viewer intent wins over any late hydration
       try {
         await apiJson(`/clips/${current.id}/comments`, {
           method: "POST",
@@ -282,48 +313,125 @@ export async function mountVideoActions(options: MountOptions): Promise<void> {
     }
   });
 
+  // Late hydration from /engagement: apply the server snapshot ONCE to the
+  // like/comment controls (the feed row omits these fields). It never overwrites
+  // a value the viewer already changed this session, and it is latched so a
+  // second, potentially stale snapshot can never clobber the applied state.
+  let hydrated = false;
+  applyHydration = snapshot => {
+    if (hydrated) return;
+    hydrated = true;
+    if (!userChangedLike) {
+      if (typeof snapshot.liked === "boolean") current.liked = snapshot.liked;
+      if (typeof snapshot.likeCount === "number") current.likeCount = snapshot.likeCount;
+      renderHeart();
+    }
+    if (!userChangedComment && typeof snapshot.commentCount === "number") {
+      current.commentCount = snapshot.commentCount;
+      setCount(commentButton, current.commentCount);
+    }
+  };
+
   const shareUrl = current.code
     ? new URL(`${BASE}clip/${current.code}`, window.location.origin).href
     : `${window.location.origin}${BASE}clip#clip-${current.id}`;
 
   // ── Share ────────────────────────────────────────────────────────────
+  // The persisted share count is recorded ONLY after a successful native share
+  // or link copy — never on cancellation. The endpoint is idempotent per
+  // citizen, so retries do not inflate the count.
   const share = railButton("Share", icons.share());
+  let shareCount = Number(current.shareCount ?? 0);
+  setCount(share, shareCount);
+  const recordShare = async () => {
+    // Anonymous viewers can still share the link; only authenticated citizens
+    // increment the persisted count. A failed count never blocks the share.
+    if (options.saveDisabled || options.accountId === null || options.accountId === undefined) return;
+    try {
+      const data = await apiJson(`/clips/${current.id}/share`, { method: "POST" });
+      if (data?.shared === true && Number.isFinite(Number(data.shareCount))) {
+        shareCount = Number(data.shareCount);
+        current.shareCount = shareCount;
+        setCount(share, shareCount);
+      }
+    } catch {
+      // Sharing already succeeded for the user; a count failure is non-fatal.
+    }
+  };
   share.addEventListener("click", async () => {
     try {
-      if (navigator.share) await navigator.share({ title: current.title, url: shareUrl });
-      else {
-        if (await copyLink(shareUrl)) showMessage(status, "Link copied");
-        else showSelectableLink(status, shareUrl);
+      if (navigator.share) {
+        // navigator.share resolves only on a completed share, rejects (AbortError)
+        // on cancellation — so we count only after it resolves.
+        await navigator.share({ title: current.title, url: shareUrl });
+        await recordShare();
+        showMessage(status, "Partagé");
+      } else if (await copyLink(shareUrl)) {
+        await recordShare();
+        showMessage(status, "Lien copié");
+      } else {
+        // Fallback surface — the user must still copy manually, so do not count.
+        showSelectableLink(status, shareUrl);
       }
     } catch (error) {
-      if ((error as DOMException)?.name !== "AbortError") showMessage(status, "Unable to share", true);
+      // Cancellation (AbortError) must never record a share.
+      if ((error as DOMException)?.name !== "AbortError") showMessage(status, "Partage indisponible", true);
     }
   });
 
-  // ── Bookmark / Save (local, device-only) ─────────────────────────────
-  let saved = options.saveDisabled ? false : isClipSaved(options.accountId ?? null, current.id);
-  const bookmark = railButton(saved ? "Saved on this device" : "Save on this device", icons.bookmark(saved));
+  // ── Bookmark / Save (persisted per citizen) ──────────────────────────
+  // Persistent server-side save is the source of truth. If identity is unknown
+  // (non-401 failure) we fall back to a device-only save so the control stays
+  // usable, labelled honestly.
+  const canPersistSave = !options.saveDisabled &&
+    options.accountId !== null && options.accountId !== undefined;
+  let saved = current.saved ?? (canPersistSave ? false : isClipSaved(options.accountId ?? null, current.id));
+  let saveCount = Number(current.saveCount ?? 0);
+  const bookmark = railButton(saved ? "Enregistré" : "Enregistrer", icons.bookmark(saved));
   bookmark.setAttribute("aria-pressed", String(saved));
   bookmark.classList.toggle("active", saved);
-  if (options.saveDisabled) {
-    // Identity could not be resolved (non-401), so scoping a save is unsafe.
-    bookmark.disabled = true;
-    bookmark.setAttribute("aria-label", "Saving unavailable — sign-in status unknown");
-  }
-  bookmark.addEventListener("click", () => {
-    if (options.saveDisabled) return;
-    const next = toggleClipSaved(options.accountId ?? null, current.id);
-    if (next === null) {
-      showMessage(status, "Saving is unavailable on this device", true);
-      return;
-    }
-    saved = next;
+  setCount(bookmark, saveCount);
+  const renderBookmark = () => {
     const iconWrap = bookmark.querySelector(".clip-rail-icon");
     if (iconWrap) iconWrap.innerHTML = icons.bookmark(saved);
     bookmark.classList.toggle("active", saved);
     bookmark.setAttribute("aria-pressed", String(saved));
-    bookmark.setAttribute("aria-label", saved ? "Saved on this device" : "Save on this device");
-    showMessage(status, saved ? "Saved on this device" : "Removed from saved");
+    bookmark.setAttribute("aria-label", saved ? "Enregistré" : "Enregistrer");
+    setCount(bookmark, saveCount);
+  };
+  if (options.saveDisabled) {
+    bookmark.disabled = true;
+    bookmark.setAttribute("aria-label", "Enregistrement indisponible — statut de connexion inconnu");
+  }
+  bookmark.addEventListener("click", async () => {
+    if (options.saveDisabled) return;
+    if (!canPersistSave) {
+      // No authenticated identity — degrade to device-only save (labelled honestly).
+      const next = toggleClipSaved(options.accountId ?? null, current.id);
+      if (next === null) { showMessage(status, "Enregistrement indisponible sur cet appareil", true); return; }
+      saved = next;
+      const iconWrap = bookmark.querySelector(".clip-rail-icon");
+      if (iconWrap) iconWrap.innerHTML = icons.bookmark(saved);
+      bookmark.classList.toggle("active", saved);
+      bookmark.setAttribute("aria-pressed", String(saved));
+      bookmark.setAttribute("aria-label", saved ? "Enregistré sur cet appareil" : "Enregistrer");
+      showMessage(status, saved ? "Enregistré sur cet appareil" : "Retiré des enregistrements");
+      return;
+    }
+    bookmark.disabled = true;
+    try {
+      const data = await apiJson(`/clips/${current.id}/save`, { method: "POST" });
+      saved = Boolean(data.saved);
+      saveCount = Number(data.saveCount ?? saveCount);
+      current.saved = saved;
+      current.saveCount = saveCount;
+      renderBookmark();
+      showMessage(status, saved ? "Enregistré" : "Retiré des enregistrements");
+    } catch (error) {
+      showMessage(status, error instanceof Error ? error.message : "Impossible d'enregistrer", true);
+    } finally {
+      bookmark.disabled = false;
+    }
   });
 
   // ── Three-dot menu (secondary actions) ───────────────────────────────
@@ -459,4 +567,5 @@ export async function mountVideoActions(options: MountOptions): Promise<void> {
 
   // Rail order: heart, comment, share, bookmark/save, three-dots.
   rail.append(heart, commentButton, share, bookmark, menuWrap);
+  return noopHandle;
 }

@@ -58,17 +58,24 @@ export const RequeueClipThumbnailResponse = zod.object({
  * @summary Paginated visible clips with persistent, clip-scoped poster URLs
  */
 
-export const getClipsFeedQueryLimitDefault = 10;
-export const getClipsFeedQueryLimitMax = 20;
+export const getClipsFeedQueryLimitDefault = 3;
+export const getClipsFeedQueryLimitMax = 10;
+
+export const getClipsFeedQueryQMax = 100;
 
 
 
 export const GetClipsFeedQueryParams = zod.object({
   "before": zod.coerce.number().int().min(1).optional(),
-  "limit": zod.coerce.number().int().min(1).max(getClipsFeedQueryLimitMax).default(getClipsFeedQueryLimitDefault)
+  "limit": zod.coerce.number().int().min(1).max(getClipsFeedQueryLimitMax).default(getClipsFeedQueryLimitDefault),
+  "q": zod.coerce.string().max(getClipsFeedQueryQMax).optional().describe('Case-insensitive literal search across title, clip code, and username')
 })
 
 export const getClipsFeedResponseClipsItemDurationSecMin = 60;
+
+export const getClipsFeedResponseClipsItemSaveCountMin = 0;
+
+export const getClipsFeedResponseClipsItemShareCountMin = 0;
 
 
 
@@ -82,10 +89,58 @@ export const GetClipsFeedResponse = zod.object({
   "duration_sec": zod.number().int().min(getClipsFeedResponseClipsItemDurationSecMin),
   "views": zod.number().int(),
   "created_at": zod.coerce.date(),
+  "author": zod.object({
+  "id": zod.number().int(),
+  "username": zod.string(),
+  "avatarUrl": zod.string().nullable()
+}),
+  "saved": zod.boolean(),
+  "saveCount": zod.number().int().min(getClipsFeedResponseClipsItemSaveCountMin),
+  "shareCount": zod.number().int().min(getClipsFeedResponseClipsItemShareCountMin),
   "thumb": zod.string().nullable().describe('Stable /api/clips/thumbnail/{id} URL, or null for legacy/failed posters')
 })),
   "hasMore": zod.boolean(),
   "nextBefore": zod.number().int().nullable()
+})
+
+
+/**
+ * @summary Toggle the authenticated citizen's persistent clip bookmark
+ */
+
+
+
+export const ToggleClipSaveParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const toggleClipSaveResponseSaveCountMin = 0;
+
+
+
+export const ToggleClipSaveResponse = zod.object({
+  "saved": zod.boolean(),
+  "saveCount": zod.number().int().min(toggleClipSaveResponseSaveCountMin)
+})
+
+
+/**
+ * @summary Idempotently record one share for the authenticated citizen
+ */
+
+
+
+export const RecordClipShareParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const recordClipShareResponseShareCountMin = 0;
+
+
+
+export const RecordClipShareResponse = zod.object({
+  "shared": zod.literal(true),
+  "shareCount": zod.number().int().min(recordClipShareResponseShareCountMin)
 })
 
 

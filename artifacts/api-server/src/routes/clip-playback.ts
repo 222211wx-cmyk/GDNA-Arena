@@ -1,11 +1,26 @@
 import { Router, type IRouter } from "express";
 
+export function publicAvatarUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const avatar = value.trim();
+  if (!avatar || avatar.length > 2048) return null;
+  if (avatar.startsWith("/") && !avatar.startsWith("//")) return avatar;
+  try {
+    const url = new URL(avatar);
+    return url.protocol === "https:" || url.protocol === "http:" ? avatar : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PlaybackClip {
   id: number; code: string; title: string; original_name: string | null;
   duration_sec: number; size_bytes: string | number; created_at: Date | string;
   content_type: string; processing_status: string; object_name: string;
   user_id: number; username: string; like_count: string | number;
   comment_count: string | number; liked_by_viewer: boolean;
+  save_count: string | number; share_count: string | number; saved_by_viewer: boolean;
+  avatar_url: string | null;
 }
 
 /** Public clips only; the lookup dependency must exclude frozen/deleted rows. */
@@ -31,11 +46,14 @@ export function createClipPlaybackRouter(deps: {
           duration: Number(row.duration_sec), size: Number(row.size_bytes),
           created_at: row.created_at, contentType: row.content_type,
           processingStatus: row.processing_status,
-          author: { id: row.user_id, username: row.username },
+          author: { id: row.user_id, username: row.username, avatarUrl: publicAvatarUrl(row.avatar_url) },
           isOwner: viewerId === row.user_id,
           liked: row.liked_by_viewer,
           likeCount: Number(row.like_count),
           commentCount: Number(row.comment_count),
+          saved: row.saved_by_viewer,
+          saveCount: Number(row.save_count),
+          shareCount: Number(row.share_count),
           url: playback?.url ?? null, urlExpiresAt: playback?.urlExpiresAt ?? null,
         },
       });

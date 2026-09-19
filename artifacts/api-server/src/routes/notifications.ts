@@ -16,9 +16,9 @@ router.get("/notifications", async (req, res): Promise<void> => {
 
   const [unread] = await db.select({ cnt: sql<number>`count(*)::int` })
     .from(notifications)
-    .where(eq(notifications.userId, userId));
+    .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
 
-  const unreadCount = list.filter(n => !n.isRead).length;
+  const unreadCount = unread?.cnt ?? 0;
 
   res.json({ notifications: list, unreadCount });
 });

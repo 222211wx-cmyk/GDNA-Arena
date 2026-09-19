@@ -42,6 +42,13 @@ export interface RequeuedClipThumbnail {
   thumbnailRetryAt: string;
 }
 
+export interface ClipAuthor {
+  id: number;
+  username: string;
+  /** @nullable */
+  avatarUrl: string | null;
+}
+
 export interface ClipFeedItem {
   id: number;
   user_id: number;
@@ -52,11 +59,29 @@ export interface ClipFeedItem {
   duration_sec: number;
   views: number;
   created_at: string;
+  author: ClipAuthor;
+  saved: boolean;
+  /** @minimum 0 */
+  saveCount: number;
+  /** @minimum 0 */
+  shareCount: number;
   /**
      * Stable /api/clips/thumbnail/{id} URL, or null for legacy/failed posters
      * @nullable
      */
   thumb: string | null;
+}
+
+export interface ClipSaveResult {
+  saved: boolean;
+  /** @minimum 0 */
+  saveCount: number;
+}
+
+export interface ClipShareResult {
+  shared: true;
+  /** @minimum 0 */
+  shareCount: number;
 }
 
 export interface ClipsFeedPage {
@@ -419,9 +444,14 @@ export type GetClipsFeedParams = {
 before?: number;
 /**
  * @minimum 1
- * @maximum 20
+ * @maximum 10
  */
 limit?: number;
+/**
+ * Case-insensitive literal search across title, clip code, and username
+ * @maxLength 100
+ */
+q?: string;
 };
 
 export type DeclineCallParams = {

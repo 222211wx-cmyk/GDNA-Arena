@@ -8,6 +8,11 @@ import { retryThumbnailName } from "./clip-storage-names.js";
  * bytes belonging to this account once its clip rows have been deleted.
  */
 export async function deleteAccountClips(client: PoolClient, userId: number): Promise<void> {
+  // Account rows are soft-deleted, so user foreign keys never fire. Explicitly
+  // erase engagement the citizen left on clips owned by other accounts.
+  await client.query("DELETE FROM clip_bookmarks WHERE user_id=$1", [userId]);
+  await client.query("DELETE FROM clip_shares WHERE user_id=$1", [userId]);
+
   const { rows } = await client.query<{
     id: number; object_name: string; upload_object_name: string | null;
     thumbnail_object_name: string | null; processing_output_object: string | null;

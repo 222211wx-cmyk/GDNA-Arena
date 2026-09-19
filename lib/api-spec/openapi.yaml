@@ -115,7 +115,11 @@ paths:
           schema: { type: integer, minimum: 1 }
         - in: query
           name: limit
-          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+          schema: { type: integer, minimum: 1, maximum: 10, default: 3 }
+        - in: query
+          name: q
+          description: Case-insensitive literal search across title, clip code, and username
+          schema: { type: string, maxLength: 100 }
       responses:
         "200":
           description: Newest visible clips; null thumb means no poster is available
@@ -124,9 +128,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/ClipsFeedPage"
         "400":
-          description: Invalid cursor or limit
-        "500":
-          description: Feed unavailable
+          description: Invalid cursor, limit, or search term
+        "503":
+          description: Feed temporarily unavailable; response is explicitly degraded
+  /clips/{id}/save:
+    post:
+      operationId: toggleClipSave
+      summary: Toggle the authenticated citizen's persistent clip bookmark
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Current bookmark state and global save count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipSaveResult"
+        "401": { description: Not authenticated }
+        "404": { description: "Clip is frozen, deleted, or missing" }
+  /clips/{id}/share:
+    post:
+      operationId: recordClipShare
+      summary: Idempotently record one share for the authenticated citizen
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Share acknowledgement and global unique-citizen count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipShareResult"
+        "401": { description: Not authenticated }
+        "404": { description: "Clip is frozen, deleted, or missing" }
   /clips/thumbnail/{id}:
     get:
       operationId: getClipThumbnail
@@ -815,7 +855,7 @@ components:
         thumbnailRetryAt: { type: string, format: date-time }
     ClipFeedItem:
       type: object
-      required: [id, user_id, username, title, content_type, duration_sec, views, created_at, thumb]
+      required: [id, user_id, username, title, content_type, duration_sec, views, created_at, thumb, author, saved, saveCount, shareCount]
       properties:
         id: { type: integer }
         user_id: { type: integer }
@@ -825,9 +865,33 @@ components:
         duration_sec: { type: integer, minimum: 60 }
         views: { type: integer }
         created_at: { type: string, format: date-time }
+        author:
+          $ref: "#/components/schemas/ClipAuthor"
+        saved: { type: boolean }
+        saveCount: { type: integer, minimum: 0 }
+        shareCount: { type: integer, minimum: 0 }
         thumb:
           type: [string, "null"]
           description: Stable /api/clips/thumbnail/{id} URL, or null for legacy/failed posters
+    ClipAuthor:
+      type: object
+      required: [id, username, avatarUrl]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        avatarUrl: { type: [string, "null"] }
+    ClipSaveResult:
+      type: object
+      required: [saved, saveCount]
+      properties:
+        saved: { type: boolean }
+        saveCount: { type: integer, minimum: 0 }
+    ClipShareResult:
+      type: object
+      required: [shared, shareCount]
+      properties:
+        shared: { type: boolean, enum: [true] }
+        shareCount: { type: integer, minimum: 0 }
     ClipsFeedPage:
       type: object
       required: [clips, hasMore, nextBefore]

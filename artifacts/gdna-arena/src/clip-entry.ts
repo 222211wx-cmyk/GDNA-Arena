@@ -18,8 +18,10 @@ function loadCompressionModule(): Promise<CompressionModule> {
   }
   return compressionModulePromise;
 }
-import { mountVideoActions } from "./components/clips/VideoActions";
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
+import { reelsShellCss } from "./components/clips/reelsStyles";
+import { mountReels, type ReelsController } from "./components/clips/reelsFeed";
+import { reelsIcons } from "./components/clips/reelsIcons";
 
 const BASE = import.meta.env.BASE_URL;
 const FEED_TIMEOUT_MS = 12_000;
@@ -55,12 +57,24 @@ style.textContent = `
   .storage-badge[data-state=connected] .storage-text{color:${palette.chart3}}
   .storage-badge[data-state=error] .storage-dot{background:${palette.destructive}}
   .storage-badge[data-state=error] .storage-text{color:${palette.destructive}}
+  ${reelsShellCss(palette as unknown as Record<string, string>, space)}
+  /* The upload composer lives inside the reels shell; drop the standalone
+     centered <main> layout so the form fills the composer sheet width. */
+  #reels-root main{padding:0;margin:0;max-width:none}
+  #reels-root main > header{display:none}
+  .reels-css-fullscreen{background:${palette.background}}
 `;
 document.head.appendChild(style);
 
 root.innerHTML = `
-<main dir="rtl" data-testid="clip-shell">
-  <header><h1>الكليبز</h1><a href="${BASE}">ARENA</a></header>
+<div id="reels-root" data-testid="clip-shell"></div>
+<div id="composer" class="reels-composer" role="dialog" aria-label="Publier un clip" aria-modal="true" hidden>
+<div class="reels-composer-head">
+  <button id="composer-close" type="button" class="reels-icon-btn" aria-label="Fermer">${reelsIcons.close()}</button>
+  <h2>Publier un clip</h2>
+</div>
+<div class="reels-composer-body">
+<main dir="rtl">
   <div id="auth" class="muted" aria-live="polite">جارٍ التحقق من تسجيل الدخول…</div>
   <form id="upload" data-testid="clip-upload" hidden>
     <h2>رفع صوت أو فيديو</h2>
@@ -92,11 +106,9 @@ root.innerHTML = `
     <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p>
     <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div>
   </form>
-  <section aria-labelledby="feed-title">
-    <h2 id="feed-title">أحدث الكليبز</h2>
-    <div id="feed" aria-live="polite">جارٍ التحميل…</div>
-  </section>
-</main>`;
+</main>
+</div>
+</div>`;
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const auth = element<HTMLDivElement>("auth");
@@ -112,7 +124,9 @@ const progressWrap = element<HTMLDivElement>("progress-wrap");
 const progress = element<HTMLProgressElement>("progress");
 const status = element<HTMLParagraphElement>("upload-status");
 const uploadError = element<HTMLParagraphElement>("upload-error");
-const feed = element<HTMLDivElement>("feed");
+const reelsRoot = element<HTMLDivElement>("reels-root");
+const composer = element<HTMLDivElement>("composer");
+const composerClose = element<HTMLButtonElement>("composer-close");
 const storageBadge = element<HTMLDivElement>("storage-badge");
 const storageText = element<HTMLSpanElement>("storage-text");
 const storageBucket = element<HTMLSpanElement>("storage-bucket");
@@ -123,10 +137,6 @@ const compressStatus = element<HTMLParagraphElement>("compress-status");
 const mutableControls = Array.from(form.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, #choose-file"));
 let cachedFile: File | null = null;
 let selectedDuration: number | null = null;
-let accountId: number | null = null;
-// "unknown" until loadAuth settles. Only a 401 confirms "anonymous"; any other
-// identity failure stays "unknown" so saves are disabled (never mis-scoped).
-let identityStatus: "unknown" | "anonymous" | "authenticated" = "unknown";
 let durationController: AbortController | null = null;
 let uploadController: AbortController | null = null;
 
@@ -337,7 +347,7 @@ form.addEventListener("submit", async event => {
         },
       );
       finalizePublication(published);
-      await loadFeed();
+      reloadFeedAfterPublish();
       return;
     }
     const published = await uploadClip(file, metadata, uploadController.signal, (
@@ -356,7 +366,7 @@ form.addEventListener("submit", async event => {
           : `${formatBytes(uploaded)} من ${formatBytes(file.size)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)} — يكمل الى تقطع`;
     });
     finalizePublication(published);
-    await loadFeed();
+    reloadFeedAfterPublish();
   } catch (error) {
     const cancelled = uploadController.signal.aborted;
     uploadError.textContent = cancelled ? "تم إلغاء الرفع — يمكنك إعادة المحاولة" :
@@ -374,74 +384,35 @@ form.addEventListener("submit", async event => {
   }
 });
 
-type Clip = { id: number; video_url: string; content_type?: string; title?: string; name?: string; code?: string };
+// ── Reels feed + upload composer wiring ──────────────────────────────────────
+// The fullscreen Reels feed is the primary surface. The camera button (and the
+// empty-state "publish") open this composer, which hosts the existing upload
+// form untouched, preserving every selector (#file #compress #submit #receipt
+// #storage-badge) and the direct helixly-clips upload/compression pipeline.
+let reels: ReelsController | null = null;
+let lastFocusBeforeComposer: HTMLElement | null = null;
 
-function renderClips(clips: Clip[]) {
-  feed.replaceChildren();
-  if (!clips.length) {
-    feed.textContent = "لا يوجد كليبز - كن أول من ينشر";
-    return;
-  }
-  for (const clip of clips.slice(0, 3)) {
-    const article = document.createElement("article");
-    article.id = `clip-${clip.id}`;
-    const title = document.createElement("h3");
-    title.textContent = clip.name || clip.title || (clip.content_type?.startsWith("audio/") ? "مقطع صوتي" : "فيديو");
-    const media = document.createElement(clip.content_type?.startsWith("audio/") ? "audio" : "video");
-    media.setAttribute("controls", "");
-    media.setAttribute("preload", "none");
-    if (media instanceof HTMLVideoElement) media.playsInline = true;
-    media.src = clip.video_url;
-    const mediaFrame = document.createElement("div");
-    mediaFrame.className = "clip-media-frame";
-    mediaFrame.append(media);
-    const actions = document.createElement("div");
-    article.append(title, mediaFrame, actions);
-    void mountVideoActions({
-      host: actions,
-      media,
-      titleElement: title,
-      clipId: clip.id,
-      code: clip.code,
-      accountId,
-      saveDisabled: identityStatus === "unknown",
-      contentType: clip.content_type,
-    });
-    if (clip.code) {
-      const code = document.createElement("p");
-      const link = document.createElement("a");
-      link.href = `${BASE}clip/${clip.code}`;
-      link.textContent = clip.code;
-      code.append(link);
-      code.dir = "ltr";
-      article.append(code);
-    }
-    feed.append(article);
-  }
+function openComposer() {
+  lastFocusBeforeComposer = document.activeElement as HTMLElement;
+  composer.hidden = false;
+  (chooseFile ?? composerClose).focus();
+}
+function closeComposer() {
+  composer.hidden = true;
+  lastFocusBeforeComposer?.focus();
+}
+composerClose.addEventListener("click", closeComposer);
+composer.addEventListener("keydown", event => { if (event.key === "Escape") closeComposer(); });
+
+function mountReelsFeed() {
+  reels?.destroy();
+  reels = mountReels(reelsRoot, { onOpenComposer: openComposer });
 }
 
-async function loadFeed() {
-  feed.textContent = "جارٍ التحميل…";
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${BASE}api/clips/feed?limit=3`, { cache: "no-store", signal: controller.signal });
-    if (!response.ok) throw new Error();
-    const data: unknown = await response.json();
-    const candidate = data as { clips?: unknown[]; degraded?: boolean };
-    if (candidate.degraded || !Array.isArray(candidate.clips)) throw new Error();
-    const clips = candidate.clips.filter((value): value is Clip => {
-      const clip = value as Partial<Clip>;
-      return Number.isSafeInteger(clip?.id) && typeof clip?.video_url === "string";
-    });
-    if (clips.length !== candidate.clips.length) throw new Error();
-    renderClips(clips);
-  } catch {
-    feed.innerHTML = `<p class="error">الكليبز غير متاحة حالياً أو الاتصال بطيء.</p><button class="secondary" type="button">إعادة المحاولة</button>`;
-    feed.querySelector("button")?.addEventListener("click", () => void loadFeed());
-  } finally {
-    clearTimeout(timer);
-  }
+/** After a successful publish, refresh the feed and return to it. */
+function reloadFeedAfterPublish() {
+  closeComposer();
+  mountReelsFeed();
 }
 
 type R2Status = {
@@ -507,26 +478,19 @@ async function loadAuth() {
       credentials: "include", cache: "no-store", signal: controller.signal,
     });
     if (response.status === 401) {
-      identityStatus = "anonymous";
       auth.innerHTML = `<a href="${BASE}login">سجل الدخول لرفع الصوت أو الفيديو</a>`;
       return;
     }
     if (!response.ok) throw new Error();
     const me = await response.json().catch(() => null);
     if (me && Number.isSafeInteger(me.id)) {
-      accountId = me.id;
-      identityStatus = "authenticated";
       // The R2 status endpoint is authenticated; only probe it once we know the
       // viewer is signed in. It never blocks the form (rendered right below).
       void loadStorageStatus();
-    } else {
-      // Reachable server but unusable identity payload — do not assume anonymous.
-      identityStatus = "unknown";
     }
     auth.textContent = "يمكنك رفع ملفك الآن";
     form.hidden = false;
   } catch {
-    identityStatus = "unknown";
     auth.innerHTML = `تعذر التحقق من الجلسة. <a href="${BASE}login">تسجيل الدخول</a>`;
   } finally {
     clearTimeout(timer);
@@ -534,6 +498,8 @@ async function loadAuth() {
 }
 
 document.body.dataset.clipReady = "true";
-// Resolve the viewer account before rendering the feed so device-only saves are
-// scoped to the signed-in account rather than the anonymous bucket.
-void loadAuth().finally(() => void loadFeed());
+// Mount the fullscreen Reels feed immediately (it resolves its own viewer
+// identity for engagement scoping). Resolve auth in parallel to enable the
+// upload composer form.
+mountReelsFeed();
+void loadAuth();

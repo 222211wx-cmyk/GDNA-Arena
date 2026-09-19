@@ -25,13 +25,18 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 describe("clip player identity + bookmark scope", () => {
-  it("scopes the save to the account only after a delayed identity resolves", async () => {
+  it("persists the save to the server once a delayed identity resolves", async () => {
     let releaseIdentity!: () => void;
     const gate = new Promise<void>(resolve => { releaseIdentity = resolve; });
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const saveCalls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes("/api/auth/me")) {
         await gate; // identity settles AFTER the clip renders
         return json({ id: 7, username: "producer" });
+      }
+      if (url.includes("/api/clips/42/save") && init?.method === "POST") {
+        saveCalls.push(url);
+        return json({ saved: true, saveCount: 3 });
       }
       return json(clipBody());
     }));
@@ -39,14 +44,16 @@ describe("clip player identity + bookmark scope", () => {
     renderClipPlayer("HELX-123456");
     // Media can render immediately; actions must wait for identity.
     await vi.waitFor(() => expect(document.querySelector("audio")).not.toBeNull());
-    expect(document.querySelector('[aria-label^="Save"]')).toBeNull();
+    expect(document.querySelector('[aria-label^="Enregistr"]')).toBeNull();
     releaseIdentity();
     await vi.waitFor(() =>
-      expect(document.querySelector('[aria-label="Save on this device"]')).not.toBeNull());
-    (document.querySelector('[aria-label="Save on this device"]') as HTMLButtonElement).click();
+      expect(document.querySelector('[aria-label="Enregistrer"]')).not.toBeNull());
+    (document.querySelector('[aria-label="Enregistrer"]') as HTMLButtonElement).click();
     await vi.waitFor(() =>
-      expect(window.localStorage.getItem("gdna-arena.saved-clips.7")).toContain("42"));
-    // Never written to the anonymous bucket.
+      expect(document.querySelector('[aria-label="Enregistré"]')).not.toBeNull());
+    expect(saveCalls.length).toBe(1);
+    // No device-bucket writes for an authenticated citizen.
+    expect(window.localStorage.getItem("gdna-arena.saved-clips.7")).toBeNull();
     expect(window.localStorage.getItem("gdna-arena.saved-clips.anon")).toBeNull();
   });
 
@@ -58,14 +65,14 @@ describe("clip player identity + bookmark scope", () => {
     const { renderClipPlayer } = await import("./clip-player-entry");
     renderClipPlayer("HELX-123456");
     await vi.waitFor(() =>
-      expect(document.querySelector('[aria-label="Saving unavailable — sign-in status unknown"]')).not.toBeNull());
-    const button = document.querySelector('[aria-label="Saving unavailable — sign-in status unknown"]') as HTMLButtonElement;
+      expect(document.querySelector('[aria-label="Enregistrement indisponible — statut de connexion inconnu"]')).not.toBeNull());
+    const button = document.querySelector('[aria-label="Enregistrement indisponible — statut de connexion inconnu"]') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     button.click();
     expect(window.localStorage.getItem("gdna-arena.saved-clips.anon")).toBeNull();
   });
 
-  it("scopes to the anonymous bucket only when identity is a confirmed 401", async () => {
+  it("falls back to the anonymous device bucket only when identity is a confirmed 401", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.includes("/api/auth/me")) return json({ error: "unauthorized" }, 401);
       return json(clipBody());
@@ -73,8 +80,8 @@ describe("clip player identity + bookmark scope", () => {
     const { renderClipPlayer } = await import("./clip-player-entry");
     renderClipPlayer("HELX-123456");
     await vi.waitFor(() =>
-      expect(document.querySelector('[aria-label="Save on this device"]')).not.toBeNull());
-    (document.querySelector('[aria-label="Save on this device"]') as HTMLButtonElement).click();
+      expect(document.querySelector('[aria-label="Enregistrer"]')).not.toBeNull());
+    (document.querySelector('[aria-label="Enregistrer"]') as HTMLButtonElement).click();
     await vi.waitFor(() =>
       expect(window.localStorage.getItem("gdna-arena.saved-clips.anon")).toContain("42"));
   });

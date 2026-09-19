@@ -13,7 +13,12 @@ export type GetClipsFeedParams = {
 before?: number;
 /**
  * @minimum 1
- * @maximum 20
+ * @maximum 10
  */
 limit?: number;
+/**
+ * Case-insensitive literal search across title, clip code, and username
+ * @maxLength 100
+ */
+q?: string;
 };

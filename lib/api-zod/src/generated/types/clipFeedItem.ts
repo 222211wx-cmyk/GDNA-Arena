@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ClipAuthor } from './clipAuthor';
 
 export interface ClipFeedItem {
   id: number;
@@ -16,6 +17,12 @@ export interface ClipFeedItem {
   duration_sec: number;
   views: number;
   created_at: Date;
+  author: ClipAuthor;
+  saved: boolean;
+  /** @minimum 0 */
+  saveCount: number;
+  /** @minimum 0 */
+  shareCount: number;
   /**
      * Stable /api/clips/thumbnail/{id} URL, or null for legacy/failed posters
      * @nullable

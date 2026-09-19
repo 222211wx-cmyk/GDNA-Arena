@@ -18,11 +18,14 @@ type ClipByCode = {
   processingStatus: string;
   url: string | null;
   id: number;
-  author: { id: number; username: string };
+  author: { id: number; username: string; avatarUrl?: string | null };
   isOwner: boolean;
   liked: boolean;
   likeCount: number;
   commentCount: number;
+  saved?: boolean;
+  saveCount?: number;
+  shareCount?: number;
 };
 
 const palette = tokens.color.dark;
@@ -206,6 +209,9 @@ export function renderClipPlayer(code: string) {
               liked: clip.liked,
               likeCount: clip.likeCount,
               commentCount: clip.commentCount,
+              saved: clip.saved,
+              saveCount: clip.saveCount,
+              shareCount: clip.shareCount,
             } satisfies VideoActionState,
           });
           document.title = `${name.textContent} — HELIXLY`;

@@ -203,7 +203,19 @@ export async function clipsFixture(t, database) {
     ALTER TABLE clips ADD COLUMN original_name TEXT;
     ALTER TABLE clips ADD COLUMN processing_attempts INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE clips ADD COLUMN processing_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-    ALTER TABLE clips ADD COLUMN processing_output_object TEXT
+    ALTER TABLE clips ADD COLUMN processing_output_object TEXT;
+    CREATE TABLE clip_bookmarks (
+      clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (clip_id,user_id)
+    );
+    CREATE TABLE clip_shares (
+      clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (clip_id,user_id)
+    )
   `);
   assert.equal((await observer.query("SELECT count(*) FROM clips")).rows[0].count, "0");
   async function seed(id, options = {}) {

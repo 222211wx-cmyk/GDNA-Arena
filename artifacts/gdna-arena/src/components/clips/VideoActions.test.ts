@@ -37,23 +37,46 @@ describe("VideoActions", () => {
     }));
   });
 
-  it("persists a device-only save via the bookmark rail button", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+  it("persists a save via the server endpoint and reflects the returned count", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ saved: true, saveCount: 9 }));
+    vi.stubGlobal("fetch", fetchMock);
     await mountVideoActions({
       host: document.getElementById("actions")!,
       media: document.querySelector("video")!,
       titleElement: document.getElementById("title")!,
       clipId: 42,
       accountId: 7,
-      initial: { ...state },
+      initial: { ...state, saved: false, saveCount: 8 },
     });
-    const save = document.querySelector('[aria-label="Save on this device"]') as HTMLButtonElement;
+    const save = document.querySelector('[aria-label="Enregistrer"]') as HTMLButtonElement;
     expect(save.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(save);
     await vi.waitFor(() =>
-      expect(document.querySelector('[aria-label="Saved on this device"]')?.getAttribute("aria-pressed")).toBe("true"),
+      expect(document.querySelector('[aria-label="Enregistré"]')?.getAttribute("aria-pressed")).toBe("true"),
     );
-    expect(window.localStorage.getItem("gdna-arena.saved-clips.7")).toContain("42");
+    expect(document.querySelector('[aria-label="Enregistré"]')?.textContent).toContain("9");
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/clips/42/save"), expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+    }));
+  });
+
+  it("falls back to a device-only save when identity is unknown", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+    await mountVideoActions({
+      host: document.getElementById("actions")!,
+      media: document.querySelector("video")!,
+      titleElement: document.getElementById("title")!,
+      clipId: 42,
+      accountId: null,
+      initial: { ...state },
+    });
+    const save = document.querySelector('[aria-label="Enregistrer"]') as HTMLButtonElement;
+    fireEvent.click(save);
+    await vi.waitFor(() =>
+      expect(document.querySelector('[aria-label="Enregistré sur cet appareil"]')?.getAttribute("aria-pressed")).toBe("true"),
+    );
+    expect(window.localStorage.getItem("gdna-arena.saved-clips.anon")).toContain("42");
   });
 
   it("renders the author as a real profile link, plus title and audio label", async () => {
@@ -109,6 +132,62 @@ describe("VideoActions", () => {
     fireEvent.input(input, { target: { value: "Saved title" } });
     fireEvent.submit(input.closest("form")!);
     await vi.waitFor(() => expect(document.getElementById("title")?.textContent).toBe("Saved title"));
+  });
+
+  it("renders the owner title editor INSIDE the visible caption node (never a detached element)", async () => {
+    // Regression: the Reels feed passed a detached <span> as titleElement, so the
+    // owner editor input mounted off-DOM and was invisible. The editor must render
+    // into the exact on-screen node the caller supplies, and that node must be
+    // connected to the document so the input is actually visible/focusable.
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ clip: { title: "x" } })));
+    const caption = document.createElement("p");
+    caption.className = "reels-caption";
+    caption.setAttribute("dir", "auto");
+    caption.textContent = "Original title";
+    document.body.appendChild(caption); // the real, on-screen caption
+    await mountVideoActions({
+      host: document.getElementById("actions")!,
+      media: document.querySelector("video")!,
+      titleElement: caption,
+      clipId: 42,
+      initial: { ...state },
+    });
+    fireEvent.click(document.querySelector('[aria-label="Edit title"]')!);
+    const input = document.querySelector('[aria-label="Clip title"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    // The input lives inside the supplied caption node and is on-screen.
+    expect(caption.contains(input)).toBe(true);
+    expect(input.isConnected).toBe(true);
+    expect(input.value).toBe("Original title");
+  });
+
+  it("hydrate() merges a late engagement snapshot but never clobbers a user mutation", async () => {
+    // Regression: like/comment reset to 0 after reload because the feed seeds
+    // liked:false/0 and the later /engagement fetch never re-rendered the rail.
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ liked: true, likeCount: 2 })));
+    const handle = await mountVideoActions({
+      host: document.getElementById("actions")!,
+      media: document.querySelector("video")!,
+      titleElement: document.getElementById("title")!,
+      clipId: 42,
+      initial: { ...state, liked: false, likeCount: 0, commentCount: 0 },
+    });
+    // Rail starts at the (empty) feed-row seed.
+    expect(document.querySelector('[aria-label="Like"]')?.textContent).toContain("0");
+    // A late engagement snapshot hydrates the persisted state into the controls.
+    handle.hydrate({ liked: true, likeCount: 1, commentCount: 3 });
+    expect(document.querySelector('[aria-label="Unlike"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Unlike"]')?.textContent).toContain("1");
+    const commentBtn = document.querySelector('[aria-label="Comments"]')!;
+    expect(commentBtn.textContent).toContain("3");
+    // Now the viewer likes; a subsequent (stale) snapshot must NOT overwrite the
+    // applied state — hydration is latched to the first snapshot only.
+    fireEvent.click(document.querySelector('[aria-label="Unlike"]')!);
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Unlike"]')?.textContent).toContain("2"));
+    handle.hydrate({ liked: false, likeCount: 0, commentCount: 0 });
+    // User's mutation stands and the latch ignores the stale second snapshot.
+    expect(document.querySelector('[aria-label="Unlike"]')?.textContent).toContain("2");
+    expect(commentBtn.textContent).toContain("3");
   });
 
   it("exposes a selectable URL when clipboard paths are blocked", async () => {

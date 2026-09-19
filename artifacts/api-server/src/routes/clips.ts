@@ -7,7 +7,7 @@ import { logger } from "../lib/logger";
 import { createClipsFeedHandler } from "./clips-feed.js";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
 import { createClipsUploadsRouter } from "./clips-uploads.js";
-import { createClipPlaybackRouter } from "./clip-playback.js";
+import { createClipPlaybackRouter, publicAvatarUrl } from "./clip-playback.js";
 import { signClipPlayback } from "../lib/clip-playback.js";
 import { ClipUploads } from "../lib/clip-uploads.js";
 import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js";
@@ -39,11 +39,16 @@ router.use(createClipPlaybackRouter({
               c.processing_status,c.object_name,c.user_id,c.username,
               (SELECT COUNT(*) FROM clip_likes l WHERE l.clip_id=c.id) AS like_count,
               (SELECT COUNT(*) FROM clip_comments m WHERE m.clip_id=c.id) AS comment_count,
-              EXISTS(SELECT 1 FROM clip_likes l WHERE l.clip_id=c.id AND l.user_id=$2) AS liked_by_viewer
-       FROM clips c WHERE c.code=$1 AND c.is_frozen=FALSE`,
+              (SELECT COUNT(*) FROM clip_bookmarks b WHERE b.clip_id=c.id) AS save_count,
+              (SELECT COUNT(*) FROM clip_shares s WHERE s.clip_id=c.id) AS share_count,
+              EXISTS(SELECT 1 FROM clip_likes l WHERE l.clip_id=c.id AND l.user_id=$2) AS liked_by_viewer,
+              EXISTS(SELECT 1 FROM clip_bookmarks b WHERE b.clip_id=c.id AND b.user_id=$2) AS saved_by_viewer,
+              COALESCE(NULLIF(to_jsonb(u)->>'avatar_url',''), NULLIF(to_jsonb(u)->>'avatar','')) AS avatar_url
+       FROM clips c JOIN users u ON u.id=c.user_id
+       WHERE c.code=$1 AND c.is_frozen=FALSE`,
       [code, viewerId],
     );
-    return rows[0] ?? null;
+    return rows[0] ? { ...rows[0], avatar_url: publicAvatarUrl(rows[0].avatar_url) } : null;
   },
   sign: signClipPlayback,
   log: error => logger.warn({ err: error }, "[clips] playback metadata unavailable"),
@@ -251,26 +256,43 @@ async function isAdmin(userId: number): Promise<boolean> {
 
 // ─── GET /clips/feed — Reels feed, newest first ──────────────────────────────
 router.get("/clips/feed", createClipsFeedHandler({
-  async loadRows(before, limit, signal) {
+  async loadRows(before, limit, signal, q = "", viewerId = null) {
     const client = await acquireFeedClient(signal);
     try {
       // The handler deadline may fire while waiting for a saturated pool. In that
       // case release immediately and never start a query after the response.
       if (signal?.aborted) throw new Error("Clips feed deadline exceeded");
       await client.query("BEGIN");
-      await client.query("SET LOCAL statement_timeout = '120ms'");
-      await client.query("SET LOCAL lock_timeout = '80ms'");
-      const params = before === null ? [limit + 1] : [before, limit + 1];
+      await client.query("SET LOCAL statement_timeout = '750ms'");
+      await client.query("SET LOCAL lock_timeout = '250ms'");
+      const escapedSearch = q.replace(/[\\%_]/g, character => `\\${character}`);
+      const params = [viewerId, `%${escapedSearch}%`, before, limit + 1];
       const { rows } = await client.query(
         `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec, c.code, c.processing_status,
-                c.views, c.created_at, c.thumbnail_object_name
-         FROM clips c
+                c.views, c.created_at, c.thumbnail_object_name,
+                json_build_object(
+                  'id', c.user_id,
+                  'username', c.username,
+                  'avatarUrl', COALESCE(NULLIF(to_jsonb(u)->>'avatar_url',''), NULLIF(to_jsonb(u)->>'avatar',''))
+                ) AS author,
+                (SELECT COUNT(*) FROM clip_bookmarks b WHERE b.clip_id=c.id)::int AS "saveCount",
+                (SELECT COUNT(*) FROM clip_shares s WHERE s.clip_id=c.id)::int AS "shareCount",
+                EXISTS(SELECT 1 FROM clip_bookmarks b WHERE b.clip_id=c.id AND b.user_id=$1) AS saved
+         FROM clips c JOIN users u ON u.id=c.user_id
          WHERE c.is_frozen = FALSE AND c.object_name IS NOT NULL AND c.object_name <> ''
-           ${before === null ? "" : "AND c.id < $1"}
-         ORDER BY c.id DESC LIMIT $${params.length}`, params,
+           AND ($2::text = '%%' OR c.title ILIKE $2 ESCAPE '\'
+             OR c.code ILIKE $2 ESCAPE '\' OR c.username ILIKE $2 ESCAPE '\')
+           AND ($3::integer IS NULL OR c.id < $3)
+         ORDER BY c.id DESC LIMIT $4`, params,
       );
       await client.query("COMMIT");
-      return rows;
+      return rows.map(row => ({
+        ...row,
+        author: {
+          ...row.author,
+          avatarUrl: publicAvatarUrl(row.author?.avatarUrl),
+        },
+      }));
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
@@ -360,8 +382,13 @@ router.get("/clips/:id/engagement", async (req, res): Promise<void> => {
     `SELECT c.id,c.user_id,c.username,c.title,c.code,
             (SELECT COUNT(*) FROM clip_likes l WHERE l.clip_id=c.id)::text AS like_count,
             (SELECT COUNT(*) FROM clip_comments m WHERE m.clip_id=c.id)::text AS comment_count,
-            EXISTS(SELECT 1 FROM clip_likes l WHERE l.clip_id=c.id AND l.user_id=$2) AS liked
-     FROM clips c WHERE c.id=$1 AND c.is_frozen=FALSE`, [id, viewerId],
+             (SELECT COUNT(*) FROM clip_bookmarks b WHERE b.clip_id=c.id)::text AS save_count,
+             (SELECT COUNT(*) FROM clip_shares s WHERE s.clip_id=c.id)::text AS share_count,
+             EXISTS(SELECT 1 FROM clip_likes l WHERE l.clip_id=c.id AND l.user_id=$2) AS liked,
+             EXISTS(SELECT 1 FROM clip_bookmarks b WHERE b.clip_id=c.id AND b.user_id=$2) AS saved,
+             COALESCE(NULLIF(to_jsonb(u)->>'avatar_url',''), NULLIF(to_jsonb(u)->>'avatar','')) AS avatar_url
+      FROM clips c JOIN users u ON u.id=c.user_id
+      WHERE c.id=$1 AND c.is_frozen=FALSE`, [id, viewerId],
   );
   const row = rows[0];
   if (!row) { res.status(404).json({ error: "Clip not found" }); return; }
@@ -370,11 +397,14 @@ router.get("/clips/:id/engagement", async (req, res): Promise<void> => {
       id: row.id,
       title: row.title,
       code: row.code,
-      author: { id: row.user_id, username: row.username },
+      author: { id: row.user_id, username: row.username, avatarUrl: publicAvatarUrl(row.avatar_url) },
       isOwner: viewerId === row.user_id,
       liked: row.liked,
       likeCount: Number(row.like_count),
       commentCount: Number(row.comment_count),
+      saved: row.saved,
+      saveCount: Number(row.save_count),
+      shareCount: Number(row.share_count),
     },
   });
 });
@@ -407,6 +437,74 @@ router.post("/clips/:id/like", async (req, res): Promise<void> => {
     await client.query("ROLLBACK").catch(() => {});
     logger.error({ err: error, clipId: id, userId }, "[clips] like failed");
     res.status(500).json({ error: "Failed to update like" });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── POST /clips/:id/save — persisted bookmark toggle per citizen ─────────────
+router.post("/clips/:id/save", async (req, res): Promise<void> => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const client = await requirePool().connect();
+  try {
+    await client.query("BEGIN");
+    const visible = await client.query(`SELECT id FROM clips WHERE id=$1 AND is_frozen=FALSE FOR UPDATE`, [id]);
+    if (!visible.rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Clip not found" });
+      return;
+    }
+    const inserted = await client.query(
+      `INSERT INTO clip_bookmarks (clip_id,user_id) VALUES ($1,$2)
+       ON CONFLICT DO NOTHING RETURNING clip_id`, [id, userId],
+    );
+    const saved = Boolean(inserted.rows[0]);
+    if (!saved) await client.query(`DELETE FROM clip_bookmarks WHERE clip_id=$1 AND user_id=$2`, [id, userId]);
+    const count = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM clip_bookmarks WHERE clip_id=$1`, [id],
+    );
+    await client.query("COMMIT");
+    res.json({ saved, saveCount: Number(count.rows[0]?.count ?? 0) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    logger.error({ err: error, clipId: id, userId }, "[clips] save failed");
+    res.status(500).json({ error: "Failed to update save" });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── POST /clips/:id/share — one count per citizen, retry-safe ────────────────
+router.post("/clips/:id/share", async (req, res): Promise<void> => {
+  const userId = requireAuth(req, res);
+  if (!userId) return;
+  const id = parseClipId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const client = await requirePool().connect();
+  try {
+    await client.query("BEGIN");
+    const visible = await client.query(`SELECT id FROM clips WHERE id=$1 AND is_frozen=FALSE FOR UPDATE`, [id]);
+    if (!visible.rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Clip not found" });
+      return;
+    }
+    await client.query(
+      `INSERT INTO clip_shares (clip_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [id, userId],
+    );
+    const count = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM clip_shares WHERE clip_id=$1`, [id],
+    );
+    await client.query("COMMIT");
+    res.json({ shared: true, shareCount: Number(count.rows[0]?.count ?? 0) });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    logger.error({ err: error, clipId: id, userId }, "[clips] share failed");
+    res.status(500).json({ error: "Failed to record share" });
   } finally {
     client.release();
   }

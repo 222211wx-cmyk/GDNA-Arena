@@ -6,11 +6,12 @@ import {
   parseClipsFeedQuery,
 } from "./clips-feed.js";
 
-test("clips feed query defaults to ten records without a cursor", () => {
+test("clips feed query uses the bounded default without a cursor", () => {
   assert.deepEqual(parseClipsFeedQuery({}), {
     ok: true,
     before: null,
     limit: DEFAULT_CLIPS_FEED_LIMIT,
+    q: "",
   });
 });
 
@@ -19,21 +20,25 @@ test("clips feed query accepts a bounded limit and positive cursor", () => {
     ok: true,
     before: 42,
     limit: 6,
+    q: "",
   });
-  assert.deepEqual(parseClipsFeedQuery({ limit: "20" }), {
+  assert.deepEqual(parseClipsFeedQuery({ limit: "10", q: "  HELX  " }), {
     ok: true,
     before: null,
-    limit: 20,
+    limit: 10,
+    q: "HELX",
   });
 });
 
 test("clips feed query rejects invalid limits and cursors", () => {
-  for (const limit of ["0", "-1", "1.5", "21", "9007199254740992", "", ["6"]]) {
+  for (const limit of ["0", "-1", "1.5", "11", "9007199254740992", "", ["6"]]) {
     assert.deepEqual(parseClipsFeedQuery({ limit }), { ok: false, parameter: "limit" });
   }
   for (const before of ["0", "-1", "1.5", "9007199254740992", "", ["42"]]) {
     assert.deepEqual(parseClipsFeedQuery({ before }), { ok: false, parameter: "before" });
   }
+  assert.deepEqual(parseClipsFeedQuery({ q: ["term"] }), { ok: false, parameter: "q" });
+  assert.deepEqual(parseClipsFeedQuery({ q: "x".repeat(101) }), { ok: false, parameter: "q" });
 });
 
 test("clips feed page emits the requested records and a cursor only when more exist", () => {

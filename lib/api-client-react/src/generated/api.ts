@@ -35,6 +35,8 @@ import type {
   CallPushInstallationInput,
   CallPushOk,
   CallPushSession,
+  ClipSaveResult,
+  ClipShareResult,
   ClipsFeedPage,
   DailyRewardResult,
   DeclineCallParams,
@@ -381,6 +383,154 @@ export function useGetClipsFeed<TData = Awaited<ReturnType<typeof getClipsFeed>>
 
 
 
+
+export const getToggleClipSaveUrl = (id: number,) => {
+
+
+
+
+  return `/api/clips/${id}/save`
+}
+
+/**
+ * @summary Toggle the authenticated citizen's persistent clip bookmark
+ */
+export const toggleClipSave = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<ClipSaveResult> => {
+
+  return customFetch<ClipSaveResult>(getToggleClipSaveUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getToggleClipSaveMutationKey = () => ['toggleClipSave'] as const;
+
+export const getToggleClipSaveMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof toggleClipSave>>, TError,ToggleClipSaveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof toggleClipSave>>, TError,ToggleClipSaveMutationVariables, TContext> => {
+
+const mutationKey = getToggleClipSaveMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof toggleClipSave>>, ToggleClipSaveMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  toggleClipSave(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ToggleClipSaveMutationResult = NonNullable<Awaited<ReturnType<typeof toggleClipSave>>>
+
+    export type ToggleClipSaveMutationError = ErrorType<void>
+    export type ToggleClipSaveMutationVariables = {id: number}
+
+    /**
+ * @summary Toggle the authenticated citizen's persistent clip bookmark
+ */
+export const useToggleClipSave = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof toggleClipSave>>, TError,ToggleClipSaveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof toggleClipSave>>,
+        TError,
+        ToggleClipSaveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getToggleClipSaveMutationOptions(options), queryClient);
+    }
+
+export const getRecordClipShareUrl = (id: number,) => {
+
+
+
+
+  return `/api/clips/${id}/share`
+}
+
+/**
+ * @summary Idempotently record one share for the authenticated citizen
+ */
+export const recordClipShare = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<ClipShareResult> => {
+
+  return customFetch<ClipShareResult>(getRecordClipShareUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRecordClipShareMutationKey = () => ['recordClipShare'] as const;
+
+export const getRecordClipShareMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordClipShare>>, TError,RecordClipShareMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordClipShare>>, TError,RecordClipShareMutationVariables, TContext> => {
+
+const mutationKey = getRecordClipShareMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordClipShare>>, RecordClipShareMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  recordClipShare(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordClipShareMutationResult = NonNullable<Awaited<ReturnType<typeof recordClipShare>>>
+
+    export type RecordClipShareMutationError = ErrorType<void>
+    export type RecordClipShareMutationVariables = {id: number}
+
+    /**
+ * @summary Idempotently record one share for the authenticated citizen
+ */
+export const useRecordClipShare = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordClipShare>>, TError,RecordClipShareMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof recordClipShare>>,
+        TError,
+        RecordClipShareMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRecordClipShareMutationOptions(options), queryClient);
+    }
 
 export const getGetClipThumbnailUrl = (id: number,) => {
 

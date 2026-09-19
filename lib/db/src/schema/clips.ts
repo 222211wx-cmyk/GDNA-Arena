@@ -68,6 +68,7 @@ export const clipLikesTable = pgTable("clip_likes", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   primaryKey: primaryKey({ columns: [table.clipId, table.userId] }),
+  userIndex: index("clip_bookmarks_user_idx").on(table.userId),
 }));
 
 export const clipCommentsTable = pgTable("clip_comments", {
@@ -78,4 +79,21 @@ export const clipCommentsTable = pgTable("clip_comments", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   clipCreatedAt: index("clip_comments_clip_created_idx").on(table.clipId, table.createdAt, table.id),
+}));
+
+export const clipBookmarksTable = pgTable("clip_bookmarks", {
+  clipId: integer("clip_id").notNull().references(() => clipsTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  primaryKey: primaryKey({ columns: [table.clipId, table.userId] }),
+  userIndex: index("clip_shares_user_idx").on(table.userId),
+}));
+
+export const clipSharesTable = pgTable("clip_shares", {
+  clipId: integer("clip_id").notNull().references(() => clipsTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  primaryKey: primaryKey({ columns: [table.clipId, table.userId] }),
 }));

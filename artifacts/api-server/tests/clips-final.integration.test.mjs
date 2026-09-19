@@ -46,6 +46,88 @@ test("final publication: server code/name, duplicate content allowed, audio and 
   assert.equal(feed.clips[0].duration, 90001);
 });
 
+test("clip saves persist across sessions, shares are auth-bound and idempotent, and search keeps cursors", async t => {
+  const f = await clipsFixture(t, database);
+  await f.seed(1);
+  await f.seed(2);
+  await f.observer.query(
+    `UPDATE clips SET title=CASE id WHEN 1 THEN 'Ocean Signal' ELSE 'Desert Echo' END,
+       code=CASE id WHEN 1 THEN 'HELX-100001' ELSE 'HELX-100002' END,
+       processing_status='queued'`,
+  );
+  const base = await f.http();
+
+  assert.equal((await fetch(`${base}/clips/1/save`, { method: "POST" })).status, 401);
+  assert.equal((await fetch(`${base}/clips/1/share`, { method: "POST" })).status, 401);
+
+  const save = await (await fetch(`${base}/clips/1/save`, {
+    method: "POST", headers: { "x-test-user": "7" },
+  })).json();
+  assert.deepEqual(save, { saved: true, saveCount: 1 });
+
+  // A new HTTP request represents a fresh session backed by the same citizen id.
+  const persisted = await (await fetch(`${base}/clips/1/engagement`, {
+    headers: { "x-test-user": "7" },
+  })).json();
+  assert.equal(persisted.engagement.saved, true);
+  assert.equal(persisted.engagement.saveCount, 1);
+  const otherCitizen = await (await fetch(`${base}/clips/1/engagement`, {
+    headers: { "x-test-user": "8" },
+  })).json();
+  assert.equal(otherCitizen.engagement.saved, false);
+  assert.equal(otherCitizen.engagement.saveCount, 1);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const shared = await (await fetch(`${base}/clips/1/share`, {
+      method: "POST", headers: { "x-test-user": "7" },
+    })).json();
+    assert.deepEqual(shared, { shared: true, shareCount: 1 });
+  }
+  const secondCitizenShare = await (await fetch(`${base}/clips/1/share`, {
+    method: "POST", headers: { "x-test-user": "8" },
+  })).json();
+  assert.deepEqual(secondCitizenShare, { shared: true, shareCount: 2 });
+
+  const search = await (await fetch(`${base}/clips/feed?q=ocean&limit=1`)).json();
+  assert.equal(search.clips.length, 1);
+  assert.equal(search.clips[0].id, 1);
+  assert.deepEqual(search.clips[0].author, {
+    id: 7, username: "fixture-owner", avatarUrl: null,
+  });
+  assert.equal(search.clips[0].saveCount, 1);
+  assert.equal(search.clips[0].shareCount, 2);
+  assert.equal(search.clips[0].saved, false);
+  assert.equal(search.hasMore, false);
+
+  const firstPage = await (await fetch(`${base}/clips/feed?q=fixture-owner&limit=1`)).json();
+  assert.equal(firstPage.clips[0].id, 2);
+  assert.equal(firstPage.hasMore, true);
+  assert.equal(firstPage.nextBefore, 2);
+  const secondPage = await (await fetch(
+    `${base}/clips/feed?q=fixture-owner&limit=1&before=${firstPage.nextBefore}`,
+  )).json();
+  assert.equal(secondPage.clips[0].id, 1);
+
+  const byCode = await (await fetch(`${base}/clip/by-code/HELX-100001`, {
+    headers: { "x-test-user": "7" },
+  })).json();
+  assert.equal(byCode.clip.saved, true);
+  assert.equal(byCode.clip.saveCount, 1);
+  assert.equal(byCode.clip.shareCount, 2);
+
+  await f.observer.query("UPDATE clips SET is_frozen=TRUE WHERE id=1");
+  assert.equal((await fetch(`${base}/clips/1/engagement`)).status, 404);
+  assert.equal((await fetch(`${base}/clip/by-code/HELX-100001`)).status, 404);
+  assert.equal((await fetch(`${base}/clips/1/save`, {
+    method: "POST", headers: { "x-test-user": "7" },
+  })).status, 404);
+  assert.equal((await fetch(`${base}/clips/1/share`, {
+    method: "POST", headers: { "x-test-user": "7" },
+  })).status, 404);
+  const frozenSearch = await (await fetch(`${base}/clips/feed?q=Ocean`)).json();
+  assert.equal(frozenSearch.clips.length, 0);
+});
+
 test("compression: durable reserved output, replica exclusion, deletion fence and atomic URL swap", async t => {
   const f = await clipsFixture(t, database);
   const clip = await f.seed(1);
@@ -100,20 +182,29 @@ test("compression: durable reserved output, replica exclusion, deletion fence an
 test("explicit account erasure queues original and derived bytes only for its owner", async t => {
   const f = await clipsFixture(t, database);
   const clip = await f.seed(1);
+  await f.seed(2);
+  await f.observer.query("UPDATE clips SET user_id=8,username='other-owner' WHERE id=2");
+  await f.observer.query("INSERT INTO clip_bookmarks (clip_id,user_id) VALUES (2,7),(2,8)");
+  await f.observer.query("INSERT INTO clip_shares (clip_id,user_id) VALUES (2,7),(2,8)");
   const derived = "clip_compressed_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp4";
   f.state.objects.set(derived, Buffer.from("encoded"));
   await f.observer.query("UPDATE clips SET upload_object_name=object_name, object_name=$1 WHERE id=1", [derived]);
   const client = await f.observer.connect();
   try {
     await client.query("BEGIN");
-    await f.a.deleteAccountClips(client, 8);
+    await f.a.deleteAccountClips(client, 9);
     await client.query("COMMIT");
-    assert.equal((await f.observer.query("SELECT count(*) FROM clips")).rows[0].count, "1");
+    assert.equal((await f.observer.query("SELECT count(*) FROM clips")).rows[0].count, "2");
     await client.query("BEGIN");
     await f.a.deleteAccountClips(client, 7);
     await client.query("COMMIT");
   } finally { client.release(); }
-  assert.equal((await f.observer.query("SELECT count(*) FROM clips")).rows[0].count, "0");
+  assert.equal((await f.observer.query("SELECT count(*) FROM clips WHERE user_id=7")).rows[0].count, "0");
+  assert.equal((await f.observer.query("SELECT count(*) FROM clips WHERE user_id=8")).rows[0].count, "1");
+  assert.equal((await f.observer.query("SELECT count(*) FROM clip_bookmarks WHERE user_id=7")).rows[0].count, "0");
+  assert.equal((await f.observer.query("SELECT count(*) FROM clip_shares WHERE user_id=7")).rows[0].count, "0");
+  assert.equal((await f.observer.query("SELECT count(*) FROM clip_bookmarks WHERE user_id=8")).rows[0].count, "1");
+  assert.equal((await f.observer.query("SELECT count(*) FROM clip_shares WHERE user_id=8")).rows[0].count, "1");
   assert.ok(f.state.objects.has(clip.objectName), "storage work only follows the committed deletion");
   await f.a.runClipStorageCleanupBatch();
   assert.equal(f.state.objects.has(clip.objectName), false);
