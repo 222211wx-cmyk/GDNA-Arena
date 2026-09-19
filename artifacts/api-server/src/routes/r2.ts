@@ -23,7 +23,7 @@ import {
   resolveClipUploadType,
   ClipUploadError,
 } from "../lib/clip-upload-protocol.js";
-import { publishClip } from "../lib/clip-publish.js";
+import { publishClip, validateClipDisplayTitle } from "../lib/clip-publish.js";
 import { finalClipReceipt } from "./clips-thumbnail-response.js";
 import { logger } from "../lib/logger.js";
 
@@ -39,6 +39,7 @@ type UploadRow = {
   object_name: string;
   multipart_upload_id: string;
   original_name: string;
+  display_title: string | null;
   content_type: string;
   size_bytes: string;
   duration_sec: number;
@@ -67,7 +68,7 @@ function safeEtag(value: unknown): string | null {
 async function uploadRow(id: string, userId: number): Promise<UploadRow | null> {
   if (!UUID.test(id)) return null;
   const { rows } = await pool.query<UploadRow>(
-    `SELECT id,user_id,object_name,multipart_upload_id,original_name,content_type,
+    `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
             size_bytes,duration_sec,state,clip_id,expires_at
      FROM r2_clip_uploads WHERE id=$1 AND user_id=$2`, [id, userId],
   );
@@ -89,6 +90,9 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
   try {
     if (action === "initiate") {
       const originalName = typeof req.body?.filename === "string" ? req.body.filename.trim().slice(0, 1024) : "";
+      const displayTitle = validateClipDisplayTitle(
+        Object.prototype.hasOwnProperty.call(req.body ?? {}, "title") ? req.body.title : undefined,
+      ) ?? null;
       const size = integer(req.body?.size);
       const duration = Number(req.body?.durationSec);
       const contentType = resolveClipUploadType(String(req.body?.contentType ?? ""), originalName);
@@ -99,13 +103,14 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
       }
       if (size > MAX_NEW_CLIP_BYTES) { res.status(413).json({ error: NEW_CLIP_TOO_LARGE }); return; }
       const existing = await pool.query<UploadRow>(
-        `SELECT id,user_id,object_name,multipart_upload_id,original_name,content_type,
+        `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
                 size_bytes,duration_sec,state,clip_id,expires_at
          FROM r2_clip_uploads WHERE user_id=$1 AND request_id=$2`, [userId, requestId],
       );
       if (existing.rows[0]) {
         const row = existing.rows[0];
-        if (Number(row.size_bytes) !== size || row.content_type !== contentType || row.original_name !== originalName) {
+        if (Number(row.size_bytes) !== size || row.content_type !== contentType ||
+            row.original_name !== originalName || row.display_title !== displayTitle) {
           res.status(409).json({ error: "Upload request identity already belongs to different media" }); return;
         }
         res.json({
@@ -127,11 +132,11 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
       try {
         await pool.query(
           `INSERT INTO r2_clip_uploads
-             (id,user_id,request_id,object_name,multipart_upload_id,original_name,
-              content_type,size_bytes,duration_sec,expires_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()+INTERVAL '${SESSION_TTL_HOURS} hours')`,
+              (id,user_id,request_id,object_name,multipart_upload_id,original_name,display_title,
+               content_type,size_bytes,duration_sec,expires_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()+INTERVAL '${SESSION_TTL_HOURS} hours')`,
           [id, userId, requestId, r2Reference(key), created.UploadId, originalName,
-            contentType, size, duration],
+             displayTitle, contentType, size, duration],
         );
       } catch (error) {
         await r2Client().send(new AbortMultipartUploadCommand({
@@ -139,13 +144,14 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
         })).catch(() => {});
         if ((error as { code?: string }).code === "23505") {
           const raced = await pool.query<UploadRow>(
-            `SELECT id,user_id,object_name,multipart_upload_id,original_name,content_type,
+            `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
                     size_bytes,duration_sec,state,clip_id,expires_at
              FROM r2_clip_uploads WHERE user_id=$1 AND request_id=$2`, [userId, requestId],
           );
           const winner = raced.rows[0];
           if (winner && Number(winner.size_bytes) === size &&
-              winner.content_type === contentType && winner.original_name === originalName) {
+              winner.content_type === contentType && winner.original_name === originalName &&
+              winner.display_title === displayTitle) {
             res.json({
               sessionId: winner.id, partSize: PART_BYTES,
               partCount: Math.ceil(size / PART_BYTES), state: winner.state,
@@ -240,7 +246,7 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
         await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${row.id}`]);
         locked = true;
         const currentResult = await client.query<UploadRow>(
-          `SELECT id,user_id,object_name,multipart_upload_id,original_name,content_type,
+          `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
                   size_bytes,duration_sec,state,clip_id,expires_at
            FROM r2_clip_uploads WHERE id=$1 AND user_id=$2`, [row.id, userId],
         );
@@ -321,6 +327,7 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
             userId,
             filename: current.object_name,
             title: current.original_name,
+            displayTitle: current.display_title ?? undefined,
             contentType: current.content_type,
             size: Number(current.size_bytes),
             sha256: "",

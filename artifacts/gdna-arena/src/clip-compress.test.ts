@@ -23,6 +23,7 @@ vi.mock("./components/clips/prepareVideo", () => ({
 const input = () => document.getElementById("file") as HTMLInputElement;
 const submit = () => document.getElementById("submit") as HTMLButtonElement;
 const compress = () => document.getElementById("compress") as HTMLInputElement;
+const displayName = () => document.getElementById("display-name") as HTMLInputElement;
 const form = () => document.getElementById("upload") as HTMLFormElement;
 const text = (id: string) => document.getElementById(id)!.textContent;
 
@@ -76,11 +77,18 @@ describe("optional compress-before-upload", () => {
     const file = media("v.mp4", "video/mp4", 10 * 1024 * 1024);
     select(file);
     await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    displayName().value = "فيديو مضغوط";
+    displayName().dispatchEvent(new Event("input", { bubbles: true }));
     compress().checked = true;
     form().requestSubmit();
     await vi.waitFor(() => expect(uploadPrepared).toHaveBeenCalledOnce());
     expect(prepare.mock.calls[0][0]).toBe(file);
-    expect(uploadPrepared.mock.calls[0][0]).toMatchObject({ uploadFile: prepared.uploadFile, outputDuration: 120 });
+    expect(uploadPrepared.mock.calls[0][0]).toMatchObject({
+      uploadFile: prepared.uploadFile,
+      outputDuration: 120,
+      title: "فيديو مضغوط",
+      originalFilename: "v.mp4",
+    });
     expect(upload).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(text("receipt")).toContain("HELX-000002"));
   });

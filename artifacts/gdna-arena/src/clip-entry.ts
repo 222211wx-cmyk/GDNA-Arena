@@ -86,6 +86,11 @@ root.innerHTML = `
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
     <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 2GB</p>
+    <label id="display-name-row" for="display-name" hidden>
+      <span>اسم الفيشي</span>
+      <input id="display-name" data-testid="clip-display-name" type="text" dir="auto" autocomplete="off" aria-describedby="display-name-error">
+      <span id="display-name-error" class="error" role="alert" aria-live="polite"></span>
+    </label>
     <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
     <div id="compress-row" data-testid="clip-compress-row" hidden>
       <label id="compress-label" for="compress">
@@ -115,6 +120,9 @@ const auth = element<HTMLDivElement>("auth");
 const form = element<HTMLFormElement>("upload");
 const input = element<HTMLInputElement>("file");
 const chooseFile = element<HTMLButtonElement>("choose-file");
+const displayNameRow = element<HTMLLabelElement>("display-name-row");
+const displayName = element<HTMLInputElement>("display-name");
+const displayNameError = element<HTMLSpanElement>("display-name-error");
 const durationStatus = element<HTMLParagraphElement>("duration-status");
 const receipt = element<HTMLDivElement>("receipt");
 const submit = element<HTMLButtonElement>("submit");
@@ -139,6 +147,46 @@ let cachedFile: File | null = null;
 let selectedDuration: number | null = null;
 let durationController: AbortController | null = null;
 let uploadController: AbortController | null = null;
+let selectedFileKey: string | null = null;
+
+const MEDIA_EXTENSIONS = new Set([
+  "3g2", "3gp", "aac", "aiff", "amr", "avi", "flac", "m4a", "m4v", "mkv",
+  "mov", "mp3", "mp4", "mpeg", "mpg", "oga", "ogg", "ogv", "opus", "wav",
+  "webm", "wma", "wmv",
+]);
+
+/** Strip only a recognized media suffix; dots in all other names are retained. */
+export function defaultClipDisplayName(filename: string) {
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0 || !MEDIA_EXTENSIONS.has(filename.slice(dot + 1).toLocaleLowerCase())) {
+    return filename;
+  }
+  return filename.slice(0, dot);
+}
+
+function fileSelectionKey(file: File) {
+  return JSON.stringify([file.name, file.size, file.type, file.lastModified]);
+}
+
+function normalizedDisplayName() {
+  return displayName.value.trim();
+}
+
+function displayNameValidationError() {
+  const value = normalizedDisplayName();
+  if (!value) return "اسم الفيشي مطلوب";
+  if ([...value].length > 120) return "اسم الفيشي خاصو يكون 120 حرف أو أقل";
+  return "";
+}
+
+function updateSubmitState() {
+  const nameError = displayNameValidationError();
+  displayNameError.textContent = nameError;
+  displayName.setAttribute("aria-invalid", String(Boolean(nameError)));
+  submit.disabled = Boolean(uploadController) || !cachedFile ||
+    cachedFile.size > MAX_CLIP_BYTES || selectedDuration === null ||
+    selectedDuration < 60 || Boolean(nameError);
+}
 
 function formatBytes(bytes: number) {
   return new Intl.NumberFormat("ar").format(bytes) + " بايت";
@@ -161,6 +209,10 @@ function finalizePublication(published: PublishedClip) {
   cachedFile = null;
   selectedDuration = null;
   input.value = "";
+  displayName.value = "";
+  displayNameRow.hidden = true;
+  displayNameError.textContent = "";
+  selectedFileKey = null;
   chooseFile.textContent = "Choisir un fichier — فيديو / أوديو";
   durationStatus.textContent = "";
   compressRow.hidden = true;
@@ -240,11 +292,18 @@ input.addEventListener("change", async () => {
   durationController?.abort();
   const probing = new AbortController();
   durationController = probing;
+  const nextFileKey = fileSelectionKey(selected);
+  if (nextFileKey !== selectedFileKey) {
+    displayName.value = defaultClipDisplayName(selected.name);
+  }
+  selectedFileKey = nextFileKey;
+  displayNameRow.hidden = false;
   cachedFile = selected;
   selectedDuration = null;
   chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MB`;
   selection.textContent = "✓ Fichier sélectionné";
   submit.disabled = true;
+  updateSubmitState();
   uploadError.textContent = "";
   progressWrap.hidden = true;
   status.textContent = "";
@@ -264,13 +323,15 @@ input.addEventListener("change", async () => {
     durationStatus.textContent = `المدة: ${formatDuration(duration)}`;
     void refreshCompressAvailability(selected, duration);
     if (duration < 60) uploadError.textContent = "خاص دقيقة الفوق";
-    else submit.disabled = false;
+    updateSubmitState();
   } catch (error) {
     if (probing.signal.aborted || cachedFile !== selected) return;
     durationStatus.textContent = "المدة غير متاحة";
     uploadError.textContent = error instanceof Error ? error.message : "تعذر قراءة مدة الملف";
   }
 });
+
+displayName.addEventListener("input", updateSubmitState);
 
 cancel.addEventListener("click", () => uploadController?.abort(new DOMException("Cancelled", "AbortError")));
 
@@ -286,8 +347,17 @@ form.addEventListener("submit", async event => {
     uploadError.textContent = "خاص دقيقة الفوق";
     return;
   }
+  const title = normalizedDisplayName();
+  const titleError = displayNameValidationError();
+  if (titleError) {
+    displayNameError.textContent = titleError;
+    displayName.focus();
+    updateSubmitState();
+    return;
+  }
   const metadata: ClipUploadMetadata = {
-    title: file.name,
+    title,
+    originalFilename: file.name,
     contentType: file.type || "application/octet-stream",
     durationSec: selectedDuration,
   };
@@ -332,7 +402,13 @@ form.addEventListener("submit", async event => {
     }
     if (prepared) {
       const published = await uploadPreparedClip(
-        { originalFile: file, uploadFile: prepared.uploadFile, outputDuration: prepared.outputDuration },
+        {
+          originalFile: file,
+          uploadFile: prepared.uploadFile,
+          outputDuration: prepared.outputDuration,
+          title,
+          originalFilename: file.name,
+        },
         uploadController.signal,
         (percent, uploadedBytes, speedBytesPerSecond, uploadState) => {
           const total = prepared!.uploadFile.size;
@@ -346,7 +422,7 @@ form.addEventListener("submit", async event => {
               : `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)} — يكمل الى تقطع`;
         },
       );
-      finalizePublication(published);
+      finalizePublication({ ...published, name: title });
       reloadFeedAfterPublish();
       return;
     }
@@ -365,7 +441,7 @@ form.addEventListener("submit", async event => {
           ? `${formatBytes(uploaded)} من ${formatBytes(file.size)} — متوقف مؤقتاً؛ يكمل الى تقطع عند رجوع الاتصال`
           : `${formatBytes(uploaded)} من ${formatBytes(file.size)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)} — يكمل الى تقطع`;
     });
-    finalizePublication(published);
+    finalizePublication({ ...published, name: title });
     reloadFeedAfterPublish();
   } catch (error) {
     const cancelled = uploadController.signal.aborted;
@@ -378,8 +454,7 @@ form.addEventListener("submit", async event => {
     // Re-evaluate compression availability for whatever selection remains (the
     // helper disables/hides the box when there is no eligible video).
     void refreshCompressAvailability(cachedFile, selectedDuration);
-    submit.disabled = !cachedFile || cachedFile.size > MAX_CLIP_BYTES ||
-      selectedDuration === null || selectedDuration < 60;
+    updateSubmitState();
     cancel.hidden = true;
   }
 });

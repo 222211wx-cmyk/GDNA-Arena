@@ -234,6 +234,13 @@ export function reelsShellCss(palette: Palette, space: string): string {
   }
   .reels-caption-toggle:focus-visible{outline:2px solid ${palette.ring};outline-offset:2px;border-radius:${space}}
 
+  /* Grid/search metadata shows the persisted display title as the primary line. */
+  .reels-grid-cell-title,.reels-grid-cell-author{
+    display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .reels-grid-cell-title{color:var(--reels-on-media);font-weight:700}
+  .reels-grid-cell-author{color:var(--reels-on-media-dim);font-size:.75rem}
+
   /* ── On-screen editing tools (horizontal-swipe panel) ─────────────────── */
   .reels-tools-panel{
     position:absolute;top:0;bottom:0;right:0;z-index:15;
@@ -311,7 +318,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
     position:absolute;left:0;right:0;bottom:0;
     padding:calc(${space} * 3) calc(${space} * 2) calc(${space} * 2);
     background:linear-gradient(to top, var(--reels-scrim-strong), transparent);
-    color:var(--reels-on-media);font-size:.6875rem;display:flex;align-items:center;gap:calc(${space} * 1);
+    color:var(--reels-on-media);font-size:.6875rem;display:grid;gap:calc(${space} * 1);text-align:start;
   }
   .reels-grid-cell:focus-visible{outline:2px solid ${palette.ring};outline-offset:-2px}
 

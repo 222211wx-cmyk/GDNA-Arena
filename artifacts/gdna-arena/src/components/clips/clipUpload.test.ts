@@ -95,6 +95,36 @@ describe("direct R2 multipart clip upload", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("does not resume a session when its display metadata changes", async () => {
+    const file = new File(["media"], "source.mp4", { type: "video/mp4" });
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(body);
+      if (body.action === "initiate") {
+        return Response.json({
+          sessionId: crypto.randomUUID(),
+          partSize: UPLOAD_CHUNK_BYTES,
+        });
+      }
+      return Response.json({ error: "stop after initiation" }, { status: 400 });
+    }));
+
+    for (const title of ["العنوان الأول", "العنوان الثاني"]) {
+      await expect(uploadClip(file, {
+        title,
+        originalFilename: file.name,
+        contentType: file.type,
+        durationSec: 61,
+      }, new AbortController().signal, vi.fn())).rejects.toThrow("stop after initiation");
+    }
+
+    expect(bodies.filter(body => body.action === "initiate")).toMatchObject([
+      { filename: "source.mp4", title: "العنوان الأول" },
+      { filename: "source.mp4", title: "العنوان الثاني" },
+    ]);
+  });
+
   it("uploads a prepared file while retaining the original filename metadata", async () => {
     const calls = mockR2({
       ok: true,
@@ -114,6 +144,29 @@ describe("direct R2 multipart clip upload", () => {
       filename: "camera-original.mov",
       contentType: "video/webm",
       durationSec: 67.2,
+      size: uploadFile.size,
+    });
+    expect(initiated).not.toHaveProperty("title");
+  });
+
+  it("keeps prepared display title separate from the actual source filename", async () => {
+    const calls = mockR2();
+    const originalFile = new File(["original"], "لقطة أصلية.MOV", { type: "video/quicktime" });
+    const uploadFile = new File(["prepared"], "prepared.webm", { type: "video/webm" });
+
+    await uploadPreparedClip({
+      originalFile,
+      uploadFile,
+      outputDuration: 70,
+      title: "  رحلتي الأولى  ",
+      originalFilename: originalFile.name,
+    }, new AbortController().signal, vi.fn());
+
+    const initiated = JSON.parse(String(calls[0][1]?.body));
+    expect(initiated).toMatchObject({
+      filename: "لقطة أصلية.MOV",
+      title: "  رحلتي الأولى  ",
+      contentType: "video/webm",
       size: uploadFile.size,
     });
   });

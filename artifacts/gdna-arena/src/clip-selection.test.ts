@@ -22,6 +22,7 @@ vi.mock("./components/clips/prepareVideo", () => ({
 const input = () => document.getElementById("file") as HTMLInputElement;
 const submit = () => document.getElementById("submit") as HTMLButtonElement;
 const chooser = () => document.getElementById("choose-file") as HTMLButtonElement;
+const displayName = () => document.getElementById("display-name") as HTMLInputElement;
 const form = () => document.getElementById("upload") as HTMLFormElement;
 const text = (id: string) => document.getElementById(id)!.textContent;
 function select(file?: File) {
@@ -107,10 +108,49 @@ describe("final simple Clip selection", () => {
   it("retains the previous selection after picker cancellation", async () => {
     select(media("selfie.mp4", "video/mp4", 1024));
     await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    displayName().value = "سيلفي ديالي";
+    displayName().dispatchEvent(new Event("input", { bubbles: true }));
     select();
     expect(text("selection")).toBe("✓ Fichier sélectionné");
     expect(chooser().textContent).toContain("selfie.mp4");
+    expect(displayName().value).toBe("سيلفي ديالي");
     expect(submit().disabled).toBe(false);
+  });
+
+  it("reveals a labelled name, strips only media extensions, and defaults anew for another file", async () => {
+    const first = media("رحلة.الصيف.MP4", "video/mp4", 1024);
+    select(first);
+    await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    expect(document.querySelector('label[for="display-name"]')?.textContent).toContain("اسم الفيشي");
+    expect(displayName().value).toBe("رحلة.الصيف");
+
+    displayName().value = "عنوان مختار";
+    displayName().dispatchEvent(new Event("input", { bubbles: true }));
+    select(first);
+    expect(displayName().value).toBe("عنوان مختار");
+
+    select(media("notes.final", "audio/mpeg", 1024));
+    await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    expect(displayName().value).toBe("notes.final");
+  });
+
+  it("validates the trimmed Unicode display name at 120 code points", async () => {
+    select(media("voice.mp3", "audio/mpeg", 1024));
+    await vi.waitFor(() => expect(submit().disabled).toBe(false));
+
+    displayName().value = "   ";
+    displayName().dispatchEvent(new Event("input", { bubbles: true }));
+    expect(submit().disabled).toBe(true);
+    expect(text("display-name-error")).toContain("مطلوب");
+
+    displayName().value = "😀".repeat(120);
+    displayName().dispatchEvent(new Event("input", { bubbles: true }));
+    expect(submit().disabled).toBe(false);
+
+    displayName().value += "😀";
+    displayName().dispatchEvent(new Event("input", { bubbles: true }));
+    expect(submit().disabled).toBe(true);
+    expect(text("display-name-error")).toContain("120");
   });
 
   it("ignores metadata from an earlier replaced selection", async () => {
@@ -140,11 +180,19 @@ describe("final simple Clip selection", () => {
     upload.mockRejectedValueOnce(new Error("Network interrupted"));
     select(file);
     await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    displayName().value = "  عنوان كبير  ";
+    displayName().dispatchEvent(new Event("input", { bubbles: true }));
     form().requestSubmit();
     await vi.waitFor(() => expect(text("upload-error")).toBe("Network interrupted"));
     expect(upload.mock.calls[0][0]).toBe(file);
-    expect(upload.mock.calls[0][1]).toEqual({ title: "large.mp4", contentType: "video/mp4", durationSec: 61 });
+    expect(upload.mock.calls[0][1]).toEqual({
+      title: "عنوان كبير",
+      originalFilename: "large.mp4",
+      contentType: "video/mp4",
+      durationSec: 61,
+    });
     expect(chooser().textContent).toContain("large.mp4");
+    expect(displayName().value).toBe("  عنوان كبير  ");
     expect(submit().disabled).toBe(false);
   });
 

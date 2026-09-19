@@ -612,9 +612,12 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           cell.append(fb);
         }
         const meta = el("div", "reels-grid-cell-meta");
-        meta.innerHTML = reelsIcons.navHome(false);
-        meta.querySelector("svg")?.remove();
-        meta.textContent = `@${clip.author.username}`;
+        const gridTitle = el("span", "reels-grid-cell-title");
+        gridTitle.textContent = clip.title;
+        gridTitle.dir = "auto";
+        const gridAuthor = el("span", "reels-grid-cell-author");
+        gridAuthor.textContent = `@${clip.author.username}`;
+        meta.append(gridTitle, gridAuthor);
         cell.append(meta);
         cell.addEventListener("click", () => openFromGrid(clip.id));
         grid.append(cell);
@@ -679,7 +682,14 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           } else {
             const fb = el("div", "reels-grid-cell-fallback"); fb.textContent = clip.title || clip.author.username; cell.append(fb);
           }
-          const meta = el("div", "reels-grid-cell-meta"); meta.textContent = `@${clip.author.username}`; cell.append(meta);
+          const meta = el("div", "reels-grid-cell-meta");
+          const resultTitle = el("span", "reels-grid-cell-title");
+          resultTitle.textContent = clip.title;
+          resultTitle.dir = "auto";
+          const resultAuthor = el("span", "reels-grid-cell-author");
+          resultAuthor.textContent = `@${clip.author.username}`;
+          meta.append(resultTitle, resultAuthor);
+          cell.append(meta);
           cell.addEventListener("click", () => {
             searchQuery = q;
             closeSearch();

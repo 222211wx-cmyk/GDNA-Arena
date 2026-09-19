@@ -14,6 +14,8 @@ export const CLIP_COMPRESSION_THRESHOLD = 0;
 
 export interface PublishClipInput {
   userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
+  /** Explicit publication name. `title` remains the original upload filename. */
+  displayTitle?: string;
   // Accepted for compatibility with older clients, never used to gate publication.
   purpose?: unknown; originalReference?: unknown; rightsHolderName?: unknown;
   rightsHolderRole?: unknown; isOriginalFootage?: unknown; deferThumbnail?: boolean;
@@ -22,6 +24,15 @@ export interface PublishClipInput {
 export function clipName(filename: string): string {
   const base = filename.split(/[\\/]/).pop()?.trim() || "clip";
   return base.replace(/\.[^.]+$/, "").trim() || base;
+}
+
+export function validateClipDisplayTitle(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new ClipUploadError(400, "Clip display title must be text");
+  const title = value.trim();
+  if (!title) throw new ClipUploadError(400, "Clip display title cannot be blank");
+  if ([...title].length > 120) throw new ClipUploadError(400, "Clip display title cannot exceed 120 characters");
+  return title;
 }
 
 /** No ownership/fingerprint/category checks: verify real media and >=60 seconds. */
@@ -34,6 +45,7 @@ export async function publishClip(
   if (!contentType) throw new ClipUploadError(415, "صيغة الصوت أو الفيديو غير مدعومة");
   if (!Number.isSafeInteger(input.size) || input.size <= 0) throw new ClipUploadError(400, "Invalid media size");
   if (input.size > MAX_NEW_CLIP_BYTES) throw new ClipUploadError(413, NEW_CLIP_TOO_LARGE);
+  const displayTitle = validateClipDisplayTitle(input.displayTitle);
   const [metadata] = await clipFile(input.filename).getMetadata();
   if (Number(metadata.size) !== input.size) throw new ClipUploadError(409, "Stored media size does not match");
   let verifiedSeconds: number;
@@ -43,7 +55,9 @@ export async function publishClip(
     throw new ClipUploadError(400, "تعذّر التحقق من الملف الصوتي أو الفيديو — الملف غير صالح أو غير مدعوم");
   }
   const duration = clipDurationSeconds(verifiedSeconds, contentType);
-  const name = clipName(input.title);
+  // Explicit names are not filenames: dots and slashes are meaningful and
+  // must survive unchanged. Legacy callers still derive a name from `title`.
+  const name = displayTitle ?? clipName(input.title);
   const client = lockedClient ?? await connectDatabase();
   try {
     await client.query("BEGIN");

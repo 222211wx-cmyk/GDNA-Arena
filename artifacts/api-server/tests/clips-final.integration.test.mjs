@@ -27,12 +27,24 @@ test("final publication: server code/name, duplicate content allowed, audio and 
     await assert.rejects(f.a.publishClip({ ...input, contentType }), /خاص دقيقة الفوق/);
   }
   f.state.duration = 60;
-  const first = await f.a.publishClip(input);
+  const first = await f.a.publishClip({ ...input, displayTitle: "  اسم/نسخة.v1  " });
   assert.match(first.code, /^HELX-\d{6}$/);
-  assert.equal(first.name, "movie.part.one");
+  assert.equal(first.name, "اسم/نسخة.v1");
   assert.equal(first.duration, 60);
   assert.equal(first.processingStatus, "queued");
   assert.equal((await f.observer.query("SELECT original_name FROM clips WHERE id=$1", [first.id])).rows[0].original_name, "movie.part.one.mp4");
+  await assert.rejects(
+    f.a.publishClip({ ...input, displayTitle: " ".repeat(3) }),
+    error => error.status === 400 && /blank/.test(error.message),
+  );
+  await assert.rejects(
+    f.a.publishClip({ ...input, displayTitle: "ع".repeat(121) }),
+    error => error.status === 400 && /120/.test(error.message),
+  );
+  await assert.rejects(
+    f.a.publishClip({ ...input, displayTitle: 42 }),
+    error => error.status === 400 && /text/.test(error.message),
+  );
   f.state.duration = 90001;
   const second = await f.a.publishClip({ ...input, contentType: "audio/mpeg", purpose: "anything" });
   assert.equal(second.duration, 90001);

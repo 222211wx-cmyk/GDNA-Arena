@@ -170,6 +170,7 @@ export async function ensureClipsTables(): Promise<void> {
         object_name TEXT NOT NULL UNIQUE,
         multipart_upload_id TEXT NOT NULL,
         original_name TEXT NOT NULL,
+        display_title TEXT,
         content_type TEXT NOT NULL,
         size_bytes BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= ${MAX_NEW_CLIP_BYTES}),
         duration_sec DOUBLE PRECISION NOT NULL CHECK (duration_sec >= 0),

@@ -5,7 +5,10 @@ const REQUEST_TIMEOUT_MS = 300_000;
 const RETRY_DELAYS_MS = [0, 1_000, 2_000, 5_000, 10_000, 20_000];
 
 export type ClipUploadMetadata = {
-  title: string;
+  /** Citizen-facing publication title. Omitted by legacy callers. */
+  title?: string;
+  /** Actual source filename, kept separate from the citizen-facing title. */
+  originalFilename?: string;
   contentType: string;
   durationSec: number;
 };
@@ -14,6 +17,10 @@ export type PreparedClipUpload = {
   originalFile: File;
   uploadFile: File;
   outputDuration: number;
+  /** Citizen-facing publication title. */
+  title?: string;
+  /** Actual source filename when it was captured before preparation. */
+  originalFilename?: string;
 };
 
 export type ClipUploadState = "uploading" | "offline";
@@ -82,7 +89,13 @@ function sessionKey(file: File, metadata: ClipUploadMetadata) {
     sessionId = crypto.randomUUID();
     fileSessionIds.set(file, sessionId);
   }
-  return `${sessionId}:${metadata.title}:${metadata.contentType}:${metadata.durationSec}`;
+  return JSON.stringify([
+    sessionId,
+    metadata.title ?? null,
+    metadata.originalFilename ?? null,
+    metadata.contentType,
+    metadata.durationSec,
+  ]);
 }
 
 function retryableStatus(status: number) {
@@ -158,14 +171,20 @@ async function runR2Upload(
   onProgress: ClipUploadProgress,
 ) {
   if (!saved.sessionId) {
-    const initiated = await r2Json({
+    const initiation: Record<string, unknown> = {
       action: "initiate",
       requestId: saved.requestId,
-      filename: metadata.title,
+      filename: metadata.originalFilename ?? metadata.title ?? file.name,
       contentType: metadata.contentType,
       durationSec: metadata.durationSec,
       size: file.size,
-    }, signal);
+    };
+    // Omission preserves the legacy API contract for old upload callers. New
+    // callers provide originalFilename, making title explicitly display-only.
+    if (metadata.originalFilename !== undefined && metadata.title !== undefined) {
+      initiation.title = metadata.title;
+    }
+    const initiated = await r2Json(initiation, signal);
     if (typeof initiated?.sessionId !== "string" || initiated.partSize !== UPLOAD_CHUNK_BYTES) {
       throw new Error("R2 did not create a valid upload session");
     }
@@ -273,7 +292,7 @@ export async function uploadClip(
   return {
     ...body.clip,
     code,
-    name: body.name ?? body.clip.name ?? body.clip.title,
+    name: body.clip.title ?? body.name ?? body.clip.name,
     duration: body.duration ?? body.clip.duration ?? body.clip.duration_sec,
     url: body.url ?? body.clip.url ?? body.clip.video_url,
     created_at: body.created_at ?? body.clip.created_at,
@@ -294,7 +313,8 @@ export function uploadPreparedClip(
   onProgress: ClipUploadProgress,
 ) {
   return uploadClip(prepared.uploadFile, {
-    title: prepared.originalFile.name,
+    title: prepared.title,
+    originalFilename: prepared.originalFilename ?? prepared.originalFile.name,
     contentType: prepared.uploadFile.type,
     durationSec: prepared.outputDuration,
   }, signal, onProgress);
