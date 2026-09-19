@@ -52,7 +52,9 @@ import type {
   CitizenUploadMediaParams,
   ClipSaveResult,
   ClipShareResult,
+  ClipUploadStatus,
   ClipsFeedPage,
+  CompleteClipUploadBody,
   DailyRewardResult,
   DeclineCallParams,
   ErrorResponse,
@@ -76,6 +78,7 @@ import type {
   MissedCallsResponse,
   MissedCallsSeenInput,
   PlayResult,
+  PresignClipUploadBody,
   RegistrationInput,
   RequeuedClipThumbnail,
   SuccessResponse,
@@ -108,6 +111,271 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getPresignClipUploadUrl = () => {
+
+
+
+
+  return `/api/upload/presign`
+}
+
+/**
+ * Owner-authorized direct R2 multipart upload. 5 MiB parts, maximum 10 GiB (2048 parts). No clip bytes accepted.
+ */
+export const presignClipUpload = async (presignClipUploadBody: PresignClipUploadBody, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getPresignClipUploadUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(presignClipUploadBody)
+  }
+);}
+
+
+
+
+
+export const getPresignClipUploadMutationKey = () => ['presignClipUpload'] as const;
+
+export const getPresignClipUploadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof presignClipUpload>>, TError,PresignClipUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof presignClipUpload>>, TError,PresignClipUploadMutationVariables, TContext> => {
+
+const mutationKey = getPresignClipUploadMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof presignClipUpload>>, PresignClipUploadMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  presignClipUpload(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PresignClipUploadMutationResult = NonNullable<Awaited<ReturnType<typeof presignClipUpload>>>
+    export type PresignClipUploadMutationBody = BodyType<PresignClipUploadBody>
+    export type PresignClipUploadMutationError = ErrorType<void>
+    export type PresignClipUploadMutationVariables = {data: BodyType<PresignClipUploadBody>}
+
+    export const usePresignClipUpload = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof presignClipUpload>>, TError,PresignClipUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof presignClipUpload>>,
+        TError,
+        PresignClipUploadMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPresignClipUploadMutationOptions(options), queryClient);
+    }
+
+export const getCompleteClipUploadUrl = () => {
+
+
+
+
+  return `/api/upload/complete`
+}
+
+/**
+ * Complete and HEAD-validate R2 multipart object; transactionally enqueue verification. Does not probe or encode media.
+ */
+export const completeClipUpload = async (completeClipUploadBody: CompleteClipUploadBody, options?: Parameters<typeof customFetch>[1]): Promise<ClipUploadStatus> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ClipUploadStatus>(getCompleteClipUploadUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(completeClipUploadBody)
+  }
+);}
+
+
+
+
+
+export const getCompleteClipUploadMutationKey = () => ['completeClipUpload'] as const;
+
+export const getCompleteClipUploadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeClipUpload>>, TError,CompleteClipUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeClipUpload>>, TError,CompleteClipUploadMutationVariables, TContext> => {
+
+const mutationKey = getCompleteClipUploadMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeClipUpload>>, CompleteClipUploadMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  completeClipUpload(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteClipUploadMutationResult = NonNullable<Awaited<ReturnType<typeof completeClipUpload>>>
+    export type CompleteClipUploadMutationBody = BodyType<CompleteClipUploadBody>
+    export type CompleteClipUploadMutationError = ErrorType<void>
+    export type CompleteClipUploadMutationVariables = {data: BodyType<CompleteClipUploadBody>}
+
+    export const useCompleteClipUpload = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeClipUpload>>, TError,CompleteClipUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof completeClipUpload>>,
+        TError,
+        CompleteClipUploadMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCompleteClipUploadMutationOptions(options), queryClient);
+    }
+
+export const getGetClipUploadStatusUrl = (sessionId: string,) => {
+
+
+
+
+  return `/api/upload/status/${sessionId}`
+}
+
+export const getClipUploadStatus = async (sessionId: string, options?: Parameters<typeof customFetch>[1]): Promise<ClipUploadStatus> => {
+
+  return customFetch<ClipUploadStatus>(getGetClipUploadStatusUrl(sessionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClipUploadStatusQueryKey = (sessionId: string,) => {
+    return [
+    `/api/upload/status/${sessionId}`
+    ] as const;
+    }
+
+
+export const getGetClipUploadStatusQueryOptions = <TData = Awaited<ReturnType<typeof getClipUploadStatus>>, TError = ErrorType<void>>(sessionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClipUploadStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClipUploadStatusQueryKey(sessionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClipUploadStatus>>> = ({ signal }) => getClipUploadStatus(sessionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sessionId !== null && sessionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClipUploadStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetClipUploadStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getClipUploadStatus>>>
+export type GetClipUploadStatusQueryError = ErrorType<void>
+
+
+export function useGetClipUploadStatus<TData = Awaited<ReturnType<typeof getClipUploadStatus>>, TError = ErrorType<void>>(
+ sessionId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClipUploadStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClipUploadStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getClipUploadStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClipUploadStatus<TData = Awaited<ReturnType<typeof getClipUploadStatus>>, TError = ErrorType<void>>(
+ sessionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClipUploadStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClipUploadStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getClipUploadStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClipUploadStatus<TData = Awaited<ReturnType<typeof getClipUploadStatus>>, TError = ErrorType<void>>(
+ sessionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClipUploadStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetClipUploadStatus<TData = Awaited<ReturnType<typeof getClipUploadStatus>>, TError = ErrorType<void>>(
+ sessionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClipUploadStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetClipUploadStatusQueryOptions(sessionId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getCitizenMetadataUrl = () => {
 

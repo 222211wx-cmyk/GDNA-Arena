@@ -18,7 +18,8 @@ export class ClipProbeBusyError extends Error {
  * loopback HTTP ranges let ffprobe seek to MP4/MOV tail metadata without
  * downloading the entire video. Limits bound work, NOT the media's duration.
  */
-export async function verifiedDuration(file: File, expectedKind?: "audio" | "video" | "media"): Promise<number> {
+export async function verifiedDuration(file: File, expectedKind?: "audio" | "video" | "media", signal?: AbortSignal): Promise<number> {
+  if (signal?.aborted) throw new Error("Media verification interrupted");
   if (activeJobs >= 2) throw new ClipProbeBusyError();
   activeJobs++;
   try {
@@ -26,13 +27,13 @@ export async function verifiedDuration(file: File, expectedKind?: "audio" | "vid
       (globalThis as typeof globalThis & {
         [TEST_LIMITS_KEY]?: Partial<typeof DEFAULT_LIMITS>;
       })[TEST_LIMITS_KEY];
-    return await probe(file, { ...DEFAULT_LIMITS, ...overrides }, expectedKind);
+    return await probe(file, { ...DEFAULT_LIMITS, ...overrides }, expectedKind, signal);
   } finally {
     activeJobs--;
   }
 }
 
-async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "audio" | "video" | "media"): Promise<number> {
+async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "audio" | "video" | "media", signal?: AbortSignal): Promise<number> {
   const secretPath = `/${randomBytes(32).toString("hex")}`;
   const streams = new Set<Readable>();
   const sockets = new Set<Socket>();
@@ -56,6 +57,8 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "
     stopIO();
     rejectFailure(error);
   };
+  const onAbort = () => fail(new Error("Media verification interrupted"));
+  signal?.addEventListener("abort",onAbort,{once:true});
   const onClientError = (error: NodeJS.ErrnoException) => {
     // Seeking/early exit closes an unread HTTP response. TCP resets and broken
     // writes are expected here, unlike an error from the GCS source itself.
@@ -206,6 +209,7 @@ async function probe(file: File, limits: typeof DEFAULT_LIMITS, expectedKind?: "
     });
     return await Promise.race([result, failed]);
   } finally {
+    signal?.removeEventListener("abort",onAbort);
     clearTimeout(timer);
     controller.abort();
     stopIO();

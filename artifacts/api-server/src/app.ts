@@ -9,6 +9,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
+import { clipAwareJsonBody } from "./lib/clip-metadata-json.js";
 
 const app: Express = express();
 
@@ -91,7 +92,7 @@ const isClipUploadRequest = (path: string) =>
   path === "/api/clip/upload" ||
   path === "/api/clip/upload-simple" ||
   path === "/api/clip/upload-final";
-const jsonBody = express.json();
+const jsonBody = clipAwareJsonBody();
 const formBody = express.urlencoded({ extended: true });
 app.use((req, res, next) => isClipUploadRequest(req.path) ? next() : jsonBody(req, res, next));
 app.use((req, res, next) => isClipUploadRequest(req.path) ? next() : formBody(req, res, next));

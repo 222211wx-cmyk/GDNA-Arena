@@ -8,7 +8,6 @@ export function readClipDuration(file: File, signal: AbortSignal): Promise<numbe
     const media = document.createElement(file.type.startsWith("audio/") ? "audio" : "video");
     const url = URL.createObjectURL(file);
     let settled = false;
-    let seekingDuration = false;
     const cleanup = () => {
       clearTimeout(timer);
       signal.removeEventListener("abort", aborted);
@@ -30,15 +29,11 @@ export function readClipDuration(file: File, signal: AbortSignal): Promise<numbe
     const inspect = () => {
       if (Number.isFinite(media.duration) && media.duration > 0) {
         finish(media.duration);
-      } else if (media.duration === Infinity && !seekingDuration) {
-        // Some recorded WebM files omit duration until the browser seeks the end.
-        seekingDuration = true;
-        try { media.currentTime = Number.MAX_SAFE_INTEGER; } catch { /* wait for metadata/error */ }
       }
     };
     const aborted = () => finish(undefined, new DOMException("Cancelled", "AbortError"));
     const timer = window.setTimeout(() => finish(undefined,
-      new Error("تعذر قراءة مدة الملف. أعد اختياره أو جرّب صيغة صوت أو فيديو يدعمها المتصفح.")), 30_000);
+      new Error("تعذر قراءة مدة الملف — سيتحقق الخادم من المدة.")), 4_000);
     signal.addEventListener("abort", aborted, { once: true });
     media.preload = "metadata";
     media.onloadedmetadata = inspect;

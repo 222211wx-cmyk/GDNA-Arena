@@ -2,14 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./components/clips/clipUpload", () => ({
   uploadClip: vi.fn(),
-  uploadPreparedClip: vi.fn(),
   MAX_CLIP_BYTES: 2 * 1024 * 1024 * 1024,
 }));
 vi.mock("./components/clips/readClipDuration", () => ({ readClipDuration: vi.fn() }));
-vi.mock("./components/clips/prepareVideo", () => ({
-  prepareClipForUpload: vi.fn(),
-  browserCompressionUnavailableReason: () => null,
-}));
 vi.mock("./components/clips/VideoActions", () => ({ mountVideoActions: vi.fn(async () => {}) }));
 
 const json = (body: unknown, status = 200) =>

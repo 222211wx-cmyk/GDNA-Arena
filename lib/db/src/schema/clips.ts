@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  check,
   boolean,
   doublePrecision,
   index,
@@ -65,6 +66,19 @@ export const clipsTable = pgTable("clips", {
     .where(sql`${table.processingStatus} IN ('queued', 'processing')`),
 }));
 
+export const clipMediaJobsTable = pgTable("clip_media_jobs", {
+  sessionId: uuid("session_id").primaryKey().references(() => r2ClipUploadsTable.id, {onDelete:"cascade"}),
+  state: text("state").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  token: uuid("token"),
+  error: text("error"),
+  outputObject: text("output_object"),
+  retryAt: timestamp("retry_at",{withTimezone:true}).notNull().defaultNow(),
+}, table => ({
+  claim: index("clip_media_jobs_claim_idx").on(table.retryAt,table.sessionId)
+    .where(sql`${table.state} IN ('queued','processing')`),
+}));
+
 export const r2ClipUploadsTable = pgTable("r2_clip_uploads", {
   id: uuid("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
@@ -83,6 +97,7 @@ export const r2ClipUploadsTable = pgTable("r2_clip_uploads", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   requestIdentity: unique("r2_clip_uploads_user_id_request_id_key").on(table.userId, table.requestId),
+  sizeCheck: check("r2_clip_uploads_size_bytes_check",sql`${table.sizeBytes}>0 AND ${table.sizeBytes}<=10737418240`),
   expiry: index("r2_clip_uploads_expiry_idx")
     .on(table.expiresAt)
     .where(sql`${table.state} IN ('active', 'completing')`),

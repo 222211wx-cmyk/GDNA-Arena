@@ -47,17 +47,17 @@ describe("local clip duration metadata", () => {
   it("fails with a visible error instead of waiting indefinitely", async () => {
     const read = readClipDuration(new File(["media"], "sample.mp4"), new AbortController().signal);
     const rejection = expect(read).rejects.toThrow("تعذر قراءة مدة الملف");
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(4_000);
     await rejection;
     expect(revokeURL).toHaveBeenCalledOnce();
   });
-  it("resolves an initially infinite WebM duration after seeking metadata", async () => {
+  it("does not seek/decode an unbounded WebM to recover missing duration", async () => {
     const read = readClipDuration(new File(["media"], "sample.webm", { type: "video/webm" }), new AbortController().signal);
     Object.defineProperty(media, "duration", { configurable: true, value: Infinity });
     media.dispatchEvent(new Event("loadedmetadata"));
-    expect(media.currentTime).toBe(Number.MAX_SAFE_INTEGER);
-    Object.defineProperty(media, "duration", { configurable: true, value: 65 });
-    media.dispatchEvent(new Event("durationchange"));
-    expect(await read).toBe(65);
+    expect(media.currentTime).toBe(0);
+    const rejection = expect(read).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(4_000);
+    await rejection;
   });
 });

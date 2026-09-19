@@ -17,10 +17,19 @@ test("R2 initiate persists display title and includes it in retry identity", asy
 
   const sessions = new Map();
   const clips = new Map();
+  const jobs = new Map();
   let creates = 0;
   let storageCalls = 0;
   const databaseClient = {
     async query(sql, params = []) {
+      if (sql.includes("INSERT INTO clip_media_jobs")) {
+        if (!jobs.has(params[0])) jobs.set(params[0],{state:"queued"});
+        return {rows:[]};
+      }
+      if (sql.includes("SET state='completing'")) {
+        [...sessions.values()].find(row=>row.id===params[0]).state="completing";
+        return {rows:[]};
+      }
       if (sql.includes("pg_advisory_")) return { rows: [] };
       if (sql.includes("FROM r2_clip_uploads WHERE id=$1 AND user_id=$2")) {
         const row = [...sessions.values()].find(value => value.id === params[0] && value.user_id === params[1]);
@@ -60,6 +69,10 @@ test("R2 initiate persists display title and includes it in retry identity", asy
   globalThis[key] = {
     pool: {
       async query(sql, params) {
+        if (sql.includes("FROM clip_media_jobs")) {
+          const owner = [...sessions.values()].find(row=>row.id===params[0] && row.user_id===params[1]);
+          return {rows:owner && jobs.has(params[0]) ? [jobs.get(params[0])] : []};
+        }
         if (sql.includes("FROM r2_clip_uploads WHERE id=$1 AND user_id=$2")) {
           const row = [...sessions.values()].find(value => value.id === params[0] && value.user_id === params[1]);
           return { rows: row ? [row] : [] };
@@ -96,6 +109,13 @@ test("R2 initiate persists display title and includes it in retry identity", asy
           return { UploadId: `upload-${creates}` };
         }
         if (command.input.MultipartUpload) return {};
+        const ownerSession=[...sessions.values()].find(row=>row.object_name===`r2:${command.input.Key}`);
+        if (Number(ownerSession?.size_bytes)===10737418240) {
+          const start=Number(command.input.PartNumberMarker ?? 0);
+          const count=Math.min(1000,2048-start);
+          return {Parts:Array.from({length:count},(_,i)=>({PartNumber:start+i+1,ETag:`"${"a".repeat(32)}"`,Size:5242880})),
+            IsTruncated:start+count<2048,NextPartNumberMarker:String(start+count)};
+        }
         return { Parts: [{ PartNumber: 1, ETag: `"${"a".repeat(32)}"`, Size: 10 }], IsTruncated: false };
       },
     },
@@ -113,7 +133,7 @@ test("R2 initiate persists display title and includes it in retry identity", asy
     export const r2Reference = value => "r2:" + value;
     export const logger = { warn() {}, info() {}, error() {} };
     export const clipFile = () => ({ getMetadata: async () => [{ size: 10 }] });
-    export const verifiedDuration = async () => 60;
+    export const verifiedDuration = async () => { throw Error("API MUST NOT PROBE"); };
     export class ClipProbeBusyError extends Error {}
     class Command { constructor(input) { this.input = input; } }
     export class AbortMultipartUploadCommand extends Command {}
@@ -199,27 +219,87 @@ test("R2 initiate persists display title and includes it in retry identity", asy
     title: "اسم/نسخة.v1",
     parts: [{ partNumber: 1, etag: `"${"a".repeat(32)}"` }],
   };
+  for (const action of ["inspect", "part", "abort", "complete"]) {
+    const foreign = await fetch(`${base}/r2/presign`, {
+      method: "POST", headers: { "content-type": "application/json", "x-test-user": "8" },
+      body: JSON.stringify({ action, sessionId: session.id, partNumber: 1 }),
+    });
+    assert.equal(foreign.status, 404, `${action} rejects foreign session`);
+  }
+  const switched = await finalize(7, { ...completion, expectedOwnerId: 8 });
+  assert.equal(switched.status, 403, "account-switch expectation is enforced");
+  const inspect = () => fetch(`${base}/r2/presign`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "inspect", sessionId: session.id }),
+  });
+  assert.deepEqual((await (await inspect()).json()).parts,
+    [{ partNumber: 1, etag: `"${"a".repeat(32)}"`, size: 10 }],
+    "fresh client reconstructs authoritative stored parts without a local offset");
+  assert.equal((await inspect()).headers.get("cache-control"), "no-store");
   const beforeOwnershipCheck = storageCalls;
   assert.equal((await finalize(8, completion)).status, 404,
     "another citizen cannot finalize an upload session they do not own");
   assert.equal(storageCalls, beforeOwnershipCheck,
     "ownership is checked before any R2 completion request");
+  for (const etag of [`"${"a".repeat(32)}`, `${"a".repeat(32)}"`, `"${"z".repeat(32)}"`, ""]) {
+    assert.equal((await finalize(7, {
+      ...completion, parts: [{ partNumber: 1, etag }],
+    })).status, 400, "malformed or one-sided quoted ETags are rejected");
+  }
+  assert.equal((await finalize(7, {
+    ...completion, parts: [{ partNumber: 1, etag: `"${"b".repeat(32)}"` }],
+  })).status, 409, "valid but incorrect ETag cannot authorize completion");
   assert.equal((await finalize(7, { ...completion, url: "https://public.invalid/foreign.mp4" })).status, 400,
     "client object URLs are never trusted");
   const completed = await finalize(7, completion);
   const completedText = await completed.text();
-  assert.equal(completed.status, 200, completedText);
+  assert.equal(completed.status, 202, completedText);
   const receipt = JSON.parse(completedText);
-  assert.equal(receipt.clip.id, 91);
-  assert.equal(receipt.clip.duration_sec, 60);
-  assert.equal(session.state, "published");
+  assert.equal(receipt.state, "queued");
+  assert.equal(receipt.receipt, undefined);
+  assert.equal(session.state, "completing");
+  assert.equal(clips.size,0,"API never inserts an unverified visible clip");
+  const ownStatus = await fetch(`${base}/upload/status/${session.id}`);
+  assert.equal(ownStatus.status,200);
+  assert.equal((await ownStatus.json()).state,"queued");
+  assert.equal((await fetch(`${base}/upload/status/${session.id}`,{headers:{"x-test-user":"8"}})).status,404);
+  assert.equal((await fetch(`${base}/upload/status/${session.id}`,{headers:{"x-test-user":"0"}})).status,401);
   const legacy = await fetch(`${base}/r2/presign`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ action: "complete", ...completion }),
   });
   const legacyText = await legacy.text();
-  assert.equal(legacy.status, 200, legacyText);
-  assert.equal(JSON.parse(legacyText).clip.id, 91,
+  assert.equal(legacy.status, 202, legacyText);
+  assert.equal(JSON.parse(legacyText).sessionId, session.id,
     "legacy complete shares the idempotent finalization handler");
+  const beforePublishedAbort = storageCalls;
+  const aborted = await fetch(`${base}/r2/presign`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "abort", sessionId: session.id }),
+  });
+  assert.equal(aborted.status, 409, "abort after completion loses to the published state");
+  assert.equal(storageCalls, beforePublishedAbort, "published media is never remotely aborted");
+  assert.equal(jobs.size,1,"duplicate completion enqueues exactly once");
+  session.state = "active";
+  jobs.clear();
+  session.expires_at = new Date(0);
+  assert.equal((await initiate("اسم/نسخة.v1")).status, 410,
+    "an expired retry identity must not pretend to be resumable");
+  assert.equal((await inspect()).status, 410);
+  for (const size of [10737418240,10737418241]) {
+    const response=await fetch(`${base}/upload/presign`,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({action:"initiate",expectedOwnerId:7,requestId:randomUUID(),
+        filename:"large.mp4",contentType:"video/mp4",size,durationSec:null})
+    });
+    assert.equal(response.status,size===10737418240?201:413);
+    if(response.status===201){
+      const large=await response.json();
+      assert.equal(large.partCount,2048);
+      const inspectLarge=await fetch(`${base}/upload/presign`,{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({action:"inspect",sessionId:large.sessionId})});
+      assert.equal((await inspectLarge.json()).parts.length,2048,"inspection paginates all 2048 parts");
+    }
+  }
 });

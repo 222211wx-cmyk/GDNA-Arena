@@ -14,7 +14,7 @@ import {
 
 type StoredFile = Pick<File, "createReadStream" | "createWriteStream" | "delete">;
 const largeInput = { filename: "original.mp4", contentType: "video/mp4", size: COMPRESS_ABOVE_BYTES + 1 };
-const reservedName = `clip_compressed_${"1".repeat(32)}.mp4`;
+const reservedName = `clip_compressed_${"1".repeat(32)}_720p.mp4`;
 
 async function temporary(run: (directory: string) => Promise<void>) {
   const directory = await mkdtemp(join(tmpdir(), "clip-compression-test-"));
@@ -188,7 +188,7 @@ test("streamed storage output is unique, private, create-only; temp files are cl
     });
     const first = await compress(largeInput), second = await compress(largeInput);
     assert.ok(first && second);
-    assert.match(first.filename, /^clip_[a-f0-9]{32}\.mp4$/);
+    assert.match(first.filename, /^clip_[a-f0-9]{32}_720p\.mp4$/);
     assert.notEqual(first.filename, second.filename);
     assert.equal(first.contentType, "video/mp4");
     assert.equal(first.size, 32);
@@ -242,7 +242,7 @@ test("partial uploads are removed and cleanup outages expose an orphan for durab
       await assert.rejects(compress(largeInput), error => {
         if (mode === "cleanup-error") {
           assert.ok(error instanceof ClipCompressionCleanupError);
-          assert.match(error.orphanFilename, /^clip_[a-f0-9]{32}\.mp4$/);
+          assert.match(error.orphanFilename, /^clip_[a-f0-9]{32}_720p\.mp4$/);
         } else assert.match((error as Error).message, mode === "collision" ? /already exists/ : /storage disconnected/);
         return true;
       });

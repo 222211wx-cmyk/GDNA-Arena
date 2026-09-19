@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "worker:dev": "pnpm run build && pnpm run worker:start",
+    "worker:start": "node --enable-source-maps ./dist/media-worker.mjs",
     "test:citizen-policy": "esbuild src/lib/citizen-policy.test.ts --bundle --platform=node --format=cjs --external:pg --external:pino --outfile=.citizen-policy-test.cjs && node --test .citizen-policy-test.cjs; status=$?; rm -f .citizen-policy-test.cjs; exit $status",
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "pnpm run typecheck && node ./build.mjs",

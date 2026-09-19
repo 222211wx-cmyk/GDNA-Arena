@@ -1,7 +1,7 @@
 /** Owner-requested maximum for NEW uploads; historical stored clips are untouched. */
-export const MAX_CLIP_BYTES = 2 * 1024 * 1024 * 1024;
+export const MAX_CLIP_BYTES = 10 * 1024 * 1024 * 1024;
 export const MAX_NEW_CLIP_BYTES = MAX_CLIP_BYTES;
-export const NEW_CLIP_TOO_LARGE = "Maximum file size is 2 GiB";
+export const NEW_CLIP_TOO_LARGE = "Maximum file size is 10 GiB";
 export const CLIP_EXT: Record<string, string> = {
   "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
   "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac",

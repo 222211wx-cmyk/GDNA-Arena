@@ -10,7 +10,7 @@ const DELETE_TIMEOUT_MS = 10_000;
 const INTERVAL_MS = 60_000;
 let timer: NodeJS.Timeout | undefined;
 
-async function abortOneExpiredR2Upload(): Promise<void> {
+export async function abortOneExpiredR2Upload(): Promise<void> {
   const config = r2Config();
   if (!config) return;
   const { rows } = await pool.query<{
@@ -18,23 +18,50 @@ async function abortOneExpiredR2Upload(): Promise<void> {
   }>(
     `SELECT id,object_name,multipart_upload_id FROM r2_clip_uploads
      WHERE state='active' AND expires_at <= NOW()
+       AND NOT EXISTS (SELECT 1 FROM clip_media_jobs j WHERE j.session_id=r2_clip_uploads.id)
      ORDER BY expires_at LIMIT 1`,
   );
   const upload = rows[0];
   if (!upload) return;
+  const client = await pool.connect();
+  let acquired = false;
   try {
-    await r2Client().send(new AbortMultipartUploadCommand({
-      Bucket: config.bucket,
-      Key: r2Key(upload.object_name),
-      UploadId: upload.multipart_upload_id,
-    }));
+    const lock = await client.query(
+      "SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS acquired", [`r2-upload:${upload.id}`],
+    );
+    acquired = lock.rows[0]?.acquired === true;
+    if (!acquired) return;
+    await client.query("BEGIN");
+    // Recheck under a row lock: owner activity may have renewed the lease
+    // after the candidate scan. Fence renewal until remote abort is settled.
+    const current = await client.query(
+      `SELECT id FROM r2_clip_uploads WHERE id=$1 AND state='active' AND expires_at<=NOW()
+       AND NOT EXISTS (SELECT 1 FROM clip_media_jobs j WHERE j.session_id=r2_clip_uploads.id)
+       FOR UPDATE`,
+      [upload.id],
+    );
+    if (!current.rows[0]) { await client.query("ROLLBACK"); return; }
+    try {
+      await r2Client().send(new AbortMultipartUploadCommand({
+        Bucket: config.bucket,
+        Key: r2Key(upload.object_name),
+        UploadId: upload.multipart_upload_id,
+      }));
+    } catch (error) {
+      if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
+    }
+    await client.query(
+      `UPDATE r2_clip_uploads SET state='aborted',updated_at=NOW()
+       WHERE id=$1 AND state='active' AND expires_at <= NOW()`, [upload.id],
+    );
+    await client.query("COMMIT");
   } catch (error) {
-    if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    if (acquired) await client.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${upload.id}`]).catch(() => {});
+    client.release();
   }
-  await pool.query(
-    `UPDATE r2_clip_uploads SET state='aborted',updated_at=NOW()
-     WHERE id=$1 AND state='active' AND expires_at <= NOW()`, [upload.id],
-  );
 }
 
 async function removeObject(objectName: string): Promise<void> {
@@ -81,6 +108,10 @@ export async function runClipStorageCleanupBatch(clipId?: number): Promise<numbe
                 OR c.upload_object_name=pending.object_name
                 OR c.thumbnail_object_name=pending.object_name
                 OR c.processing_output_object=pending.object_name
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM r2_clip_uploads u JOIN clip_media_jobs j ON j.session_id=u.id
+              WHERE u.object_name=pending.object_name
             )
             AND NOT EXISTS (
               SELECT 1 FROM citizen_profiles p WHERE

@@ -2,22 +2,17 @@ import { tokens } from "@workspace/gdna-ds/tokens";
 import {
   MAX_CLIP_BYTES,
   uploadClip,
-  uploadPreparedClip,
+  runQueuedUpload,
+  discardQueuedUpload,
+  pauseQueuedUpload,
+  markQueuedPaused,
+  currentUploadOwner,
   type ClipUploadMetadata,
+  type ClipUploadProgress,
 } from "./components/clips/clipUpload";
 import { readClipDuration } from "./components/clips/readClipDuration";
+import { listQueue } from "./components/clips/uploadQueue";
 
-// The browser-compression graph (canvas/recorder) is heavy and optional, so it
-// is only ever loaded on demand — the thin clip entry never imports it eagerly.
-type ClipPreparationPhase = "loading" | "compressing" | "verifying";
-type CompressionModule = typeof import("./components/clips/prepareVideo");
-let compressionModulePromise: Promise<CompressionModule> | null = null;
-function loadCompressionModule(): Promise<CompressionModule> {
-  if (!compressionModulePromise) {
-    compressionModulePromise = import("./components/clips/prepareVideo");
-  }
-  return compressionModulePromise;
-}
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
 import { reelsShellCss } from "./components/clips/reelsStyles";
 import { mountReels, type ReelsController } from "./components/clips/reelsFeed";
@@ -85,7 +80,7 @@ root.innerHTML = `
     </div>
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
-    <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 2GB</p>
+     <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 10 GiB (10 737 418 240 octets)</p>
     <div id="progress-wrap" hidden>
       <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress>
       <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p>
@@ -96,17 +91,11 @@ root.innerHTML = `
       <span id="display-name-error" class="error" role="alert" aria-live="polite"></span>
     </label>
     <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
-    <div id="compress-row" data-testid="clip-compress-row" hidden>
-      <label id="compress-label" for="compress">
-        <input id="compress" data-testid="clip-compress" type="checkbox" aria-describedby="compress-note">
-        <span>ضغط الفيديو قبل الرفع (اختياري)</span>
-      </label>
-      <p id="compress-note" class="muted">ضغط اختياري داخل المتصفح بواسطة ffmpeg.wasm عند توفره. قد يستغرق وقتاً، والملف الأصلي محفوظ ولن يُعدَّل.</p>
-      <p id="compress-status" data-testid="clip-compress-status" class="muted" role="status" aria-live="polite"></p>
-    </div>
+     <p class="muted" dir="ltr">Jusqu’à 10 GiB. Le quota local peut être inférieur : sans stockage local, transfert au premier plan uniquement, reprise après fermeture indisponible. Arrière-plan selon le navigateur, sans garantie après fermeture forcée du mobile. Après réception serveur, vous pouvez partir pendant le traitement.</p>
+    <div id="pending-uploads" dir="ltr" aria-live="polite"></div>
     <div>
       <button id="submit" data-testid="clip-submit" type="submit" disabled>نشر</button>
-      <button id="cancel" class="secondary" type="button" hidden>إلغاء</button>
+      <button id="cancel" class="secondary" type="button" hidden>Pause</button>
     </div>
     <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p>
     <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div>
@@ -138,10 +127,6 @@ const composerClose = element<HTMLButtonElement>("composer-close");
 const storageBadge = element<HTMLDivElement>("storage-badge");
 const storageText = element<HTMLSpanElement>("storage-text");
 const storageBucket = element<HTMLSpanElement>("storage-bucket");
-const compressRow = element<HTMLDivElement>("compress-row");
-const compress = element<HTMLInputElement>("compress");
-const compressNote = element<HTMLParagraphElement>("compress-note");
-const compressStatus = element<HTMLParagraphElement>("compress-status");
 const mutableControls = Array.from(form.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, #choose-file"));
 let cachedFile: File | null = null;
 let selectedDuration: number | null = null;
@@ -150,8 +135,137 @@ let durationProbe: Promise<number | null> | null = null;
 let uploadController: AbortController | null = null;
 let selectedFileKey: string | null = null;
 let submissionPending = false;
+let uploadOwner: number | null = null;
+let activeQueueId: string | null = null;
+let selectedQueueId: string | null = null;
+const pendingUploads = element<HTMLDivElement>("pending-uploads");
+let pollingJobs = false;
+let foregroundOnly = false;
+
+async function pollPendingJobs() {
+  if (pollingJobs || uploadOwner === null || document.visibilityState === "hidden") return;
+  pollingJobs = true;
+  const owner = uploadOwner;
+  try {
+    for (const record of await listQueue(owner)) {
+      if (!record.serverOwned || record.status === "failed" || uploadController) continue;
+      const published = await runQueuedUpload(record.id, owner, new AbortController().signal, () => {});
+      if (uploadOwner !== owner) return;
+      if (published) { finalizePublication(published, record.id); mountReelsFeed(); }
+    }
+    await refreshPendingUploads();
+  } catch (error) {
+    uploadError.textContent = error instanceof Error ? error.message : "Vérification du traitement indisponible";
+    await refreshPendingUploads();
+  } finally { pollingJobs = false; }
+}
+setInterval(() => { void pollPendingJobs(); }, 5_000);
+window.addEventListener("pageshow", () => { void pollPendingJobs(); });
+document.addEventListener("visibilitychange", () => { void pollPendingJobs(); });
+
+async function refreshPendingUploads() {
+  if (uploadOwner === null) return;
+  try {
+    const owner = await currentUploadOwner();
+    if (owner !== uploadOwner) {
+      uploadController?.abort();
+      uploadOwner = owner;
+      cachedFile = null; selectedQueueId = null; input.value = "";
+      receipt.hidden = true; receipt.replaceChildren();
+      progressWrap.hidden = true;
+      updateSubmitState();
+    }
+    const records = await listQueue(owner);
+    pendingUploads.replaceChildren();
+    for (const record of records) {
+      const row = document.createElement("div");
+      const label = document.createElement("p");
+      const labels = { pending: "En attente", uploading: "À reprendre / en transfert", paused: "En pause", processing: "100% transféré — Traitement serveur; vous pouvez quitter", published: "Publié", error: "À reprendre", failed: "Traitement échoué — supprimer le suivi puis resélectionner pour réessayer" };
+      label.textContent = `${record.metadata.title ?? record.name} — ${labels[record.status]} — ${Math.floor(record.uploaded / record.size * 100)}%${record.error ? ` — ${record.error}` : ""}`;
+      const resume = document.createElement("button");
+      resume.type = "button"; resume.textContent = record.serverOwned ? "Vérifier le traitement" : "Reprendre";
+      resume.dataset.testid = `resume-upload-${record.id}`;
+      resume.disabled = Boolean(uploadController);
+      resume.onclick = async () => {
+        if (uploadController || uploadOwner === null) return;
+        const controller = new AbortController();
+        uploadController = controller; activeQueueId = record.id;
+        cancel.hidden = false; progressWrap.hidden = false;
+        status.textContent = "Vérification de la reprise — attente si un autre onglet transfère déjà ce fichier…";
+        updateSubmitState();
+        try {
+          const published = await runQueuedUpload(record.id, uploadOwner, controller.signal,
+            (percent, bytes, speed, state) => reportUploadProgress(record.size, percent, bytes, speed, state));
+          if (published) {
+            const clearedSelection = finalizePublication(published, record.id);
+            if (clearedSelection) reloadFeedAfterPublish();
+            else mountReelsFeed();
+          }
+        } catch (error) { uploadError.textContent = error instanceof Error ? error.message : "Transfert interrompu"; }
+        finally {
+          uploadController = null; activeQueueId = null; cancel.hidden = true;
+          updateSubmitState(); void refreshPendingUploads();
+        }
+      };
+      const pause = document.createElement("button");
+      pause.type = "button"; pause.textContent = "Pause"; pause.className = "secondary";
+      pause.hidden = Boolean(record.serverOwned);
+      pause.dataset.testid = `pause-upload-${record.id}`;
+      pause.onclick = () => {
+        pauseQueuedUpload(record.id);
+        navigator.serviceWorker?.controller?.postMessage({ type: "CLIP_UPLOAD_PAUSE", id: record.id });
+        void markQueuedPaused(record.id, record.owner).then(refreshPendingUploads).catch(error => {
+          uploadError.textContent = error instanceof Error ? error.message : "Pause impossible";
+        });
+      };
+      const discard = document.createElement("button");
+      discard.type = "button"; discard.textContent = record.serverOwned ? "Supprimer le suivi local" : "Abandonner"; discard.className = "secondary";
+      discard.dataset.testid = `discard-upload-${record.id}`;
+      discard.onclick = async () => {
+        if (uploadOwner === null || !confirm(record.serverOwned ? "Supprimer le suivi local ? Le traitement serveur ne sera pas annulé." : "Abandonner et supprimer ce transfert ?")) return;
+        discard.disabled = true;
+      try {
+        await discardQueuedUpload(record.id, uploadOwner);
+        if (selectedQueueId === record.id) { selectedQueueId = null; displayName.disabled = false; }
+        await refreshPendingUploads();
+      }
+        catch (error) { uploadError.textContent = error instanceof Error ? error.message : "Abandon impossible"; discard.disabled = false; }
+      };
+      row.append(label, resume, pause, discard); pendingUploads.append(row);
+    }
+  } catch (error) {
+    receipt.hidden = true;
+    pendingUploads.textContent = `Reprise locale indisponible : ${error instanceof Error ? error.message : "stockage inaccessible"}`;
+  }
+}
+
+// Hand off only on departure. While this page is alive XHR gives real byte-level
+// progress; the same Web Lock prevents the worker from racing it.
+window.addEventListener("pagehide", () => {
+  if (!activeQueueId || !("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.controller?.postMessage({ type: "CLIP_UPLOAD_START", id: activeQueueId });
+  void navigator.serviceWorker.getRegistration().then(registration => {
+    const sync = (registration as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } } | undefined)?.sync;
+    return sync?.register("helixly-clips-upload");
+  }).catch(() => { /* Stored queue remains available on reopening. */ });
+});
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", event => {
+  const data = event.data;
+  if (data?.owner !== uploadOwner) return;
+  if (data.type === "CLIP_UPLOAD_DONE") { void refreshPendingUploads(); mountReelsFeed(); }
+  if (data.type === "CLIP_UPLOAD_ERROR") { uploadError.textContent = data.error; void refreshPendingUploads(); }
+  if (data.type === "CLIP_UPLOAD_PROGRESS") {
+    status.textContent = data.state === "processing" ? "Traitement serveur…" : `${Math.floor(data.percent)}% — ${data.state === "stalled" ? "En attente de R2" : "Arrière-plan : octets confirmés par R2"}`;
+    progressWrap.hidden = false; progress.value = data.percent;
+  }
+});
+if (window.isSecureContext && "serviceWorker" in navigator) {
+  // Same URL and scope as app-entry: updates the canonical push/call worker.
+  void navigator.serviceWorker.register(`${BASE}sw.js`, { scope: BASE, updateViaCache: "none" }).catch(() => {
+    pendingUploads.textContent = "Arrière-plan indisponible. Le transfert fonctionne dans cet onglet; les fichiers enregistrés restent reprenables.";
+  });
+}
 const DURATION_CLICK_WAIT_MS = 8_000;
-const SLOW_UPLOAD_BYTES_PER_SECOND = 143 * 1024;
 
 const MEDIA_EXTENSIONS = new Set([
   "3g2", "3gp", "aac", "aiff", "amr", "avi", "flac", "m4a", "m4v", "mkv",
@@ -206,21 +320,27 @@ function formatDuration(seconds: number) {
 
 type PublishedClip = { name: string; code: string };
 
-function finalizePublication(published: PublishedClip) {
-  cachedFile = null;
-  selectedDuration = null;
-  input.value = "";
-  displayName.value = "";
-  displayNameRow.hidden = true;
-  displayNameError.textContent = "";
-  selectedFileKey = null;
-  chooseFile.textContent = "Choisir un fichier — فيديو / أوديو";
-  durationStatus.textContent = "";
-  compressRow.hidden = true;
-  compress.checked = false;
-  compress.disabled = true;
-  compressStatus.textContent = "";
-  selection.textContent = "تم نشر الملف";
+export function finalizePublication(published: PublishedClip, finishedQueueId?: string) {
+  // A server job can finish while the composer holds a different file or paused
+  // upload. Its receipt must not reset that independent selection or its identity.
+  const clearSelection = finishedQueueId === undefined ||
+    selectedQueueId === finishedQueueId || (!cachedFile && !selectedQueueId);
+  if (clearSelection) {
+    progress.value = 100;
+    status.textContent = "تم نشر الملف — publication confirmée";
+    selectedQueueId = null;
+    cachedFile = null;
+    selectedDuration = null;
+    input.value = "";
+    displayName.value = "";
+    displayNameRow.hidden = true;
+    displayNameError.textContent = "";
+    selectedFileKey = null;
+    chooseFile.textContent = "Choisir un fichier — فيديو / أوديو";
+    durationStatus.textContent = "";
+    selection.textContent = "تم نشر الملف";
+    updateSubmitState();
+  }
   receipt.replaceChildren();
   const name = document.createElement("p");
   name.textContent = published.name;
@@ -233,55 +353,7 @@ function finalizePublication(published: PublishedClip) {
   link.textContent = "فتح الملف";
   receipt.append(link);
   receipt.hidden = false;
-}
-
-const COMPRESS_WARNING =
-  "ضغط اختياري داخل المتصفح بواسطة ffmpeg.wasm عند توفره. قد يستغرق وقتاً، والملف الأصلي محفوظ ولن يُعدَّل.";
-
-const compressPhaseLabel: Record<ClipPreparationPhase, string> = {
-  loading: "جارٍ تحضير الفيديو للضغط…",
-  compressing: "جارٍ الضغط",
-  verifying: "جارٍ التحقق من الفيديو المضغوط",
-};
-
-let compressAvailabilityToken = 0;
-
-/**
- * Reflect browser-compression availability for the current selection. Video only
- * (audio always uploads uncompressed); supported source is <=512MiB and <=30min.
- * Unsupported reasons disable and uncheck the box without hiding it, so the user
- * makes an explicit choice — never a silent fallback. The capability probe lives
- * in the on-demand compression module, so this is async.
- */
-async function refreshCompressAvailability(file: File | null, durationSeconds: number | null) {
-  const token = ++compressAvailabilityToken;
-  compressStatus.textContent = "";
-  if (!file || !file.type.startsWith("video/")) {
-    compressRow.hidden = true;
-    compress.checked = false;
-    compress.disabled = true;
-    return;
-  }
-  compressRow.hidden = false;
-  compress.disabled = true;
-  compressNote.textContent = COMPRESS_WARNING;
-  let reason: string | null = null;
-  try {
-    const module = await loadCompressionModule();
-    reason = module.browserCompressionUnavailableReason(file, durationSeconds ?? undefined);
-  } catch {
-    reason = "تعذر تحميل أداة الضغط في هذا المتصفح. يمكنك رفع الملف الأصلي.";
-  }
-  // A newer selection has superseded this probe; leave its result in place.
-  if (token !== compressAvailabilityToken || cachedFile !== file) return;
-  if (reason) {
-    compress.checked = false;
-    compress.disabled = true;
-    compressNote.textContent = reason;
-    return;
-  }
-  compress.disabled = false;
-  compressNote.textContent = COMPRESS_WARNING;
+  return clearSelection;
 }
 
 chooseFile.addEventListener("click", () => input.click());
@@ -300,6 +372,8 @@ input.addEventListener("change", async () => {
   selectedFileKey = nextFileKey;
   displayNameRow.hidden = false;
   cachedFile = selected;
+  selectedQueueId = null;
+  displayName.disabled = false;
   selectedDuration = null;
   chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MB`;
   selection.textContent = "✓ Fichier sélectionné";
@@ -312,7 +386,6 @@ input.addEventListener("change", async () => {
   status.textContent = `0% — 0 من ${formatBytes(selected.size)}`;
   receipt.hidden = true;
   receipt.replaceChildren();
-  void refreshCompressAvailability(selected, null);
   if (selected.size > MAX_CLIP_BYTES) {
     durationStatus.textContent = "";
     cancel.hidden = true;
@@ -324,11 +397,10 @@ input.addEventListener("change", async () => {
     if (probing.signal.aborted || cachedFile !== selected) return null;
     selectedDuration = duration;
     durationStatus.textContent = `المدة: ${formatDuration(duration)}`;
-    void refreshCompressAvailability(selected, duration);
     return duration;
   }).catch(() => {
     if (!probing.signal.aborted && cachedFile === selected) {
-      durationStatus.textContent = "المدة غير متاحة — سيُشرح السبب عند النشر";
+      durationStatus.textContent = "Durée inconnue — vérification par le serveur";
     }
     return null;
   }).finally(() => {
@@ -395,23 +467,21 @@ function reportUploadProgress(
   percent: number,
   uploadedBytes: number | undefined,
   speedBytesPerSecond: number,
-  uploadState: "uploading" | "offline",
+  uploadState: "uploading" | "offline" | "stalled" | "processing",
 ) {
   const uploaded = uploadedBytes ?? Math.min(total, Math.round(total * percent / 100));
   const displayPercent = Math.floor(percent);
   progress.value = percent;
   submit.textContent = `Téléversement ${displayPercent}%…`;
-  if (percent === 100) {
-    status.textContent = `تم النشر — ${formatBytes(total)}`;
+  if (uploadState === "processing") {
+    status.textContent = "100% transféré — vérification et traitement serveur… Vous pouvez quitter après réception serveur; la publication reste à confirmer.";
+    submit.textContent = "Traitement serveur…";
+    cancel.hidden = true;
     return;
   }
-  const slowWarning = uploaded > 0 && speedBytesPerSecond > 0 &&
-    speedBytesPerSecond <= SLOW_UPLOAD_BYTES_PER_SECOND
-    ? " — Connexion lente, compression recommandée"
-    : "";
   status.textContent = uploadState === "offline"
     ? `${formatBytes(uploaded)} من ${formatBytes(total)} — متوقف مؤقتاً؛ يكمل الى تقطع عند رجوع الاتصال`
-    : `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)}${slowWarning} — يكمل الى تقطع`;
+    : `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}% — ${uploadState === "stalled" ? "En attente du réseau / accusé R2" : formatSpeed(speedBytesPerSecond)}`;
 }
 
 form.addEventListener("submit", async event => {
@@ -419,11 +489,12 @@ form.addEventListener("submit", async event => {
   const file = cachedFile;
   if (!file || uploadController || submissionPending) return;
   submissionPending = true;
+  foregroundOnly = false;
   uploadError.textContent = "";
   displayNameError.textContent = "";
   displayName.setAttribute("aria-invalid", "false");
   if (file.size > MAX_CLIP_BYTES) {
-    uploadError.textContent = "الحد الأقصى للملف هو 2GB";
+    uploadError.textContent = "الحد الأقصى للملف هو 10 GiB (10 737 418 240 octets)";
     submissionPending = false;
     return;
   }
@@ -436,7 +507,6 @@ form.addEventListener("submit", async event => {
     submissionPending = false;
     return;
   }
-  const wantsCompression = compress.checked && !compress.disabled && file.type.startsWith("video/");
   const operation = new AbortController();
   uploadController = operation;
   mutableControls.forEach(control => { control.disabled = true; });
@@ -447,7 +517,6 @@ form.addEventListener("submit", async event => {
   progressWrap.hidden = false;
   progress.value = 0;
   status.textContent = `0% — 0 من ${formatBytes(file.size)} — جارٍ التحقق من المدة…`;
-  compressStatus.textContent = "";
   uploadError.textContent = "";
   try {
     const duration = selectedDuration ?? await awaitPendingDurationProbe(operation.signal);
@@ -465,77 +534,41 @@ form.addEventListener("submit", async event => {
       // No guessed duration: the server probes media if browser metadata is unavailable.
       durationSec: duration,
     };
-    status.textContent = wantsCompression
-      ? "جارٍ التحضير للضغط…"
-      : `0% — 0 من ${formatBytes(file.size)}`;
-    // Optional, explicit compression. On any failure we surface the error and
-    // keep the checkbox + original selection so the user can uncheck and upload
-    // the original — never a silent fallback.
-    let prepared: { uploadFile: File; outputDuration: number } | null = null;
-    if (wantsCompression) {
-      try {
-        const { prepareClipForUpload } = await loadCompressionModule();
-        prepared = await prepareClipForUpload(file, operation.signal, phase => {
-          progress.value = phase.percent;
-          const label = compressPhaseLabel[phase.phase];
-          compressStatus.textContent = phase.phase === "compressing"
-            ? `${label} — ${Math.floor(phase.percent)}%`
-            : label;
-          status.textContent = "لا تُغلق الصفحة أثناء الضغط.";
-        });
-        compressStatus.textContent = `تم الضغط: ${formatBytes(file.size)} ← ${formatBytes(prepared.uploadFile.size)}`;
-        progress.value = 0;
-        status.textContent = `0 من ${formatBytes(prepared.uploadFile.size)}`;
-      } catch (error) {
-        if (operation.signal.aborted) throw error;
-        const reason = error instanceof Error ? error.message : "تعذر ضغط الفيديو";
-        uploadError.textContent = `${reason} — أزل خيار الضغط لرفع الملف الأصلي.`;
-        compressStatus.textContent = "";
-        status.textContent = "لم يبدأ الرفع";
-        return;
-      }
-    }
-    if (prepared) {
-      const published = await uploadPreparedClip(
-        {
-          originalFile: file,
-          uploadFile: prepared.uploadFile,
-          outputDuration: prepared.outputDuration,
-          title,
-          originalFilename: file.name,
-        },
-        operation.signal,
-        (percent, uploadedBytes, speedBytesPerSecond, uploadState) => {
-          reportUploadProgress(prepared!.uploadFile.size, percent, uploadedBytes,
-            speedBytesPerSecond, uploadState);
-        },
-      );
-      finalizePublication({ ...published, name: title });
-      reloadFeedAfterPublish();
-      return;
-    }
-    const published = await uploadClip(file, metadata, operation.signal, (
+    status.textContent = `Enregistrement local du fichier — ${formatBytes(file.size)}`;
+    const onProgress: ClipUploadProgress = (
       percent,
       uploadedBytes,
       speedBytesPerSecond,
       uploadState,
-    ) => {
+    ): void => {
       reportUploadProgress(file.size, percent, uploadedBytes, speedBytesPerSecond, uploadState);
+    };
+    if (selectedQueueId) activeQueueId = selectedQueueId;
+    const published = selectedQueueId && uploadOwner !== null
+      ? await runQueuedUpload(selectedQueueId, uploadOwner, operation.signal, onProgress)
+      : await uploadClip(file, metadata, operation.signal, onProgress, {
+      onStored: record => { activeQueueId = record.id; selectedQueueId = record.id; void refreshPendingUploads(); },
+      onForegroundOnly: message => { foregroundOnly = true; uploadError.textContent = message; },
     });
+    if (!published) {
+      cachedFile = null; input.value = ""; selectedQueueId = null;
+      status.textContent = "100% reçu par le serveur — traitement en cours. Vous pouvez quitter; le suivi reprend au retour.";
+      return;
+    }
     finalizePublication({ ...published, name: title });
     reloadFeedAfterPublish();
   } catch (error) {
     const cancelled = operation.signal.aborted;
-    uploadError.textContent = cancelled ? "تم إلغاء الرفع — يمكنك إعادة المحاولة" :
+    uploadError.textContent = cancelled ? (foregroundOnly ? "Transfert interrompu — non enregistré localement; reprise après fermeture indisponible." : "En pause — Reprendre pour continuer") :
       error instanceof Error ? error.message : "تعذر الرفع — حاول مجدداً";
     status.textContent = cancelled ? "توقف الرفع" : "لم يكتمل الرفع";
   } finally {
     submissionPending = false;
     uploadController = null;
+    activeQueueId = null;
+    void refreshPendingUploads();
     mutableControls.forEach(control => { control.disabled = false; });
-    // Re-evaluate compression availability for whatever selection remains (the
-    // helper disables/hides the box when there is no eligible video).
-    void refreshCompressAvailability(cachedFile, selectedDuration);
+    displayName.disabled = Boolean(selectedQueueId);
     updateSubmitState();
     submit.textContent = "نشر";
     cancel.hidden = true;
@@ -545,8 +578,7 @@ form.addEventListener("submit", async event => {
 // ── Reels feed + upload composer wiring ──────────────────────────────────────
 // The fullscreen Reels feed is the primary surface. The camera button (and the
 // empty-state "publish") open this composer, which hosts the existing upload
-// form untouched, preserving every selector (#file #compress #submit #receipt
-// #storage-badge) and the direct helixly-clips upload/compression pipeline.
+// form and direct helixly-clips upload pipeline.
 let reels: ReelsController | null = null;
 let lastFocusBeforeComposer: HTMLElement | null = null;
 
@@ -644,6 +676,8 @@ async function loadAuth() {
     if (!response.ok) throw new Error();
     const me = await response.json().catch(() => null);
     if (me && Number.isSafeInteger(me.id)) {
+      uploadOwner = me.id;
+      void refreshPendingUploads();
       // The R2 status endpoint is authenticated; only probe it once we know the
       // viewer is signed in. It never blocks the form (rendered right below).
       void loadStorageStatus();

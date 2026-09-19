@@ -41,7 +41,8 @@ async function storePoster(name: string, jpeg: Buffer): Promise<void> {
  * this function. Attempts/backoff commit BEFORE processing, so crashes consume
  * an attempt too. The row lock is shared with DELETE /clips/:id.
  */
-export async function runClipThumbnailRetryBatch(): Promise<number> {
+export async function runClipThumbnailRetryBatch(signal?: AbortSignal): Promise<number> {
+  if (signal?.aborted) return 0;
   if (running) return 0;
   running = true;
   const client = await pool.connect().catch((err: unknown) => {
@@ -61,7 +62,7 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
     locked = lock.rows[0]?.acquired === true;
     if (!locked) return 0;
 
-    for (let n = 0; n < CLIP_THUMBNAIL_RETRY_BATCH_SIZE && Date.now() < deadline; n++) {
+    for (let n = 0; n < CLIP_THUMBNAIL_RETRY_BATCH_SIZE && Date.now() < deadline && !signal?.aborted; n++) {
       // One autocommitted statement reserves work and durably advances backoff.
       // Failed/poison files cannot starve unattempted older clips.
       const claim = await client.query<{ id: number; thumbnail_retry_attempts: number }>(`
@@ -95,7 +96,7 @@ export async function runClipThumbnailRetryBatch(): Promise<number> {
           continue; // Deleted, already completed, frozen, or being deleted.
         }
         const name = retryThumbnailName(candidate.id, rows[0].object_name);
-        const jpeg = await generateClipThumbnail(clipFile(rows[0].object_name));
+        const jpeg = await generateClipThumbnail(clipFile(rows[0].object_name),signal);
         await storePoster(name, jpeg);
         await client.query(
           `UPDATE clips SET thumbnail_object_name=$2

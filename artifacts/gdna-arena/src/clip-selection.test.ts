@@ -3,22 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { upload, duration } = vi.hoisted(() => ({ upload: vi.fn(), duration: vi.fn() }));
 vi.mock("./components/clips/clipUpload", () => ({
   uploadClip: upload,
-  uploadPreparedClip: vi.fn(),
-  MAX_CLIP_BYTES: 2 * 1024 * 1024 * 1024,
+  MAX_CLIP_BYTES: 10 * 1024 * 1024 * 1024,
 }));
 vi.mock("./components/clips/readClipDuration", () => ({ readClipDuration: duration }));
-// Deterministically model browser-compression support in jsdom: video <=512MiB
-// and <=30min is compressible; everything else reports an explicit reason.
-vi.mock("./components/clips/prepareVideo", () => ({
-  prepareClipForUpload: vi.fn(),
-  VideoPreparationUnsupportedError: class extends Error {},
-  browserCompressionUnavailableReason: (file: File, durationSeconds?: number) => {
-    if (!file.type.startsWith("video/")) return "ضغط المتصفح متاح للفيديو فقط";
-    if (file.size > 512 * 1024 * 1024) return "كبير جداً للضغط";
-    if (durationSeconds !== undefined && durationSeconds > 30 * 60) return "طويل جداً للضغط";
-    return null;
-  },
-}));
 const input = () => document.getElementById("file") as HTMLInputElement;
 const submit = () => document.getElementById("submit") as HTMLButtonElement;
 const chooser = () => document.getElementById("choose-file") as HTMLButtonElement;
@@ -53,6 +40,44 @@ afterEach(() => {
 });
 
 describe("final simple Clip selection", () => {
+  it("shows an older processing receipt without wiping an unrelated new selection", async () => {
+    const file = media("second.mp4", "video/mp4", 1024);
+    select(file);
+    await vi.waitFor(() => expect(text("duration-status")).toContain(":"));
+    displayName().value = "Second custom title";
+    const beforeDuration = text("duration-status");
+    const { finalizePublication } = await import("./clip-entry");
+    expect(finalizePublication(receipt, "older-processing-job")).toBe(false);
+    expect(text("receipt")).toContain(receipt.code);
+    expect(displayName().value).toBe("Second custom title");
+    expect(text("duration-status")).toBe(beforeDuration);
+    expect(chooser().textContent).toContain("second.mp4");
+    expect(input().files?.[0]).toBe(file);
+    expect(submit().disabled).toBe(false);
+    upload.mockRejectedValueOnce(new Error("Keep selection"));
+    form().requestSubmit();
+    await vi.waitFor(() => expect(upload).toHaveBeenCalledOnce());
+    expect(upload.mock.calls[0][0]).toBe(file);
+    expect(upload.mock.calls[0][1].title).toBe("Second custom title");
+  });
+
+  it("does not clear another queued job identity when an older job finishes", async () => {
+    upload.mockImplementationOnce(async (_file, _metadata, _signal, _progress, options) => {
+      options.onStored({ id: "second-queued-job" });
+      throw new Error("Paused");
+    });
+    select(media("second.mp4", "video/mp4", 1024));
+    form().requestSubmit();
+    await vi.waitFor(() => expect(text("upload-error")).toBe("Paused"));
+    const { finalizePublication } = await import("./clip-entry");
+    expect(finalizePublication(receipt, "older-processing-job")).toBe(false);
+    expect(displayName().disabled).toBe(true);
+    expect(chooser().textContent).toContain("second.mp4");
+    // Matching completion, unlike an unrelated manual resume/poll, owns the reset.
+    expect(finalizePublication(receipt, "second-queued-job")).toBe(true);
+    expect(submit().disabled).toBe(true);
+    expect(displayName().value).toBe("");
+  });
   it.each([
     ["recording.mp3", "audio/mpeg", 1024, 60],
     ["video.mp4", "video/mp4", 500 * 1024 * 1024, 61],
@@ -67,26 +92,18 @@ describe("final simple Clip selection", () => {
     expect(input().files?.[0]).toBe(file);
     expect(text("duration-status")).toContain(":");
     expect(text("upload-error")).toBe("");
-    // Compression is the only optional control and it is always OFF by default;
-    // there are no radios and no legacy quality toggles.
+    // Only original bytes; no encoding declarations or quality toggles.
     expect(form().querySelectorAll('input[type="radio"]')).toHaveLength(0);
-    const checkbox = document.getElementById("compress") as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
-    const isVideo = type.startsWith("video/");
-    const compressibleVideo = isVideo && size <= 512 * 1024 * 1024;
-    // Audio hides the row; oversized/long video keeps it visible but disabled.
-    expect((document.getElementById("compress-row") as HTMLDivElement).hidden).toBe(!isVideo);
-    if (compressibleVideo) await vi.waitFor(() => expect(checkbox.disabled).toBe(false));
-    else expect(checkbox.disabled).toBe(true);
+    expect(form().querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it("retains but blocks a file over the explicit 2GB transport maximum", async () => {
-    const file = media("too-large.mp4", "video/mp4", 2 * 1024 ** 3 + 1);
+  it("retains but blocks a file over the explicit 10 GiB transport maximum", async () => {
+    const file = media("too-large.mp4", "video/mp4", 10 * 1024 ** 3 + 1);
     select(file);
     expect(submit().disabled).toBe(false);
     form().requestSubmit();
-    await vi.waitFor(() => expect(text("upload-error")).toContain("2GB"));
+    await vi.waitFor(() => expect(text("upload-error")).toContain("10 GiB"));
     expect(input().files?.[0]).toBe(file);
     expect(submit().disabled).toBe(false);
     expect(duration).not.toHaveBeenCalled();
@@ -161,7 +178,7 @@ describe("final simple Clip selection", () => {
     expect(input().files?.[0]).toBe(file);
   });
 
-  it("reports bytes, speed, percent and the exact slow-connection recommendation", async () => {
+  it("reports real bytes, speed and percent without encoding advice", async () => {
     upload.mockImplementationOnce(async (_file, _metadata, _signal, onProgress) => {
       onProgress(25, 256 * 1024, 100 * 1024, "uploading");
       return new Promise(() => {});
@@ -172,7 +189,7 @@ describe("final simple Clip selection", () => {
     await vi.waitFor(() => expect(submit().textContent).toBe("Téléversement 25%…"));
     expect(text("upload-status")).toContain("25%");
     expect(text("upload-status")).toContain("100.0 KB/s");
-    expect(text("upload-status")).toContain("Connexion lente, compression recommandée");
+    expect(text("upload-status")).not.toContain("compression recommandée");
   });
 
   it("retains the previous selection after picker cancellation", async () => {
@@ -245,7 +262,7 @@ describe("final simple Clip selection", () => {
     duration.mockRejectedValueOnce(new Error("Unsupported codec"));
     upload.mockResolvedValueOnce(receipt);
     select(media("camera.mov", "video/quicktime", 1024));
-    await vi.waitFor(() => expect(text("duration-status")).toContain("غير متاحة"));
+    await vi.waitFor(() => expect(text("duration-status")).toContain("vérification par le serveur"));
     expect(text("upload-error")).toBe("");
     expect(submit().disabled).toBe(false);
     expect(chooser().textContent).toContain("camera.mov");

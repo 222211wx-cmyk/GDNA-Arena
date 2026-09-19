@@ -23,13 +23,16 @@ type Candidate = {
  * fence deletion; DELETE returns 409 rather than waiting on a long encoder.
  * Originals remain playable until a successful atomic pointer swap.
  */
-export async function runClipCompressionBatch(): Promise<number> {
+export async function runClipCompressionBatch(signal?: AbortSignal): Promise<number> {
+  if (signal?.aborted) return 0;
   if (running) return 0;
   running = true;
   const client = await pool.connect().catch(error => { running = false; throw error; });
   let globalLocked = false, clipLocked = false, broken = false;
   let candidate: Candidate | undefined;
   const controller = new AbortController();
+  const interrupted = () => controller.abort();
+  signal?.addEventListener("abort",interrupted,{once:true});
   const lostConnection = (error: Error) => { broken = true; controller.abort(error); };
   client.on("error", lostConnection);
   const enqueue = async (names: (string | null | undefined)[]) => {
@@ -88,7 +91,7 @@ export async function runClipCompressionBatch(): Promise<number> {
     // active owner may write the old candidate. Connection loss aborts its I/O.
     await enqueue([candidate.processing_output_object]);
     outputName = providerSibling(candidate.object_name,
-      `clip_compressed_${randomUUID().replaceAll("-", "")}${candidate.content_type.startsWith("audio/") ? ".m4a" : ".mp4"}`);
+      `clip_compressed_${randomUUID().replaceAll("-", "")}${candidate.content_type.startsWith("audio/") ? ".m4a" : "_720p.mp4"}`);
     candidate.processing_attempts++;
     await client.query(
       `UPDATE clips SET processing_status='processing', processing_attempts=$2,
@@ -167,6 +170,7 @@ export async function runClipCompressionBatch(): Promise<number> {
     logger.warn({ err: error, clipId: candidate?.id }, "[clips] compression deferred; original retained");
     return 0;
   } finally {
+    signal?.removeEventListener("abort",interrupted);
     controller.abort();
     if (!broken) {
       try {

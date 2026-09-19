@@ -79,7 +79,7 @@ async function closeServer(server: Server, sockets: Set<Socket>): Promise<void> 
   await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
-async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number): Promise<Buffer> {
+async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number, signal?: AbortSignal): Promise<Buffer> {
   const [metadata] = await beforeDeadline(file.getMetadata(), deadline);
   const size = Number(metadata.size);
   if (!Number.isSafeInteger(size) || size <= 0) {
@@ -174,6 +174,8 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number)
 
   let child: ChildProcess | undefined;
   let timeout: NodeJS.Timeout | undefined;
+  const abort = () => child?.kill("SIGKILL");
+  signal?.addEventListener("abort",abort,{once:true});
   try {
     await beforeDeadline(new Promise<void>((resolve, reject) => {
       const onError = (error: Error) => reject(error);
@@ -185,6 +187,7 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number)
     }), deadline);
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("Thumbnail bridge did not bind a TCP port");
+    if (signal?.aborted) throw new Error("Thumbnail interrupted");
 
     const args = [
       "-hide_banner", "-loglevel", "error", "-nostdin",
@@ -246,6 +249,7 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number)
     });
     return result;
   } finally {
+    signal?.removeEventListener("abort",abort);
     if (timeout) clearTimeout(timeout);
     if (child && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     for (const stream of streams) stream.destroy();
@@ -259,14 +263,15 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number)
  * At most two calls run concurrently. Additional calls reject immediately so
  * thumbnail work cannot become an unbounded in-process queue.
  */
-export async function generateClipThumbnail(file: File): Promise<Buffer> {
+export async function generateClipThumbnail(file: File, signal?: AbortSignal): Promise<Buffer> {
+  if (signal?.aborted) throw new Error("Thumbnail interrupted");
   if (activeJobs >= MAX_CONCURRENT) {
     throw new Error("Clip thumbnail generator is busy");
   }
   activeJobs++;
   try {
     const limits = runtimeLimits();
-    return await runThumbnail(file, limits, Date.now() + limits.timeoutMs);
+    return await runThumbnail(file, limits, Date.now() + limits.timeoutMs,signal);
   } finally {
     activeJobs--;
   }

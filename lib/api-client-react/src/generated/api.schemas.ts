@@ -5,6 +5,26 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type ClipUploadStatusState = typeof ClipUploadStatusState[keyof typeof ClipUploadStatusState];
+
+
+export const ClipUploadStatusState = {
+  queued: 'queued',
+  processing: 'processing',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+
+export type ClipUploadStatusReceipt = { [key: string]: unknown };
+
+export interface ClipUploadStatus {
+  sessionId: string;
+  state: ClipUploadStatusState;
+  statusUrl: string;
+  receipt?: ClipUploadStatusReceipt;
+  error?: string;
+}
+
 export interface CitizenSocialMediaInput {
   /** Multipart image bytes */
   image: string;
@@ -591,6 +611,66 @@ export interface TransactionsResponse {
   transactions: TransactionItem[];
   balance: number;
 }
+
+export type PresignClipUploadBodyAction = typeof PresignClipUploadBodyAction[keyof typeof PresignClipUploadBodyAction];
+
+
+export const PresignClipUploadBodyAction = {
+  initiate: 'initiate',
+  part: 'part',
+  inspect: 'inspect',
+  abort: 'abort',
+  complete: 'complete',
+} as const;
+
+export type PresignClipUploadBody = {
+  action: PresignClipUploadBodyAction;
+  expectedOwnerId: number;
+  requestId?: string;
+  sessionId?: string;
+  filename?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title?: string;
+  contentType?: string;
+  /**
+     * @minimum 1
+     * @maximum 10737418240
+     */
+  size?: number;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  durationSec?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 2048
+     */
+  partNumber?: number;
+};
+
+export type CompleteClipUploadBodyPartsItem = {
+  /**
+     * @minimum 1
+     * @maximum 2048
+     */
+  partNumber: number;
+  etag: string;
+};
+
+export type CompleteClipUploadBody = {
+  sessionId: string;
+  expectedOwnerId: number;
+  title?: string;
+  /**
+     * @minItems 1
+     * @maxItems 2048
+     */
+  parts: CompleteClipUploadBodyPartsItem[];
+};
 
 export type CitizenMetadata200 = {
   cities?: string[];

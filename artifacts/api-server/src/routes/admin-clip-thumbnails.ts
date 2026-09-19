@@ -7,11 +7,9 @@ import {
   RequeueClipThumbnailParams,
   RequeueClipThumbnailResponse,
 } from "@workspace/api-zod";
-import {
-  CLIP_THUMBNAIL_LOCK_KEY,
-  CLIP_THUMBNAIL_LOCK_NAMESPACE,
-  CLIP_THUMBNAIL_MAX_ATTEMPTS,
-} from "../jobs/clip-thumbnail-retry.js";
+const CLIP_THUMBNAIL_LOCK_KEY = 1;
+const CLIP_THUMBNAIL_LOCK_NAMESPACE = 19183721;
+const CLIP_THUMBNAIL_MAX_ATTEMPTS = 8;
 import { requireAdmin } from "../middleware/require-admin.js";
 
 const router: IRouter = Router();

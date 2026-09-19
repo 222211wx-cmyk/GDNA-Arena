@@ -198,9 +198,8 @@ test("publishing enforces minimum-only media duration without fingerprint restri
   assert.match(publish, /clipDurationSeconds\(verifiedSeconds, contentType\)/);
   assert.doesNotMatch(publish, /MAX_DURATION|durationSec\s*>/);
   assert.match(publish, /verifiedDuration.*clip-duration\.js/);
-  assert.match(route, /hash\.update\(chunk\)/);
-  assert.match(route, /sha256: hash\.digest\("hex"\)/);
-  assert.match(route, /sha256: f\.sha256/);
+  assert.match(route, /retiredClipUploadsRouter/);
+  assert.doesNotMatch(route, /publishClip|upload\.single/);
   assert.doesNotMatch(publish, /INSERT INTO content_fingerprints|clip_original_registrations|shouldBlockForProtectedAudio/);
 });
 

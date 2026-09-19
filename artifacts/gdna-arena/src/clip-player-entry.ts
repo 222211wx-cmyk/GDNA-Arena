@@ -208,6 +208,9 @@ export function renderClipPlayer(code: string) {
           clearTimeout(timeout);
         }
         name.textContent = clip.name || clip.originalName || clip.code;
+        if (clip.processingStatus === "failed") {
+          throw new Error("فشل تجهيز الكليب. على صاحب الملف إعادة رفعه.");
+        }
         if (clip.url) {
           const media = document.createElement(clip.contentType.startsWith("audio/") ? "audio" : "video");
           media.controls = true;
@@ -252,7 +255,9 @@ export function renderClipPlayer(code: string) {
         if (++polls >= MAX_AUTOMATIC_POLLS) {
           throw new Error("الكليب ما زال قيد التجهيز. أعد المحاولة بعد قليل.");
         }
-        status.textContent = `جارٍ تجهيز الكليب… ${clip.processingStatus || ""}`;
+        status.textContent = clip.processingStatus === "queued"
+          ? "تم استلام الملف — في انتظار المعالجة. يمكنك المغادرة والعودة لاحقاً."
+          : "جارٍ تجهيز الكليب على الخادم… يمكنك المغادرة والعودة لاحقاً.";
         await new Promise<void>((resolve, reject) => {
           const timer = window.setTimeout(resolve, POLL_DELAY_MS);
           controller.signal.addEventListener("abort", () => {

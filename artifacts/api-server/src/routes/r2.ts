@@ -23,13 +23,49 @@ import {
   resolveClipUploadType,
   ClipUploadError,
 } from "../lib/clip-upload-protocol.js";
-import { publishClip, validateClipDisplayTitle } from "../lib/clip-publish.js";
+import { validateClipDisplayTitle } from "../lib/clip-title.js";
 import { finalClipReceipt } from "./clips-thumbnail-response.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
+async function status(sessionId: string, userId: number) {
+  const { rows } = await pool.query(
+    `SELECT j.state,j.error,c.id,c.title,c.code,c.duration_sec,c.created_at,c.processing_status,c.thumbnail_object_name
+     FROM clip_media_jobs j JOIN r2_clip_uploads u ON u.id=j.session_id
+     LEFT JOIN clips c ON c.id=u.clip_id WHERE j.session_id=$1 AND u.user_id=$2`, [sessionId,userId]);
+  const row = rows[0];
+  if (!row) return null;
+  return { sessionId, state: row.state, statusUrl: `/api/upload/status/${sessionId}`,
+    ...(row.error ? { error: row.error } : {}),
+    ...(row.state === "ready" && row.id ? {receipt: finalClipReceipt(row)} : {}) };
+}
+router.get("/upload/status/:sessionId", async (req,res) => {
+  const userId = auth(req,res);
+  if (!userId) return;
+  const id = String(req.params.sessionId);
+  if (!UUID.test(id)) { res.status(404).json({error:"Upload session not found"}); return; }
+  const result = await status(id,userId);
+  res.set("Cache-Control","no-store");
+  if (!result) { res.status(404).json({error:"Upload session not found"}); return; }
+  res.json(result);
+});
 const PART_BYTES = 5 * 1024 * 1024;
-const URL_TTL_SECONDS = 15 * 60;
+async function listAllParts(bucket: string, key: string, uploadId: string) {
+  const parts: import("@aws-sdk/client-s3").Part[] = [];
+  let marker: string | undefined;
+  do {
+    const page = await r2Client().send(new ListPartsCommand({
+      Bucket: bucket, Key: key, UploadId: uploadId, PartNumberMarker: marker,
+    }));
+    parts.push(...(page.Parts ?? []));
+    marker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
+    if (page.IsTruncated && !marker) throw new Error("R2 pagination cursor missing");
+  } while (marker);
+  return { Parts: parts, IsTruncated: false };
+}
+// Five MiB can take >15 minutes on intermittent mobile links. Each retry can
+// mint a fresh capability for the same part; never require restarting a session.
+const URL_TTL_SECONDS = 60 * 60;
 const SESSION_TTL_HOURS = 48;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -51,6 +87,9 @@ type UploadRow = {
 function auth(req: any, res: any): number | null {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Authentication required" }); return null; }
+  if (req.body?.expectedOwnerId !== undefined && req.body.expectedOwnerId !== userId) {
+    res.status(403).json({ error: "Upload belongs to a different signed-in account" }); return null;
+  }
   return userId;
 }
 
@@ -62,7 +101,7 @@ function integer(value: unknown): number | null {
 function safeEtag(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  return /^"?[a-fA-F0-9]{32}(?:-\d+)?"?$/.test(trimmed) ? trimmed : null;
+  return /^(?:"[a-fA-F0-9]{32}(?:-\d+)?"|[a-fA-F0-9]{32}(?:-\d+)?)$/.test(trimmed) ? trimmed : null;
 }
 
 async function uploadRow(id: string, userId: number): Promise<UploadRow | null> {
@@ -85,7 +124,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
   const sessionId = String(req.body?.sessionId ?? "").toLowerCase();
   const row = await uploadRow(sessionId, userId);
   if (!row) { res.status(404).json({ error: "R2 upload session not found" }); return; }
-  if (row.expires_at.getTime() <= Date.now() && row.state !== "published") {
+  if (row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
     res.status(410).json({ error: "R2 upload session expired" }); return;
   }
   const key = row.object_name.slice("r2:".length);
@@ -101,12 +140,17 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     );
     const current = currentResult.rows[0];
     if (!current) { res.status(404).json({ error: "R2 upload session not found" }); return; }
+    if (current.expires_at.getTime() <= Date.now() && ["active","completing"].includes(current.state) && !await status(current.id,userId)) {
+      res.status(410).json({ error: "R2 upload session expired" }); return;
+    }
     if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "title")) {
       const requestedTitle = validateClipDisplayTitle(req.body.title) ?? null;
       if (requestedTitle !== current.display_title) {
         res.status(409).json({ error: "Clip title does not match the authorized upload session" }); return;
       }
     }
+    const accepted = await status(current.id,userId);
+    if (accepted) { res.status(202).json(accepted); return; }
     if (current.state === "published" && current.clip_id) {
       const found = await client.query(`SELECT * FROM clips WHERE id=$1 AND user_id=$2`, [current.clip_id, userId]);
       if (!found.rows[0]) { res.status(410).json({ error: "Published clip was removed" }); return; }
@@ -125,11 +169,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
       part.PartNumber !== index + 1 || !part.ETag)) {
       res.status(400).json({ error: "Every multipart part and ETag is required in order" }); return;
     }
-    const listed = await r2Client().send(new ListPartsCommand({
-      Bucket: config.bucket,
-      Key: key,
-      UploadId: current.multipart_upload_id,
-    })).catch(error => {
+    const listed = await listAllParts(config.bucket,key,current.multipart_upload_id).catch(error => {
       if ((error as { name?: string }).name === "NoSuchUpload" && current.state === "completing") return null;
       throw error;
     });
@@ -168,39 +208,13 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
         head.Metadata?.session !== current.id) {
       throw new ClipUploadError(409, "Completed R2 object failed ownership or size verification");
     }
-    // publishClip probes the completed object and is authoritative for the
-    // >=60-second rule; client duration is intentionally only resumable metadata.
-    const existing = await client.query(
-      `SELECT id,title,content_type,duration_sec,code,created_at,
-              thumbnail_object_name,processing_status
-       FROM clips WHERE user_id=$1
-         AND (object_name=$2 OR upload_object_name=$2)
-       ORDER BY id LIMIT 1`, [userId, current.object_name],
-    );
-    const clip = existing.rows[0] ?? await publishClip({
-        userId,
-        filename: current.object_name,
-        title: current.original_name,
-        displayTitle: current.display_title ?? undefined,
-        contentType: current.content_type,
-        size: Number(current.size_bytes),
-        sha256: "",
-        deferThumbnail: true,
-      }, client, async (transaction, published) => {
-        await transaction.query(
-          `UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW()
-           WHERE id=$1 AND user_id=$3`,
-          [current.id, published.id, userId],
-        );
-      });
-    if (existing.rows[0]) {
-      await client.query(
-        `UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW()
-         WHERE id=$1 AND user_id=$3`,
-        [current.id, clip.id, userId],
-      );
-    }
-    res.json(finalClipReceipt(clip));
+    await client.query("BEGIN");
+    try {
+      await client.query("INSERT INTO clip_media_jobs(session_id) VALUES ($1) ON CONFLICT DO NOTHING", [current.id]);
+      await client.query("UPDATE r2_clip_uploads SET state='completing',updated_at=NOW() WHERE id=$1", [current.id]);
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    res.status(202).json(await status(current.id,userId));
   } finally {
     if (locked) await client.query(
       "SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${row.id}`],
@@ -228,7 +242,7 @@ router.get("/r2/status", async (req, res) => {
   res.json(await r2ConnectionStatus());
 });
 
-router.post("/clips/create", async (req, res): Promise<void> => {
+router.post(["/clips/create","/upload/complete"], async (req, res): Promise<void> => {
   const userId = auth(req, res);
   if (!userId) return;
   const config = r2Config();
@@ -240,12 +254,13 @@ router.post("/clips/create", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/r2/presign", async (req, res): Promise<void> => {
+router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> => {
   const userId = auth(req, res);
   if (!userId) return;
   const config = r2Config();
   if (!config) { res.status(503).json({ error: "R2 storage is not configured" }); return; }
   const action = req.body?.action;
+  res.set("Cache-Control", "no-store");
   try {
     if (action === "initiate") {
       const originalName = typeof req.body?.filename === "string" ? req.body.filename.trim().slice(0, 1024) : "";
@@ -271,6 +286,9 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
       );
       if (existing.rows[0]) {
         const row = existing.rows[0];
+        if (row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
+          res.status(410).json({ error: "R2 upload session expired" }); return;
+        }
         if (Number(row.size_bytes) !== size || row.content_type !== contentType ||
             row.original_name !== originalName || row.display_title !== displayTitle) {
           res.status(409).json({ error: "Upload request identity already belongs to different media" }); return;
@@ -337,7 +355,7 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
     const sessionId = String(req.body?.sessionId ?? "").toLowerCase();
     const row = await uploadRow(sessionId, userId);
     if (!row) { res.status(404).json({ error: "R2 upload session not found" }); return; }
-    if (row.expires_at.getTime() <= Date.now() && row.state !== "published") {
+    if (action !== "abort" && row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
       res.status(410).json({ error: "R2 upload session expired" }); return;
     }
     const key = row.object_name.slice("r2:".length);
@@ -352,6 +370,13 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
       const expectedBytes = partNumber === partCount
         ? Number(row.size_bytes) - (partCount - 1) * PART_BYTES
         : PART_BYTES;
+      // Rolling owner-authorized activity lease. Paused uploads expire after
+      // 48 hours; slow uploads do not expire while parts are still authorized.
+      const renewed = await pool.query(
+        `UPDATE r2_clip_uploads SET expires_at=NOW()+INTERVAL '${SESSION_TTL_HOURS} hours',updated_at=NOW()
+         WHERE id=$1 AND user_id=$2 AND state='active' AND expires_at>NOW() RETURNING id`, [row.id, userId],
+      );
+      if (!renewed.rowCount) { res.status(409).json({ error: "R2 upload is no longer active" }); return; }
       const url = await getSignedUrl(r2Client(), new UploadPartCommand({
         Bucket: config.bucket,
         Key: key,
@@ -374,9 +399,9 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
         return;
       }
       if (row.state === "aborted") { res.json({ state: "aborted", parts: [] }); return; }
-      const listed = await r2Client().send(new ListPartsCommand({
-        Bucket: config.bucket, Key: key, UploadId: row.multipart_upload_id,
-      })).catch(error => {
+      const accepted = await status(row.id,userId);
+      if (accepted) { res.json(accepted); return; }
+      const listed = await listAllParts(config.bucket,key,row.multipart_upload_id).catch(error => {
         if ((error as { name?: string }).name === "NoSuchUpload") return null;
         throw error;
       });
@@ -392,17 +417,38 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
     }
 
     if (action === "abort") {
-      if (row.state === "published") { res.status(409).json({ error: "Clip is already published" }); return; }
-      await r2Client().send(new AbortMultipartUploadCommand({
-        Bucket: config.bucket, Key: key, UploadId: row.multipart_upload_id,
-      })).catch(error => {
-        if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
-      });
-      await pool.query(
-        `UPDATE r2_clip_uploads SET state='aborted',updated_at=NOW()
-         WHERE id=$1 AND user_id=$2 AND state<>'published'`, [row.id, userId],
-      );
-      res.status(204).end();
+      const client = await pool.connect();
+      try {
+        // Serialize with completion so abort cannot mark a just-published clip
+        // aborted, nor delete its source while mandatory verification is running.
+        await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${row.id}`]);
+        const current = await uploadRow(row.id, userId);
+        if (!current || !["active","completing"].includes(current.state) || await status(row.id,userId)) { res.status(409).json({ error: "Upload is already accepted" }); return; }
+        await r2Client().send(new AbortMultipartUploadCommand({
+          Bucket: config.bucket, Key: key, UploadId: row.multipart_upload_id,
+        })).catch(error => {
+          if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
+        });
+        await client.query("BEGIN");
+        await client.query(
+          `UPDATE r2_clip_uploads SET state='aborted',updated_at=NOW()
+           WHERE id=$1 AND user_id=$2 AND state<>'published'`, [row.id, userId],
+        );
+        // Complete may have succeeded before verification/its acknowledgement
+        // failed. Durable cleanup handles that object as well as absent objects.
+        await client.query(
+          `INSERT INTO clip_storage_cleanup (object_name,clip_id) VALUES ($1,0)
+           ON CONFLICT (object_name) DO UPDATE SET retry_at=NOW()`, [row.object_name],
+        );
+        await client.query("COMMIT");
+        res.status(204).end();
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        await client.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${row.id}`]).catch(() => {});
+        client.release();
+      }
       return;
     }
 

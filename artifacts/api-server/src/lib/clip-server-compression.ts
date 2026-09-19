@@ -98,12 +98,12 @@ export async function transcodeClipFile(
     "-hide_banner", "-nostdin", "-v", "error", "-xerror",
     "-max_alloc", String(256 * 1024 * 1024),
     // Uploaded media must not turn ffmpeg into an outbound HTTP/SSRF client.
-    "-protocol_whitelist", "file,pipe", "-threads", "2", "-i", sourcePath,
+    "-protocol_whitelist", "file,pipe", "-threads", "1", "-i", sourcePath,
     ...(kind === "video" ? [
       "-map", "0:v:0", "-map", "0:a?",
       "-vf", "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
       "-filter_threads", "1", "-c:v", "libx264", "-preset", "fast",
-      "-crf", "28", "-pix_fmt", "yuv420p", "-threads", "2",
+      "-crf", "28", "-pix_fmt", "yuv420p", "-threads", "1",
     ] : ["-map", "0:a", "-vn"]),
     "-c:a", "aac", "-b:a", "128k",
     "-map_metadata", "-1", "-map_chapters", "-1",
@@ -180,7 +180,7 @@ export function createStoredClipCompressor(deps: ClipCompressionDependencies) {
     const extension = kind === "video" ? ".mp4" : ".m4a";
     const contentType = kind === "video" ? "video/mp4" : "audio/mp4";
     if (input.outputFilename !== undefined && (
-      !/^(?:r2:clips\/derived\/)?clip_(?:compressed_)?[a-f0-9]{32}\.(mp4|m4a)$/.test(input.outputFilename) ||
+      !/^(?:r2:clips\/derived\/)?clip_(?:compressed_)?[a-f0-9]{32}(?:_720p)?\.(mp4|m4a)$/.test(input.outputFilename) ||
       !input.outputFilename.endsWith(extension) ||
       input.outputFilename === input.filename
     )) throw new Error("Invalid reserved clip output filename");
@@ -220,7 +220,7 @@ export function createStoredClipCompressor(deps: ClipCompressionDependencies) {
         // larger alternative or a synthetic URL when compression is ineffective.
         if (!input.force && output.size >= original.size) return null;
         // Follow the existing clip object-name contract used by reconciliation.
-        filename = input.outputFilename ?? `clip_${randomUUID().replaceAll("-", "")}${extension}`;
+        filename = input.outputFilename ?? `clip_${randomUUID().replaceAll("-", "")}${kind === "video" ? "_720p" : ""}${extension}`;
         target = deps.file(filename);
         uploadAttempted = true;
         let outputStream: ReturnType<File["createWriteStream"]>;

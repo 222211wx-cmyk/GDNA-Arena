@@ -13,6 +13,7 @@ export type ClipDatabaseClient = Awaited<ReturnType<typeof connectDatabase>>;
 export const CLIP_COMPRESSION_THRESHOLD = 0;
 
 export interface PublishClipInput {
+  signal?: AbortSignal;
   userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
   /** Explicit publication name. `title` remains the original upload filename. */
   displayTitle?: string;
@@ -49,7 +50,7 @@ export async function publishClip(
   const [metadata] = await clipFile(input.filename).getMetadata();
   if (Number(metadata.size) !== input.size) throw new ClipUploadError(409, "Stored media size does not match");
   let verifiedSeconds: number;
-  try { verifiedSeconds = await verifiedDuration(clipFile(input.filename), "media"); }
+  try { verifiedSeconds = await verifiedDuration(clipFile(input.filename), "media", input.signal); }
   catch (error) {
     if (error instanceof ClipProbeBusyError) throw new ClipUploadError(503, "Media verification is busy; retry shortly");
     throw new ClipUploadError(400, "تعذّر التحقق من الملف الصوتي أو الفيديو — الملف غير صالح أو غير مدعوم");

@@ -1,24 +1,18 @@
 import { Router, type IRouter } from "express";
-import crypto from "crypto";
-import multer from "multer";
 import { pool } from "@workspace/db";
-import type { File as GcsFile } from "@google-cloud/storage";
 import { logger } from "../lib/logger";
 import { createClipsFeedHandler } from "./clips-feed.js";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
-import { createClipsUploadsRouter } from "./clips-uploads.js";
 import { createClipPlaybackRouter, publicAvatarUrl } from "./clip-playback.js";
 import { signClipPlayback } from "../lib/clip-playback.js";
-import { ClipUploads } from "../lib/clip-uploads.js";
-import { gcsUploadStore, clipUploadPublisher } from "../lib/clip-uploads-gcs.js";
 import { clipByteRange } from "../lib/clip-byte-range.js";
 import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
-import { clipCompressionLock } from "../jobs/clip-compression.js";
-import { createSimpleClipUploadRouter } from "./clip-simple-upload.js";
+const clipCompressionLock = (id: number) => `clip-compression:${id}`;
 import {
-  CLIP_EXT, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, resolveClipUploadType, clipDownloadExtension,
+  clipDownloadExtension, MAX_NEW_CLIP_BYTES,
 } from "../lib/clip-upload-protocol.js";
 import { validateContent } from "../lib/moderate.js";
+import { retiredClipUploadsRouter } from "./clip-upload-retired.js";
 
 // ─── CLIPS — كليبسز (Reels-style stories and original declarations) ──────────
 // Publishing rules:
@@ -28,7 +22,6 @@ import { validateContent } from "../lib/moderate.js";
 //    registered full-duration visuals; they are declarations, not legal findings.
 //  • Views earn coins via monetization_settings (content_type 'clip').
 import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
-import { publishClip, ClipUploadError } from "../lib/clip-publish.js";
 import { CLIP_THUMBNAIL_MAX_ATTEMPTS } from "../jobs/clip-thumbnail-retry.js";
 
 const router: IRouter = Router();
@@ -53,24 +46,7 @@ router.use(createClipPlaybackRouter({
   sign: signClipPlayback,
   log: error => logger.warn({ err: error }, "[clips] playback metadata unavailable"),
 }));
-router.use(createClipsUploadsRouter(new ClipUploads(gcsUploadStore, clipUploadPublisher)));
-router.use(createSimpleClipUploadRouter({
-  file: clipFile,
-  publish: input => publishClip({ ...input, deferThumbnail: true }),
-  log: (err, message) => logger.warn({ err }, `[clips] ${message}`),
-  async cleanup(name) {
-    // Preserve a committed original when a COMMIT acknowledgement was lost.
-    const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1 OR upload_object_name=$1 OR processing_output_object=$1`, [name]);
-    if (rows.length) return;
-    // Persist a delayed sweep before best-effort deletion. This also catches an
-    // SDK request that finishes late after the aborted stream has been destroyed.
-    await requirePool().query(
-      `INSERT INTO clip_storage_cleanup (object_name, clip_id, retry_at)
-       VALUES ($1, 0, NOW() + INTERVAL '5 minutes') ON CONFLICT (object_name) DO NOTHING`, [name],
-    );
-    await clipFile(name).delete({ ignoreNotFound: true });
-  },
-}));
+router.use(retiredClipUploadsRouter());
 
 function requirePool() {
   if (!pool) throw new Error("Database not configured");
@@ -192,49 +168,6 @@ export async function ensureClipsTables(): Promise<void> {
   }
 }
 
-// Multer engine: stream straight to GCS while computing sha256 — no local disk,
-// no memory buffering; the fingerprint is ready the moment the upload finishes.
-const clipStorage: import("multer").StorageEngine = {
-  _handleFile(_req, file, cb) {
-    const normalizedType = resolveClipUploadType(file.mimetype, file.originalname);
-    if (!normalizedType) { cb(new Error("UNSUPPORTED_TYPE")); return; }
-    file.mimetype = normalizedType;
-    const filename = `clip_${crypto.randomUUID().replace(/-/g, "")}${CLIP_EXT[file.mimetype] ?? ".bin"}`;
-    let gcs: GcsFile;
-    try { gcs = clipFile(filename); } catch (e) { cb(e as Error); return; }
-    const hash = crypto.createHash("sha256");
-    let size = 0;
-    let done = false; // once-only completion — never call cb twice
-    const fail = (e: Error) => {
-      if (done) return;
-      done = true;
-      file.stream.unpipe(ws);
-      file.stream.resume(); // drain remaining input so the request can finish
-      ws.destroy();
-      // Delete any partial object directly — multer only calls _removeFile when
-      // a filename was reported, which never happens on the failure path.
-      gcs.delete({ ignoreNotFound: true }).catch(() => {});
-      cb(e);
-    };
-    file.stream.on("data", (chunk: Buffer) => { hash.update(chunk); size += chunk.length; });
-    const ws = gcs.createWriteStream({ resumable: false, metadata: { contentType: file.mimetype } });
-    ws.on("error", fail);
-    ws.on("finish", () => {
-      if (done) return;
-      done = true;
-      cb(null, { filename, size, sha256: hash.digest("hex") } as any);
-    });
-    file.stream.on("error", fail);
-    file.stream.on("aborted", () => fail(new Error("UPLOAD_ABORTED")));
-    file.stream.pipe(ws);
-  },
-  _removeFile(_req, file, cb) {
-    if (!file.filename) { cb(null); return; }
-    clipFile(file.filename).delete({ ignoreNotFound: true }).then(() => cb(null), (e) => cb(e));
-  },
-};
-const upload = multer({ storage: clipStorage, limits: { files: 1, fileSize: MAX_NEW_CLIP_BYTES } });
-
 function requireAuth(req: any, res: any): number | null {
   const userId = (req.session as any)?.userId;
   if (!userId) { res.status(401).json({ error: "يجب تسجيل الدخول" }); return null; }
@@ -303,45 +236,6 @@ router.get("/clips/feed", createClipsFeedHandler({
   },
   logFailure: err => logger.error({ err }, "[clips] feed failed"),
 }));
-
-// ─── POST /clips — compatibility publication (actual media ≥1min, no maximum) ───
-router.post("/clips", (req, res): void => {
-  const userId = requireAuth(req, res);
-  if (!userId) return;
-  upload.single("video")(req, res, async (err: unknown) => {
-    const f = req.file as (Express.Multer.File & { sha256?: string }) | undefined;
-    const cleanup = async () => {
-      if (!f?.filename) return;
-      // Also safe after a lost COMMIT acknowledgement: never remove a referenced object.
-       const { rows } = await requirePool().query(`SELECT id FROM clips WHERE object_name=$1 OR upload_object_name=$1 OR processing_output_object=$1`, [f.filename]);
-      if (!rows.length) await clipFile(f.filename).delete({ ignoreNotFound: true });
-    };
-    try {
-      if (err) {
-        const msg = (err as Error).message === "UNSUPPORTED_TYPE"
-          ? "صيغة الصوت أو الفيديو غير مدعومة"
-          : (err as { code?: string }).code === "LIMIT_FILE_SIZE" ? NEW_CLIP_TOO_LARGE : "فشل الرفع";
-        res.status((err as { code?: string }).code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error: msg }); return;
-      }
-      if (!f?.filename || !f.sha256) { res.status(400).json({ error: "الفيديو مطلوب" }); return; }
-      const title = f.originalname;
-      const clip = await publishClip({
-        userId, filename: f.filename, title, contentType: f.mimetype,
-        size: f.size, sha256: f.sha256,
-        purpose: req.body?.purpose, originalReference: req.body?.originalReference,
-        rightsHolderName: req.body?.rightsHolderName, rightsHolderRole: req.body?.rightsHolderRole,
-        isOriginalFootage: req.body?.isOriginalFootage,
-      });
-      res.json({ clip });
-    } catch (e) {
-      await cleanup().catch(error => logger.warn({ err: error }, "[clips] upload cleanup deferred"));
-      logger.error({ err: e }, "[clips] publish failed");
-      res.status(e instanceof ClipUploadError ? e.status : 500).json({
-        error: e instanceof ClipUploadError ? e.message : "Failed",
-      });
-    }
-  });
-});
 
 // ─── PATCH /clips/:id — owner may retitle their own clip ──────────────────────
 router.patch("/clips/:id", async (req, res): Promise<void> => {

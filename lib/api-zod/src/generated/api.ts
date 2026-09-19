@@ -8,6 +8,76 @@
 import * as zod from 'zod';
 
 
+/**
+ * Owner-authorized direct R2 multipart upload. 5 MiB parts, maximum 10 GiB (2048 parts). No clip bytes accepted.
+ */
+export const presignClipUploadBodyTitleMax = 120;
+
+export const presignClipUploadBodySizeMax = 10737418240;
+
+export const presignClipUploadBodyDurationSecMin = 0;
+
+export const presignClipUploadBodyPartNumberMax = 2048;
+
+
+
+export const PresignClipUploadBody = zod.object({
+  "action": zod.enum(['initiate', 'part', 'inspect', 'abort', 'complete']),
+  "expectedOwnerId": zod.number().int(),
+  "requestId": zod.string().uuid().optional(),
+  "sessionId": zod.string().uuid().optional(),
+  "filename": zod.string().optional(),
+  "title": zod.string().min(1).max(presignClipUploadBodyTitleMax).optional(),
+  "contentType": zod.string().optional(),
+  "size": zod.number().int().min(1).max(presignClipUploadBodySizeMax).optional(),
+  "durationSec": zod.number().min(presignClipUploadBodyDurationSecMin).nullish(),
+  "partNumber": zod.number().int().min(1).max(presignClipUploadBodyPartNumberMax).optional()
+})
+
+export const PresignClipUploadResponse = zod.unknown()
+
+
+/**
+ * Complete and HEAD-validate R2 multipart object; transactionally enqueue verification. Does not probe or encode media.
+ */
+export const completeClipUploadBodyPartsItemPartNumberMax = 2048;
+
+export const completeClipUploadBodyPartsMax = 2048;
+
+
+
+export const CompleteClipUploadBody = zod.object({
+  "sessionId": zod.string().uuid(),
+  "expectedOwnerId": zod.number().int(),
+  "title": zod.string().optional(),
+  "parts": zod.array(zod.object({
+  "partNumber": zod.number().int().min(1).max(completeClipUploadBodyPartsItemPartNumberMax),
+  "etag": zod.string()
+})).min(1).max(completeClipUploadBodyPartsMax)
+})
+
+export const CompleteClipUploadResponse = zod.object({
+  "sessionId": zod.string().uuid(),
+  "state": zod.enum(['queued', 'processing', 'ready', 'failed']),
+  "statusUrl": zod.string(),
+  "receipt": zod.record(zod.string(), zod.unknown()).optional(),
+  "error": zod.string().optional()
+})
+
+
+export const GetClipUploadStatusParams = zod.object({
+  "sessionId": zod.coerce.string().uuid()
+})
+
+export const GetClipUploadStatusResponse = zod.object({
+  "sessionId": zod.string().uuid(),
+  "state": zod.enum(['queued', 'processing', 'ready', 'failed']),
+  "statusUrl": zod.string(),
+  "receipt": zod.record(zod.string(), zod.unknown()).optional(),
+  "error": zod.string().optional()
+})
+
+
 export const CitizenMetadataResponse = zod.object({
   "cities": zod.array(zod.string()).optional(),
   "interests": zod.array(zod.string()).optional()

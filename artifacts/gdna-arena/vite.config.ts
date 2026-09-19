@@ -5,6 +5,7 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { buildSync } from "esbuild";
 
 // PORT only needed for dev server — build doesn't use it
 const port = Number(process.env.PORT || 3000);
@@ -13,7 +14,12 @@ const port = Number(process.env.PORT || 3000);
 const basePath = process.env.BASE_PATH || "/";
 
 function pwaServiceWorker() {
-  const pushWorkerSource = readFileSync(path.resolve(import.meta.dirname, "src/service-worker.js"), "utf8");
+  const uploadWorkerSource = buildSync({
+    entryPoints: [path.resolve(import.meta.dirname, "src/components/clips/uploadWorker.ts")],
+    bundle: true, write: false, format: "iife", platform: "browser", target: "es2022",
+    define: { "import.meta.env.BASE_URL": JSON.stringify(basePath.endsWith("/") ? basePath : `${basePath}/`) },
+  }).outputFiles[0].text;
+  const pushWorkerSource = readFileSync(path.resolve(import.meta.dirname, "src/service-worker.js"), "utf8") + "\n" + uploadWorkerSource;
   return {
     name: "gdna-safe-pwa-service-worker",
     configureServer(server: { middlewares: { use: (route: string, handler: (_req: unknown, res: { setHeader: (name: string, value: string) => void; end: (body: string) => void }) => void) => void } }) {
@@ -21,7 +27,12 @@ function pwaServiceWorker() {
       server.middlewares.use(workerPath, (_req, res) => {
         res.setHeader("Content-Type", "text/javascript");
         res.setHeader("Service-Worker-Allowed", basePath);
-        res.end(pushWorkerSource);
+        res.setHeader("Cache-Control", "no-store");
+        // Development uses the same upload/push worker, but deliberately omits
+        // production caching so Vite/HMR requests can never become stale.
+        res.end(`self.addEventListener("install", event => event.waitUntil(self.skipWaiting()));
+self.addEventListener("activate", event => event.waitUntil(self.clients.claim()));
+${pushWorkerSource}`);
       });
     },
     generateBundle(_: unknown, bundle: Record<string, { fileName: string; type: string }>) {

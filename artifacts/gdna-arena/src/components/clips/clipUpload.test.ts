@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_CLIP_BYTES,
-  uploadClip,
-  uploadPreparedClip,
+  uploadForeground as uploadClip,
   UPLOAD_CHUNK_BYTES,
 } from "./clipUpload";
 
@@ -50,7 +49,7 @@ function mockR2(receipt = {
         ? { state: "active", parts: [] }
         : body.action === "part"
           ? { url: `https://r2.invalid/upload?part=${body.partNumber}`, partNumber: body.partNumber }
-          : String(url).endsWith("api/clips/create")
+          : String(url).endsWith("api/upload/complete")
             ? receipt
             : receipt;
     return Response.json(response);
@@ -93,7 +92,7 @@ describe("direct R2 multipart clip upload", () => {
       ],
     });
     expect(String(calls.filter(([url]) => !String(url).startsWith("https://r2.invalid/")).at(-1)?.[0]))
-      .toContain("api/clips/create");
+      .toContain("api/upload/complete");
     const puts = calls.filter(([url]) => String(url).startsWith("https://r2.invalid/"));
     expect(puts).toHaveLength(2);
     expect(puts.every(([, init]) => init?.method === "PUT")).toBe(true);
@@ -102,7 +101,7 @@ describe("direct R2 multipart clip upload", () => {
     expect(progress.at(-1)).toBe(100);
   });
 
-  it("rejects over 2 GiB and pre-aborted calls before any request", async () => {
+  it("rejects over 10 GiB and pre-aborted calls before any request", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const tooLarge = new File(["x"], "large.mp4", { type: "video/mp4" });
@@ -112,7 +111,7 @@ describe("direct R2 multipart clip upload", () => {
       { title: tooLarge.name, contentType: tooLarge.type, durationSec: 61 },
       new AbortController().signal,
       vi.fn(),
-    )).rejects.toThrow("2GB");
+    )).rejects.toThrow("10 GiB");
 
     const controller = new AbortController();
     controller.abort(new DOMException("cancelled", "AbortError"));
@@ -155,60 +154,6 @@ describe("direct R2 multipart clip upload", () => {
     ]);
   });
 
-  it("uploads a prepared file while retaining the original filename metadata", async () => {
-    const calls = mockR2({
-      ok: true,
-      clip: { id: 10, code: "HELX-654321", name: "camera", url: null },
-    });
-    const originalFile = new File(["original"], "camera-original.mov", { type: "video/quicktime" });
-    const uploadFile = new File(["prepared"], "camera-original-480p.webm", { type: "video/webm" });
-
-    await uploadPreparedClip({
-      originalFile,
-      uploadFile,
-      outputDuration: 67.2,
-    }, new AbortController().signal, vi.fn());
-
-    const initiated = JSON.parse(String(calls[0][1]?.body));
-    expect(initiated).toMatchObject({
-      filename: "camera-original.mov",
-      contentType: "video/webm",
-      durationSec: 67.2,
-      size: uploadFile.size,
-    });
-    expect(initiated).not.toHaveProperty("title");
-  });
-
-  it("keeps prepared display title separate from the actual source filename", async () => {
-    const calls = mockR2();
-    const originalFile = new File(["original"], "لقطة أصلية.MOV", { type: "video/quicktime" });
-    const uploadFile = new File(["prepared"], "prepared.webm", { type: "video/webm" });
-
-    await uploadPreparedClip({
-      originalFile,
-      uploadFile,
-      outputDuration: 70,
-      title: "  رحلتي الأولى  ",
-      originalFilename: originalFile.name,
-    }, new AbortController().signal, vi.fn());
-
-    const initiated = JSON.parse(String(calls[0][1]?.body));
-    expect(initiated).toMatchObject({
-      filename: "لقطة أصلية.MOV",
-      title: "  رحلتي الأولى  ",
-      contentType: "video/webm",
-      size: uploadFile.size,
-    });
-    const finalized = JSON.parse(String(calls
-      .filter(([url]) => String(url).endsWith("api/clips/create"))
-      .at(-1)?.[1]?.body));
-    expect(finalized).toMatchObject({
-      sessionId: expect.any(String),
-      title: "  رحلتي الأولى  ",
-    });
-    expect(finalized).not.toHaveProperty("url");
-  });
-
   it("accepts unknown client duration and surfaces metadata-only finalization errors", async () => {
     const calls = mockR2();
     const fetchMock = vi.mocked(fetch);
@@ -242,6 +187,6 @@ describe("direct R2 multipart clip upload", () => {
 
     const initiated = JSON.parse(String(calls[0][1]?.body));
     expect(initiated.durationSec).toBeNull();
-    expect(String(calls.at(-1)?.[0])).toContain("api/clips/create");
+    expect(String(calls.at(-1)?.[0])).toContain("api/upload/complete");
   });
 });

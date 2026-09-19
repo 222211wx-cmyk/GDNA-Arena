@@ -3,11 +3,11 @@ name: Clips upload transport decisions
 description: Owner-directed Clips compression and resumable upload policy, plus integrity constraints
 ---
 
-Keep the default citizen Clips upload lightweight. Optional, bounded client compression is now allowed; do not make whole-file hashing, full media decoding, or a large WASM download mandatory.
+Never compress citizen Clips in the browser. Upload the original directly to R2 in resumable parts and let the server process it.
 
-**Why:** After rejecting browser compression on 2026-09-18 because of Android hangs, the owner explicitly requested client compression again on 2026-09-19, then specifically requested ffmpeg.wasm. This supersedes the prohibition and the interim MediaRecorder approach; browser encoding can still increase total waiting time.
+**Why:** On 2026-09-19 the owner reported severe mobile stalls and explicitly reversed the earlier same-day request for ffmpeg.wasm. This latest instruction removes optional browser encoding too, not just automatic compression.
 
-**How to apply:** Lazy-load optional compression, retain the selected original, label preparation separately from transfer, and reject larger or unverifiable outputs without silently uploading the original. Keep cancellation, bounded metadata waits, foreground-only capture, resumable chunks, and server-side duration verification. Never promise a universal sub-minute transfer from duration alone.
+**How to apply:** Do not reintroduce FFmpeg WASM, MediaRecorder recompression, large encoder downloads, or a “compress before uploading” option. Keep metadata inspection bounded and lightweight. Measure transfer time independently of server processing; 137 MB under a minute requires sufficient real uplink bandwidth.
 
 Treat browser duration as an untrusted hint, not a prerequisite for an enabled Publish button.
 
@@ -15,35 +15,35 @@ Treat browser duration as an untrusted hint, not a prerequisite for an enabled P
 
 **How to apply:** Keep selection actionable; validate visibly on click and let unknown metadata reach authoritative server probing. Cancellation must cover pending metadata as well as preparation and transfer.
 
-Explicitly bundle the FFmpeg class worker rather than relying on its default relative URL under Vite dependency optimization.
+Browser-close continuation is best effort, not a universal browser guarantee.
 
-**Why:** The default worker resolved beside the optimized dependency instead of the package and returned 404; UI compression stalled until its loading timeout.
+**Why:** The owner requested Background Sync after losing a long transfer, but mobile browsers can terminate workers and do not all support Background Sync.
 
-**How to apply:** Keep worker/core/WASM same-origin and base-path-aware. Verify the actual worker endpoint and a real browser encode, not just TypeScript or successful imports.
+**How to apply:** Persist the original file and upload identity when storage permits; reconcile acknowledged parts on resume. Distinguish background availability from durable reopen-and-resume. If local storage fails, explain the foreground-only limitation rather than claiming saved recovery.
 
-Validate packaged-WASM ffprobe output, not its return code alone.
+Always retain a chosen audio/video file and show its name/size immediately. The latest upload specification allows files through 10 GiB with duration at least 60 seconds; apply no upper duration cap.
 
-**Why:** The real FFmpeg core 0.12.10 produced complete, valid JSON with a `-1` return value. Treating that value as a definitive failure blocked compression before encoding, despite a valid source.
+**Why:** The owner's service-separation request on 2026-09-19 explicitly requires the same direct-upload flow for 137 MB and 10 GB files, superseding the earlier 2 GiB cap. The intended interaction remains file → duration → generated name/code, without the old 25 MiB restriction or short-audio exception.
 
-**How to apply:** Require a fresh non-empty probe report and strictly validate its streams/duration. Missing or invalid reports still fail; keep the exit status for diagnostics. Verify this behavior again on core upgrades.
+**How to apply:** No publication-type/rights/footage declarations. Enforce the 10 GiB file maximum consistently, preserve selection on failure/cancellation, enforce duration again on the server, and show “خاص دقيقة الفوق” for short files. Do not remove unrelated chat attachment limits.
 
-Always retain a chosen audio/video file and show its name/size immediately. The latest upload specification allows files through 2 GiB with duration at least 60 seconds; apply no upper duration cap.
-
-**Why:** The owner's later architecture specification on 2026-09-18 explicitly replaced unrestricted size with a 2 GB maximum and requested 5 MB Tus chunks. The intended interaction remains file → duration → generated name/code, without the old 25 MiB restriction or short-audio exception.
-
-**How to apply:** No publication-type/rights/footage declarations. Enforce only the requested 2 GiB file maximum, preserve selection on failure/cancellation, enforce duration again on the server, and show “خاص دقيقة الفوق” for short files.
-
-All new clips still undergo server transcoding; video targets at most 720p, while audio uses AAC. Optional client compression does not replace server validation.
+All new clips still undergo server transcoding; video targets at most 720p, while audio uses AAC.
 
 **Why:** The later architecture specification superseded the earlier above-100-MiB-only rule. Transcoding does not reduce the original upload transfer, and no transfer can progress at zero bandwidth.
 
 **How to apply:** Keep large transfers resumable and processing durable with bounded concurrency. Do not promise that server compression makes uploading the original faster, that audio has a video resolution, or that an Autoscale instance will stay alive for a long background encode.
 
+Keep new-upload HTTP handling separate from media probing and encoding, and distinguish process separation from independently scaled infrastructure.
+
+**Why:** The owner explicitly requested a lightweight site and a separate queued media worker. Replit documentation confirms that services within one project share its deployment container; another process in that project is not independent compute or evidence of billion-upload capacity.
+
+**How to apply:** Queue heavy work durably after R2 completion and return an accepted/processing state, not a false publication receipt. Make worker execution separately deployable, preserve lightweight homepage/search loading, and disclose when dedicated worker infrastructure and load testing are still required.
+
 Scope upload retry identities to the exact selected File object unless full content identity is safely established.
 
 **Why:** Matching names, sizes, modification dates and a small beginning/end sample cannot distinguish files whose middle bytes differ. Reusing an upload offset across those files can splice unrelated bytes.
 
-**How to apply:** Keep same-selection network recovery and retries without claiming persistence across reloads. Do not substitute partial fingerprints for full-file identity in durable resume logic.
+**How to apply:** Resume from a persisted original Blob or otherwise establish full content identity. Do not substitute name/size/date or partial fingerprints for full-file identity in durable resume logic. When neither is available, a newly selected file needs a new upload identity.
 
 If maintaining legacy Tus APIs, parallelize independent resumable parts, not concurrent writes at different offsets of one Tus upload.
 

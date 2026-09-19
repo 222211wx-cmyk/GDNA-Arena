@@ -1,9 +1,9 @@
 ---
 name: Browser media verification
-description: Why successful uploads do not prove that browser-compressed media retains its audio and timing
+description: Output verification, large-upload control-plane checks, and honest upload-speed measurements
 ---
 
-Check the actual encoded output when changing browser media preparation; upload success and a playable container are not sufficient evidence.
+Check the actual encoded output when changing media processing; upload success and a playable container are not sufficient evidence.
 
 **Why:** Native recording can accept a video while omitting an audio track captured before playback starts. Browser audio routing can also change recorded timing. Generic MP4 support does not guarantee H.264/AAC: workspace Chromium produced VP9/Opus in an MP4 container.
 
@@ -20,3 +20,15 @@ Chromium CDP can omit Content-Length for binary uploads; a missing header is not
 **Why:** Direct R2 uploads completed and published successfully while a QA script falsely failed its byte-total assertion because requestWillBeSent omitted that header.
 
 **How to apply:** Use server-verified object sizes or content hashes for byte integrity, and sanitized host/method observations for routing. Treat unavailable client byte counts as unknown, and continue independent playback checks rather than discarding the fixture on an instrumentation-only mismatch.
+
+Verify a new queued processing path against the real compressor, not only mocked job dependencies.
+
+**Why:** Worker boundary tests passed while a reserved output identity violated the compressor's existing validation contract, causing repeated retries before encoding began.
+
+**How to apply:** Exercise one real queued publication through output verification and playback. Once transport passes, use a targeted processing check for subsequent encoder fixes, and allow legitimate retry backoff without mistaking it for an active encode.
+
+Validate maximum-size uploads through their metadata path as well as their binary-transfer path.
+
+**Why:** A valid large-file multipart session can still fail at completion when its part manifest exceeds the HTTP framework's default JSON-body limit, even though every media byte goes directly to R2.
+
+**How to apply:** Test a maximum-part-count completion manifest through the actual HTTP parser. Scope any larger metadata allowance to upload-control routes; preserve unrelated request-size protections.
