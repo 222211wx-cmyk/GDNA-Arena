@@ -56,13 +56,19 @@ afterEach(() => {
 });
 
 describe("optional compress-before-upload", () => {
+  it("describes compression as optional ffmpeg.wasm work, not realtime", () => {
+    expect(text("compress-note")).toContain("ffmpeg.wasm");
+    expect(text("compress-note")).toContain("اختياري");
+    expect(text("compress-note")).not.toContain("بالوقت الحقيقي");
+  });
+
   it("defaults OFF and uploads the original file when unchecked", async () => {
     upload.mockResolvedValueOnce({ name: "clip", code: "HELX-000001" });
     const file = media("v.mp4", "video/mp4", 10 * 1024 * 1024);
     select(file);
     await vi.waitFor(() => expect(submit().disabled).toBe(false));
     expect(compress().checked).toBe(false);
-    expect(compress().disabled).toBe(false);
+    await vi.waitFor(() => expect(compress().disabled).toBe(false));
     form().requestSubmit();
     await vi.waitFor(() => expect(upload).toHaveBeenCalledOnce());
     expect(upload.mock.calls[0][0]).toBe(file);
@@ -77,6 +83,7 @@ describe("optional compress-before-upload", () => {
     const file = media("v.mp4", "video/mp4", 10 * 1024 * 1024);
     select(file);
     await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    await vi.waitFor(() => expect(compress().disabled).toBe(false));
     displayName().value = "فيديو مضغوط";
     displayName().dispatchEvent(new Event("input", { bubbles: true }));
     compress().checked = true;
@@ -98,6 +105,7 @@ describe("optional compress-before-upload", () => {
     const file = media("v.mp4", "video/mp4", 10 * 1024 * 1024);
     select(file);
     await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    await vi.waitFor(() => expect(compress().disabled).toBe(false));
     compress().checked = true;
     form().requestSubmit();
     await vi.waitFor(() => expect(text("upload-error")).toContain("codec unsupported"));

@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import {
   AbortMultipartUploadCommand,
@@ -75,10 +75,169 @@ async function uploadRow(id: string, userId: number): Promise<UploadRow | null> 
   return rows[0] ?? null;
 }
 
+type R2Config = NonNullable<ReturnType<typeof r2Config>>;
+
+async function completeUpload(req: Request, res: Response, userId: number, config: R2Config): Promise<void> {
+  if (["objectUrl", "publicUrl", "url"].some(field =>
+    Object.prototype.hasOwnProperty.call(req.body ?? {}, field))) {
+    throw new ClipUploadError(400, "Object URLs are not accepted; the upload session identifies the R2 object");
+  }
+  const sessionId = String(req.body?.sessionId ?? "").toLowerCase();
+  const row = await uploadRow(sessionId, userId);
+  if (!row) { res.status(404).json({ error: "R2 upload session not found" }); return; }
+  if (row.expires_at.getTime() <= Date.now() && row.state !== "published") {
+    res.status(410).json({ error: "R2 upload session expired" }); return;
+  }
+  const key = row.object_name.slice("r2:".length);
+  const client = await pool.connect();
+  let locked = false;
+  try {
+    await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${row.id}`]);
+    locked = true;
+    const currentResult = await client.query<UploadRow>(
+      `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
+              size_bytes,duration_sec,state,clip_id,expires_at
+       FROM r2_clip_uploads WHERE id=$1 AND user_id=$2`, [row.id, userId],
+    );
+    const current = currentResult.rows[0];
+    if (!current) { res.status(404).json({ error: "R2 upload session not found" }); return; }
+    if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "title")) {
+      const requestedTitle = validateClipDisplayTitle(req.body.title) ?? null;
+      if (requestedTitle !== current.display_title) {
+        res.status(409).json({ error: "Clip title does not match the authorized upload session" }); return;
+      }
+    }
+    if (current.state === "published" && current.clip_id) {
+      const found = await client.query(`SELECT * FROM clips WHERE id=$1 AND user_id=$2`, [current.clip_id, userId]);
+      if (!found.rows[0]) { res.status(410).json({ error: "Published clip was removed" }); return; }
+      res.json(finalClipReceipt(found.rows[0])); return;
+    }
+    if (current.state !== "active" && current.state !== "completing") {
+      res.status(409).json({ error: "R2 upload cannot be completed" }); return;
+    }
+    const expectedParts = Math.ceil(Number(current.size_bytes) / PART_BYTES);
+    const rawParts = Array.isArray(req.body?.parts) ? req.body.parts : [];
+    const parts: { PartNumber: number | null; ETag: string | null }[] = rawParts.map((part: any) => ({
+      PartNumber: integer(part?.partNumber),
+      ETag: safeEtag(part?.etag),
+    }));
+    if (parts.length !== expectedParts || parts.some((part, index) =>
+      part.PartNumber !== index + 1 || !part.ETag)) {
+      res.status(400).json({ error: "Every multipart part and ETag is required in order" }); return;
+    }
+    const listed = await r2Client().send(new ListPartsCommand({
+      Bucket: config.bucket,
+      Key: key,
+      UploadId: current.multipart_upload_id,
+    })).catch(error => {
+      if ((error as { name?: string }).name === "NoSuchUpload" && current.state === "completing") return null;
+      throw error;
+    });
+    if (listed) {
+      const stored = listed.Parts ?? [];
+      const mismatch = stored.length !== expectedParts || stored.some((part, index) => {
+        const expectedSize = index === expectedParts - 1
+          ? Number(current.size_bytes) - index * PART_BYTES
+          : PART_BYTES;
+        return part.PartNumber !== index + 1 || Number(part.Size) !== expectedSize ||
+          part.ETag !== parts[index]?.ETag;
+      });
+      if (mismatch || listed.IsTruncated) {
+        res.status(409).json({ error: "Stored R2 parts do not match the authorized upload" }); return;
+      }
+    }
+    await client.query(
+      `UPDATE r2_clip_uploads SET state='completing',updated_at=NOW() WHERE id=$1`, [current.id],
+    );
+    try {
+      await r2Client().send(new CompleteMultipartUploadCommand({
+        Bucket: config.bucket,
+        Key: key,
+        UploadId: current.multipart_upload_id,
+        MultipartUpload: { Parts: parts as { PartNumber: number; ETag: string }[] },
+      }));
+    } catch (error) {
+      if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
+      // A lost Complete acknowledgement consumes the multipart upload. HEAD
+      // below is the authoritative idempotence check before publication.
+    }
+    const head = await r2Client().send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+    if (Number(head.ContentLength) !== Number(current.size_bytes) ||
+        head.ContentType !== current.content_type ||
+        head.Metadata?.owner !== String(userId) ||
+        head.Metadata?.session !== current.id) {
+      throw new ClipUploadError(409, "Completed R2 object failed ownership or size verification");
+    }
+    // publishClip probes the completed object and is authoritative for the
+    // >=60-second rule; client duration is intentionally only resumable metadata.
+    const existing = await client.query(
+      `SELECT id,title,content_type,duration_sec,code,created_at,
+              thumbnail_object_name,processing_status
+       FROM clips WHERE user_id=$1
+         AND (object_name=$2 OR upload_object_name=$2)
+       ORDER BY id LIMIT 1`, [userId, current.object_name],
+    );
+    const clip = existing.rows[0] ?? await publishClip({
+        userId,
+        filename: current.object_name,
+        title: current.original_name,
+        displayTitle: current.display_title ?? undefined,
+        contentType: current.content_type,
+        size: Number(current.size_bytes),
+        sha256: "",
+        deferThumbnail: true,
+      }, client, async (transaction, published) => {
+        await transaction.query(
+          `UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW()
+           WHERE id=$1 AND user_id=$3`,
+          [current.id, published.id, userId],
+        );
+      });
+    if (existing.rows[0]) {
+      await client.query(
+        `UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW()
+         WHERE id=$1 AND user_id=$3`,
+        [current.id, clip.id, userId],
+      );
+    }
+    res.json(finalClipReceipt(clip));
+  } finally {
+    if (locked) await client.query(
+      "SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${row.id}`],
+    ).catch(() => {});
+    client.release();
+  }
+}
+
+function uploadFailure(res: Response, error: unknown, userId: number, action: string): void {
+  logger.warn({
+    errorName: error instanceof Error ? error.name : "UnknownError",
+    status: error instanceof ClipUploadError ? error.status :
+      Number((error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode) || undefined,
+    userId,
+    action,
+  }, "[r2] clip upload request failed");
+  res.status(error instanceof ClipUploadError ? error.status : 500).json({
+    error: error instanceof ClipUploadError ? error.message : "R2 upload request failed",
+  });
+}
+
 router.get("/r2/status", async (req, res) => {
   if (!auth(req, res)) return;
   res.set("Cache-Control", "private, max-age=15");
   res.json(await r2ConnectionStatus());
+});
+
+router.post("/clips/create", async (req, res): Promise<void> => {
+  const userId = auth(req, res);
+  if (!userId) return;
+  const config = r2Config();
+  if (!config) { res.status(503).json({ error: "R2 storage is not configured" }); return; }
+  try {
+    await completeUpload(req, res, userId, config);
+  } catch (error) {
+    uploadFailure(res, error, userId, "create");
+  }
 });
 
 router.post("/r2/presign", async (req, res): Promise<void> => {
@@ -94,7 +253,10 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
         Object.prototype.hasOwnProperty.call(req.body ?? {}, "title") ? req.body.title : undefined,
       ) ?? null;
       const size = integer(req.body?.size);
-      const duration = Number(req.body?.durationSec);
+      // Browsers cannot always read container metadata. Null is a deliberate
+      // unknown hint; publishClip still probes the completed object and enforces
+      // the real duration before creating a clip row.
+      const duration = req.body?.durationSec === null ? 0 : Number(req.body?.durationSec);
       const contentType = resolveClipUploadType(String(req.body?.contentType ?? ""), originalName);
       const requestId = String(req.body?.requestId ?? "").toLowerCase();
       if (!UUID.test(requestId) || !originalName || !size || !contentType ||
@@ -164,6 +326,11 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
       res.status(201).json({
         sessionId: id, partSize: PART_BYTES, partCount: Math.ceil(size / PART_BYTES), state: "active",
       });
+      return;
+    }
+
+    if (action === "complete") {
+      await completeUpload(req, res, userId, config);
       return;
     }
 
@@ -239,135 +406,9 @@ router.post("/r2/presign", async (req, res): Promise<void> => {
       return;
     }
 
-    if (action === "complete") {
-      const client = await pool.connect();
-      let locked = false;
-      try {
-        await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${row.id}`]);
-        locked = true;
-        const currentResult = await client.query<UploadRow>(
-          `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
-                  size_bytes,duration_sec,state,clip_id,expires_at
-           FROM r2_clip_uploads WHERE id=$1 AND user_id=$2`, [row.id, userId],
-        );
-        const current = currentResult.rows[0];
-        if (!current) { res.status(404).json({ error: "R2 upload session not found" }); return; }
-        if (current.state === "published" && current.clip_id) {
-          const found = await client.query(`SELECT * FROM clips WHERE id=$1 AND user_id=$2`, [current.clip_id, userId]);
-          if (!found.rows[0]) { res.status(410).json({ error: "Published clip was removed" }); return; }
-          res.json(finalClipReceipt(found.rows[0])); return;
-        }
-        if (current.state !== "active" && current.state !== "completing") {
-          res.status(409).json({ error: "R2 upload cannot be completed" }); return;
-        }
-        const expectedParts = Math.ceil(Number(current.size_bytes) / PART_BYTES);
-        const rawParts = Array.isArray(req.body?.parts) ? req.body.parts : [];
-        const parts: { PartNumber: number | null; ETag: string | null }[] = rawParts.map((part: any) => ({
-          PartNumber: integer(part?.partNumber),
-          ETag: safeEtag(part?.etag),
-        }));
-        if (parts.length !== expectedParts || parts.some((part: { PartNumber: number | null; ETag: string | null }, index: number) =>
-          part.PartNumber !== index + 1 || !part.ETag)) {
-          res.status(400).json({ error: "Every multipart part and ETag is required in order" }); return;
-        }
-        const listed = await r2Client().send(new ListPartsCommand({
-          Bucket: config.bucket,
-          Key: key,
-          UploadId: current.multipart_upload_id,
-        })).catch(error => {
-          if ((error as { name?: string }).name === "NoSuchUpload" && current.state === "completing") return null;
-          throw error;
-        });
-        if (listed) {
-          const stored = listed.Parts ?? [];
-          const mismatch = stored.length !== expectedParts || stored.some((part, index) => {
-            const expectedSize = index === expectedParts - 1
-              ? Number(current.size_bytes) - index * PART_BYTES
-              : PART_BYTES;
-            return part.PartNumber !== index + 1 || Number(part.Size) !== expectedSize ||
-              part.ETag !== parts[index]?.ETag;
-          });
-          if (mismatch || listed.IsTruncated) {
-            res.status(409).json({ error: "Stored R2 parts do not match the authorized upload" }); return;
-          }
-        }
-        await client.query(
-          `UPDATE r2_clip_uploads SET state='completing',updated_at=NOW() WHERE id=$1`, [current.id],
-        );
-        try {
-          await r2Client().send(new CompleteMultipartUploadCommand({
-            Bucket: config.bucket,
-            Key: key,
-            UploadId: current.multipart_upload_id,
-            MultipartUpload: { Parts: parts as { PartNumber: number; ETag: string }[] },
-          }));
-        } catch (error) {
-          if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
-          // A lost Complete acknowledgement consumes the multipart upload. HEAD
-          // below is the authoritative idempotence check before publication.
-        }
-        const head = await r2Client().send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
-        if (Number(head.ContentLength) !== Number(current.size_bytes) ||
-            head.ContentType !== current.content_type ||
-            head.Metadata?.owner !== String(userId) ||
-            head.Metadata?.session !== current.id) {
-          throw new ClipUploadError(409, "Completed R2 object failed ownership or size verification");
-        }
-        // Publication commits internally. If the process dies before the
-        // session update below, the session advisory lock is released and a
-        // retry finds this durable row rather than inserting a duplicate.
-        const existing = await client.query(
-          `SELECT id,title,content_type,duration_sec,code,created_at,
-                  thumbnail_object_name,processing_status
-           FROM clips WHERE user_id=$1
-             AND (object_name=$2 OR upload_object_name=$2)
-           ORDER BY id LIMIT 1`, [userId, current.object_name],
-        );
-        const clip = existing.rows[0] ?? await publishClip({
-            userId,
-            filename: current.object_name,
-            title: current.original_name,
-            displayTitle: current.display_title ?? undefined,
-            contentType: current.content_type,
-            size: Number(current.size_bytes),
-            sha256: "",
-            deferThumbnail: true,
-          }, client, async (transaction, published) => {
-            await transaction.query(
-              `UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW()
-               WHERE id=$1 AND user_id=$3`,
-              [current.id, published.id, userId],
-            );
-          });
-        if (existing.rows[0]) {
-          await client.query(
-            `UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW()
-             WHERE id=$1 AND user_id=$3`,
-            [current.id, clip.id, userId],
-          );
-        }
-        res.json(finalClipReceipt(clip));
-      } finally {
-        if (locked) await client.query(
-          "SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${row.id}`],
-        ).catch(() => {});
-        client.release();
-      }
-      return;
-    }
-
     res.status(400).json({ error: "Unknown R2 presign action" });
   } catch (error) {
-    logger.warn({
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      status: error instanceof ClipUploadError ? error.status :
-        Number((error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode) || undefined,
-      userId,
-      action,
-    }, "[r2] clip upload request failed");
-    res.status(error instanceof ClipUploadError ? error.status : 500).json({
-      error: error instanceof ClipUploadError ? error.message : "R2 upload request failed",
-    });
+    uploadFailure(res, error, userId, String(action ?? ""));
   }
 });
 

@@ -2,30 +2,28 @@ import { describe, expect, it } from "vitest";
 import {
   browserCompressionUnavailableReason,
   compressionCandidateError,
+  ffmpegCompressionArguments,
+  ffprobeInvocationError,
+  ffmpegVideoBitrate,
   MAX_BROWSER_COMPRESSION_SOURCE_BYTES,
+  preparedProbeError,
   videoOutputSize,
-  webmWithDuration,
 } from "./prepareVideo";
 
 describe("video preparation metadata", () => {
-  it("uses 480p on the short edge and preserves aspect ratio with even dimensions", () => {
-    expect(videoOutputSize(1280, 720)).toEqual({ width: 852, height: 480 });
-    expect(videoOutputSize(720, 1280)).toEqual({ width: 480, height: 852 });
+  it("caps the short edge at 720 and preserves aspect ratio with even dimensions", () => {
+    expect(videoOutputSize(1920, 1080)).toEqual({ width: 1280, height: 720 });
+    expect(videoOutputSize(1080, 1920)).toEqual({ width: 720, height: 1280 });
     expect(videoOutputSize(320, 240)).toEqual({ width: 320, height: 240 });
   });
 
-  it("adds finite WebM Duration to Segment Info without changing media bytes", () => {
-    // Info(size=7) containing TimecodeScale(size=3, 1,000,000), then Cluster.
-    const source = new Uint8Array([
-      0x15, 0x49, 0xa9, 0x66, 0x87,
-      0x2a, 0xd7, 0xb1, 0x83, 0x0f, 0x42, 0x40,
-      0x1f, 0x43, 0xb6, 0x75, 0xff, 0xaa,
-    ]);
-    const fixed = webmWithDuration(source, 67);
-    expect(fixed[4]).toBe(0x92); // Info payload grew from 7 to 18 bytes.
-    expect([...fixed.slice(12, 15)]).toEqual([0x44, 0x89, 0x88]);
-    expect(new DataView(fixed.buffer).getFloat64(15, false)).toBe(67_000);
-    expect([...fixed.slice(-6)]).toEqual([0x1f, 0x43, 0xb6, 0x75, 0xff, 0xaa]);
+  it("requests interoperable H264/AAC MP4 and keeps optional source audio", () => {
+    const args = ffmpegCompressionArguments(1280, 720, 61);
+    expect(args).toEqual(expect.arrayContaining([
+      "-map", "0:v:0", "0:a:0?", "-c:v", "libx264",
+      "-pix_fmt", "yuv420p", "-c:a", "aac", "prepared.mp4",
+    ]));
+    expect(ffmpegVideoBitrate(61)).toBeLessThanOrEqual(1_600_000);
   });
 
   it("refuses unbounded browser work and non-video input before decoding", () => {
@@ -41,5 +39,32 @@ describe("video preparation metadata", () => {
     expect(compressionCandidateError(100, 100)).toContain("ليست أصغر");
     expect(compressionCandidateError(100, 101)).toContain("ليست أصغر");
     expect(compressionCandidateError(100, 99)).toBeNull();
+  });
+
+  it("budgets long clips beneath the bounded output cap", () => {
+    expect(ffmpegVideoBitrate(30 * 60)).toBeLessThan(ffmpegVideoBitrate(60));
+    expect(ffmpegCompressionArguments(1280, 720, 65)).not.toContain("-shortest");
+  });
+
+  it("rejects lost audio, wrong codecs, and duration damage on clips over 60 seconds", () => {
+    const source = { duration: 65, hasAudio: true };
+    const valid = {
+      duration: 65,
+      width: 1280,
+      height: 720,
+      videoCodec: "h264",
+      hasAudio: true,
+      audioCodec: "aac",
+    };
+    expect(preparedProbeError(source, valid, { width: 1280, height: 720 })).toBeNull();
+    expect(preparedProbeError(source, { ...valid, duration: 50 }, { width: 1280, height: 720 }))
+      .toContain("مدة");
+    expect(preparedProbeError(source, { ...valid, hasAudio: false }, { width: 1280, height: 720 }))
+      .toContain("الصوت");
+  });
+
+  it("accepts the packaged core's -1 ffprobe status when it wrote a report", () => {
+    expect(ffprobeInvocationError(-1, '{"streams":[]}')).toBeNull();
+    expect(ffprobeInvocationError(-1, "")).toContain("ffprobe -1");
   });
 });

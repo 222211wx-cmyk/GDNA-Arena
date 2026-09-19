@@ -16,10 +16,54 @@ test("R2 initiate persists display title and includes it in retry identity", asy
   t.after(() => { delete globalThis[key]; });
 
   const sessions = new Map();
+  const clips = new Map();
   let creates = 0;
+  let storageCalls = 0;
+  const databaseClient = {
+    async query(sql, params = []) {
+      if (sql.includes("pg_advisory_")) return { rows: [] };
+      if (sql.includes("FROM r2_clip_uploads WHERE id=$1 AND user_id=$2")) {
+        const row = [...sessions.values()].find(value => value.id === params[0] && value.user_id === params[1]);
+        return { rows: row ? [row] : [] };
+      }
+      if (sql.includes("FROM clips WHERE user_id=$1")) {
+        const clip = [...clips.values()].find(value =>
+          value.user_id === params[0] && value.object_name === params[1]);
+        return { rows: clip ? [clip] : [] };
+      }
+      if (sql.includes("SELECT * FROM clips WHERE id=$1 AND user_id=$2")) {
+        const clip = clips.get(params[0]);
+        return { rows: clip?.user_id === params[1] ? [clip] : [] };
+      }
+      if (sql.includes("SELECT username FROM users")) return { rows: [{ username: "owner" }] };
+      if (sql.includes("INSERT INTO clips")) {
+        const clip = {
+          id: 91, user_id: params[0], title: params[2], object_name: params[3],
+          content_type: params[4], duration_sec: params[6], code: params[7],
+          processing_status: params[8], created_at: new Date().toISOString(),
+          thumbnail_object_name: null,
+        };
+        clips.set(clip.id, clip);
+        return { rows: [clip] };
+      }
+      if (sql.includes("UPDATE r2_clip_uploads SET state='published'")) {
+        const row = [...sessions.values()].find(value => value.id === params[0] && value.user_id === params[2]);
+        if (row) { row.state = "published"; row.clip_id = params[1]; }
+        return { rows: [] };
+      }
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK" ||
+          sql.includes("SET state='completing'")) return { rows: [] };
+      throw new Error(`Unexpected client SQL: ${sql}`);
+    },
+    release() {},
+  };
   globalThis[key] = {
     pool: {
       async query(sql, params) {
+        if (sql.includes("FROM r2_clip_uploads WHERE id=$1 AND user_id=$2")) {
+          const row = [...sessions.values()].find(value => value.id === params[0] && value.user_id === params[1]);
+          return { rows: row ? [row] : [] };
+        }
         if (sql.includes("FROM r2_clip_uploads WHERE user_id=$1 AND request_id=$2")) {
           return { rows: sessions.has(params[1]) ? [sessions.get(params[1])] : [] };
         }
@@ -36,11 +80,23 @@ test("R2 initiate persists display title and includes it in retry identity", asy
         }
         throw new Error(`Unexpected SQL: ${sql}`);
       },
+      async connect() { return databaseClient; },
     },
     client: {
-      async send() {
-        creates++;
-        return { UploadId: `upload-${creates}` };
+      async send(command) {
+        storageCalls++;
+        if (!command.input.UploadId) {
+          if (!command.input.Metadata) {
+            return {
+              ContentLength: 10, ContentType: "video/mp4",
+              Metadata: { owner: "7", session: [...sessions.values()][0].id },
+            };
+          }
+          creates++;
+          return { UploadId: `upload-${creates}` };
+        }
+        if (command.input.MultipartUpload) return {};
+        return { Parts: [{ PartNumber: 1, ETag: `"${"a".repeat(32)}"`, Size: 10 }], IsTruncated: false };
       },
     },
   };
@@ -56,16 +112,27 @@ test("R2 initiate persists display title and includes it in retry identity", asy
     export const r2ConnectionStatus = async () => ({ ok: true });
     export const r2Reference = value => "r2:" + value;
     export const logger = { warn() {}, info() {}, error() {} };
-    export const clipFile = () => ({ getMetadata: async () => [{ size: 1 }] });
+    export const clipFile = () => ({ getMetadata: async () => [{ size: 10 }] });
     export const verifiedDuration = async () => 60;
     export class ClipProbeBusyError extends Error {}
+    class Command { constructor(input) { this.input = input; } }
+    export class AbortMultipartUploadCommand extends Command {}
+    export class CompleteMultipartUploadCommand extends Command {}
+    export class CreateMultipartUploadCommand extends Command {}
+    export class HeadObjectCommand extends Command {}
+    export class ListPartsCommand extends Command {}
+    export class UploadPartCommand extends Command {}
+    export const getSignedUrl = async () => "https://r2.invalid/signed";
   `);
   await writeFile(entry, `
     import express from "express";
     import router from ${JSON.stringify(path.join(apiRoot, "src/routes/r2.ts"))};
     const app = express();
     app.use(express.json());
-    app.use((req, _res, next) => { req.session = { userId: 7 }; next(); });
+    app.use((req, _res, next) => {
+      req.session = { userId: Number(req.header("x-test-user") || 7) };
+      next();
+    });
     app.use(router);
     export { app };
   `);
@@ -80,6 +147,8 @@ test("R2 initiate persists display title and includes it in retry identity", asy
         plugin.onResolve({ filter: /\/logger\.js$/ }, () => ({ path: boundary }));
         plugin.onResolve({ filter: /\/clip-storage\.js$/ }, () => ({ path: boundary }));
         plugin.onResolve({ filter: /\/clip-duration\.js$/ }, () => ({ path: boundary }));
+         plugin.onResolve({ filter: /^@aws-sdk\/client-s3$/ }, () => ({ path: boundary }));
+         plugin.onResolve({ filter: /^@aws-sdk\/s3-request-presigner$/ }, () => ({ path: boundary }));
       },
     }],
   });
@@ -118,4 +187,39 @@ test("R2 initiate persists display title and includes it in retry identity", asy
     assert.equal(response.status, 400);
   }
   assert.equal(creates, 1);
+
+  const session = sessions.get(requestId);
+  const finalize = (userId, body) => fetch(`${base}/clips/create`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-test-user": String(userId) },
+    body: JSON.stringify(body),
+  });
+  const completion = {
+    sessionId: session.id,
+    title: "اسم/نسخة.v1",
+    parts: [{ partNumber: 1, etag: `"${"a".repeat(32)}"` }],
+  };
+  const beforeOwnershipCheck = storageCalls;
+  assert.equal((await finalize(8, completion)).status, 404,
+    "another citizen cannot finalize an upload session they do not own");
+  assert.equal(storageCalls, beforeOwnershipCheck,
+    "ownership is checked before any R2 completion request");
+  assert.equal((await finalize(7, { ...completion, url: "https://public.invalid/foreign.mp4" })).status, 400,
+    "client object URLs are never trusted");
+  const completed = await finalize(7, completion);
+  const completedText = await completed.text();
+  assert.equal(completed.status, 200, completedText);
+  const receipt = JSON.parse(completedText);
+  assert.equal(receipt.clip.id, 91);
+  assert.equal(receipt.clip.duration_sec, 60);
+  assert.equal(session.state, "published");
+  const legacy = await fetch(`${base}/r2/presign`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "complete", ...completion }),
+  });
+  const legacyText = await legacy.text();
+  assert.equal(legacy.status, 200, legacyText);
+  assert.equal(JSON.parse(legacyText).clip.id, 91,
+    "legacy complete shares the idempotent finalization handler");
 });

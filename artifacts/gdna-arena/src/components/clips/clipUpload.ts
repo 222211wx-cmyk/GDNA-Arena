@@ -1,4 +1,5 @@
 const R2_API = `${import.meta.env.BASE_URL}api/r2/presign`;
+const CLIPS_CREATE_API = `${import.meta.env.BASE_URL}api/clips/create`;
 export const UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024;
 export const MAX_CLIP_BYTES = 2 * 1024 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 300_000;
@@ -10,7 +11,8 @@ export type ClipUploadMetadata = {
   /** Actual source filename, kept separate from the citizen-facing title. */
   originalFilename?: string;
   contentType: string;
-  durationSec: number;
+  /** Untrusted hint only. Null means the browser could not inspect the media. */
+  durationSec: number | null;
 };
 
 export type PreparedClipUpload = {
@@ -122,6 +124,59 @@ async function r2Json(body: Record<string, unknown>, signal: AbortSignal) {
   return response.status === 204 ? null : response.json();
 }
 
+async function finalizeClip(body: Record<string, unknown>, signal: AbortSignal) {
+  const response = await request(CLIPS_CREATE_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }, signal);
+  if (!response.ok) throw Object.assign(new Error(await errorMessage(response)), { status: response.status });
+  return response.json();
+}
+
+function putR2Part(
+  url: string,
+  bytes: Blob,
+  signal: AbortSignal,
+  onProgress: (loaded: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const done = () => signal.removeEventListener("abort", abort);
+    xhr.open("PUT", url);
+    xhr.timeout = REQUEST_TIMEOUT_MS;
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable) onProgress(Math.min(bytes.size, event.loaded));
+    };
+    xhr.onload = () => {
+      done();
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(Object.assign(new Error(`R2 part upload failed (${xhr.status})`), { status: xhr.status }));
+        return;
+      }
+      const etag = xhr.getResponseHeader("ETag");
+      if (!etag) { reject(new Error("R2 upload response did not expose ETag")); return; }
+      resolve(etag);
+    };
+    xhr.onerror = () => {
+      done();
+      reject(Object.assign(new Error("R2 part upload failed (network error)"), { status: 0 }));
+    };
+    xhr.ontimeout = () => {
+      done();
+      reject(Object.assign(new Error("R2 part upload timed out"), { status: 408 }));
+    };
+    xhr.onabort = () => {
+      done();
+      reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    else xhr.send(bytes);
+  });
+}
+
 async function uploadR2Part(
   file: File,
   sessionId: string,
@@ -129,31 +184,23 @@ async function uploadR2Part(
   start: number,
   end: number,
   signal: AbortSignal,
+  onProgress: (loaded: number) => void,
 ): Promise<string> {
   let lastError: unknown;
   for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
     signal.throwIfAborted();
     if (RETRY_DELAYS_MS[attempt]) await wait(RETRY_DELAYS_MS[attempt], signal);
+    // A retry starts this part from byte zero. Reset its active contribution so
+    // acknowledged + in-flight totals never count the same part twice.
+    onProgress(0);
     try {
       // Always request a fresh URL on retry. This handles expiry without ever
       // routing media bytes through the GDNA API server.
       const signed = await r2Json({ action: "part", sessionId, partNumber }, signal);
       if (typeof signed?.url !== "string") throw new Error("R2 did not return an upload URL");
-      const response = await fetch(signed.url, {
-        method: "PUT",
-        body: file.slice(start, end),
-        signal,
-      });
-      if (!response.ok) {
-        const error = Object.assign(new Error(`R2 part upload failed (${response.status})`), { status: response.status });
-        if (!retryableStatus(response.status) && response.status !== 403) throw error;
-        lastError = error;
-        continue;
-      }
-      const etag = response.headers.get("ETag");
-      if (!etag) throw new Error("R2 upload response did not expose ETag");
-      return etag;
+      return await putR2Part(signed.url, file.slice(start, end), signal, onProgress);
     } catch (error) {
+      onProgress(0);
       if (signal.aborted) throw signal.reason;
       const status = Number((error as { status?: number }).status ?? 0);
       if (status && !retryableStatus(status) && status !== 403) throw error;
@@ -209,6 +256,7 @@ async function runR2Upload(
   }
   const partCount = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
   let uploadedBytes = 0;
+  const activeBytes = new Map<number, number>();
   for (const partNumber of saved.completed.keys()) {
     const start = (partNumber - 1) * UPLOAD_CHUNK_BYTES;
     uploadedBytes += Math.min(UPLOAD_CHUNK_BYTES, file.size - start);
@@ -217,13 +265,15 @@ async function runR2Upload(
   let lastTime = performance.now();
   let speed = 0;
   const report = () => {
+    const currentBytes = Math.min(file.size, uploadedBytes +
+      Array.from(activeBytes.values()).reduce((total, bytes) => total + bytes, 0));
     const now = performance.now();
     const elapsed = Math.max(0.001, (now - lastTime) / 1_000);
-    const current = Math.max(0, uploadedBytes - lastBytes) / elapsed;
+    const current = Math.max(0, currentBytes - lastBytes) / elapsed;
     speed = speed ? speed * 0.65 + current * 0.35 : current;
-    lastBytes = uploadedBytes;
+    lastBytes = currentBytes;
     lastTime = now;
-    onProgress(Math.min(99, uploadedBytes / file.size * 100), uploadedBytes, speed,
+    onProgress(Math.min(99, currentBytes / file.size * 100), currentBytes, speed,
       navigator.onLine ? "uploading" : "offline");
   };
   report();
@@ -250,19 +300,34 @@ async function runR2Upload(
       }
       const start = (partNumber - 1) * UPLOAD_CHUNK_BYTES;
       const end = Math.min(file.size, start + UPLOAD_CHUNK_BYTES);
-      const etag = await uploadR2Part(file, saved.sessionId!, partNumber, start, end, signal);
+      const etag = await uploadR2Part(
+        file,
+        saved.sessionId!,
+        partNumber,
+        start,
+        end,
+        signal,
+        loaded => {
+          activeBytes.set(partNumber, loaded);
+          report();
+        },
+      );
+      activeBytes.delete(partNumber);
       saved.completed.set(partNumber, etag);
       uploadedBytes += end - start;
       report();
     }
   };
   await Promise.all(Array.from({ length: Math.min(3, partCount) }, worker));
-  return r2Json({
-    action: "complete",
+  const completion: Record<string, unknown> = {
     sessionId: saved.sessionId,
     parts: Array.from(saved.completed, ([partNumber, etag]) => ({ partNumber, etag }))
       .sort((a, b) => a.partNumber - b.partNumber),
-  }, signal);
+  };
+  if (metadata.originalFilename !== undefined && metadata.title !== undefined) {
+    completion.title = metadata.title;
+  }
+  return finalizeClip(completion, signal);
 }
 
 export async function uploadClip(

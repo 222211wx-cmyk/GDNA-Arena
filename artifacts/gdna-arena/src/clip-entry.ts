@@ -86,6 +86,10 @@ root.innerHTML = `
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
     <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 2GB</p>
+    <div id="progress-wrap" hidden>
+      <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress>
+      <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p>
+    </div>
     <label id="display-name-row" for="display-name" hidden>
       <span>اسم الفيشي</span>
       <input id="display-name" data-testid="clip-display-name" type="text" dir="auto" autocomplete="off" aria-describedby="display-name-error">
@@ -97,16 +101,12 @@ root.innerHTML = `
         <input id="compress" data-testid="clip-compress" type="checkbox" aria-describedby="compress-note">
         <span>ضغط الفيديو قبل الرفع (اختياري)</span>
       </label>
-      <p id="compress-note" class="muted">الضغط يجري داخل المتصفح بالوقت الحقيقي (يستغرق مدة الفيديو تقريباً)، ويقلّل الحجم لكنه لا يضمن رفعاً أسرع. الملف الأصلي محفوظ ولن يُعدَّل.</p>
+      <p id="compress-note" class="muted">ضغط اختياري داخل المتصفح بواسطة ffmpeg.wasm عند توفره. قد يستغرق وقتاً، والملف الأصلي محفوظ ولن يُعدَّل.</p>
       <p id="compress-status" data-testid="clip-compress-status" class="muted" role="status" aria-live="polite"></p>
     </div>
     <div>
       <button id="submit" data-testid="clip-submit" type="submit" disabled>نشر</button>
       <button id="cancel" class="secondary" type="button" hidden>إلغاء</button>
-    </div>
-    <div id="progress-wrap" hidden>
-      <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress>
-      <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p>
     </div>
     <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p>
     <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div>
@@ -146,8 +146,12 @@ const mutableControls = Array.from(form.querySelectorAll<HTMLInputElement | HTML
 let cachedFile: File | null = null;
 let selectedDuration: number | null = null;
 let durationController: AbortController | null = null;
+let durationProbe: Promise<number | null> | null = null;
 let uploadController: AbortController | null = null;
 let selectedFileKey: string | null = null;
+let submissionPending = false;
+const DURATION_CLICK_WAIT_MS = 8_000;
+const SLOW_UPLOAD_BYTES_PER_SECOND = 143 * 1024;
 
 const MEDIA_EXTENSIONS = new Set([
   "3g2", "3gp", "aac", "aiff", "amr", "avi", "flac", "m4a", "m4v", "mkv",
@@ -180,12 +184,9 @@ function displayNameValidationError() {
 }
 
 function updateSubmitState() {
-  const nameError = displayNameValidationError();
-  displayNameError.textContent = nameError;
-  displayName.setAttribute("aria-invalid", String(Boolean(nameError)));
-  submit.disabled = Boolean(uploadController) || !cachedFile ||
-    cachedFile.size > MAX_CLIP_BYTES || selectedDuration === null ||
-    selectedDuration < 60 || Boolean(nameError);
+  // Selection is enough to make the action discoverable. Size, duration and
+  // title errors are explained after a click instead of by a disabled button.
+  submit.disabled = Boolean(uploadController) || !cachedFile;
 }
 
 function formatBytes(bytes: number) {
@@ -235,7 +236,7 @@ function finalizePublication(published: PublishedClip) {
 }
 
 const COMPRESS_WARNING =
-  "الضغط يجري داخل المتصفح بالوقت الحقيقي (يستغرق مدة الفيديو تقريباً)، ويقلّل الحجم لكنه لا يضمن رفعاً أسرع. الملف الأصلي محفوظ ولن يُعدَّل.";
+  "ضغط اختياري داخل المتصفح بواسطة ffmpeg.wasm عند توفره. قد يستغرق وقتاً، والملف الأصلي محفوظ ولن يُعدَّل.";
 
 const compressPhaseLabel: Record<ClipPreparationPhase, string> = {
   loading: "جارٍ تحضير الفيديو للضغط…",
@@ -302,77 +303,171 @@ input.addEventListener("change", async () => {
   selectedDuration = null;
   chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MB`;
   selection.textContent = "✓ Fichier sélectionné";
-  submit.disabled = true;
   updateSubmitState();
   uploadError.textContent = "";
-  progressWrap.hidden = true;
-  status.textContent = "";
+  displayNameError.textContent = "";
+  displayName.setAttribute("aria-invalid", "false");
+  progressWrap.hidden = false;
+  progress.value = 0;
+  status.textContent = `0% — 0 من ${formatBytes(selected.size)}`;
   receipt.hidden = true;
   receipt.replaceChildren();
   void refreshCompressAvailability(selected, null);
   if (selected.size > MAX_CLIP_BYTES) {
     durationStatus.textContent = "";
-    uploadError.textContent = "الحد الأقصى للملف هو 2GB";
+    cancel.hidden = true;
     return;
   }
   durationStatus.textContent = "المدة: جارٍ القراءة…";
-  try {
-    const duration = await readClipDuration(selected, probing.signal);
-    if (probing.signal.aborted || cachedFile !== selected) return;
+  cancel.hidden = false;
+  const probe = readClipDuration(selected, probing.signal).then(duration => {
+    if (probing.signal.aborted || cachedFile !== selected) return null;
     selectedDuration = duration;
     durationStatus.textContent = `المدة: ${formatDuration(duration)}`;
     void refreshCompressAvailability(selected, duration);
-    if (duration < 60) uploadError.textContent = "خاص دقيقة الفوق";
-    updateSubmitState();
-  } catch (error) {
-    if (probing.signal.aborted || cachedFile !== selected) return;
-    durationStatus.textContent = "المدة غير متاحة";
-    uploadError.textContent = error instanceof Error ? error.message : "تعذر قراءة مدة الملف";
+    return duration;
+  }).catch(() => {
+    if (!probing.signal.aborted && cachedFile === selected) {
+      durationStatus.textContent = "المدة غير متاحة — سيُشرح السبب عند النشر";
+    }
+    return null;
+  }).finally(() => {
+    if (durationProbe === probe) durationProbe = null;
+    if (!uploadController && cachedFile === selected) cancel.hidden = true;
+  });
+  durationProbe = probe;
+  await probe;
+});
+
+displayName.addEventListener("input", () => {
+  if (!displayNameValidationError()) {
+    displayNameError.textContent = "";
+    displayName.setAttribute("aria-invalid", "false");
+  }
+  updateSubmitState();
+});
+
+cancel.addEventListener("click", () => {
+  const reason = new DOMException("Cancelled", "AbortError");
+  if (uploadController) {
+    uploadController.abort(reason);
+    // A publication waiting on the selection probe owns that wait too. Abort
+    // both so cancellation cannot later fall through into transfer.
+    if (durationProbe) durationController?.abort(reason);
+  } else if (durationController) {
+    durationController.abort(reason);
+    durationStatus.textContent = "تم إلغاء قراءة المدة";
+    cancel.hidden = true;
   }
 });
 
-displayName.addEventListener("input", updateSubmitState);
+async function awaitPendingDurationProbe(signal: AbortSignal) {
+  signal.throwIfAborted();
+  const pending = durationProbe;
+  if (!pending) return selectedDuration;
+  let timer = 0;
+  let rejectAborted: ((reason: unknown) => void) | null = null;
+  const aborted = new Promise<never>((_, reject) => {
+    rejectAborted = reject;
+  });
+  const onAbort = () => rejectAborted?.(
+    signal.reason ?? new DOMException("Cancelled", "AbortError"),
+  );
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    const duration = await Promise.race([
+      pending,
+      new Promise<null>(resolve => {
+        timer = window.setTimeout(() => resolve(null), DURATION_CLICK_WAIT_MS);
+      }),
+      aborted,
+    ]);
+    signal.throwIfAborted();
+    return duration;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", onAbort);
+  }
+}
 
-cancel.addEventListener("click", () => uploadController?.abort(new DOMException("Cancelled", "AbortError")));
+function reportUploadProgress(
+  total: number,
+  percent: number,
+  uploadedBytes: number | undefined,
+  speedBytesPerSecond: number,
+  uploadState: "uploading" | "offline",
+) {
+  const uploaded = uploadedBytes ?? Math.min(total, Math.round(total * percent / 100));
+  const displayPercent = Math.floor(percent);
+  progress.value = percent;
+  submit.textContent = `Téléversement ${displayPercent}%…`;
+  if (percent === 100) {
+    status.textContent = `تم النشر — ${formatBytes(total)}`;
+    return;
+  }
+  const slowWarning = uploaded > 0 && speedBytesPerSecond > 0 &&
+    speedBytesPerSecond <= SLOW_UPLOAD_BYTES_PER_SECOND
+    ? " — Connexion lente, compression recommandée"
+    : "";
+  status.textContent = uploadState === "offline"
+    ? `${formatBytes(uploaded)} من ${formatBytes(total)} — متوقف مؤقتاً؛ يكمل الى تقطع عند رجوع الاتصال`
+    : `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)}${slowWarning} — يكمل الى تقطع`;
+}
 
 form.addEventListener("submit", async event => {
   event.preventDefault();
   const file = cachedFile;
-  if (!file || uploadController) return;
+  if (!file || uploadController || submissionPending) return;
+  submissionPending = true;
+  uploadError.textContent = "";
+  displayNameError.textContent = "";
+  displayName.setAttribute("aria-invalid", "false");
   if (file.size > MAX_CLIP_BYTES) {
     uploadError.textContent = "الحد الأقصى للملف هو 2GB";
-    return;
-  }
-  if (selectedDuration === null || selectedDuration < 60) {
-    uploadError.textContent = "خاص دقيقة الفوق";
+    submissionPending = false;
     return;
   }
   const title = normalizedDisplayName();
   const titleError = displayNameValidationError();
   if (titleError) {
     displayNameError.textContent = titleError;
+    displayName.setAttribute("aria-invalid", "true");
     displayName.focus();
-    updateSubmitState();
+    submissionPending = false;
     return;
   }
-  const metadata: ClipUploadMetadata = {
-    title,
-    originalFilename: file.name,
-    contentType: file.type || "application/octet-stream",
-    durationSec: selectedDuration,
-  };
   const wantsCompression = compress.checked && !compress.disabled && file.type.startsWith("video/");
-  uploadController = new AbortController();
+  const operation = new AbortController();
+  uploadController = operation;
   mutableControls.forEach(control => { control.disabled = true; });
   submit.disabled = true;
+  submit.textContent = "Téléversement 0%…";
   cancel.hidden = false;
   cancel.disabled = false;
   progressWrap.hidden = false;
   progress.value = 0;
-  status.textContent = wantsCompression ? "جارٍ التحضير للضغط…" : `0 من ${formatBytes(file.size)}`;
+  status.textContent = `0% — 0 من ${formatBytes(file.size)} — جارٍ التحقق من المدة…`;
   compressStatus.textContent = "";
   uploadError.textContent = "";
   try {
+    const duration = selectedDuration ?? await awaitPendingDurationProbe(operation.signal);
+    operation.signal.throwIfAborted();
+    if (cachedFile !== file) return;
+    if (duration !== null && duration < 60) {
+      uploadError.textContent = "خاص دقيقة الفوق";
+      status.textContent = "لم يبدأ الرفع";
+      return;
+    }
+    const metadata: ClipUploadMetadata = {
+      title,
+      originalFilename: file.name,
+      contentType: file.type || "application/octet-stream",
+      // No guessed duration: the server probes media if browser metadata is unavailable.
+      durationSec: duration,
+    };
+    status.textContent = wantsCompression
+      ? "جارٍ التحضير للضغط…"
+      : `0% — 0 من ${formatBytes(file.size)}`;
     // Optional, explicit compression. On any failure we surface the error and
     // keep the checkbox + original selection so the user can uncheck and upload
     // the original — never a silent fallback.
@@ -380,7 +475,7 @@ form.addEventListener("submit", async event => {
     if (wantsCompression) {
       try {
         const { prepareClipForUpload } = await loadCompressionModule();
-        prepared = await prepareClipForUpload(file, uploadController.signal, phase => {
+        prepared = await prepareClipForUpload(file, operation.signal, phase => {
           progress.value = phase.percent;
           const label = compressPhaseLabel[phase.phase];
           compressStatus.textContent = phase.phase === "compressing"
@@ -392,7 +487,7 @@ form.addEventListener("submit", async event => {
         progress.value = 0;
         status.textContent = `0 من ${formatBytes(prepared.uploadFile.size)}`;
       } catch (error) {
-        if (uploadController.signal.aborted) throw error;
+        if (operation.signal.aborted) throw error;
         const reason = error instanceof Error ? error.message : "تعذر ضغط الفيديو";
         uploadError.textContent = `${reason} — أزل خيار الضغط لرفع الملف الأصلي.`;
         compressStatus.textContent = "";
@@ -409,52 +504,40 @@ form.addEventListener("submit", async event => {
           title,
           originalFilename: file.name,
         },
-        uploadController.signal,
+        operation.signal,
         (percent, uploadedBytes, speedBytesPerSecond, uploadState) => {
-          const total = prepared!.uploadFile.size;
-          const uploaded = uploadedBytes ?? Math.min(total, Math.round(total * percent / 100));
-          const displayPercent = Math.floor(percent);
-          progress.value = percent;
-          status.textContent = percent === 100
-            ? `تم النشر — ${formatBytes(total)}`
-            : uploadState === "offline"
-              ? `${formatBytes(uploaded)} من ${formatBytes(total)} — متوقف مؤقتاً؛ يكمل الى تقطع عند رجوع الاتصال`
-              : `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)} — يكمل الى تقطع`;
+          reportUploadProgress(prepared!.uploadFile.size, percent, uploadedBytes,
+            speedBytesPerSecond, uploadState);
         },
       );
       finalizePublication({ ...published, name: title });
       reloadFeedAfterPublish();
       return;
     }
-    const published = await uploadClip(file, metadata, uploadController.signal, (
+    const published = await uploadClip(file, metadata, operation.signal, (
       percent,
       uploadedBytes,
       speedBytesPerSecond,
       uploadState,
     ) => {
-      const uploaded = uploadedBytes ?? Math.min(file.size, Math.round(file.size * percent / 100));
-      const displayPercent = Math.floor(percent);
-      progress.value = percent;
-      status.textContent = percent === 100
-        ? `تم النشر — ${formatBytes(file.size)}`
-        : uploadState === "offline"
-          ? `${formatBytes(uploaded)} من ${formatBytes(file.size)} — متوقف مؤقتاً؛ يكمل الى تقطع عند رجوع الاتصال`
-          : `${formatBytes(uploaded)} من ${formatBytes(file.size)} — ${displayPercent}% — ${formatSpeed(speedBytesPerSecond)} — يكمل الى تقطع`;
+      reportUploadProgress(file.size, percent, uploadedBytes, speedBytesPerSecond, uploadState);
     });
     finalizePublication({ ...published, name: title });
     reloadFeedAfterPublish();
   } catch (error) {
-    const cancelled = uploadController.signal.aborted;
+    const cancelled = operation.signal.aborted;
     uploadError.textContent = cancelled ? "تم إلغاء الرفع — يمكنك إعادة المحاولة" :
       error instanceof Error ? error.message : "تعذر الرفع — حاول مجدداً";
     status.textContent = cancelled ? "توقف الرفع" : "لم يكتمل الرفع";
   } finally {
+    submissionPending = false;
     uploadController = null;
     mutableControls.forEach(control => { control.disabled = false; });
     // Re-evaluate compression availability for whatever selection remains (the
     // helper disables/hides the box when there is no eligible video).
     void refreshCompressAvailability(cachedFile, selectedDuration);
     updateSubmitState();
+    submit.textContent = "نشر";
     cancel.hidden = true;
   }
 });

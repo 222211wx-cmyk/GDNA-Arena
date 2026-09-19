@@ -35,9 +35,10 @@ describe("ultra-light clip bootstrap", () => {
     expect(html).toContain("جارٍ تجهيز الرفع");
     expect(html).toContain('route === "/clip" || route === "/clips"');
     expect(html).not.toContain('endsWith("/clip")');
-    // No recorder/ffmpeg/eager-playback code lives in the thin entry itself; the
-    // recorder graph is confined to the lazily imported compression module.
-    expect(clip).not.toMatch(/MediaRecorder|ffmpeg|autoplay/i);
+    // No recorder/runtime ffmpeg import/eager-playback code lives in the thin
+    // entry itself; mentioning ffmpeg.wasm in optional-compression copy must not
+    // pull its heavy runtime into this bootstrap graph.
+    expect(clip).not.toMatch(/MediaRecorder|@ffmpeg\/|autoplay/i);
     // The Reels feed loads playback URLs lazily: a <video> element is created
     // (and its src assigned) only when a slide is activated by the observer —
     // never eagerly for every clip, and never with a broad preload.
@@ -63,9 +64,12 @@ describe("ultra-light clip bootstrap", () => {
   it("uploads directly to R2 (presigned multipart), resumes only the same File, and locks metadata", () => {
     const transport = source("./components/clips/clipUpload.ts");
     const clip = source("./clip-entry.ts");
-    // Direct-to-R2 invariant: presigned multipart PUTs, never a proxied/Tus path.
+    // Direct-to-R2 invariant: each sliced part is sent by XHR PUT to the
+    // presigned URL itself (XHR enables byte progress), never a proxied/Tus path.
     expect(transport).toContain("api/r2/presign");
-    expect(transport).toContain('method: "PUT"');
+    expect(transport).toContain('xhr.open("PUT", url)');
+    expect(transport).toContain("xhr.send(bytes)");
+    expect(transport).toContain("putR2Part(signed.url, file.slice(start, end), signal, onProgress)");
     expect(transport).not.toMatch(/tus-js-client|new tus\.Upload|storeFingerprintForResuming/i);
     // Resume is scoped to the exact same in-memory File object only — no
     // persisted fingerprint, content hash, or localStorage cross-session state.

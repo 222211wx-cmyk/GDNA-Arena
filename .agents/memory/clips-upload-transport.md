@@ -5,9 +5,27 @@ description: Owner-directed Clips compression and resumable upload policy, plus 
 
 Keep the default citizen Clips upload lightweight. Optional, bounded client compression is now allowed; do not make whole-file hashing, full media decoding, or a large WASM download mandatory.
 
-**Why:** After rejecting browser compression on 2026-09-18 because of Android hangs, the owner explicitly requested client compression again on 2026-09-19. The latest request supersedes the prohibition, but real-time browser recording can increase total waiting time and can enlarge already-compressed videos.
+**Why:** After rejecting browser compression on 2026-09-18 because of Android hangs, the owner explicitly requested client compression again on 2026-09-19, then specifically requested ffmpeg.wasm. This supersedes the prohibition and the interim MediaRecorder approach; browser encoding can still increase total waiting time.
 
 **How to apply:** Lazy-load optional compression, retain the selected original, label preparation separately from transfer, and reject larger or unverifiable outputs without silently uploading the original. Keep cancellation, bounded metadata waits, foreground-only capture, resumable chunks, and server-side duration verification. Never promise a universal sub-minute transfer from duration alone.
+
+Treat browser duration as an untrusted hint, not a prerequisite for an enabled Publish button.
+
+**Why:** The owner reported a selected 137 MB file with R2 Connected but an inert button. A browser unable to decode metadata must not silently block a server-verifiable upload.
+
+**How to apply:** Keep selection actionable; validate visibly on click and let unknown metadata reach authoritative server probing. Cancellation must cover pending metadata as well as preparation and transfer.
+
+Explicitly bundle the FFmpeg class worker rather than relying on its default relative URL under Vite dependency optimization.
+
+**Why:** The default worker resolved beside the optimized dependency instead of the package and returned 404; UI compression stalled until its loading timeout.
+
+**How to apply:** Keep worker/core/WASM same-origin and base-path-aware. Verify the actual worker endpoint and a real browser encode, not just TypeScript or successful imports.
+
+Validate packaged-WASM ffprobe output, not its return code alone.
+
+**Why:** The real FFmpeg core 0.12.10 produced complete, valid JSON with a `-1` return value. Treating that value as a definitive failure blocked compression before encoding, despite a valid source.
+
+**How to apply:** Require a fresh non-empty probe report and strictly validate its streams/duration. Missing or invalid reports still fail; keep the exit status for diagnostics. Verify this behavior again on core upgrades.
 
 Always retain a chosen audio/video file and show its name/size immediately. The latest upload specification allows files through 2 GiB with duration at least 60 seconds; apply no upper duration cap.
 

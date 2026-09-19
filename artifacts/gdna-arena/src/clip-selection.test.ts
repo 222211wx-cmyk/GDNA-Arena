@@ -62,8 +62,8 @@ describe("final simple Clip selection", () => {
     const file = media(name, type, size);
     select(file);
     expect(chooser().textContent).toContain(`${name} — ${(size / 1024 / 1024).toFixed(2)} MB`);
-    expect(submit().disabled).toBe(true);
-    await vi.waitFor(() => expect(submit().disabled).toBe(false));
+    expect(submit().disabled).toBe(false);
+    await vi.waitFor(() => expect(text("duration-status")).toContain(":"));
     expect(input().files?.[0]).toBe(file);
     expect(text("duration-status")).toContain(":");
     expect(text("upload-error")).toBe("");
@@ -76,25 +76,29 @@ describe("final simple Clip selection", () => {
     const compressibleVideo = isVideo && size <= 512 * 1024 * 1024;
     // Audio hides the row; oversized/long video keeps it visible but disabled.
     expect((document.getElementById("compress-row") as HTMLDivElement).hidden).toBe(!isVideo);
-    expect(checkbox.disabled).toBe(!compressibleVideo);
+    if (compressibleVideo) await vi.waitFor(() => expect(checkbox.disabled).toBe(false));
+    else expect(checkbox.disabled).toBe(true);
     expect(upload).not.toHaveBeenCalled();
   });
 
   it("retains but blocks a file over the explicit 2GB transport maximum", async () => {
     const file = media("too-large.mp4", "video/mp4", 2 * 1024 ** 3 + 1);
     select(file);
+    expect(submit().disabled).toBe(false);
+    form().requestSubmit();
     await vi.waitFor(() => expect(text("upload-error")).toContain("2GB"));
     expect(input().files?.[0]).toBe(file);
-    expect(submit().disabled).toBe(true);
+    expect(submit().disabled).toBe(false);
     expect(duration).not.toHaveBeenCalled();
   });
 
   it.each(["audio/mpeg", "video/mp4"])("blocks a short %s with the exact requested message", async type => {
     duration.mockResolvedValueOnce(59.99);
     select(media("short", type, 100));
-    await vi.waitFor(() => expect(text("upload-error")).toBe("خاص دقيقة الفوق"));
-    expect(submit().disabled).toBe(true);
+    await vi.waitFor(() => expect(text("duration-status")).toContain(":"));
+    expect(submit().disabled).toBe(false);
     form().requestSubmit();
+    await vi.waitFor(() => expect(text("upload-error")).toBe("خاص دقيقة الفوق"));
     expect(upload).not.toHaveBeenCalled();
   });
 
@@ -103,6 +107,72 @@ describe("final simple Clip selection", () => {
     chooser().click();
     expect(click).toHaveBeenCalledOnce();
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("shows immediate zero progress and keeps publish available while metadata is pending", () => {
+    duration.mockReturnValueOnce(new Promise(() => {}));
+    select(media("critical.mp4", "video/mp4", 137 * 1024 * 1024));
+    expect(submit().disabled).toBe(false);
+    expect((document.getElementById("progress-wrap") as HTMLDivElement).hidden).toBe(false);
+    expect((document.getElementById("progress") as HTMLProgressElement).value).toBe(0);
+    expect(text("upload-status")).toContain("0% — 0 من");
+    expect((document.getElementById("cancel") as HTMLButtonElement).hidden).toBe(false);
+  });
+
+  it("awaits a pending duration probe after click, then starts upload", async () => {
+    let resolveDuration!: (seconds: number) => void;
+    duration.mockReturnValueOnce(new Promise<number>(resolve => { resolveDuration = resolve; }));
+    upload.mockResolvedValueOnce(receipt);
+    select(media("pending.mp4", "video/mp4", 1024));
+    form().requestSubmit();
+    expect(upload).not.toHaveBeenCalled();
+    expect(chooser().disabled).toBe(true);
+    expect(submit().disabled).toBe(true);
+    expect(submit().textContent).toBe("Téléversement 0%…");
+    expect(text("upload-status")).toContain("0% — 0 من");
+    resolveDuration(61);
+    await vi.waitFor(() => expect(upload).toHaveBeenCalledOnce());
+  });
+
+  it("cancels the whole publish while awaiting metadata and never transitions to upload", async () => {
+    let resolveDuration!: (seconds: number) => void;
+    duration.mockReturnValueOnce(new Promise<number>(resolve => { resolveDuration = resolve; }));
+    const file = media("cancel-pending.mp4", "video/mp4", 1024);
+    select(file);
+    form().requestSubmit();
+
+    const cancel = document.getElementById("cancel") as HTMLButtonElement;
+    expect(cancel.hidden).toBe(false);
+    expect(chooser().disabled).toBe(true);
+    cancel.click();
+
+    await vi.waitFor(() => expect(text("upload-status")).toBe("توقف الرفع"));
+    expect(upload).not.toHaveBeenCalled();
+    expect(chooser().disabled).toBe(false);
+    expect(submit().disabled).toBe(false);
+    expect(input().files?.[0]).toBe(file);
+
+    // Even if an uncooperative browser probe resolves after cancellation, the
+    // cancelled operation must not fall through into upload.
+    resolveDuration(61);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(upload).not.toHaveBeenCalled();
+    expect(input().files?.[0]).toBe(file);
+  });
+
+  it("reports bytes, speed, percent and the exact slow-connection recommendation", async () => {
+    upload.mockImplementationOnce(async (_file, _metadata, _signal, onProgress) => {
+      onProgress(25, 256 * 1024, 100 * 1024, "uploading");
+      return new Promise(() => {});
+    });
+    select(media("slow.mp4", "video/mp4", 1024 * 1024));
+    await vi.waitFor(() => expect(text("duration-status")).toContain(":"));
+    form().requestSubmit();
+    await vi.waitFor(() => expect(submit().textContent).toBe("Téléversement 25%…"));
+    expect(text("upload-status")).toContain("25%");
+    expect(text("upload-status")).toContain("100.0 KB/s");
+    expect(text("upload-status")).toContain("Connexion lente, compression recommandée");
   });
 
   it("retains the previous selection after picker cancellation", async () => {
@@ -140,7 +210,8 @@ describe("final simple Clip selection", () => {
 
     displayName().value = "   ";
     displayName().dispatchEvent(new Event("input", { bubbles: true }));
-    expect(submit().disabled).toBe(true);
+    expect(submit().disabled).toBe(false);
+    form().requestSubmit();
     expect(text("display-name-error")).toContain("مطلوب");
 
     displayName().value = "😀".repeat(120);
@@ -149,7 +220,8 @@ describe("final simple Clip selection", () => {
 
     displayName().value += "😀";
     displayName().dispatchEvent(new Event("input", { bubbles: true }));
-    expect(submit().disabled).toBe(true);
+    expect(submit().disabled).toBe(false);
+    form().requestSubmit();
     expect(text("display-name-error")).toContain("120");
   });
 
@@ -159,20 +231,27 @@ describe("final simple Clip selection", () => {
     select(media("old.mp4", "video/mp4", 1024));
     duration.mockResolvedValueOnce(59);
     select(media("new.mp3", "audio/mpeg", 1024));
-    await vi.waitFor(() => expect(text("upload-error")).toBe("خاص دقيقة الفوق"));
+    await vi.waitFor(() => expect(text("duration-status")).toContain(":"));
     resolveOld(65);
     await Promise.resolve();
-    expect(submit().disabled).toBe(true);
+    expect(submit().disabled).toBe(false);
+    form().requestSubmit();
+    await vi.waitFor(() => expect(text("upload-error")).toBe("خاص دقيقة الفوق"));
     expect(text("selection")).toBe("✓ Fichier sélectionné");
     expect(chooser().textContent).toContain("new.mp3");
   });
 
-  it("shows metadata failure explicitly without erasing the filename", async () => {
+  it("allows server verification after metadata failure without erasing the filename", async () => {
     duration.mockRejectedValueOnce(new Error("Unsupported codec"));
+    upload.mockResolvedValueOnce(receipt);
     select(media("camera.mov", "video/quicktime", 1024));
-    await vi.waitFor(() => expect(text("upload-error")).toBe("Unsupported codec"));
-    expect(submit().disabled).toBe(true);
+    await vi.waitFor(() => expect(text("duration-status")).toContain("غير متاحة"));
+    expect(text("upload-error")).toBe("");
+    expect(submit().disabled).toBe(false);
     expect(chooser().textContent).toContain("camera.mov");
+    form().requestSubmit();
+    await vi.waitFor(() => expect(upload).toHaveBeenCalledOnce());
+    expect(upload.mock.calls[0][1].durationSec).toBeNull();
   });
 
   it("submits only file metadata and retains the selection on failure", async () => {
