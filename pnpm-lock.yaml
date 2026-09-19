@@ -156,13 +156,6 @@ overrides:
 importers:
 
   .:
-    dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.1135.0
-        version: 3.1135.0
-      '@aws-sdk/s3-request-presigner':
-        specifier: ^3.1135.0
-        version: 3.1135.0
     devDependencies:
       prettier:
         specifier: ^3.8.4
@@ -173,6 +166,12 @@ importers:
 
   artifacts/api-server:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1135.0
+        version: 3.1135.0
+      '@aws-sdk/s3-request-presigner':
+        specifier: ^3.1135.0
+        version: 3.1135.0
       '@google-cloud/storage':
         specifier: ^8.0.0
         version: 8.0.0

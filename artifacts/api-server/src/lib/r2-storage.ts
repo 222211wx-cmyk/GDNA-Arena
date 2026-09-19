@@ -1,0 +1,281 @@
+import {
+  DeleteObjectCommand,
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  HeadObjectCommand,
+  UploadPartCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PassThrough, Readable, Writable } from "node:stream";
+
+export const R2_PREFIX = "r2:";
+
+export interface ClipStorageFile {
+  getMetadata(): Promise<[{ size: number; contentType?: string }]>;
+  createReadStream(range?: { start?: number; end?: number }): Readable;
+  createWriteStream(options?: {
+    metadata?: { contentType?: string; cacheControl?: string };
+    preconditionOpts?: { ifGenerationMatch?: number };
+  }): Writable;
+  delete(options?: { ignoreNotFound?: boolean }): Promise<unknown>;
+}
+
+type R2Config = {
+  endpoint: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+};
+
+export function r2Config(): R2Config | null {
+  const endpoint = process.env.R2_ENDPOINT?.trim();
+  const bucket = (process.env.R2_BUCKET_NAME || process.env.R2_BUCKET)?.trim();
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return null;
+  return { endpoint, bucket, accessKeyId, secretAccessKey };
+}
+
+let cachedClient: { signature: string; client: S3Client } | undefined;
+export function r2Client(): S3Client {
+  const config = r2Config();
+  if (!config) throw new Error("R2 storage is not configured");
+  const signature = `${config.endpoint}\n${config.bucket}\n${config.accessKeyId}`;
+  if (cachedClient?.signature !== signature) {
+    cachedClient?.client.destroy();
+    cachedClient = {
+      signature,
+      client: new S3Client({
+        region: "auto",
+        endpoint: config.endpoint,
+        credentials: {
+          accessKeyId: config.accessKeyId,
+          secretAccessKey: config.secretAccessKey,
+        },
+      }),
+    };
+  }
+  return cachedClient.client;
+}
+
+export function r2Reference(key: string): string {
+  if (!/^clips\/(?:original|derived)\/[A-Za-z0-9][A-Za-z0-9/._-]*$/.test(key) ||
+      key.includes("..") || key.includes("\\")) {
+    throw new Error("Invalid R2 object key");
+  }
+  return `${R2_PREFIX}${key}`;
+}
+
+export function isR2Reference(reference: string): boolean {
+  return reference.startsWith(R2_PREFIX);
+}
+
+export function providerSibling(reference: string, filename: string): string {
+  return isR2Reference(reference) ? r2Reference(`clips/derived/${filename}`) : filename;
+}
+
+export function r2Key(reference: string): string {
+  if (!isR2Reference(reference)) throw new Error("Not an R2 object reference");
+  const key = reference.slice(R2_PREFIX.length);
+  r2Reference(key);
+  return key;
+}
+
+function nodeBody(body: unknown): Readable {
+  if (body instanceof Readable) return body;
+  throw new Error("R2 returned an unsupported response stream");
+}
+
+class R2Writable extends Writable {
+  private pending = Buffer.alloc(0);
+  private uploadId?: string;
+  private partNumber = 1;
+  private readonly parts: { PartNumber: number; ETag: string }[] = [];
+  private readonly partBytes = 5 * 1024 * 1024;
+  constructor(
+    private readonly key: string,
+    private readonly contentType?: string,
+    private readonly cacheControl?: string,
+    private readonly createOnly = false,
+  ) { super(); }
+
+  override _construct(callback: (error?: Error | null) => void) {
+    const config = r2Config();
+    if (!config) { callback(new Error("R2 storage is not configured")); return; }
+    const prepare = async () => {
+      if (this.createOnly) {
+        try {
+          await r2Client().send(new HeadObjectCommand({ Bucket: config.bucket, Key: this.key }));
+          throw Object.assign(new Error("R2 object already exists"), { code: 412 });
+        } catch (error) {
+          if (Number((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode) !== 404) throw error;
+        }
+      }
+      const result = await r2Client().send(new CreateMultipartUploadCommand({
+        Bucket: config.bucket,
+        Key: this.key,
+        ContentType: this.contentType,
+        CacheControl: this.cacheControl,
+      }));
+      if (!result.UploadId) throw new Error("R2 did not create multipart upload");
+      this.uploadId = result.UploadId;
+    };
+    prepare().then(() => callback(), error => callback(error as Error));
+  }
+
+  private async uploadPart(bytes: Buffer) {
+    const config = r2Config();
+    if (!config || !this.uploadId) throw new Error("R2 multipart upload is not initialized");
+    const number = this.partNumber++;
+    const result = await r2Client().send(new UploadPartCommand({
+      Bucket: config.bucket,
+      Key: this.key,
+      UploadId: this.uploadId,
+      PartNumber: number,
+      Body: bytes,
+    }));
+    if (!result.ETag) throw new Error("R2 did not return multipart ETag");
+    this.parts.push({ PartNumber: number, ETag: result.ETag });
+  }
+
+  override _write(chunk: Buffer | Uint8Array, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    this.pending = Buffer.concat([this.pending, Buffer.from(chunk)]);
+    const flush = async () => {
+      while (this.pending.length >= this.partBytes) {
+        const part = this.pending.subarray(0, this.partBytes);
+        this.pending = this.pending.subarray(this.partBytes);
+        await this.uploadPart(part);
+      }
+    };
+    flush().then(() => callback(), error => callback(error as Error));
+  }
+
+  override _final(callback: (error?: Error | null) => void) {
+    const config = r2Config();
+    const finish = async () => {
+      if (!config || !this.uploadId) throw new Error("R2 multipart upload is not initialized");
+      if (this.pending.length || !this.parts.length) await this.uploadPart(this.pending);
+      this.pending = Buffer.alloc(0);
+      await r2Client().send(new CompleteMultipartUploadCommand({
+        Bucket: config.bucket,
+        Key: this.key,
+        UploadId: this.uploadId,
+        MultipartUpload: { Parts: this.parts },
+      }));
+    };
+    finish().then(() => callback(), async error => {
+      if (config && this.uploadId) {
+        await r2Client().send(new AbortMultipartUploadCommand({
+          Bucket: config.bucket, Key: this.key, UploadId: this.uploadId,
+        })).catch(() => {});
+      }
+      callback(error as Error);
+    });
+  }
+
+  override _destroy(error: Error | null, callback: (error?: Error | null) => void) {
+    const config = r2Config();
+    if (!config || !this.uploadId || this.writableFinished) { callback(error); return; }
+    r2Client().send(new AbortMultipartUploadCommand({
+      Bucket: config.bucket, Key: this.key, UploadId: this.uploadId,
+    })).catch(() => {}).finally(() => callback(error));
+  }
+}
+
+export function r2File(reference: string): ClipStorageFile {
+  const key = r2Key(reference);
+  return {
+    async getMetadata() {
+      const config = r2Config();
+      if (!config) throw new Error("R2 storage is not configured");
+      const result = await r2Client().send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+      return [{ size: Number(result.ContentLength), contentType: result.ContentType }];
+    },
+    createReadStream(range = {}) {
+      const stream = new PassThrough();
+      let source: Readable | undefined;
+      stream.once("close", () => {
+        if (source && !source.destroyed) source.destroy();
+      });
+      const config = r2Config();
+      if (!config) {
+        queueMicrotask(() => stream.destroy(new Error("R2 storage is not configured")));
+        return stream;
+      }
+      const Range = range.start !== undefined
+        ? `bytes=${range.start}-${range.end ?? ""}`
+        : undefined;
+      void r2Client().send(new GetObjectCommand({
+        Bucket: config.bucket, Key: key, Range,
+      })).then(result => {
+        source = nodeBody(result.Body);
+        source.on("error", error => stream.destroy(error));
+        source.pipe(stream);
+      }, error => stream.destroy(error as Error));
+      return stream;
+    },
+    createWriteStream(options = {}) {
+      return new R2Writable(
+        key,
+        options.metadata?.contentType,
+        options.metadata?.cacheControl,
+        options.preconditionOpts?.ifGenerationMatch === 0,
+      );
+    },
+    async delete(options = {}) {
+      const config = r2Config();
+      if (!config) throw new Error("R2 storage is not configured");
+      try {
+        return await r2Client().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
+      } catch (error) {
+        if (options.ignoreNotFound && Number((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode) === 404) {
+          return undefined;
+        }
+        throw error;
+      }
+    },
+  };
+}
+
+export async function signR2Get(reference: string, expiresInSeconds: number): Promise<string> {
+  const config = r2Config();
+  if (!config) throw new Error("R2 storage is not configured");
+  return getSignedUrl(r2Client(), new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: r2Key(reference),
+  }), { expiresIn: expiresInSeconds });
+}
+
+let statusCache: { expires: number; connected: boolean; error?: string } | undefined;
+export async function r2ConnectionStatus(): Promise<{
+  provider: "r2"; configured: boolean; connected: boolean; bucket: string | null; error?: string;
+}> {
+  const config = r2Config();
+  if (!config) return { provider: "r2", configured: false, connected: false, bucket: null, error: "R2 is not configured" };
+  if (!statusCache || statusCache.expires <= Date.now()) {
+    try {
+      await r2Client().send(new HeadBucketCommand({
+        Bucket: config.bucket,
+      }), { abortSignal: AbortSignal.timeout(5_000) });
+      statusCache = { expires: Date.now() + 60_000, connected: true };
+    } catch (error) {
+      const status = Number((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode) || 0;
+      statusCache = {
+        expires: Date.now() + 15_000,
+        connected: false,
+        error: status ? `R2 bucket check failed (${status})` : "R2 bucket check failed",
+      };
+    }
+  }
+  return {
+    provider: "r2",
+    configured: true,
+    connected: statusCache.connected,
+    bucket: config.bucket,
+    ...(statusCache.error ? { error: statusCache.error } : {}),
+  };
+}

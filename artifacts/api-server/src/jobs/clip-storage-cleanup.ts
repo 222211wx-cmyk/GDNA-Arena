@@ -1,12 +1,41 @@
 import { pool } from "@workspace/db";
 import { clipFile } from "../lib/clip-storage.js";
 import { logger } from "../lib/logger";
+import { AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
+import { r2Client, r2Config, r2Key } from "../lib/r2-storage.js";
 
 const BATCH_SIZE = 12;
 const BATCH_DEADLINE_MS = 90_000;
 const DELETE_TIMEOUT_MS = 10_000;
 const INTERVAL_MS = 60_000;
 let timer: NodeJS.Timeout | undefined;
+
+async function abortOneExpiredR2Upload(): Promise<void> {
+  const config = r2Config();
+  if (!config) return;
+  const { rows } = await pool.query<{
+    id: string; object_name: string; multipart_upload_id: string;
+  }>(
+    `SELECT id,object_name,multipart_upload_id FROM r2_clip_uploads
+     WHERE state='active' AND expires_at <= NOW()
+     ORDER BY expires_at LIMIT 1`,
+  );
+  const upload = rows[0];
+  if (!upload) return;
+  try {
+    await r2Client().send(new AbortMultipartUploadCommand({
+      Bucket: config.bucket,
+      Key: r2Key(upload.object_name),
+      UploadId: upload.multipart_upload_id,
+    }));
+  } catch (error) {
+    if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
+  }
+  await pool.query(
+    `UPDATE r2_clip_uploads SET state='aborted',updated_at=NOW()
+     WHERE id=$1 AND state='active' AND expires_at <= NOW()`, [upload.id],
+  );
+}
 
 async function removeObject(objectName: string): Promise<void> {
   let timeout: NodeJS.Timeout | undefined;
@@ -94,7 +123,10 @@ export async function runClipStorageCleanupBatch(clipId?: number): Promise<numbe
 export function startClipStorageCleanupJob(): void {
   if (timer) return;
   const tick = async () => {
-    try { await runClipStorageCleanupBatch(); }
+    try {
+      await runClipStorageCleanupBatch();
+      await abortOneExpiredR2Upload();
+    }
     catch (err) { logger.error({ err }, "[clips] storage cleanup batch failed"); }
     finally {
       timer = setTimeout(tick, INTERVAL_MS);

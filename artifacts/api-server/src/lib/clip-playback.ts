@@ -1,4 +1,5 @@
 import { clipFile } from "./clip-storage.js";
+import { isR2Reference, signR2Get } from "./r2-storage.js";
 
 // Long enough for a 24-hour recording. This is an expiring public-playback
 // capability, not a CDN configuration or a value to persist in the database.
@@ -9,6 +10,13 @@ export async function signClipPlayback(
   filename: string,
   request: typeof fetch = fetch,
 ): Promise<{ url: string; urlExpiresAt: string }> {
+  if (isR2Reference(filename)) {
+    const seconds = Math.floor(CLIP_PLAYBACK_TTL_MS / 1000);
+    return {
+      url: await signR2Get(filename, seconds),
+      urlExpiresAt: new Date(Date.now() + seconds * 1000).toISOString(),
+    };
+  }
   const file = clipFile(filename);
   const urlExpiresAt = new Date(Date.now() + CLIP_PLAYBACK_TTL_MS).toISOString();
   const response = await request("http://127.0.0.1:1106/object-storage/signed-object-url", {

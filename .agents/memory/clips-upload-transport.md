@@ -32,3 +32,15 @@ If maintaining legacy Tus APIs, parallelize independent resumable parts, not con
 **Why:** A Tus upload has one authoritative sequential offset. The official GCS Tus store evaluated in September 2026 did not support concatenation or termination. Keeping the existing storage provider while supporting parallel transfer and cancellation required separately resumable parts and durable server-side composition.
 
 **How to apply:** Preserve server ownership checks, atomic offset updates and exact ordered composition when changing upload transport. Do not enable a client's built-in parallel-concatenation mode unless the server actually implements that extension.
+
+Use direct R2 multipart transfer for web publishing without implicitly migrating historical clips.
+
+**Why:** The owner authorized using the existing R2 bucket for new uploads after confirming access, not moving or deleting existing Replit-stored media. Mixed storage is intentional during this transition.
+
+**How to apply:** Resolve playback, processing, thumbnails, and deletion from each object's provider identity, not the currently selected upload provider. Never retag historical object names to make them appear to be R2 objects. Future native publishing should use the same direct-upload protocol.
+
+Treat verified S3 access and a Replit Cloudflare connector as separate connection states.
+
+**Why:** R2 credentials successfully authenticated without completing the earlier connector prompt. The originally requested bucket name did not exist; the owner explicitly selected the existing bucket instead.
+
+**How to apply:** Base the app's Connected indicator on a real bucket-access check. Do not reopen OAuth just to change a connector chip, or assume that saved credentials prove the selected bucket exists.

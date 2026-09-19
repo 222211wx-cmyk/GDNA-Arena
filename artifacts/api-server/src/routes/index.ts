@@ -48,6 +48,7 @@ import callPushRouter from "./call-push";
 import communicationGroupsRouter from "./communication-groups";
 import browserPushRouter from "./browser-push";
 import adminClipThumbnailsRouter from "./admin-clip-thumbnails";
+import r2Router from "./r2";
 
 const router: IRouter = Router();
 
@@ -80,6 +81,7 @@ router.use(empireMediaRouter);
 router.use(rightsRouter);
 router.use(ppoRouter);
 router.use(clipsRouter);
+router.use(r2Router);
 router.use(adminClipThumbnailsRouter);
 router.use(levelsRouter);
 router.use(rtcRouter);

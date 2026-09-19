@@ -3,6 +3,7 @@ import { pool } from "@workspace/db";
 import { compressStoredClip, ClipCompressionCleanupError } from "../lib/clip-server-compression.js";
 import { logger } from "../lib/logger.js";
 import { retryThumbnailName } from "../lib/clip-storage-names.js";
+import { providerSibling } from "../lib/clip-storage.js";
 
 const GLOBAL_LOCK_NAMESPACE = 19183722;
 const GLOBAL_LOCK_KEY = 1;
@@ -86,7 +87,8 @@ export async function runClipCompressionBatch(): Promise<number> {
     // A previous process died; this attempt's exclusive lock means no older
     // active owner may write the old candidate. Connection loss aborts its I/O.
     await enqueue([candidate.processing_output_object]);
-    outputName = `clip_compressed_${randomUUID().replaceAll("-", "")}${candidate.content_type.startsWith("audio/") ? ".m4a" : ".mp4"}`;
+    outputName = providerSibling(candidate.object_name,
+      `clip_compressed_${randomUUID().replaceAll("-", "")}${candidate.content_type.startsWith("audio/") ? ".m4a" : ".mp4"}`);
     candidate.processing_attempts++;
     await client.query(
       `UPDATE clips SET processing_status='processing', processing_attempts=$2,

@@ -25,7 +25,11 @@ export function clipName(filename: string): string {
 }
 
 /** No ownership/fingerprint/category checks: verify real media and >=60 seconds. */
-export async function publishClip(input: PublishClipInput, lockedClient?: ClipDatabaseClient) {
+export async function publishClip(
+  input: PublishClipInput,
+  lockedClient?: ClipDatabaseClient,
+  beforeCommit?: (client: ClipDatabaseClient, clip: Record<string, any>) => Promise<void>,
+) {
   const contentType = normalizeClipContentType(input.contentType);
   if (!contentType) throw new ClipUploadError(415, "صيغة الصوت أو الفيديو غير مدعومة");
   if (!Number.isSafeInteger(input.size) || input.size <= 0) throw new ClipUploadError(400, "Invalid media size");
@@ -67,6 +71,7 @@ export async function publishClip(input: PublishClipInput, lockedClient?: ClipDa
           input.size, duration, code, processingStatus, input.title.split(/[\\/]/).pop() || input.title],
       );
       if (!rows[0]) continue;
+      if (beforeCommit) await beforeCommit(client, rows[0]);
       await client.query("COMMIT");
       return clipWithThumbnail(rows[0]);
     }

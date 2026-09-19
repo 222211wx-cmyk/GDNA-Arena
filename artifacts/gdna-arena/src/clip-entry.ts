@@ -47,6 +47,14 @@ style.textContent = `
   .copy-link-fallback{inline-size:min(100%,28rem)}
   .clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}article{overflow:visible}
   a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
+  .storage-badge{display:flex;align-items:center;gap:calc(${space} * 2);font-size:.8125rem;flex-wrap:wrap;margin:0}
+  .storage-dot{inline-size:.5rem;block-size:.5rem;border-radius:9999px;background:${palette.mutedForeground};flex:none}
+  .storage-text{font-weight:600;color:${palette.mutedForeground}}
+  .storage-bucket{font-size:.75rem}
+  .storage-badge[data-state=connected] .storage-dot{background:${palette.chart3}}
+  .storage-badge[data-state=connected] .storage-text{color:${palette.chart3}}
+  .storage-badge[data-state=error] .storage-dot{background:${palette.destructive}}
+  .storage-badge[data-state=error] .storage-text{color:${palette.destructive}}
 `;
 document.head.appendChild(style);
 
@@ -56,6 +64,11 @@ root.innerHTML = `
   <div id="auth" class="muted" aria-live="polite">جارٍ التحقق من تسجيل الدخول…</div>
   <form id="upload" data-testid="clip-upload" hidden>
     <h2>رفع صوت أو فيديو</h2>
+    <div id="storage-badge" data-testid="clip-storage-badge" class="storage-badge" role="status" aria-live="polite" dir="ltr">
+      <span id="storage-dot" class="storage-dot" aria-hidden="true"></span>
+      <span id="storage-text" class="storage-text"></span>
+      <span id="storage-bucket" class="storage-bucket muted" dir="ltr"></span>
+    </div>
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
     <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 2GB</p>
@@ -100,6 +113,9 @@ const progress = element<HTMLProgressElement>("progress");
 const status = element<HTMLParagraphElement>("upload-status");
 const uploadError = element<HTMLParagraphElement>("upload-error");
 const feed = element<HTMLDivElement>("feed");
+const storageBadge = element<HTMLDivElement>("storage-badge");
+const storageText = element<HTMLSpanElement>("storage-text");
+const storageBucket = element<HTMLSpanElement>("storage-bucket");
 const compressRow = element<HTMLDivElement>("compress-row");
 const compress = element<HTMLInputElement>("compress");
 const compressNote = element<HTMLParagraphElement>("compress-note");
@@ -428,6 +444,61 @@ async function loadFeed() {
   }
 }
 
+type R2Status = {
+  provider: string;
+  configured: boolean;
+  connected: boolean;
+  bucket: string | null;
+  error?: string;
+};
+
+let storageController: AbortController | null = null;
+
+/**
+ * Show real app-storage (Cloudflare R2) connectivity to the uploader. Only a
+ * verified connected=true renders the green "Connected" state; every other
+ * outcome (checking, not configured, reachable-but-not-connected, timeout,
+ * network/HTTP error) stays neutral or shows a plain error — never a false
+ * green. User-facing copy is Arabic with the English provider name; technical
+ * details are not surfaced. This never blocks the upload form or the feed.
+ */
+async function loadStorageStatus() {
+  storageController?.abort();
+  const controller = new AbortController();
+  storageController = controller;
+  const timer = window.setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  storageBadge.dataset.state = "checking";
+  storageText.textContent = "جارٍ التحقق من التخزين — Cloudflare R2";
+  storageBucket.textContent = "";
+  try {
+    const response = await fetch(`${BASE}api/r2/status`, {
+      credentials: "include", cache: "no-store", signal: controller.signal,
+    });
+    if (!response.ok) throw new Error();
+    const data = (await response.json().catch(() => null)) as R2Status | null;
+    if (!data || data.connected !== true) {
+      // Reachable but not verified-connected, or unusable payload — no false green.
+      storageBadge.dataset.state = "unknown";
+      storageText.textContent = data && data.configured === false
+        ? "التخزين غير مهيأ بعد — Cloudflare R2"
+        : "تعذر تأكيد اتصال التخزين — Cloudflare R2";
+      storageBucket.textContent = "";
+      return;
+    }
+    storageBadge.dataset.state = "connected";
+    storageText.textContent = "التخزين متصل — Cloudflare R2 — Connected";
+    storageBucket.textContent = typeof data.bucket === "string" ? data.bucket : "";
+  } catch {
+    if (controller.signal.aborted && storageController !== controller) return;
+    storageBadge.dataset.state = "error";
+    storageText.textContent = "تعذر التحقق من التخزين — Cloudflare R2";
+    storageBucket.textContent = "";
+  } finally {
+    clearTimeout(timer);
+    if (storageController === controller) storageController = null;
+  }
+}
+
 async function loadAuth() {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
@@ -445,6 +516,9 @@ async function loadAuth() {
     if (me && Number.isSafeInteger(me.id)) {
       accountId = me.id;
       identityStatus = "authenticated";
+      // The R2 status endpoint is authenticated; only probe it once we know the
+      // viewer is signed in. It never blocks the form (rendered right below).
+      void loadStorageStatus();
     } else {
       // Reachable server but unusable identity payload — do not assume anonymous.
       identityStatus = "unknown";

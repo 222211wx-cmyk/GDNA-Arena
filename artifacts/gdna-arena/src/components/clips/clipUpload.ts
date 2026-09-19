@@ -1,6 +1,4 @@
-import { Upload, type DetailedError, type HttpRequest } from "tus-js-client";
-
-const ROOT = `${import.meta.env.BASE_URL}api/clips/uploads`;
+const R2_API = `${import.meta.env.BASE_URL}api/r2/presign`;
 export const UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024;
 export const MAX_CLIP_BYTES = 2 * 1024 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 300_000;
@@ -26,7 +24,11 @@ export type ClipUploadProgress = (
   state: ClipUploadState,
 ) => void;
 
-type SavedUpload = { location?: string; id?: string; groupId: string };
+type SavedUpload = {
+  requestId: string;
+  sessionId?: string;
+  completed: Map<number, string>;
+};
 const fileSessionIds = new WeakMap<File, string>();
 const resumableSessions = new Map<string, SavedUpload>();
 
@@ -83,138 +85,165 @@ function sessionKey(file: File, metadata: ClipUploadMetadata) {
   return `${sessionId}:${metadata.title}:${metadata.contentType}:${metadata.durationSec}`;
 }
 
-function uploadId(location: string) {
-  return new URL(location, window.location.href).pathname.split("/").filter(Boolean).at(-1);
+function retryableStatus(status: number) {
+  return status === 0 || status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
-function prepareCredentialedRequest(request: HttpRequest) {
-  const xhr = request.getUnderlyingObject() as XMLHttpRequest | undefined;
-  if (xhr) xhr.withCredentials = true;
+function wait(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"));
+    }, { once: true });
+  });
 }
 
-function shouldRetry(error: DetailedError) {
-  const status = error.originalResponse?.getStatus() ?? 0;
-  return status === 0 || status === 408 || status === 409 || status === 425 ||
-    status === 429 || status >= 500;
+async function r2Json(body: Record<string, unknown>, signal: AbortSignal) {
+  const response = await request(R2_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }, signal);
+  if (!response.ok) throw Object.assign(new Error(await errorMessage(response)), { status: response.status });
+  return response.status === 204 ? null : response.json();
 }
 
-function runTusUpload(
+async function uploadR2Part(
+  file: File,
+  sessionId: string,
+  partNumber: number,
+  start: number,
+  end: number,
+  signal: AbortSignal,
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+    signal.throwIfAborted();
+    if (RETRY_DELAYS_MS[attempt]) await wait(RETRY_DELAYS_MS[attempt], signal);
+    try {
+      // Always request a fresh URL on retry. This handles expiry without ever
+      // routing media bytes through the GDNA API server.
+      const signed = await r2Json({ action: "part", sessionId, partNumber }, signal);
+      if (typeof signed?.url !== "string") throw new Error("R2 did not return an upload URL");
+      const response = await fetch(signed.url, {
+        method: "PUT",
+        body: file.slice(start, end),
+        signal,
+      });
+      if (!response.ok) {
+        const error = Object.assign(new Error(`R2 part upload failed (${response.status})`), { status: response.status });
+        if (!retryableStatus(response.status) && response.status !== 403) throw error;
+        lastError = error;
+        continue;
+      }
+      const etag = response.headers.get("ETag");
+      if (!etag) throw new Error("R2 upload response did not expose ETag");
+      return etag;
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      const status = Number((error as { status?: number }).status ?? 0);
+      if (status && !retryableStatus(status) && status !== 403) throw error;
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("R2 part upload failed after retries");
+}
+
+async function runR2Upload(
   file: File,
   metadata: ClipUploadMetadata,
   saved: SavedUpload,
   signal: AbortSignal,
   onProgress: ClipUploadProgress,
 ) {
-  return new Promise<SavedUpload>((resolve, reject) => {
-    let settled = false;
-    let pausedOffline = false;
-    let latestBytes = 0;
-    let lastSampleBytes = 0;
-    let lastTime = performance.now();
-    let smoothedSpeed = 0;
-
-    const finish = (action: () => void) => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener("abort", abort);
-      window.removeEventListener("offline", offline);
-      window.removeEventListener("online", online);
-      action();
-    };
-
-    const upload = new Upload(file, {
-      endpoint: saved.location ? undefined : ROOT,
-      uploadUrl: saved.location,
-      uploadSize: file.size,
-      chunkSize: UPLOAD_CHUNK_BYTES,
-      retryDelays: RETRY_DELAYS_MS,
-      storeFingerprintForResuming: false,
-      removeFingerprintOnSuccess: true,
-      metadata: {
-        groupId: saved.groupId,
-        partIndex: "0",
-        partCount: "1",
-        totalSize: String(file.size),
-        title: metadata.title,
-        contentType: metadata.contentType,
-        durationSec: String(metadata.durationSec),
-      },
-      onBeforeRequest: prepareCredentialedRequest,
-      onShouldRetry: error => !signal.aborted && navigator.onLine && shouldRetry(error),
-      onUploadUrlAvailable: () => {
-        if (!upload.url) return;
-        saved.location = upload.url;
-        saved.id = uploadId(upload.url);
-      },
-      onProgress: (uploadedBytes, totalBytes) => {
-        latestBytes = uploadedBytes;
-        const now = performance.now();
-        const elapsed = (now - lastTime) / 1_000;
-        if (elapsed >= 0.35) {
-          const current = Math.max(0, uploadedBytes - lastSampleBytes) / elapsed;
-          smoothedSpeed = smoothedSpeed ? smoothedSpeed * 0.65 + current * 0.35 : current;
-          lastSampleBytes = uploadedBytes;
-          lastTime = now;
-        }
-        onProgress(
-          Math.min(99, totalBytes ? uploadedBytes / totalBytes * 100 : 0),
-          uploadedBytes,
-          smoothedSpeed,
-          "uploading",
-        );
-      },
-      onError: error => {
-        if (signal.aborted) return;
-        if (!navigator.onLine) {
-          offline();
-          return;
-        }
-        finish(() => reject(new Error(error.message || "تعذر متابعة الرفع بعد عدة محاولات")));
-      },
-      onSuccess: () => {
-        if (upload.url) {
-          saved.location = upload.url;
-          saved.id = uploadId(upload.url);
-        }
-        if (!saved.id) {
-          finish(() => reject(new Error("لم يعرض الخادم موقع جلسة الرفع")));
-          return;
-        }
-        finish(() => resolve(saved));
-      },
-    });
-
-    const abort = () => {
-      void upload.abort(false).finally(() => finish(() => reject(
-        signal.reason ?? new DOMException("The operation was aborted", "AbortError"),
-      )));
-    };
-    const offline = () => {
-      if (settled || pausedOffline) return;
-      pausedOffline = true;
-      onProgress(
-        Math.min(99, file.size ? latestBytes / file.size * 100 : 0),
-        latestBytes,
-        0,
-        "offline",
-      );
-      void upload.abort(false);
-    };
-    const online = () => {
-      if (settled || !pausedOffline || signal.aborted) return;
-      pausedOffline = false;
-      lastSampleBytes = latestBytes;
-      lastTime = performance.now();
-      upload.start();
-    };
-
-    signal.addEventListener("abort", abort, { once: true });
-    window.addEventListener("offline", offline);
-    window.addEventListener("online", online);
-    if (signal.aborted) abort();
-    else if (!navigator.onLine) offline();
-    else upload.start();
-  });
+  if (!saved.sessionId) {
+    const initiated = await r2Json({
+      action: "initiate",
+      requestId: saved.requestId,
+      filename: metadata.title,
+      contentType: metadata.contentType,
+      durationSec: metadata.durationSec,
+      size: file.size,
+    }, signal);
+    if (typeof initiated?.sessionId !== "string" || initiated.partSize !== UPLOAD_CHUNK_BYTES) {
+      throw new Error("R2 did not create a valid upload session");
+    }
+    saved.sessionId = initiated.sessionId;
+  }
+  const inspected = await r2Json({
+    action: "inspect",
+    sessionId: saved.sessionId,
+  }, signal);
+  if (inspected?.state === "published" && inspected.receipt) return inspected.receipt;
+  if (inspected?.state === "aborted") throw new Error("R2 upload was cancelled");
+  if (Array.isArray(inspected?.parts)) {
+    // For an active multipart upload, R2's ListParts result is authoritative.
+    // Remove stale local acknowledgements before restoring server-confirmed ETags.
+    if (inspected.state === "active") saved.completed.clear();
+    for (const part of inspected.parts) {
+      if (Number.isSafeInteger(part?.partNumber) && typeof part?.etag === "string" &&
+          Number(part?.size) > 0) {
+        saved.completed.set(part.partNumber, part.etag);
+      }
+    }
+  }
+  const partCount = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+  let uploadedBytes = 0;
+  for (const partNumber of saved.completed.keys()) {
+    const start = (partNumber - 1) * UPLOAD_CHUNK_BYTES;
+    uploadedBytes += Math.min(UPLOAD_CHUNK_BYTES, file.size - start);
+  }
+  let lastBytes = uploadedBytes;
+  let lastTime = performance.now();
+  let speed = 0;
+  const report = () => {
+    const now = performance.now();
+    const elapsed = Math.max(0.001, (now - lastTime) / 1_000);
+    const current = Math.max(0, uploadedBytes - lastBytes) / elapsed;
+    speed = speed ? speed * 0.65 + current * 0.35 : current;
+    lastBytes = uploadedBytes;
+    lastTime = now;
+    onProgress(Math.min(99, uploadedBytes / file.size * 100), uploadedBytes, speed,
+      navigator.onLine ? "uploading" : "offline");
+  };
+  report();
+  // Three independent multipart PUTs improve throughput without concurrent
+  // writes to one sequential Tus offset.
+  let nextPart = 1;
+  const worker = async () => {
+    while (nextPart <= partCount) {
+      signal.throwIfAborted();
+      const partNumber = nextPart++;
+      if (saved.completed.has(partNumber)) continue;
+      while (!navigator.onLine) {
+        report();
+        await new Promise<void>((resolve, reject) => {
+          const online = () => { cleanup(); resolve(); };
+          const abort = () => { cleanup(); reject(signal.reason); };
+          const cleanup = () => {
+            window.removeEventListener("online", online);
+            signal.removeEventListener("abort", abort);
+          };
+          window.addEventListener("online", online, { once: true });
+          signal.addEventListener("abort", abort, { once: true });
+        });
+      }
+      const start = (partNumber - 1) * UPLOAD_CHUNK_BYTES;
+      const end = Math.min(file.size, start + UPLOAD_CHUNK_BYTES);
+      const etag = await uploadR2Part(file, saved.sessionId!, partNumber, start, end, signal);
+      saved.completed.set(partNumber, etag);
+      uploadedBytes += end - start;
+      report();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, partCount) }, worker));
+  return r2Json({
+    action: "complete",
+    sessionId: saved.sessionId,
+    parts: Array.from(saved.completed, ([partNumber, etag]) => ({ partNumber, etag }))
+      .sort((a, b) => a.partNumber - b.partNumber),
+  }, signal);
 }
 
 export async function uploadClip(
@@ -226,17 +255,12 @@ export async function uploadClip(
   signal.throwIfAborted();
   if (file.size > MAX_CLIP_BYTES) throw new Error("الحد الأقصى للملف هو 2GB");
   const key = sessionKey(file, metadata);
-  const saved = resumableSessions.get(key) ?? { groupId: crypto.randomUUID() };
+  const saved = resumableSessions.get(key) ?? {
+    requestId: crypto.randomUUID(),
+    completed: new Map<number, string>(),
+  };
   resumableSessions.set(key, saved);
-  await runTusUpload(file, metadata, saved, signal, onProgress);
-
-  const completion = await request(`${import.meta.env.BASE_URL}api/clip/upload-final`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ groupId: saved.groupId, uploadIds: [saved.id] }),
-  }, signal);
-  if (!completion.ok) throw new Error(await errorMessage(completion));
-  const body = await completion.json();
+  const body = await runR2Upload(file, metadata, saved, signal, onProgress);
   if (body?.ok === false || !body?.clip || typeof body.clip !== "object") {
     throw new Error("لم يؤكد الخادم نشر الكليب");
   }

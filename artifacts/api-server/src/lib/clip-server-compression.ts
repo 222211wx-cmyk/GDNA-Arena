@@ -172,14 +172,15 @@ export function createStoredClipCompressor(deps: ClipCompressionDependencies) {
     input.signal?.throwIfAborted();
     if (!input.force && input.size <= COMPRESS_ABOVE_BYTES) return null;
     if (!Number.isSafeInteger(input.size) || input.size < 0) throw new Error("Invalid clip size");
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(input.filename)) throw new Error("Invalid stored clip filename");
+    if (!/^(?:[a-zA-Z0-9][a-zA-Z0-9._-]*|r2:clips\/[a-zA-Z0-9/._-]+)$/.test(input.filename) ||
+        input.filename.includes("..")) throw new Error("Invalid stored clip filename");
     const kind = input.contentType.startsWith("audio/") ? "audio" :
       input.contentType.startsWith("video/") ? "video" : null;
     if (!kind) throw new Error("Clip compression requires audio or video");
     const extension = kind === "video" ? ".mp4" : ".m4a";
     const contentType = kind === "video" ? "video/mp4" : "audio/mp4";
     if (input.outputFilename !== undefined && (
-      !/^clip_(?:compressed_)?[a-f0-9]{32}\.(mp4|m4a)$/.test(input.outputFilename) ||
+      !/^(?:r2:clips\/derived\/)?clip_(?:compressed_)?[a-f0-9]{32}\.(mp4|m4a)$/.test(input.outputFilename) ||
       !input.outputFilename.endsWith(extension) ||
       input.outputFilename === input.filename
     )) throw new Error("Invalid reserved clip output filename");

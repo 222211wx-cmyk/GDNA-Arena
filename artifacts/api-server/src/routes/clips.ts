@@ -158,6 +158,25 @@ export async function ensureClipsTables(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS clip_storage_cleanup_due_idx
         ON clip_storage_cleanup (retry_at, object_name);
+      CREATE TABLE IF NOT EXISTS r2_clip_uploads (
+        id UUID PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        request_id UUID NOT NULL,
+        object_name TEXT NOT NULL UNIQUE,
+        multipart_upload_id TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        size_bytes BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= ${MAX_NEW_CLIP_BYTES}),
+        duration_sec DOUBLE PRECISION NOT NULL CHECK (duration_sec >= 0),
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','completing','published','aborted')),
+        clip_id INTEGER REFERENCES clips(id) ON DELETE SET NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, request_id)
+      );
+      CREATE INDEX IF NOT EXISTS r2_clip_uploads_expiry_idx
+        ON r2_clip_uploads (expires_at) WHERE state IN ('active','completing');
       INSERT INTO monetization_settings (content_type, rate, unit)
         VALUES ('clip', 0.01, 'view') ON CONFLICT (content_type) DO NOTHING;
     `);

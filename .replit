@@ -69,29 +69,10 @@ FIREBASE_VAPID_PUBLIC = "BLm1TSJk2Hvpqoi1lWCRJuPc4SGKX54ltiGmdlizQ-Wf6jsq_NZto3f
 FCM_ENABLED = "false"
 WEB_PUSH_SUBJECT = "https://helixly.app"
 R2_ENDPOINT = "https://b1381b18b51942798929ef856d6a007a.r2.cloudflarestorage.com"
+R2_BUCKET_NAME = "helixly-clips"
 
 [userenv.development]
 ROYAL_CREDIT_SANDBOX = "true"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-fe0a3e61-810d-4ac9-bd98-f324eacc3236"
-
-[[ports]]
-localPort = 8080
-externalPort = 80
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 19130
-externalPort = 3000
-
-[[ports]]
-localPort = 22842
-externalPort = 3002
-
-[[ports]]
-localPort = 23916
-externalPort = 3001
