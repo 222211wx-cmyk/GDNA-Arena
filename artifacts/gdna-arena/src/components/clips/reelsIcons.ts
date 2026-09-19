@@ -46,4 +46,6 @@ export const reelsIcons = {
     svg('<path d="M4 7h16l-1 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1Z"/><path d="M8.5 7a3.5 3.5 0 0 1 7 0"/>', { filled: active, size: 24 }),
   navBell: (active = false) =>
     svg('<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 20a2 2 0 0 0 4 0"/>', { filled: active, size: 24 }),
+  navSearch: (active = false) =>
+    svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>', { filled: active, size: 24 }),
 };

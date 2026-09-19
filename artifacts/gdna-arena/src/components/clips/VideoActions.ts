@@ -41,6 +41,8 @@ type MountOptions = {
   saveDisabled?: boolean;
   /** Content type label shown next to the audio/video badge. */
   contentType?: string | null;
+  /** App shell that must enter fullscreen so persistent navigation stays visible. */
+  fullscreenTarget?: HTMLElement;
 };
 
 /**
@@ -516,10 +518,17 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
   const fullscreen = menuItem("Fullscreen", icons.fullscreen());
   fullscreen.addEventListener("click", async () => {
     closeMenu();
+    const target = options.fullscreenTarget ?? options.media.closest<HTMLElement>("[data-clip-fullscreen-shell]");
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else if (options.media.requestFullscreen) await options.media.requestFullscreen();
-      else if ("webkitEnterFullscreen" in options.media) (options.media as HTMLVideoElement & { webkitEnterFullscreen(): void }).webkitEnterFullscreen();
+      else if (target?.requestFullscreen) await target.requestFullscreen();
+      else if (target && "webkitRequestFullscreen" in target) {
+        (target as HTMLElement & { webkitRequestFullscreen(): void }).webkitRequestFullscreen();
+      } else if (target) {
+        target.classList.toggle("clip-css-fullscreen");
+      } else {
+        throw new Error("Fullscreen shell is unavailable");
+      }
     } catch { showMessage(status, "Fullscreen is unavailable", true); }
   });
   menu.append(fullscreen);

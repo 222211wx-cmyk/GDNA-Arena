@@ -29,9 +29,7 @@ type NavRoute = { key: string; label: string; href: string; icon: (active: boole
 
 const NAV_ROUTES: NavRoute[] = [
   { key: "home", label: "Accueil", href: `${BASE}`, icon: reelsIcons.navHome },
-  { key: "reels", label: "Reels", href: `${BASE}clips`, icon: reelsIcons.navReels },
-  { key: "friends", label: "Amis", href: `${BASE}friends`, icon: reelsIcons.navFriends },
-  { key: "shop", label: "Boutique", href: `${BASE}shop`, icon: reelsIcons.navShop },
+  { key: "reels", label: "Clips", href: `${BASE}clips`, icon: reelsIcons.navReels },
 ];
 
 type MountReelsOptions = {
@@ -75,30 +73,37 @@ function avatarNode(className: string, url: string | null, name: string): HTMLEl
   return wrap;
 }
 
-export type ReelsController = { destroy: () => void };
+export type ReelsController = {
+  destroy: () => void;
+  pause: () => void;
+  resume: () => void;
+};
 
 export function mountReels(root: HTMLElement, options: MountReelsOptions): ReelsController {
   const identityPromise = resolveIdentity();
   let identity: Identity = { status: "unknown" };
 
   // ── Shell ────────────────────────────────────────────────────────────
-  const shell = el("div", "reels-shell", { "data-tools": "closed", "data-testid": "reels-shell" });
+  const shell = el("div", "reels-shell", {
+    "data-tools": "closed",
+    "data-testid": "reels-shell",
+    "data-clip-fullscreen-shell": "",
+  });
   shell.dataset.testid = "reels-shell";
 
   // Top bar
   const topbar = el("div", "reels-topbar");
   const topLeft = el("div", "reels-topbar-left");
-  const hamburger = iconButton("Menu", reelsIcons.hamburger());
+  const homeLink = el("a", "reels-icon-btn", { href: BASE, "aria-label": "Retour à l’accueil" });
+  homeLink.innerHTML = reelsIcons.back();
   const title = el("h1", "reels-title");
-  title.textContent = "Reels";
-  topLeft.append(hamburger, title);
+  title.textContent = "GDNA Arena";
+  topLeft.append(homeLink);
   const topRight = el("div", "reels-topbar-right");
-  const cameraBtn = iconButton("Caméra — publier un clip", reelsIcons.camera());
-  cameraBtn.dataset.testid = "reels-camera";
   const searchBtn = iconButton("Rechercher", reelsIcons.search());
-  const moreBtn = iconButton("Plus", reelsIcons.more());
-  topRight.append(cameraBtn, searchBtn, moreBtn);
-  topbar.append(topLeft, topRight);
+  const moreBtn = iconButton("Menu", reelsIcons.hamburger());
+  topRight.append(searchBtn, moreBtn);
+  topbar.append(topLeft, title, topRight);
 
   // Feed track
   const track = el("div", "reels-track", { "data-testid": "reels-track", tabindex: "0", "aria-label": "Fil des Reels" });
@@ -121,6 +126,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   let searchQuery = "";
   let gridOpen = false;
   let destroyed = false;
+  let suspended = false;
   let activeSlideId: number | null = null;
   let unreadCount = 0;
   let gridToggleBtn: HTMLButtonElement;
@@ -139,15 +145,13 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       link.append(label);
       bottomnav.append(link);
     }
-    // Notifications: functional overlay (no standalone route).
-    bellItem = el("button", "reels-nav-item reels-badge-host", { type: "button", "data-nav": "notifications", "aria-label": "Notifications" });
-    bellItem.innerHTML = reelsIcons.navBell(false);
-    const bellLabel = el("span");
-    bellLabel.textContent = "Alertes";
-    bellItem.append(bellLabel);
-    bellBadge = null;
-    bellItem.addEventListener("click", openNotifications);
-    bottomnav.append(bellItem);
+    const search = el("button", "reels-nav-item", { type: "button", "data-nav": "search", "aria-label": "Recherche" });
+    search.innerHTML = reelsIcons.navSearch(false);
+    const searchLabel = el("span");
+    searchLabel.textContent = "Recherche";
+    search.append(searchLabel);
+    search.addEventListener("click", openSearch);
+    bottomnav.append(search);
     // Profile
     const profileHref = identity.status === "authenticated" && identity.username
       ? `${BASE}citizen/${encodeURIComponent(identity.username)}`
@@ -159,6 +163,10 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     pLabel.textContent = "Profil";
     profile.append(av, pLabel);
     bottomnav.append(profile);
+    // Notifications remain available from the menu; retain an inert host so the
+    // existing unread loader can update safely without adding a fifth nav item.
+    bellItem = el("button");
+    bellBadge = null;
     applyUnreadBadge();
   }
 
@@ -195,6 +203,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     clipById.set(clip.id, clip);
     const slide = el("div", "reels-slide", { "data-clip-id": String(clip.id), "data-testid": "reels-slide" });
     slide.tabIndex = -1;
+    const closeViewer = iconButton("Fermer le lecteur et afficher la grille", reelsIcons.close(), "reels-icon-btn reels-viewer-close");
+    closeViewer.addEventListener("click", () => toggleGrid(true));
+    slide.append(closeViewer);
 
     // Background from the clip's own poster (never unrelated imagery).
     if (clip.thumb) {
@@ -298,6 +309,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         accountId: identity.status === "authenticated" ? identity.accountId : null,
         saveDisabled: identity.status === "unknown",
         contentType: clip.content_type ?? undefined,
+        fullscreenTarget: shell,
         initial,
       }).then(handle => {
         actionsHandle = handle;
@@ -393,7 +405,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       if (toggle.isConnected === false) meta.append(toggle);
     }
 
-    fsBtn.addEventListener("click", () => toggleFullscreen(video ?? slide));
+    fsBtn.addEventListener("click", toggleFullscreen);
     playBtn.addEventListener("click", () => {
       if (!video) { loadPlayback(); return; }
       if (video.paused) void video.play().catch(() => {});
@@ -424,9 +436,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   }
 
   // ── Fullscreen (native with CSS fallback) ───────────────────────────────
-  function toggleFullscreen(target: Element) {
+  function toggleFullscreen() {
     const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
-    const anyTarget = target as HTMLElement & { webkitEnterFullscreen?: () => void; webkitRequestFullscreen?: () => void };
+    const anyTarget = shell as HTMLElement & { webkitRequestFullscreen?: () => void };
     try {
       if (doc.fullscreenElement || doc.webkitFullscreenElement) {
         if (document.exitFullscreen) void document.exitFullscreen();
@@ -435,9 +447,6 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         void anyTarget.requestFullscreen();
       } else if (anyTarget.webkitRequestFullscreen) {
         anyTarget.webkitRequestFullscreen();
-      } else if (anyTarget.webkitEnterFullscreen) {
-        // iOS Safari <video> native fullscreen.
-        anyTarget.webkitEnterFullscreen();
       } else {
         // CSS fallback.
         shell.classList.toggle("reels-css-fullscreen");
@@ -455,7 +464,8 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           const id = Number((entry.target as HTMLElement).dataset.clipId);
           const handle = slides.find(s => s.id === id);
           if (!handle) continue;
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+          if (!suspended && !gridOpen && !searchOverlay && !notifOverlay &&
+              entry.isIntersecting && entry.intersectionRatio >= 0.6) {
             if (activeSlideId !== id) {
               const prev = slides.find(s => s.id === activeSlideId);
               prev?.deactivate();
@@ -581,12 +591,24 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   // ── Three-column grid ────────────────────────────────────────────────────
   let gridView: HTMLElement | null = null;
+  let gridScrollTop = 0;
   function toggleGrid(open?: boolean) {
     gridOpen = open ?? !gridOpen;
-    if (gridOpen) buildGrid();
-    else { gridView?.remove(); gridView = null; }
+    if (gridOpen) {
+      slides.forEach(slide => slide.deactivate());
+      buildGrid();
+      requestAnimationFrame(() => { if (gridView) gridView.scrollTop = gridScrollTop; });
+    } else {
+      gridScrollTop = gridView?.scrollTop ?? gridScrollTop;
+      gridView?.remove();
+      gridView = null;
+    }
     gridToggleBtn.innerHTML = reelsIcons.grid(gridOpen);
     gridToggleBtn.setAttribute("aria-pressed", String(gridOpen));
+    const url = new URL(window.location.href);
+    if (gridOpen) url.searchParams.set("view", "grid");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url);
   }
 
   function buildGrid() {
@@ -628,6 +650,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   }
 
   function openFromGrid(clipId: number) {
+    gridScrollTop = gridView?.scrollTop ?? gridScrollTop;
     toggleGrid(false);
     const handle = slides.find(s => s.id === clipId);
     if (handle) {
@@ -645,6 +668,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   function openSearch() {
     if (searchOverlay) return;
+    slides.find(s => s.id === activeSlideId)?.deactivate();
     restoreFocusTo.current = document.activeElement as HTMLElement;
     searchOverlay = el("div", "reels-search", { role: "dialog", "aria-label": "Recherche", "aria-modal": "true", "data-testid": "reels-search" });
     const bar = el("div", "reels-search-bar");
@@ -717,12 +741,14 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     searchOverlay?.remove();
     searchOverlay = null;
     restoreFocusTo.current?.focus();
+    if (!gridOpen) slides.find(s => s.id === activeSlideId)?.activate();
   }
 
   // ── Notifications overlay (functional; no route) ─────────────────────────
   let notifOverlay: HTMLElement | null = null;
   function openNotifications() {
     if (notifOverlay) return;
+    slides.find(s => s.id === activeSlideId)?.deactivate();
     restoreFocusTo.current = document.activeElement as HTMLElement;
     notifOverlay = el("div", "reels-notif", { role: "dialog", "aria-label": "Notifications", "aria-modal": "true", "data-testid": "reels-notifications" });
     const head = el("div", "reels-notif-head");
@@ -788,6 +814,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     notifOverlay?.remove();
     notifOverlay = null;
     restoreFocusTo.current?.focus();
+    if (!gridOpen) slides.find(s => s.id === activeSlideId)?.activate();
   }
 
   // ── Editing tools panel (opened via horizontal swipe or the tools button) ─
@@ -809,10 +836,13 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     gridToggleBtn.setAttribute("aria-pressed", "false");
     const fsTool = makeTool("Plein écran du Reel actif", () => {
       const active = slides.find(s => s.id === activeSlideId);
-      if (active) toggleFullscreen(active.video ?? active.element);
+      if (active) toggleFullscreen();
       setTools(false);
     });
     const uploadTool = makeTool("Publier un nouveau clip", () => { setTools(false); options.onOpenComposer(); });
+    const friendsTool = makeTool("Amis", () => { window.location.assign(`${BASE}friends`); });
+    const shopTool = makeTool("Boutique", () => { window.location.assign(`${BASE}shop`); });
+    const notificationsTool = makeTool("Notifications", () => { setTools(false); openNotifications(); });
     const editTool = makeTool("Modifier le titre (propriétaire)", () => {
       setTools(false);
       const active = slides.find(s => s.id === activeSlideId);
@@ -823,7 +853,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         if (status) status.textContent = "Seul le propriétaire peut modifier le titre.";
       }
     });
-    toolsPanel.append(gridToggleBtn, fsTool, uploadTool, editTool);
+    toolsPanel.append(gridToggleBtn, fsTool, uploadTool, friendsTool, shopTool, notificationsTool, editTool);
     close.addEventListener("click", () => setTools(false));
     toolsPanel.addEventListener("keydown", event => { if (event.key === "Escape") setTools(false); });
   }
@@ -836,7 +866,8 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // The SAME handler is attached to both the feed track and the tools panel so a
   // swipe-right that STARTS on the open panel can still close it (the panel is a
   // sibling of the track, so track-only listeners never see panel-origin swipes).
-  let touchStartX = 0, touchStartY = 0, gestureLock: "none" | "horizontal" | "vertical" = "none";
+  let touchStartX = 0, touchStartY = 0;
+  let gestureLock: "none" | "horizontal" | "vertical" | "ignored" = "none";
   // True while the active gesture began inside the tools panel: from there we
   // only act on horizontal swipes (close), never drive vertical feed navigation,
   // and we leave the panel's own vertical scroll untouched.
@@ -844,14 +875,22 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   // Text editing inside the panel (e.g. the owner title editor) must never be
   // treated as a swipe gesture.
-  const isTextTarget = (target: EventTarget | null) => {
-    const el = target as HTMLElement | null;
-    return !!el?.closest("input, textarea, [contenteditable='true']");
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    const targetElement = target as HTMLElement | null;
+    return !!targetElement?.closest(
+      "input, textarea, select, button, a, [contenteditable='true'], .clip-comments, .reels-tools-panel",
+    );
   };
 
   const onTouchStart = (event: TouchEvent, fromPanel: boolean) => {
     if (event.touches.length !== 1) return;
-    if (isTextTarget(event.target)) { gestureLock = "vertical"; return; } // ignore
+    const targetElement = event.target as HTMLElement | null;
+    const panelControl = fromPanel &&
+      Boolean(targetElement?.closest("input, textarea, select, button, a, [contenteditable='true']"));
+    if (panelControl || !fromPanel && isInteractiveTarget(event.target)) {
+      gestureLock = "ignored";
+      return;
+    }
     touchStartX = event.touches[0].clientX;
     touchStartY = event.touches[0].clientY;
     gestureLock = "none";
@@ -868,6 +907,12 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     }
   };
   const onTouchEnd = (event: TouchEvent) => {
+    if (gestureLock === "vertical" && !gestureFromPanel) {
+      const dy = (event.changedTouches[0]?.clientY ?? touchStartY) - touchStartY;
+      if (dy > 72) toggleGrid(true);
+      gestureLock = "none";
+      return;
+    }
     if (gestureLock !== "horizontal") { gestureLock = "none"; return; }
     const dx = (event.changedTouches[0]?.clientX ?? touchStartX) - touchStartX;
     if (gestureFromPanel) {
@@ -912,7 +957,11 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     if ((event.target as HTMLElement)?.closest("input, textarea")) return;
     if (event.key === "ArrowDown" || event.key === "PageDown" || event.key === "j") { event.preventDefault(); step(1); }
     else if (event.key === "ArrowUp" || event.key === "PageUp" || event.key === "k") { event.preventDefault(); step(-1); }
-    else if (event.key === "f") { const a = slides.find(s => s.id === activeSlideId); if (a) toggleFullscreen(a.video ?? a.element); }
+    else if (event.key === "Escape") {
+      if (shell.classList.contains("reels-css-fullscreen")) shell.classList.remove("reels-css-fullscreen");
+      else if (document.fullscreenElement === shell) void document.exitFullscreen();
+    }
+    else if (event.key === "f") { if (activeSlideId !== null) toggleFullscreen(); }
     else if (event.key === "g") { toggleGrid(); }
     else if (event.key === " " || event.key === "Spacebar") {
       const a = slides.find(s => s.id === activeSlideId);
@@ -922,15 +971,15 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   document.addEventListener("keydown", onKey);
 
   // ── Top-bar wiring ───────────────────────────────────────────────────────
-  cameraBtn.addEventListener("click", options.onOpenComposer);
   searchBtn.addEventListener("click", openSearch);
-  hamburger.addEventListener("click", () => setTools(true));
   moreBtn.addEventListener("click", () => setTools(true));
 
   // Pause active media when the tab is hidden; resume the active slide when visible.
   const onVisibility = () => {
     if (document.hidden) slides.find(s => s.id === activeSlideId)?.deactivate();
-    else slides.find(s => s.id === activeSlideId)?.activate();
+    else if (!suspended && !gridOpen && !searchOverlay && !notifOverlay) {
+      slides.find(s => s.id === activeSlideId)?.activate();
+    }
   };
   document.addEventListener("visibilitychange", onVisibility);
 
@@ -942,11 +991,25 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       void fetchNotifications().then(({ unreadCount: unread }) => { unreadCount = unread; applyUnreadBadge(); }).catch(() => {});
     }
   });
-  void loadPage();
+  const query = new URLSearchParams(window.location.search);
+  searchQuery = query.get("q")?.trim() ?? "";
+  const initialGrid = query.get("view") === "grid";
+  if (query.get("search") === "1") queueMicrotask(openSearch);
+  void loadPage().then(() => { if (initialGrid && !destroyed) toggleGrid(true); });
 
   document.body.dataset.clipReady = "true";
 
   return {
+    pause() {
+      suspended = true;
+      slides.forEach(slide => slide.deactivate());
+    },
+    resume() {
+      suspended = false;
+      if (!gridOpen && !searchOverlay && !notifOverlay && !document.hidden) {
+        slides.find(slide => slide.id === activeSlideId)?.activate();
+      }
+    },
     destroy() {
       destroyed = true;
       io?.disconnect();

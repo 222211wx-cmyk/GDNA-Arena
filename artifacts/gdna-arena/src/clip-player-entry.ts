@@ -1,6 +1,7 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
 import { mountVideoActions, type VideoActionState } from "./components/clips/VideoActions";
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
+import { reelsIcons } from "./components/clips/reelsIcons";
 
 const BASE = import.meta.env.BASE_URL;
 const FETCH_TIMEOUT_MS = 12_000;
@@ -36,7 +37,14 @@ function addStyles() {
   style.textContent = `
     :root{color-scheme:dark;font-family:${tokens.fontFamily.sans.join(",")};background:${palette.background};color:${palette.foreground}}
     *{box-sizing:border-box}body{margin:0;background:${palette.background};color:${palette.foreground}}
-    main{padding:calc(${space} * 4);margin:auto;max-width:48rem}header{display:flex;align-items:center;justify-content:space-between}
+    .direct-clip-shell{position:fixed;inset:0;display:flex;flex-direction:column;background:${palette.background};overflow:hidden}
+    .direct-clip-shell.clip-css-fullscreen{z-index:2147483647}
+    .direct-topbar{height:64px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:env(safe-area-inset-top,0px) calc(${space} * 3) 0;border-bottom:1px solid ${palette.border};flex:none}
+    .direct-topbar h1{font-size:1.15rem;text-align:center;white-space:nowrap}
+    .direct-topbar-right{display:flex;justify-content:flex-end;gap:calc(${space} * 2)}
+    .direct-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:0;border-radius:9999px;background:transparent;color:${palette.foreground};text-decoration:none}
+    .direct-icon svg{width:24px;height:24px}
+    main{padding:calc(${space} * 4) calc(${space} * 4) calc(78px + env(safe-area-inset-bottom,0px));margin:auto;max-width:48rem;width:100%;overflow-y:auto;flex:1}
     section{display:grid;gap:calc(${space} * 3);padding:calc(${space} * 4);margin-block:calc(${space} * 4);background:${palette.card};border:1px solid ${palette.border};border-radius:${tokens.radius}}
     h1,p{margin-block:calc(${space} * 2)}button,input{font:inherit;color:${palette.foreground};background:${palette.secondary};border:1px solid ${palette.input};border-radius:${tokens.radius};padding:calc(${space} * 3)}
     button{cursor:pointer;font-weight:700}button:disabled{opacity:.55}
@@ -44,6 +52,10 @@ function addStyles() {
     .copy-link-fallback{inline-size:min(100%,28rem)}
     video,audio{inline-size:100%;max-block-size:72vh;background:${palette.background};display:block}.clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}
     #player-media{overflow:hidden;position:relative;border-radius:${tokens.radius}}
+    .direct-close{position:sticky;top:0;z-index:4}
+    .direct-bottomnav{position:absolute;left:0;right:0;bottom:0;z-index:20;display:flex;background:${palette.background};border-top:1px solid ${palette.border};padding:calc(${space} * 2) calc(${space} * 2) calc(env(safe-area-inset-bottom,0px) + ${space} * 2)}
+    .direct-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:${space};border:0;background:transparent;color:${palette.mutedForeground};font-size:.625rem;text-decoration:none}
+    .direct-nav-item svg{width:24px;height:24px}.direct-nav-item[data-active=true]{color:${palette.foreground}}
     ${clipOverlayCss(palette, space)}
     a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
   `;
@@ -136,8 +148,17 @@ export function renderClipPlayer(code: string) {
   // settles; we await it right before mounting actions to avoid a save race.
   const identityPromise = resolveIdentity();
   root.innerHTML = `
-    <main dir="rtl" data-testid="clip-player-shell">
-      <header><h1>الكليبز</h1><a href="${BASE}clip">رجوع</a></header>
+    <div class="direct-clip-shell" data-clip-fullscreen-shell data-testid="clip-player-shell">
+      <header class="direct-topbar">
+        <a class="direct-icon" href="${BASE}" aria-label="Retour à l’accueil">${reelsIcons.back()}</a>
+        <h1>GDNA Arena</h1>
+        <div class="direct-topbar-right">
+          <a class="direct-icon" href="${BASE}clips?search=1" aria-label="Recherche">${reelsIcons.search()}</a>
+          <a class="direct-icon" href="${BASE}clips?view=grid" aria-label="Menu">${reelsIcons.hamburger()}</a>
+        </div>
+      </header>
+      <main dir="rtl">
+       <a class="direct-icon direct-close" href="${BASE}clips?view=grid" aria-label="Fermer le lecteur et afficher la grille">${reelsIcons.close()}</a>
       <section>
         <p id="player-code" dir="ltr">${code}</p>
         <h1 id="player-name">جارٍ تحميل الكليب…</h1>
@@ -147,7 +168,14 @@ export function renderClipPlayer(code: string) {
         <p id="player-error" class="error" role="alert" aria-live="assertive"></p>
         <button id="player-retry" type="button" hidden>إعادة المحاولة</button>
       </section>
-    </main>`;
+      </main>
+      <nav class="direct-bottomnav" aria-label="Navigation principale">
+        <a class="direct-nav-item" href="${BASE}">${reelsIcons.navHome(false)}<span>Accueil</span></a>
+        <a class="direct-nav-item" data-active="true" href="${BASE}clips">${reelsIcons.navReels(true)}<span>Clips</span></a>
+        <a class="direct-nav-item" href="${BASE}clips?search=1">${reelsIcons.navSearch(false)}<span>Recherche</span></a>
+        <a class="direct-nav-item" href="${BASE}login">${reelsIcons.navFriends(false)}<span>Profil</span></a>
+      </nav>
+    </div>`;
 
   const name = document.getElementById("player-name") as HTMLHeadingElement;
   const mediaRoot = document.getElementById("player-media") as HTMLDivElement;
@@ -155,6 +183,7 @@ export function renderClipPlayer(code: string) {
   const actions = document.getElementById("player-actions") as HTMLDivElement;
   const error = document.getElementById("player-error") as HTMLParagraphElement;
   const retry = document.getElementById("player-retry") as HTMLButtonElement;
+  const playerShell = document.querySelector<HTMLElement>("[data-clip-fullscreen-shell]")!;
   let loadController: AbortController | null = null;
 
   const load = async () => {
@@ -182,6 +211,7 @@ export function renderClipPlayer(code: string) {
         if (clip.url) {
           const media = document.createElement(clip.contentType.startsWith("audio/") ? "audio" : "video");
           media.controls = true;
+           media.setAttribute("controlsList", "nofullscreen");
           media.preload = "metadata";
           if (media instanceof HTMLVideoElement) media.playsInline = true;
           media.src = clip.url;
@@ -200,6 +230,7 @@ export function renderClipPlayer(code: string) {
             accountId: identity.status === "authenticated" ? identity.accountId : null,
             saveDisabled: identity.status === "unknown",
             contentType: clip.contentType,
+             fullscreenTarget: playerShell,
             initial: {
               id: clip.id,
               code: clip.code,
@@ -238,6 +269,28 @@ export function renderClipPlayer(code: string) {
     }
   };
   retry.addEventListener("click", () => void load());
+  let touchStartY = 0;
+  let touchIgnored = false;
+  playerShell.addEventListener("touchstart", event => {
+    if (event.touches.length !== 1) return;
+    touchIgnored = Boolean((event.target as HTMLElement | null)?.closest(
+      "input, textarea, select, button, a, .clip-comments, .clip-menu",
+    ));
+    touchStartY = event.touches[0].clientY;
+  }, { passive: true });
+  playerShell.addEventListener("touchend", event => {
+    if (touchIgnored) return;
+    const endY = event.changedTouches[0]?.clientY ?? touchStartY;
+    if (endY - touchStartY > 72) {
+      playerShell.querySelector<HTMLMediaElement>("video,audio")?.pause();
+      window.location.assign(`${BASE}clips?view=grid`);
+    }
+  }, { passive: true });
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    if (playerShell.classList.contains("clip-css-fullscreen")) playerShell.classList.remove("clip-css-fullscreen");
+    else if (document.fullscreenElement === playerShell) void document.exitFullscreen();
+  });
   document.body.dataset.clipReady = "true";
   void load();
 }

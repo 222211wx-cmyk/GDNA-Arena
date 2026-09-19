@@ -24,11 +24,29 @@ let controller: ReelsController;
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="root"></div>';
+  window.history.replaceState(null, "", "/clips");
   // resolveIdentity + loadPage both hit fetch; return an empty, non-degraded feed.
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     if (url.includes("/api/auth/me")) return Response.json({ error: "unauthorized" }, { status: 401 });
     return Response.json({ clips: [], hasMore: false, degraded: false });
   }));
+});
+
+describe("critical Clips navigation", () => {
+  it("keeps exactly Home, Clips, Search, Profile in the persistent bottom nav", () => {
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    const labels = [...document.querySelectorAll(".reels-bottomnav .reels-nav-item > span:last-child")]
+      .map(node => node.textContent);
+    expect(labels).toEqual(["Accueil", "Clips", "Recherche", "Profil"]);
+    expect(document.querySelector('.reels-topbar-left a[href="/"]')).not.toBeNull();
+    expect(document.querySelector(".reels-title")?.textContent).toBe("GDNA Arena");
+  });
+
+  it("honors view=grid on boot even for an empty feed", async () => {
+    window.history.replaceState(null, "", "/clips?view=grid");
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-grid"]')).not.toBeNull());
+  });
 });
 
 afterEach(() => {

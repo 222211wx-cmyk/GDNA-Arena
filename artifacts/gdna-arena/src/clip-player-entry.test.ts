@@ -117,6 +117,11 @@ describe("code-based clip player", () => {
     expect(document.querySelector('[aria-label="Comments"]')?.textContent).toContain("2");
     expect(document.querySelector('[aria-label="Message"]')).not.toBeNull();
     expect(document.querySelector('[aria-label="Fullscreen"]')).not.toBeNull();
+    expect(document.querySelectorAll(".direct-bottomnav .direct-nav-item")).toHaveLength(4);
+    expect(document.querySelector('[aria-label="Retour à l’accueil"]')?.getAttribute("href")).toBe("/");
+    expect(document.querySelector('[aria-label="Fermer le lecteur et afficher la grille"]')?.getAttribute("href"))
+      .toBe("/clips?view=grid");
+    expect(document.querySelector("audio")?.getAttribute("controlsList")).toBe("nofullscreen");
     expect(document.body.dataset.clipReady).toBe("true");
   });
 

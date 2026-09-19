@@ -118,6 +118,30 @@ describe("VideoActions", () => {
     expect(document.querySelector('[aria-label="Edit title"]')).not.toBeNull();
   });
 
+  it("always requests fullscreen on the supplied navigation shell, never the media", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+    const shell = document.createElement("div");
+    document.body.append(shell);
+    const shellFullscreen = vi.fn(async () => {});
+    const mediaFullscreen = vi.fn(async () => {});
+    Object.defineProperty(shell, "requestFullscreen", { configurable: true, value: shellFullscreen });
+    Object.defineProperty(document.querySelector("video")!, "requestFullscreen", {
+      configurable: true,
+      value: mediaFullscreen,
+    });
+    await mountVideoActions({
+      host: document.getElementById("actions")!,
+      media: document.querySelector("video")!,
+      titleElement: document.getElementById("title")!,
+      fullscreenTarget: shell,
+      clipId: 42,
+      initial: { ...state },
+    });
+    fireEvent.click(document.querySelector('[aria-label="Fullscreen"]')!);
+    await vi.waitFor(() => expect(shellFullscreen).toHaveBeenCalledOnce());
+    expect(mediaFullscreen).not.toHaveBeenCalled();
+  });
+
   it("shows owner title editing and persists the returned title", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ clip: { title: "Saved title" } })));
     await mountVideoActions({

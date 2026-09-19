@@ -29,17 +29,21 @@ export function reelsShellCss(palette: Palette, space: string): string {
     --reels-shadow:color-mix(in srgb, ${palette.background} 70%, transparent);
     --reels-on-media-dim:color-mix(in srgb, ${palette.foreground} 78%, transparent);
   }
+  .reels-shell.reels-css-fullscreen,.reels-shell.clip-css-fullscreen{position:fixed;inset:0;z-index:2147483647}
   .reels-shell *{box-sizing:border-box}
 
   /* ── Top bar ──────────────────────────────────────────────────────────── */
   .reels-topbar{
-    position:absolute;left:0;right:0;top:0;z-index:20;
+    position:absolute;left:0;right:0;top:0;z-index:41;
     display:flex;align-items:center;justify-content:space-between;
     gap:calc(${space} * 2);
     padding:calc(var(--reels-top-safe) + ${space} * 3) calc(${space} * 3) calc(${space} * 3);
     background:linear-gradient(to bottom, var(--reels-scrim-strong), transparent);
     pointer-events:none;
   }
+  .reels-topbar-left,.reels-topbar-right{min-width:96px}
+  .reels-topbar-right{justify-content:flex-end}
+  .reels-topbar > .reels-title{position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap}
   .reels-topbar > *{pointer-events:auto}
   .reels-topbar-left{display:flex;align-items:center;gap:calc(${space} * 3)}
   .reels-title{font-size:1.4rem;font-weight:900;letter-spacing:-.01em;color:var(--reels-on-media);margin:0}
@@ -55,6 +59,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-icon-btn:focus-visible{outline:2px solid ${palette.ring};outline-offset:2px}
   .reels-icon-btn svg{width:26px;height:26px}
   .reels-icon-btn.reels-badge-host{position:relative}
+  .reels-viewer-close{position:absolute;left:calc(${space} * 3);top:calc(var(--reels-top-safe) + 68px);z-index:8;background:var(--reels-scrim)}
   .reels-badge{
     position:absolute;top:6px;right:6px;min-width:18px;height:18px;
     padding:0 5px;border-radius:9999px;
@@ -243,7 +248,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
 
   /* ── On-screen editing tools (horizontal-swipe panel) ─────────────────── */
   .reels-tools-panel{
-    position:absolute;top:0;bottom:0;right:0;z-index:15;
+    position:absolute;top:0;bottom:0;right:0;z-index:35;
     width:min(78%,320px);
     background:${palette.card};color:${palette.cardForeground};
     border-left:1px solid ${palette.border};
@@ -266,9 +271,9 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-tool-item:disabled{opacity:.5;cursor:not-allowed}
   .reels-tools-close{align-self:flex-end}
 
-  /* ── Bottom navigation (six flat destinations) ────────────────────────── */
+  /* ── Bottom navigation (four persistent destinations) ─────────────────── */
   .reels-bottomnav{
-    position:absolute;left:0;right:0;bottom:0;z-index:14;
+    position:absolute;left:0;right:0;bottom:0;z-index:40;
     display:flex;align-items:center;justify-content:space-around;
     padding:calc(${space} * 2) calc(${space} * 2) calc(var(--reels-bottom-safe) + ${space} * 2);
     background:${palette.background};
@@ -326,7 +331,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-search{
     position:absolute;inset:0;z-index:22;background:${palette.background};
     display:flex;flex-direction:column;
-    padding:calc(var(--reels-top-safe) + ${space} * 3) calc(${space} * 3) calc(var(--reels-bottom-safe) + ${space} * 3);
+    padding:calc(var(--reels-top-safe) + 76px) calc(${space} * 3) calc(var(--reels-bottom-safe) + 76px);
     gap:calc(${space} * 3);
   }
   .reels-search-bar{display:flex;align-items:center;gap:calc(${space} * 2)}
@@ -341,11 +346,11 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-notif{
     position:absolute;inset:0;z-index:22;background:${palette.background};color:${palette.foreground};
     display:flex;flex-direction:column;
-    padding-bottom:calc(var(--reels-bottom-safe) + ${space} * 3);
+    padding-bottom:calc(var(--reels-bottom-safe) + 76px);
   }
   .reels-notif-head{
     display:flex;align-items:center;justify-content:space-between;gap:calc(${space} * 2);
-    padding:calc(var(--reels-top-safe) + ${space} * 3) calc(${space} * 3) calc(${space} * 3);
+    padding:calc(var(--reels-top-safe) + 76px) calc(${space} * 3) calc(${space} * 3);
     border-bottom:1px solid ${palette.border};
   }
   .reels-notif-head h2{margin:0;font-size:1.1rem;font-weight:800}
@@ -393,10 +398,12 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-composer{
     position:absolute;inset:0;z-index:24;background:${palette.background};color:${palette.foreground};
     display:flex;flex-direction:column;overflow-y:auto;
+    padding-top:calc(var(--reels-top-safe) + 64px);
+    padding-bottom:calc(var(--reels-bottom-safe) + 76px);
   }
   .reels-composer-head{
     position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:calc(${space} * 3);
-    padding:calc(var(--reels-top-safe) + ${space} * 3) calc(${space} * 3) calc(${space} * 3);
+    padding:calc(${space} * 3);
     background:${palette.background};border-bottom:1px solid ${palette.border};
   }
   .reels-composer-head h2{margin:0;font-size:1.1rem;font-weight:800}

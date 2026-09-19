@@ -469,11 +469,13 @@ let lastFocusBeforeComposer: HTMLElement | null = null;
 
 function openComposer() {
   lastFocusBeforeComposer = document.activeElement as HTMLElement;
+  reels?.pause();
   composer.hidden = false;
   (chooseFile ?? composerClose).focus();
 }
 function closeComposer() {
   composer.hidden = true;
+  reels?.resume();
   lastFocusBeforeComposer?.focus();
 }
 composerClose.addEventListener("click", closeComposer);
