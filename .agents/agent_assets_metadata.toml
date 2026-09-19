@@ -100,3 +100,17 @@ mtime_ms = 1789748156219
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/44f0ca23-6001-45bd-833c-b2c4d6792ce1/3a1901c8-8768-46fb-8f48-2e66f5eac895"
 storage_version_token = "1789748187082397"
 content_type = "image/png"
+
+[[outputs]]
+id = "A8r6MLkNfxH2atzb23GOJ"
+uri = "file://.local/tests/evidence/r2-before-upload-form.png"
+type = "image"
+title = "Cloudflare R2 — Connected"
+description = "Authenticated app status verified against helixly-clips, with a successful upload/download/cleanup test."
+logical_id = "ccc2efcb-2fd1-4c56-a163-7369ff004b63"
+content_hash = "sha256:bdb4fd252e73a333c3b4712c31a3fc8f83073feaa702f1a45974c6bdacb057ee"
+size = 19355
+mtime_ms = 1789784151926
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/ccc2efcb-2fd1-4c56-a163-7369ff004b63/0b3b31de-f1cb-4405-b2a6-f88ee1ed8acf"
+storage_version_token = "1789784421305945"
+content_type = "image/png"
