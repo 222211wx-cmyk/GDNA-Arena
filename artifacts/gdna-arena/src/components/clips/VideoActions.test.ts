@@ -105,7 +105,7 @@ describe("VideoActions", () => {
     const link = document.querySelector(".clip-meta-author-link") as HTMLAnchorElement;
     expect(link).not.toBeNull();
     expect(link.textContent).toBe("@producer");
-    expect(link.getAttribute("href")).toContain("citizen/producer");
+    expect(link.getAttribute("href")).toContain("u/producer");
     expect(document.querySelector(".clip-meta-title")?.textContent).toBe("Original title");
     expect(document.querySelector(".clip-meta-audio")?.textContent).toBe("Original audio");
   });

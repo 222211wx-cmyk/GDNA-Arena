@@ -11,6 +11,7 @@
     "generate": "drizzle-kit generate --config=drizzle.config.ts",
     "migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "push": "node scripts/push-clips-additive.mjs",
+    "push:message-safety-reports": "node scripts/push-message-safety-reports-additive.mjs",
     "validate:history": "node scripts/validate-migration-history.mjs"
   },
   "dependencies": {

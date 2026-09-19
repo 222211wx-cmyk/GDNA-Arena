@@ -1763,6 +1763,9 @@ export function useCall(user: { id: number; username: string } | null) {
         if (msg.type === "chat-read") {
           window.dispatchEvent(new CustomEvent("gdna:chat-read", { detail: msg }));
         }
+        if (msg.type === "chat-typing") {
+          window.dispatchEvent(new CustomEvent("gdna:chat-typing", { detail: msg }));
+        }
         if (msg.type === "chat-message-deleted") {
           window.dispatchEvent(new CustomEvent("gdna:chat-message-deleted", { detail: msg }));
         }

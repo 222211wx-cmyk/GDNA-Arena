@@ -187,9 +187,9 @@ export default function FeedCard({ post, user, saved, onSaveToggle }: Props) {
        style={{ background: "hsl(var(--card))", border: `1px solid ${GOLD_A(0.08)}`, borderRadius: 12, overflow: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px 10px" }}>
-        <Avatar name={post.username} />
+        <a href={`/u/${encodeURIComponent(post.username)}`} aria-label={post.username}><Avatar name={post.username} /></a>
         <div style={{ flex: 1 }}>
-          <p style={{ margin: 0, fontWeight: 800, color: "hsl(var(--foreground))", fontSize: 14 }}>{post.username}</p>
+          <a href={`/u/${encodeURIComponent(post.username)}`} style={{ margin: 0, fontWeight: 800, color: "hsl(var(--foreground))", fontSize: 14 }}>{post.username}</a>
           <p style={{ margin: 0, fontSize: 11, color: "#ffffff40" }}>
              {DOMAIN_ICONS[post.domain] ?? "🌍"} {st[post.domain] ?? post.domain} · {timeAgo(post.createdAt, st, locale)}
           </p>
@@ -257,9 +257,9 @@ export default function FeedCard({ post, user, saved, onSaveToggle }: Props) {
               )}
               {comments.map(c => (
                 <div key={c.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <Avatar name={c.username} size={24} />
+                  <a href={`/u/${encodeURIComponent(c.username)}`} aria-label={c.username}><Avatar name={c.username} size={24} /></a>
                   <div style={{ background: "hsl(var(--secondary))", borderRadius: 8, padding: "6px 10px", flex: 1 }}>
-                    <span style={{ fontWeight: 700, color: GOLD, fontSize: 12 }}>{c.username}</span>
+                    <a href={`/u/${encodeURIComponent(c.username)}`} style={{ fontWeight: 700, color: GOLD, fontSize: 12 }}>{c.username}</a>
                     <span style={{ color: "hsl(var(--foreground))", fontSize: 13, marginInlineStart: 8 }} dir={dir}>{c.content}</span>
                     <p style={{ margin: "3px 0 0", fontSize: 10, color: "#ffffff25" }}>{timeAgo(c.createdAt, st, locale)}</p>
                   </div>

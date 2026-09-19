@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Search, Trophy, Music, Film, Newspaper, Landmark,
   Gamepad2, LogOut, Globe, LayoutDashboard, Wallet,
-  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User, ShoppingBag, ImageOff
+  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User, ShoppingBag, ImageOff, Crown, Users
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
@@ -17,6 +17,7 @@ const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 // جميع الأقسام ظاهرة فالتنقل الرئيسي
 const NAV_ITEMS = [
   { labelKey: "nav_home",     emoji: null,  icon: null,                        path: "/",          highlight: false },
+  { labelKey: "nav_elite",    emoji: null,  icon: <Crown size={15} />,          path: "/elite",     highlight: true  },
   { labelKey: "nav_arena",    emoji: "⚔️", icon: <Gamepad2 size={15} />,       path: "/games",     highlight: true  },
   { labelKey: "nav_shop",     emoji: "🛒", icon: <ShoppingBag size={15} />,    path: "/shop",      highlight: true  },
   { labelKey: "nav_missions", emoji: "🎯", icon: <BrainCircuit size={15} />,   path: "/growth",    highlight: true  },
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
 const MODULE_ITEMS = [
   { labelKey: "nav_messageri", icon: <Mail size={15} />,          path: "/messages", adminOnly: false },
   { labelKey: "nav_social",    icon: <MessageSquare size={15} />, path: "/social",   adminOnly: false },
+  { labelKey: "nav_citizens",  icon: <Users size={15} />,         path: "/citizens", adminOnly: false },
   { labelKey: "nav_amis",      icon: <User size={15} />,          path: "/amis",     adminOnly: true  },
 ];
 
@@ -172,7 +174,9 @@ export function Navbar() {
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
-                {item.emoji && <span className="text-base leading-none">{item.emoji}</span>}
+                {item.emoji
+                  ? <span className="text-base leading-none">{item.emoji}</span>
+                  : item.icon}
                 {t(item.labelKey)}
                 {isDM && unreadDMs > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
@@ -386,7 +390,7 @@ export function Navbar() {
                     : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {item.emoji && <span>{item.emoji}</span>}
+              {item.emoji ? <span>{item.emoji}</span> : item.icon}
               {t(item.labelKey)}
               {isDM && unreadDMs > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
@@ -454,7 +458,7 @@ export function Navbar() {
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
-                <span className="text-xl leading-none">{item.emoji ?? "›"}</span>
+                <span className="text-xl leading-none">{item.emoji ?? item.icon ?? "›"}</span>
                 {t(item.labelKey)}
                 {isDM && unreadDMs > 0 && (
                   <span className="ml-auto min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">

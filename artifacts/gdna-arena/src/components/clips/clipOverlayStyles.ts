@@ -2,10 +2,20 @@
 // meta) and the three-dot menu. Built from design-system tokens only.
 // `palette` is tokens.color.dark; `space` is the base spacing step.
 
+import { tokens } from "@workspace/gdna-ds";
+
 type Palette = Record<string, string>;
 
 export function clipOverlayCss(palette: Palette, space: string): string {
   return `
+  .clip-citizen-mini{display:flex;align-items:center;flex-wrap:wrap;gap:calc(${space} * 2);padding:calc(${space} * 2);border-radius:${tokens.radius};background:${tokens.color.light.card};color:${tokens.color.light.cardForeground};position:relative;z-index:4}
+  .clip-citizen-mini a{display:inline-flex;align-items:center;gap:calc(${space} * 2);color:inherit;text-decoration:none}
+  .clip-citizen-mini img{width:calc(${space} * 8);height:calc(${space} * 8);object-fit:cover;border-radius:${tokens.radius}}
+  .clip-citizen-initials{display:grid;place-items:center;width:calc(${space} * 8);height:calc(${space} * 8);background:${tokens.color.light.secondary};border-radius:${tokens.radius}}
+  .clip-citizen-mini button{padding:${space} calc(${space} * 2);background:${tokens.color.light.secondary};color:${tokens.color.light.secondaryForeground};border:1px solid ${tokens.color.light.border};border-radius:${tokens.radius};cursor:pointer}
+  .reels-slide .clip-citizen-mini{position:absolute;left:calc(${space} * 2);right:calc(${space} * 2);bottom:calc(64px + var(--reels-bottom-safe));font-size:.75rem;flex-wrap:nowrap;white-space:nowrap;overflow-x:auto;padding:${space};height:calc(${space} * 10);box-sizing:border-box}
+  .reels-slide .clip-citizen-mini img,.reels-slide .clip-citizen-initials{width:calc(${space} * 6);height:calc(${space} * 6);flex-shrink:0}
+  .reels-slide .clip-citizen-mini button{flex-shrink:0}
   /* The overlay sits inside the media frame so the rail floats over media. */
   .clip-media-frame .video-actions-shell,
   #player-media .video-actions-shell{position:static}

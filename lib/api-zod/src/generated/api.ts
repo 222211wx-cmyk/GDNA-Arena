@@ -8,6 +8,459 @@
 import * as zod from 'zod';
 
 
+export const CitizenMetadataResponse = zod.object({
+  "cities": zod.array(zod.string()).optional(),
+  "interests": zod.array(zod.string()).optional()
+})
+
+
+export const CitizenOwnProfileResponse = zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "coverUrl": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "age": zod.number().int().nullable(),
+  "bio": zod.string().nullable(),
+  "interests": zod.array(zod.string()),
+  "status": zod.enum(['available', 'busy', 'private']),
+  "visibility": zod.enum(['everyone', 'friends', 'private']),
+  "stats": zod.object({
+  "views": zod.number().int(),
+  "followers": zod.number().int(),
+  "following": zod.number().int()
+}),
+  "isFollowing": zod.boolean(),
+  "isFriend": zod.boolean(),
+  "isSelf": zod.boolean(),
+  "canMessage": zod.boolean(),
+  "mapDiscoverable": zod.boolean(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional(),
+  "videos": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "thumbnailUrl": zod.string().nullable()
+}))
+})
+
+
+export const citizenSaveProfileBodyDisplayNameMax = 80;
+
+export const citizenSaveProfileBodyBioMax = 1000;
+
+export const citizenSaveProfileBodyInterestsMax = 12;
+
+
+
+export const CitizenSaveProfileBody = zod.object({
+  "displayName": zod.string().min(1).max(citizenSaveProfileBodyDisplayNameMax).optional(),
+  "bio": zod.string().max(citizenSaveProfileBodyBioMax).optional(),
+  "city": zod.string().nullish(),
+  "interests": zod.array(zod.string()).max(citizenSaveProfileBodyInterestsMax).optional(),
+  "status": zod.enum(['available', 'busy', 'private']).optional(),
+  "visibility": zod.enum(['everyone', 'friends', 'private']).optional(),
+  "mapDiscoverable": zod.boolean().optional(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional()
+})
+
+export const CitizenSaveProfileResponse = zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "coverUrl": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "age": zod.number().int().nullable(),
+  "bio": zod.string().nullable(),
+  "interests": zod.array(zod.string()),
+  "status": zod.enum(['available', 'busy', 'private']),
+  "visibility": zod.enum(['everyone', 'friends', 'private']),
+  "stats": zod.object({
+  "views": zod.number().int(),
+  "followers": zod.number().int(),
+  "following": zod.number().int()
+}),
+  "isFollowing": zod.boolean(),
+  "isFriend": zod.boolean(),
+  "isSelf": zod.boolean(),
+  "canMessage": zod.boolean(),
+  "mapDiscoverable": zod.boolean(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional(),
+  "videos": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "thumbnailUrl": zod.string().nullable()
+}))
+})
+
+
+export const citizenDiscoverQueryMinAgeMin = 0;
+export const citizenDiscoverQueryMinAgeMax = 130;
+
+export const citizenDiscoverQueryMaxAgeMin = 0;
+export const citizenDiscoverQueryMaxAgeMax = 130;
+
+
+
+export const CitizenDiscoverQueryParams = zod.object({
+  "city": zod.coerce.string().optional(),
+  "interest": zod.coerce.string().optional(),
+  "minAge": zod.coerce.number().int().min(citizenDiscoverQueryMinAgeMin).max(citizenDiscoverQueryMinAgeMax).optional(),
+  "maxAge": zod.coerce.number().int().min(citizenDiscoverQueryMaxAgeMin).max(citizenDiscoverQueryMaxAgeMax).optional(),
+  "matchmaking": zod.coerce.boolean().optional()
+})
+
+export const CitizenDiscoverResponse = zod.object({
+  "profiles": zod.array(zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "coverUrl": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "age": zod.number().int().nullable(),
+  "bio": zod.string().nullable(),
+  "interests": zod.array(zod.string()),
+  "status": zod.enum(['available', 'busy', 'private']),
+  "visibility": zod.enum(['everyone', 'friends', 'private']),
+  "stats": zod.object({
+  "views": zod.number().int(),
+  "followers": zod.number().int(),
+  "following": zod.number().int()
+}),
+  "isFollowing": zod.boolean(),
+  "isFriend": zod.boolean(),
+  "isSelf": zod.boolean(),
+  "canMessage": zod.boolean(),
+  "mapDiscoverable": zod.boolean(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional(),
+  "videos": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "thumbnailUrl": zod.string().nullable()
+}))
+}))
+})
+
+
+export const CitizenMapResponse = zod.object({
+  "profiles": zod.array(zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "coverUrl": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "age": zod.number().int().nullable(),
+  "bio": zod.string().nullable(),
+  "interests": zod.array(zod.string()),
+  "status": zod.enum(['available', 'busy', 'private']),
+  "visibility": zod.enum(['everyone', 'friends', 'private']),
+  "stats": zod.object({
+  "views": zod.number().int(),
+  "followers": zod.number().int(),
+  "following": zod.number().int()
+}),
+  "isFollowing": zod.boolean(),
+  "isFriend": zod.boolean(),
+  "isSelf": zod.boolean(),
+  "canMessage": zod.boolean(),
+  "mapDiscoverable": zod.boolean(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional(),
+  "videos": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "thumbnailUrl": zod.string().nullable()
+}))
+}))
+})
+
+
+export const CitizenPublicProfileParams = zod.object({
+  "username": zod.coerce.string()
+})
+
+export const CitizenPublicProfileResponse = zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "coverUrl": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "age": zod.number().int().nullable(),
+  "bio": zod.string().nullable(),
+  "interests": zod.array(zod.string()),
+  "status": zod.enum(['available', 'busy', 'private']),
+  "visibility": zod.enum(['everyone', 'friends', 'private']),
+  "stats": zod.object({
+  "views": zod.number().int(),
+  "followers": zod.number().int(),
+  "following": zod.number().int()
+}),
+  "isFollowing": zod.boolean(),
+  "isFriend": zod.boolean(),
+  "isSelf": zod.boolean(),
+  "canMessage": zod.boolean(),
+  "mapDiscoverable": zod.boolean(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional(),
+  "videos": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "thumbnailUrl": zod.string().nullable()
+}))
+})
+
+
+export const CitizenFollowParams = zod.object({
+  "username": zod.coerce.string()
+})
+
+export const CitizenFollowResponse = zod.unknown()
+
+
+export const CitizenUnfollowParams = zod.object({
+  "username": zod.coerce.string()
+})
+
+export const CitizenUnfollowResponse = zod.unknown()
+
+
+export const CitizenUploadMediaQueryParams = zod.object({
+  "kind": zod.enum(['avatar', 'cover'])
+})
+
+export const CitizenUploadMediaBody = zod.object({
+  "image": zod.string().describe('Multipart image bytes')
+})
+
+export const CitizenUploadMediaResponse = zod.object({
+  "url": zod.string()
+})
+
+
+export const CitizenReadMediaParams = zod.object({
+  "id": zod.coerce.number().int(),
+  "kind": zod.enum(['avatar', 'cover']),
+  "token": zod.coerce.string()
+})
+
+export const CitizenReadMediaResponse = zod.unknown()
+
+
+export const CitizenListListingsQueryParams = zod.object({
+  "type": zod.enum(['market', 'service']).optional(),
+  "city": zod.coerce.string().optional()
+})
+
+export const citizenListListingsResponseListingsItemOneTitleMax = 120;
+
+export const citizenListListingsResponseListingsItemOneDescriptionMax = 2000;
+
+export const citizenListListingsResponseListingsItemOnePriceMin = 0;
+export const citizenListListingsResponseListingsItemOnePriceMax = 100000000;
+
+
+
+export const CitizenListListingsResponse = zod.object({
+  "listings": zod.array(zod.object({
+  "type": zod.enum(['market', 'service']),
+  "title": zod.string().min(1).max(citizenListListingsResponseListingsItemOneTitleMax),
+  "description": zod.string().min(1).max(citizenListListingsResponseListingsItemOneDescriptionMax),
+  "price": zod.number().min(citizenListListingsResponseListingsItemOnePriceMin).max(citizenListListingsResponseListingsItemOnePriceMax),
+  "city": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.number().int(),
+  "createdAt": zod.string(),
+  "seller": zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "coverUrl": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "age": zod.number().int().nullable(),
+  "bio": zod.string().nullable(),
+  "interests": zod.array(zod.string()),
+  "status": zod.enum(['available', 'busy', 'private']),
+  "visibility": zod.enum(['everyone', 'friends', 'private']),
+  "stats": zod.object({
+  "views": zod.number().int(),
+  "followers": zod.number().int(),
+  "following": zod.number().int()
+}),
+  "isFollowing": zod.boolean(),
+  "isFriend": zod.boolean(),
+  "isSelf": zod.boolean(),
+  "canMessage": zod.boolean(),
+  "mapDiscoverable": zod.boolean(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional(),
+  "videos": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "thumbnailUrl": zod.string().nullable()
+}))
+})
+}))).optional()
+})
+
+
+export const citizenCreateListingBodyTitleMax = 120;
+
+export const citizenCreateListingBodyDescriptionMax = 2000;
+
+export const citizenCreateListingBodyPriceMin = 0;
+export const citizenCreateListingBodyPriceMax = 100000000;
+
+
+
+export const CitizenCreateListingBody = zod.object({
+  "type": zod.enum(['market', 'service']),
+  "title": zod.string().min(1).max(citizenCreateListingBodyTitleMax),
+  "description": zod.string().min(1).max(citizenCreateListingBodyDescriptionMax),
+  "price": zod.number().min(citizenCreateListingBodyPriceMin).max(citizenCreateListingBodyPriceMax),
+  "city": zod.string().nullish()
+})
+
+export const citizenCreateListingResponseOneTitleMax = 120;
+
+export const citizenCreateListingResponseOneDescriptionMax = 2000;
+
+export const citizenCreateListingResponseOnePriceMin = 0;
+export const citizenCreateListingResponseOnePriceMax = 100000000;
+
+
+
+export const CitizenCreateListingResponse = zod.object({
+  "type": zod.enum(['market', 'service']),
+  "title": zod.string().min(1).max(citizenCreateListingResponseOneTitleMax),
+  "description": zod.string().min(1).max(citizenCreateListingResponseOneDescriptionMax),
+  "price": zod.number().min(citizenCreateListingResponseOnePriceMin).max(citizenCreateListingResponseOnePriceMax),
+  "city": zod.string().nullish()
+}).and(zod.object({
+  "id": zod.number().int(),
+  "createdAt": zod.string(),
+  "seller": zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "avatarUrl": zod.string().nullable(),
+  "coverUrl": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "age": zod.number().int().nullable(),
+  "bio": zod.string().nullable(),
+  "interests": zod.array(zod.string()),
+  "status": zod.enum(['available', 'busy', 'private']),
+  "visibility": zod.enum(['everyone', 'friends', 'private']),
+  "stats": zod.object({
+  "views": zod.number().int(),
+  "followers": zod.number().int(),
+  "following": zod.number().int()
+}),
+  "isFollowing": zod.boolean(),
+  "isFriend": zod.boolean(),
+  "isSelf": zod.boolean(),
+  "canMessage": zod.boolean(),
+  "mapDiscoverable": zod.boolean(),
+  "aiConsent": zod.boolean().optional(),
+  "fieldVisibility": zod.record(zod.string(), zod.enum(['everyone', 'friends', 'private'])).optional(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional(),
+  "videos": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "url": zod.string(),
+  "thumbnailUrl": zod.string().nullable()
+}))
+})
+}))
+
+
+export const CitizenDeleteListingParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const CitizenDeleteListingResponse = zod.unknown()
+
+
+export const citizenAssistantBodyUsernameMax = 80;
+
+export const citizenAssistantBodyPromptMax = 2000;
+
+export const citizenAssistantBodyTextMax = 4000;
+
+export const citizenAssistantBodyTargetLanguageMax = 80;
+
+
+
+export const CitizenAssistantBody = zod.object({
+  "section": zod.enum(['profile', 'matchmaking', 'market', 'services', 'helixly', 'map', 'translate', 'auto-reply']),
+  "consent": zod.boolean(),
+  "username": zod.string().max(citizenAssistantBodyUsernameMax).optional(),
+  "clipId": zod.number().int().optional(),
+  "listingId": zod.number().int().optional(),
+  "prompt": zod.string().max(citizenAssistantBodyPromptMax).optional(),
+  "text": zod.string().max(citizenAssistantBodyTextMax).optional(),
+  "targetLanguage": zod.string().max(citizenAssistantBodyTargetLanguageMax).optional()
+})
+
+export const CitizenAssistantResponse = zod.object({
+  "text": zod.string(),
+  "method": zod.string(),
+  "compatibility": zod.object({
+  "percent": zod.number().int(),
+  "explanation": zod.string(),
+  "method": zod.enum(['shared-interests-city-heuristic'])
+}).optional()
+})
+
+
 /**
  * @summary Inspect exhausted null-thumbnail clips
  */

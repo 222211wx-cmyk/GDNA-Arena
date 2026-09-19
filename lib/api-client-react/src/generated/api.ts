@@ -35,6 +35,21 @@ import type {
   CallPushInstallationInput,
   CallPushOk,
   CallPushSession,
+  CitizenAssistant200,
+  CitizenDiscover200,
+  CitizenDiscoverParams,
+  CitizenListListings200,
+  CitizenListListingsParams,
+  CitizenMap200,
+  CitizenMetadata200,
+  CitizenSocialAssistantInput,
+  CitizenSocialListing,
+  CitizenSocialListingInput,
+  CitizenSocialMediaInput,
+  CitizenSocialProfile,
+  CitizenSocialUpdate,
+  CitizenUploadMedia200,
+  CitizenUploadMediaParams,
   ClipSaveResult,
   ClipShareResult,
   ClipsFeedPage,
@@ -93,6 +108,1229 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getCitizenMetadataUrl = () => {
+
+
+
+
+  return `/api/citizen-profiles/meta`
+}
+
+export const citizenMetadata = async ( options?: Parameters<typeof customFetch>[1]): Promise<CitizenMetadata200> => {
+
+  return customFetch<CitizenMetadata200>(getCitizenMetadataUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenMetadataQueryKey = () => {
+    return [
+    `/api/citizen-profiles/meta`
+    ] as const;
+    }
+
+
+export const getCitizenMetadataQueryOptions = <TData = Awaited<ReturnType<typeof citizenMetadata>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMetadata>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCitizenMetadataQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof citizenMetadata>>> = ({ signal }) => citizenMetadata({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof citizenMetadata>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CitizenMetadataQueryResult = NonNullable<Awaited<ReturnType<typeof citizenMetadata>>>
+export type CitizenMetadataQueryError = ErrorType<unknown>
+
+
+export function useCitizenMetadata<TData = Awaited<ReturnType<typeof citizenMetadata>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMetadata>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenMetadata>>,
+          TError,
+          Awaited<ReturnType<typeof citizenMetadata>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenMetadata<TData = Awaited<ReturnType<typeof citizenMetadata>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMetadata>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenMetadata>>,
+          TError,
+          Awaited<ReturnType<typeof citizenMetadata>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenMetadata<TData = Awaited<ReturnType<typeof citizenMetadata>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMetadata>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCitizenMetadata<TData = Awaited<ReturnType<typeof citizenMetadata>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMetadata>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCitizenMetadataQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCitizenOwnProfileUrl = () => {
+
+
+
+
+  return `/api/citizen-profiles/me`
+}
+
+export const citizenOwnProfile = async ( options?: Parameters<typeof customFetch>[1]): Promise<CitizenSocialProfile> => {
+
+  return customFetch<CitizenSocialProfile>(getCitizenOwnProfileUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenOwnProfileQueryKey = () => {
+    return [
+    `/api/citizen-profiles/me`
+    ] as const;
+    }
+
+
+export const getCitizenOwnProfileQueryOptions = <TData = Awaited<ReturnType<typeof citizenOwnProfile>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenOwnProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCitizenOwnProfileQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof citizenOwnProfile>>> = ({ signal }) => citizenOwnProfile({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof citizenOwnProfile>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CitizenOwnProfileQueryResult = NonNullable<Awaited<ReturnType<typeof citizenOwnProfile>>>
+export type CitizenOwnProfileQueryError = ErrorType<unknown>
+
+
+export function useCitizenOwnProfile<TData = Awaited<ReturnType<typeof citizenOwnProfile>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenOwnProfile>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenOwnProfile>>,
+          TError,
+          Awaited<ReturnType<typeof citizenOwnProfile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenOwnProfile<TData = Awaited<ReturnType<typeof citizenOwnProfile>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenOwnProfile>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenOwnProfile>>,
+          TError,
+          Awaited<ReturnType<typeof citizenOwnProfile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenOwnProfile<TData = Awaited<ReturnType<typeof citizenOwnProfile>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenOwnProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCitizenOwnProfile<TData = Awaited<ReturnType<typeof citizenOwnProfile>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenOwnProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCitizenOwnProfileQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCitizenSaveProfileUrl = () => {
+
+
+
+
+  return `/api/citizen-profiles/me`
+}
+
+export const citizenSaveProfile = async (citizenSocialUpdate: CitizenSocialUpdate, options?: Parameters<typeof customFetch>[1]): Promise<CitizenSocialProfile> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CitizenSocialProfile>(getCitizenSaveProfileUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(citizenSocialUpdate)
+  }
+);}
+
+
+
+
+
+export const getCitizenSaveProfileMutationKey = () => ['citizenSaveProfile'] as const;
+
+export const getCitizenSaveProfileMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenSaveProfile>>, TError,CitizenSaveProfileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof citizenSaveProfile>>, TError,CitizenSaveProfileMutationVariables, TContext> => {
+
+const mutationKey = getCitizenSaveProfileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof citizenSaveProfile>>, CitizenSaveProfileMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  citizenSaveProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CitizenSaveProfileMutationResult = NonNullable<Awaited<ReturnType<typeof citizenSaveProfile>>>
+    export type CitizenSaveProfileMutationBody = BodyType<CitizenSocialUpdate>
+    export type CitizenSaveProfileMutationError = ErrorType<unknown>
+    export type CitizenSaveProfileMutationVariables = {data: BodyType<CitizenSocialUpdate>}
+
+    export const useCitizenSaveProfile = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenSaveProfile>>, TError,CitizenSaveProfileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof citizenSaveProfile>>,
+        TError,
+        CitizenSaveProfileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCitizenSaveProfileMutationOptions(options), queryClient);
+    }
+
+export const getCitizenDiscoverUrl = (params?: CitizenDiscoverParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/citizen-profiles?${stringifiedParams}` : `/api/citizen-profiles`
+}
+
+export const citizenDiscover = async (params?: CitizenDiscoverParams, options?: Parameters<typeof customFetch>[1]): Promise<CitizenDiscover200> => {
+
+  return customFetch<CitizenDiscover200>(getCitizenDiscoverUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenDiscoverQueryKey = (params?: CitizenDiscoverParams,) => {
+    return [
+    `/api/citizen-profiles`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCitizenDiscoverQueryOptions = <TData = Awaited<ReturnType<typeof citizenDiscover>>, TError = ErrorType<unknown>>(params?: CitizenDiscoverParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenDiscover>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCitizenDiscoverQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof citizenDiscover>>> = ({ signal }) => citizenDiscover(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof citizenDiscover>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CitizenDiscoverQueryResult = NonNullable<Awaited<ReturnType<typeof citizenDiscover>>>
+export type CitizenDiscoverQueryError = ErrorType<unknown>
+
+
+export function useCitizenDiscover<TData = Awaited<ReturnType<typeof citizenDiscover>>, TError = ErrorType<unknown>>(
+ params: undefined |  CitizenDiscoverParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenDiscover>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenDiscover>>,
+          TError,
+          Awaited<ReturnType<typeof citizenDiscover>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenDiscover<TData = Awaited<ReturnType<typeof citizenDiscover>>, TError = ErrorType<unknown>>(
+ params?: CitizenDiscoverParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenDiscover>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenDiscover>>,
+          TError,
+          Awaited<ReturnType<typeof citizenDiscover>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenDiscover<TData = Awaited<ReturnType<typeof citizenDiscover>>, TError = ErrorType<unknown>>(
+ params?: CitizenDiscoverParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenDiscover>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCitizenDiscover<TData = Awaited<ReturnType<typeof citizenDiscover>>, TError = ErrorType<unknown>>(
+ params?: CitizenDiscoverParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenDiscover>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCitizenDiscoverQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCitizenMapUrl = () => {
+
+
+
+
+  return `/api/citizen-profiles/map`
+}
+
+export const citizenMap = async ( options?: Parameters<typeof customFetch>[1]): Promise<CitizenMap200> => {
+
+  return customFetch<CitizenMap200>(getCitizenMapUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenMapQueryKey = () => {
+    return [
+    `/api/citizen-profiles/map`
+    ] as const;
+    }
+
+
+export const getCitizenMapQueryOptions = <TData = Awaited<ReturnType<typeof citizenMap>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMap>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCitizenMapQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof citizenMap>>> = ({ signal }) => citizenMap({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof citizenMap>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CitizenMapQueryResult = NonNullable<Awaited<ReturnType<typeof citizenMap>>>
+export type CitizenMapQueryError = ErrorType<unknown>
+
+
+export function useCitizenMap<TData = Awaited<ReturnType<typeof citizenMap>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMap>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenMap>>,
+          TError,
+          Awaited<ReturnType<typeof citizenMap>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenMap<TData = Awaited<ReturnType<typeof citizenMap>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMap>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenMap>>,
+          TError,
+          Awaited<ReturnType<typeof citizenMap>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenMap<TData = Awaited<ReturnType<typeof citizenMap>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMap>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCitizenMap<TData = Awaited<ReturnType<typeof citizenMap>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenMap>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCitizenMapQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCitizenPublicProfileUrl = (username: string,) => {
+
+
+
+
+  return `/api/citizen-profiles/${username}`
+}
+
+export const citizenPublicProfile = async (username: string, options?: Parameters<typeof customFetch>[1]): Promise<CitizenSocialProfile> => {
+
+  return customFetch<CitizenSocialProfile>(getCitizenPublicProfileUrl(username),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenPublicProfileQueryKey = (username: string,) => {
+    return [
+    `/api/citizen-profiles/${username}`
+    ] as const;
+    }
+
+
+export const getCitizenPublicProfileQueryOptions = <TData = Awaited<ReturnType<typeof citizenPublicProfile>>, TError = ErrorType<unknown>>(username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenPublicProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCitizenPublicProfileQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof citizenPublicProfile>>> = ({ signal }) => citizenPublicProfile(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof citizenPublicProfile>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CitizenPublicProfileQueryResult = NonNullable<Awaited<ReturnType<typeof citizenPublicProfile>>>
+export type CitizenPublicProfileQueryError = ErrorType<unknown>
+
+
+export function useCitizenPublicProfile<TData = Awaited<ReturnType<typeof citizenPublicProfile>>, TError = ErrorType<unknown>>(
+ username: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenPublicProfile>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenPublicProfile>>,
+          TError,
+          Awaited<ReturnType<typeof citizenPublicProfile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenPublicProfile<TData = Awaited<ReturnType<typeof citizenPublicProfile>>, TError = ErrorType<unknown>>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenPublicProfile>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenPublicProfile>>,
+          TError,
+          Awaited<ReturnType<typeof citizenPublicProfile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenPublicProfile<TData = Awaited<ReturnType<typeof citizenPublicProfile>>, TError = ErrorType<unknown>>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenPublicProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCitizenPublicProfile<TData = Awaited<ReturnType<typeof citizenPublicProfile>>, TError = ErrorType<unknown>>(
+ username: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenPublicProfile>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCitizenPublicProfileQueryOptions(username,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCitizenFollowUrl = (username: string,) => {
+
+
+
+
+  return `/api/citizen-profiles/${username}/follow`
+}
+
+export const citizenFollow = async (username: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCitizenFollowUrl(username),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenFollowMutationKey = () => ['citizenFollow'] as const;
+
+export const getCitizenFollowMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenFollow>>, TError,CitizenFollowMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof citizenFollow>>, TError,CitizenFollowMutationVariables, TContext> => {
+
+const mutationKey = getCitizenFollowMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof citizenFollow>>, CitizenFollowMutationVariables> = (props) => {
+          const {username} = props ?? {};
+
+          return  citizenFollow(username,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CitizenFollowMutationResult = NonNullable<Awaited<ReturnType<typeof citizenFollow>>>
+
+    export type CitizenFollowMutationError = ErrorType<unknown>
+    export type CitizenFollowMutationVariables = {username: string}
+
+    export const useCitizenFollow = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenFollow>>, TError,CitizenFollowMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof citizenFollow>>,
+        TError,
+        CitizenFollowMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCitizenFollowMutationOptions(options), queryClient);
+    }
+
+export const getCitizenUnfollowUrl = (username: string,) => {
+
+
+
+
+  return `/api/citizen-profiles/${username}/follow`
+}
+
+export const citizenUnfollow = async (username: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCitizenUnfollowUrl(username),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenUnfollowMutationKey = () => ['citizenUnfollow'] as const;
+
+export const getCitizenUnfollowMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenUnfollow>>, TError,CitizenUnfollowMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof citizenUnfollow>>, TError,CitizenUnfollowMutationVariables, TContext> => {
+
+const mutationKey = getCitizenUnfollowMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof citizenUnfollow>>, CitizenUnfollowMutationVariables> = (props) => {
+          const {username} = props ?? {};
+
+          return  citizenUnfollow(username,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CitizenUnfollowMutationResult = NonNullable<Awaited<ReturnType<typeof citizenUnfollow>>>
+
+    export type CitizenUnfollowMutationError = ErrorType<unknown>
+    export type CitizenUnfollowMutationVariables = {username: string}
+
+    export const useCitizenUnfollow = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenUnfollow>>, TError,CitizenUnfollowMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof citizenUnfollow>>,
+        TError,
+        CitizenUnfollowMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCitizenUnfollowMutationOptions(options), queryClient);
+    }
+
+export const getCitizenUploadMediaUrl = (params: CitizenUploadMediaParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/citizen-profiles/me/media?${stringifiedParams}` : `/api/citizen-profiles/me/media`
+}
+
+export const citizenUploadMedia = async (citizenSocialMediaInput: CitizenSocialMediaInput,
+    params: CitizenUploadMediaParams, options?: Parameters<typeof customFetch>[1]): Promise<CitizenUploadMedia200> => {
+    const formData = new FormData();
+formData.append(`image`, citizenSocialMediaInput.image);
+
+  return customFetch<CitizenUploadMedia200>(getCitizenUploadMediaUrl(params),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getCitizenUploadMediaMutationKey = () => ['citizenUploadMedia'] as const;
+
+export const getCitizenUploadMediaMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenUploadMedia>>, TError,CitizenUploadMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof citizenUploadMedia>>, TError,CitizenUploadMediaMutationVariables, TContext> => {
+
+const mutationKey = getCitizenUploadMediaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof citizenUploadMedia>>, CitizenUploadMediaMutationVariables> = (props) => {
+          const {data,params} = props ?? {};
+
+          return  citizenUploadMedia(data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CitizenUploadMediaMutationResult = NonNullable<Awaited<ReturnType<typeof citizenUploadMedia>>>
+    export type CitizenUploadMediaMutationBody = BodyType<CitizenSocialMediaInput>
+    export type CitizenUploadMediaMutationError = ErrorType<unknown>
+    export type CitizenUploadMediaMutationVariables = {data: BodyType<CitizenSocialMediaInput>;params: CitizenUploadMediaParams}
+
+    export const useCitizenUploadMedia = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenUploadMedia>>, TError,CitizenUploadMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof citizenUploadMedia>>,
+        TError,
+        CitizenUploadMediaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCitizenUploadMediaMutationOptions(options), queryClient);
+    }
+
+export const getCitizenReadMediaUrl = (id: number,
+    kind: 'avatar' | 'cover',
+    token: string,) => {
+
+
+
+
+  return `/api/citizen-profiles/media/${id}/${kind}/${token}`
+}
+
+export const citizenReadMedia = async (id: number,
+    kind: 'avatar' | 'cover',
+    token: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCitizenReadMediaUrl(id,kind,token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenReadMediaQueryKey = (id: number,
+    kind: 'avatar' | 'cover',
+    token: string,) => {
+    return [
+    `/api/citizen-profiles/media/${id}/${kind}/${token}`
+    ] as const;
+    }
+
+
+export const getCitizenReadMediaQueryOptions = <TData = Awaited<ReturnType<typeof citizenReadMedia>>, TError = ErrorType<void>>(id: number,
+    kind: 'avatar' | 'cover',
+    token: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenReadMedia>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCitizenReadMediaQueryKey(id,kind,token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof citizenReadMedia>>> = ({ signal }) => citizenReadMedia(id,kind,token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && kind !== null && kind !== undefined && token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof citizenReadMedia>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CitizenReadMediaQueryResult = NonNullable<Awaited<ReturnType<typeof citizenReadMedia>>>
+export type CitizenReadMediaQueryError = ErrorType<void>
+
+
+export function useCitizenReadMedia<TData = Awaited<ReturnType<typeof citizenReadMedia>>, TError = ErrorType<void>>(
+ id: number,
+    kind: 'avatar' | 'cover',
+    token: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenReadMedia>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenReadMedia>>,
+          TError,
+          Awaited<ReturnType<typeof citizenReadMedia>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenReadMedia<TData = Awaited<ReturnType<typeof citizenReadMedia>>, TError = ErrorType<void>>(
+ id: number,
+    kind: 'avatar' | 'cover',
+    token: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenReadMedia>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenReadMedia>>,
+          TError,
+          Awaited<ReturnType<typeof citizenReadMedia>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenReadMedia<TData = Awaited<ReturnType<typeof citizenReadMedia>>, TError = ErrorType<void>>(
+ id: number,
+    kind: 'avatar' | 'cover',
+    token: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenReadMedia>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCitizenReadMedia<TData = Awaited<ReturnType<typeof citizenReadMedia>>, TError = ErrorType<void>>(
+ id: number,
+    kind: 'avatar' | 'cover',
+    token: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenReadMedia>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCitizenReadMediaQueryOptions(id,kind,token,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCitizenListListingsUrl = (params?: CitizenListListingsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/citizen-listings?${stringifiedParams}` : `/api/citizen-listings`
+}
+
+export const citizenListListings = async (params?: CitizenListListingsParams, options?: Parameters<typeof customFetch>[1]): Promise<CitizenListListings200> => {
+
+  return customFetch<CitizenListListings200>(getCitizenListListingsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenListListingsQueryKey = (params?: CitizenListListingsParams,) => {
+    return [
+    `/api/citizen-listings`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCitizenListListingsQueryOptions = <TData = Awaited<ReturnType<typeof citizenListListings>>, TError = ErrorType<unknown>>(params?: CitizenListListingsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenListListings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCitizenListListingsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof citizenListListings>>> = ({ signal }) => citizenListListings(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof citizenListListings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CitizenListListingsQueryResult = NonNullable<Awaited<ReturnType<typeof citizenListListings>>>
+export type CitizenListListingsQueryError = ErrorType<unknown>
+
+
+export function useCitizenListListings<TData = Awaited<ReturnType<typeof citizenListListings>>, TError = ErrorType<unknown>>(
+ params: undefined |  CitizenListListingsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenListListings>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenListListings>>,
+          TError,
+          Awaited<ReturnType<typeof citizenListListings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenListListings<TData = Awaited<ReturnType<typeof citizenListListings>>, TError = ErrorType<unknown>>(
+ params?: CitizenListListingsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenListListings>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof citizenListListings>>,
+          TError,
+          Awaited<ReturnType<typeof citizenListListings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCitizenListListings<TData = Awaited<ReturnType<typeof citizenListListings>>, TError = ErrorType<unknown>>(
+ params?: CitizenListListingsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenListListings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCitizenListListings<TData = Awaited<ReturnType<typeof citizenListListings>>, TError = ErrorType<unknown>>(
+ params?: CitizenListListingsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof citizenListListings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCitizenListListingsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCitizenCreateListingUrl = () => {
+
+
+
+
+  return `/api/citizen-listings`
+}
+
+export const citizenCreateListing = async (citizenSocialListingInput: CitizenSocialListingInput, options?: Parameters<typeof customFetch>[1]): Promise<CitizenSocialListing> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CitizenSocialListing>(getCitizenCreateListingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(citizenSocialListingInput)
+  }
+);}
+
+
+
+
+
+export const getCitizenCreateListingMutationKey = () => ['citizenCreateListing'] as const;
+
+export const getCitizenCreateListingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenCreateListing>>, TError,CitizenCreateListingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof citizenCreateListing>>, TError,CitizenCreateListingMutationVariables, TContext> => {
+
+const mutationKey = getCitizenCreateListingMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof citizenCreateListing>>, CitizenCreateListingMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  citizenCreateListing(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CitizenCreateListingMutationResult = NonNullable<Awaited<ReturnType<typeof citizenCreateListing>>>
+    export type CitizenCreateListingMutationBody = BodyType<CitizenSocialListingInput>
+    export type CitizenCreateListingMutationError = ErrorType<unknown>
+    export type CitizenCreateListingMutationVariables = {data: BodyType<CitizenSocialListingInput>}
+
+    export const useCitizenCreateListing = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenCreateListing>>, TError,CitizenCreateListingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof citizenCreateListing>>,
+        TError,
+        CitizenCreateListingMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCitizenCreateListingMutationOptions(options), queryClient);
+    }
+
+export const getCitizenDeleteListingUrl = (id: number,) => {
+
+
+
+
+  return `/api/citizen-listings/${id}`
+}
+
+export const citizenDeleteListing = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCitizenDeleteListingUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getCitizenDeleteListingMutationKey = () => ['citizenDeleteListing'] as const;
+
+export const getCitizenDeleteListingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenDeleteListing>>, TError,CitizenDeleteListingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof citizenDeleteListing>>, TError,CitizenDeleteListingMutationVariables, TContext> => {
+
+const mutationKey = getCitizenDeleteListingMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof citizenDeleteListing>>, CitizenDeleteListingMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  citizenDeleteListing(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CitizenDeleteListingMutationResult = NonNullable<Awaited<ReturnType<typeof citizenDeleteListing>>>
+
+    export type CitizenDeleteListingMutationError = ErrorType<unknown>
+    export type CitizenDeleteListingMutationVariables = {id: number}
+
+    export const useCitizenDeleteListing = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenDeleteListing>>, TError,CitizenDeleteListingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof citizenDeleteListing>>,
+        TError,
+        CitizenDeleteListingMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCitizenDeleteListingMutationOptions(options), queryClient);
+    }
+
+export const getCitizenAssistantUrl = () => {
+
+
+
+
+  return `/api/ai/citizen-assistant`
+}
+
+export const citizenAssistant = async (citizenSocialAssistantInput: CitizenSocialAssistantInput, options?: Parameters<typeof customFetch>[1]): Promise<CitizenAssistant200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CitizenAssistant200>(getCitizenAssistantUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(citizenSocialAssistantInput)
+  }
+);}
+
+
+
+
+
+export const getCitizenAssistantMutationKey = () => ['citizenAssistant'] as const;
+
+export const getCitizenAssistantMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenAssistant>>, TError,CitizenAssistantMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof citizenAssistant>>, TError,CitizenAssistantMutationVariables, TContext> => {
+
+const mutationKey = getCitizenAssistantMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof citizenAssistant>>, CitizenAssistantMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  citizenAssistant(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CitizenAssistantMutationResult = NonNullable<Awaited<ReturnType<typeof citizenAssistant>>>
+    export type CitizenAssistantMutationBody = BodyType<CitizenSocialAssistantInput>
+    export type CitizenAssistantMutationError = ErrorType<void>
+    export type CitizenAssistantMutationVariables = {data: BodyType<CitizenSocialAssistantInput>}
+
+    export const useCitizenAssistant = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof citizenAssistant>>, TError,CitizenAssistantMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof citizenAssistant>>,
+        TError,
+        CitizenAssistantMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCitizenAssistantMutationOptions(options), queryClient);
+    }
 
 export const getGetExhaustedClipThumbnailsUrl = (params?: GetExhaustedClipThumbnailsParams,) => {
   const normalizedParams = new URLSearchParams();

@@ -1,7 +1,7 @@
 import { pool } from "@workspace/db";
 import { clipFile } from "../lib/clip-storage.js";
 import { logger } from "../lib/logger";
-import { AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
+import { AbortMultipartUploadCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { r2Client, r2Config, r2Key } from "../lib/r2-storage.js";
 
 const BATCH_SIZE = 12;
@@ -41,7 +41,9 @@ async function removeObject(objectName: string): Promise<void> {
   let timeout: NodeJS.Timeout | undefined;
   try {
     await Promise.race([
-      clipFile(objectName).delete({ ignoreNotFound: true }),
+      /^r2:citizen-media\/[1-9]\d*\/(?:avatar|cover)\/[a-f0-9-]{36}$/.test(objectName)
+        ? r2Client().send(new DeleteObjectCommand({ Bucket: r2Config()!.bucket, Key: objectName.slice(3) }))
+        : clipFile(objectName).delete({ ignoreNotFound: true }),
       new Promise<never>((_, reject) => {
         timeout = setTimeout(() => reject(new Error("CLIP_CLEANUP_TIMEOUT")), DELETE_TIMEOUT_MS);
         timeout.unref();
@@ -79,6 +81,11 @@ export async function runClipStorageCleanupBatch(clipId?: number): Promise<numbe
                 OR c.upload_object_name=pending.object_name
                 OR c.thumbnail_object_name=pending.object_name
                 OR c.processing_output_object=pending.object_name
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM citizen_profiles p WHERE
+                'r2:citizen-media/' || substring(p.avatar_url from '^/api/citizen-profiles/media/(.*)$') = pending.object_name
+                OR 'r2:citizen-media/' || substring(p.cover_url from '^/api/citizen-profiles/media/(.*)$') = pending.object_name
             )
           ORDER BY pending.retry_at, pending.object_name
           LIMIT 1 FOR UPDATE SKIP LOCKED

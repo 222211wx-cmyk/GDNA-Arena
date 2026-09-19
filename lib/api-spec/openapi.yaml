@@ -17,6 +17,156 @@ tags:
   - name: wallet
   - name: globalstar
 paths:
+  /citizen-profiles/meta:
+    get:
+      operationId: citizenMetadata
+      responses:
+        "200":
+          description: Allowed Moroccan cities and interests
+          content:
+            application/json:
+              schema: { type: object, properties: { cities: { type: array, items: { type: string } }, interests: { type: array, items: { type: string } } } }
+  /citizen-profiles/me:
+    get:
+      operationId: citizenOwnProfile
+      responses:
+        "200":
+          description: Own profile including privacy settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CitizenSocialProfile" }
+    put:
+      operationId: citizenSaveProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CitizenSocialUpdate" }
+      responses:
+        "200":
+          description: Updated own profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CitizenSocialProfile" }
+  /citizen-profiles:
+    get:
+      operationId: citizenDiscover
+      parameters:
+        - { in: query, name: city, schema: { type: string } }
+        - { in: query, name: interest, schema: { type: string } }
+        - { in: query, name: minAge, schema: { type: integer, minimum: 0, maximum: 130 } }
+        - { in: query, name: maxAge, schema: { type: integer, minimum: 0, maximum: 130 } }
+        - { in: query, name: matchmaking, schema: { type: boolean } }
+      responses:
+        "200":
+          description: Privacy-filtered citizens
+          content:
+            application/json:
+              schema: { type: object, required: [profiles], properties: { profiles: { type: array, items: { $ref: "#/components/schemas/CitizenSocialProfile" } } } }
+  /citizen-profiles/map:
+    get:
+      operationId: citizenMap
+      responses:
+        "200":
+          description: Consenting citizens with visible city only
+          content:
+            application/json:
+              schema: { type: object, required: [profiles], properties: { profiles: { type: array, items: { $ref: "#/components/schemas/CitizenSocialProfile" } } } }
+  /citizen-profiles/{username}:
+    get:
+      operationId: citizenPublicProfile
+      parameters:
+        - { in: path, name: username, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Authorized public projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CitizenSocialProfile" }
+  /citizen-profiles/{username}/follow:
+    parameters:
+      - { in: path, name: username, required: true, schema: { type: string } }
+    post:
+      operationId: citizenFollow
+      responses:
+        "200": { description: Followed }
+    delete:
+      operationId: citizenUnfollow
+      responses:
+        "200": { description: Unfollowed }
+  /citizen-profiles/me/media:
+    post:
+      operationId: citizenUploadMedia
+      parameters:
+        - { in: query, name: kind, required: true, schema: { type: string, enum: [avatar, cover] } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/CitizenSocialMediaInput" }
+      responses:
+        "200":
+          description: Persisted profile image URL
+          content:
+            application/json:
+              schema: { type: object, required: [url], properties: { url: { type: string } } }
+  /citizen-profiles/media/{id}/{kind}/{token}:
+    get:
+      operationId: citizenReadMedia
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+        - { in: path, name: kind, required: true, schema: { type: string, enum: [avatar, cover] } }
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "Authorized image bytes, private no-store cache policy" }
+        "404": { description: Missing image or privacy access denied }
+  /citizen-listings:
+    get:
+      operationId: citizenListListings
+      parameters:
+        - { in: query, name: type, schema: { type: string, enum: [market, service] } }
+        - { in: query, name: city, schema: { type: string } }
+      responses:
+        "200":
+          description: Authorized listings with seller projections
+          content:
+            application/json:
+              schema: { type: object, properties: { listings: { type: array, items: { $ref: "#/components/schemas/CitizenSocialListing" } } } }
+    post:
+      operationId: citizenCreateListing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CitizenSocialListingInput" }
+      responses:
+        "201":
+          description: Created listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CitizenSocialListing" }
+  /citizen-listings/{id}:
+    delete:
+      operationId: citizenDeleteListing
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted own listing }
+  /ai/citizen-assistant:
+    post:
+      operationId: citizenAssistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CitizenSocialAssistantInput" }
+      responses:
+        "200":
+          description: Consented assistance; heuristic explicitly labelled
+          content:
+            application/json:
+              schema: { type: object, required: [text, method], properties: { text: { type: string }, method: { type: string }, compatibility: { $ref: "#/components/schemas/CitizenSocialCompatibility" } } }
+        "503": { description: Optional AI unavailable }
   /admin/clips/thumbnails/exhausted:
     get:
       operationId: getExhaustedClipThumbnails
@@ -825,6 +975,100 @@ paths:
 
 components:
   schemas:
+    CitizenSocialMediaInput:
+      type: object
+      required: [image]
+      properties:
+        image: { type: string, description: Multipart image bytes, not a JSON string }
+    CitizenSocialAssistantInput:
+      type: object
+      required: [section, consent]
+      properties:
+        section: { type: string, enum: [profile, matchmaking, market, services, helixly, map, translate, auto-reply] }
+        consent: { type: boolean }
+        username: { type: string, maxLength: 80 }
+        clipId: { type: integer }
+        listingId: { type: integer }
+        prompt: { type: string, maxLength: 2000 }
+        text: { type: string, maxLength: 4000 }
+        targetLanguage: { type: string, maxLength: 80 }
+    CitizenSocialVisibility:
+      type: string
+      enum: [everyone, friends, private]
+    CitizenSocialUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        bio: { type: string, maxLength: 1000 }
+        city: { type: string, nullable: true }
+        interests: { type: array, maxItems: 12, items: { type: string } }
+        status: { type: string, enum: [available, busy, private] }
+        visibility: { $ref: "#/components/schemas/CitizenSocialVisibility" }
+        mapDiscoverable: { type: boolean }
+        aiConsent: { type: boolean }
+        fieldVisibility:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/CitizenSocialVisibility" }
+    CitizenSocialCompatibility:
+      type: object
+      required: [percent, explanation, method]
+      properties:
+        percent: { type: integer }
+        explanation: { type: string }
+        method: { type: string, enum: [shared-interests-city-heuristic] }
+    CitizenSocialProfile:
+      type: object
+      required: [userId, username, displayName, avatarUrl, coverUrl, city, age, bio, interests, status, visibility, stats, isFollowing, isFriend, isSelf, canMessage, videos, mapDiscoverable]
+      properties:
+        userId: { type: integer }
+        username: { type: string }
+        displayName: { type: string }
+        avatarUrl: { type: string, nullable: true }
+        coverUrl: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        age: { type: integer, nullable: true }
+        bio: { type: string, nullable: true }
+        interests: { type: array, items: { type: string } }
+        status: { type: string, enum: [available, busy, private] }
+        visibility: { $ref: "#/components/schemas/CitizenSocialVisibility" }
+        stats:
+          type: object
+          required: [views, followers, following]
+          properties: { views: { type: integer }, followers: { type: integer }, following: { type: integer } }
+        isFollowing: { type: boolean }
+        isFriend: { type: boolean }
+        isSelf: { type: boolean }
+        canMessage: { type: boolean }
+        mapDiscoverable: { type: boolean }
+        aiConsent: { type: boolean }
+        fieldVisibility: { type: object, additionalProperties: { $ref: "#/components/schemas/CitizenSocialVisibility" } }
+        compatibility: { $ref: "#/components/schemas/CitizenSocialCompatibility" }
+        videos:
+          type: array
+          items:
+            type: object
+            required: [id, title, url, thumbnailUrl]
+            properties: { id: { type: integer }, title: { type: string }, url: { type: string }, thumbnailUrl: { type: string, nullable: true } }
+    CitizenSocialListingInput:
+      type: object
+      additionalProperties: false
+      required: [type, title, description, price]
+      properties:
+        type: { type: string, enum: [market, service] }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, minLength: 1, maxLength: 2000 }
+        price: { type: number, minimum: 0, maximum: 100000000 }
+        city: { type: string, nullable: true }
+    CitizenSocialListing:
+      allOf:
+        - { $ref: "#/components/schemas/CitizenSocialListingInput" }
+        - type: object
+          required: [id, createdAt, seller]
+          properties:
+            id: { type: integer }
+            createdAt: { type: string }
+            seller: { $ref: "#/components/schemas/CitizenSocialProfile" }
     ExhaustedClipThumbnail:
       type: object
       required: [id, title, username, createdAt, thumbnailRetryAttempts, thumbnailRetryAt, isFrozen]

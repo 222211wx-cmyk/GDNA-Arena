@@ -6,6 +6,8 @@
 // media pauses; playback URLs and posters load lazily; the feed paginates.
 
 import { reelsIcons } from "./reelsIcons";
+import { icons } from "./clipIcons";
+import { mountInboxBadge } from "./inboxBadge";
 import {
   fetchEngagement,
   fetchFeed,
@@ -137,7 +139,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // ── Bottom nav rendering ───────────────────────────────────────────────
   let bellItem: HTMLButtonElement;
   let bellBadge: HTMLElement | null = null;
+  let disposeInbox: (() => void) | undefined;
   function renderBottomNav() {
+    disposeInbox?.();
     bottomnav.replaceChildren();
     for (const route of NAV_ROUTES) {
       const active = route.key === "reels";
@@ -155,9 +159,17 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     search.append(searchLabel);
     search.addEventListener("click", openSearch);
     bottomnav.append(search);
+    const inbox = el("a", "reels-nav-item", { href: `${BASE}messages`, "data-nav": "inbox", "aria-label": "Inbox" }) as HTMLAnchorElement;
+    inbox.style.position = "relative";
+    inbox.innerHTML = icons.message();
+    const inboxLabel = el("span");
+    inboxLabel.textContent = "Inbox";
+    inbox.append(inboxLabel);
+    bottomnav.append(inbox);
+    if (identity.status === "authenticated") disposeInbox = mountInboxBadge(inbox);
     // Profile
     const profileHref = identity.status === "authenticated" && identity.username
-      ? `${BASE}citizen/${encodeURIComponent(identity.username)}`
+      ? `${BASE}u/${encodeURIComponent(identity.username)}`
       : `${BASE}login`;
     const profile = el("a", "reels-nav-item", { href: profileHref, "data-nav": "profile", "aria-label": "Profil" });
     const av = avatarNode("reels-nav-avatar", identity.status === "authenticated" ? identity.avatarUrl : null,
@@ -167,7 +179,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     profile.append(av, pLabel);
     bottomnav.append(profile);
     // Notifications remain available from the menu; retain an inert host so the
-    // existing unread loader can update safely without adding a fifth nav item.
+    // existing notification loader can update independently of the Inbox badge.
     bellItem = el("button");
     bellBadge = null;
     applyUnreadBadge();
@@ -386,7 +398,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       const defaultAudio = meta.querySelector(".clip-meta-audio");
 
       const authorRow = el("div", "reels-author");
-      const avHref = `${BASE}citizen/${encodeURIComponent(clip.author.username)}`;
+      const avHref = `${BASE}u/${encodeURIComponent(clip.author.username)}`;
       const avLink = el("a", "reels-avatar", { href: avHref, "aria-label": `Profil de ${clip.author.username}` });
       avLink.append(avatarNode("reels-avatar-inner", clip.author.avatarUrl, clip.author.username));
       // avatarNode returns its own span; simplify: use the link as the circle.
@@ -1067,6 +1079,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   // ── Boot: identity → unread count → first page ───────────────────────────
   void identityPromise.then(resolved => {
+    if (destroyed) return;
     identity = resolved;
     renderBottomNav();
     if (resolved.status === "authenticated") {
@@ -1096,6 +1109,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     destroy() {
       playbackIntentVersion++;
       destroyed = true;
+      disposeInbox?.();
       io?.disconnect();
       feedController?.abort();
       searchController?.abort();

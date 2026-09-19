@@ -10,6 +10,7 @@ import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { isAdultForGames, normalizeBirthDate } from "../lib/age";
 import { revokeAllCallPushSessions, revokeCallPushSession } from "../lib/firebase-call-push";
 import { deleteAccountClips } from "../lib/clip-account-delete.js";
+import { deleteAccountCitizenSocial } from "../lib/citizen-media-cleanup.js";
 import { ClipUploadError } from "../lib/clip-upload-protocol.js";
 
 const pool = nullablePool!;
@@ -415,6 +416,7 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
         WHERE id = $3
       `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
       await deleteAccountClips(client, userId);
+      await deleteAccountCitizenSocial(client, userId);
       // Only erase display names from records with an immutable ownership link.
       // Never match historical snapshots by username: bots, stars, and seeded
       // records can legitimately reuse a citizen's display name.

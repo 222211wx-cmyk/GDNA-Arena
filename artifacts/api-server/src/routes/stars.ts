@@ -9,6 +9,7 @@ import bcrypt from "bcrypt";
 import { db, pool, dmRooms, dmRoomMembers, dmMessages, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { notifyMessageRecipients } from "../lib/message-push";
+import { citizenProjection } from "../lib/citizen-projection";
 import { AI_UNAVAILABLE_MESSAGE, createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
@@ -151,6 +152,9 @@ router.post("/stars/invite", async (req, res): Promise<void> => {
   );
   const starUser = starRows[0] as { id: number; username: string } | undefined;
   if (!starUser) { res.status(500).json({ error: "Star account missing" }); return; }
+  if (!(await citizenProjection(starUser.id, userId))?.canMessage) {
+    res.status(403).json({ error: "Direct messaging is unavailable for this citizen" }); return;
+  }
 
   const todayKey = new Date().toISOString().slice(0, 10);
 
@@ -185,20 +189,28 @@ router.post("/stars/invite", async (req, res): Promise<void> => {
       );
     }
 
-    // Find or create the 1:1 room between citizen and star (exactly 2 members)
+    // Share the canonical pair lock with ordinary messaging and arena-withdraw.
+    // The quota lock alone cannot serialize those other direct-room entry points.
+    await client.query(
+      "SELECT pg_advisory_xact_lock($1::integer, $2::integer)",
+      [Math.min(userId, starUser.id), Math.max(userId, starUser.id)],
+    );
+    // Reuse the oldest historical room; never rewrite IDs or move message history.
     const { rows: roomRows } = await client.query(
       `SELECT r.id FROM dm_rooms r
        JOIN dm_room_members a ON a.room_id = r.id AND a.user_id = $1
        JOIN dm_room_members b ON b.room_id = r.id AND b.user_id = $2
        WHERE r.type = 'direct'
          AND (SELECT COUNT(*) FROM dm_room_members m WHERE m.room_id = r.id) = 2
-       LIMIT 1`,
+       ORDER BY r.id LIMIT 1`,
       [userId, starUser.id],
     );
 
     if (roomRows.length > 0) {
       roomId = roomRows[0].id;
     } else {
+      // Membership changes serialize with encrypted insertion/key registration.
+      await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
       const { rows: newRoom } = await client.query(
         `INSERT INTO dm_rooms (type, created_by) VALUES ('direct', $1) RETURNING id`, [userId],
       );

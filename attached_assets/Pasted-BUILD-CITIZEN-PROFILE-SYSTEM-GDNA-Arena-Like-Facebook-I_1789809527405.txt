@@ -1,0 +1,46 @@
+BUILD CITIZEN PROFILE SYSTEM - GDNA Arena - Like Facebook/Instagram Social
+
+CONTEXT: R2 is now Connected (helixly-clips), 137MB upload fixed. Now build the social layer.
+
+GOAL: Every citizen has a public identity, not just a video. Profile is the core of entire platform.
+
+1. CITIZEN PROFILE PAGE - /u/[username]
+   - Route: /u/username - public page for everyone
+   - Fields: avatar, cover, name, city (from Morocco cities), age, bio, interests tags, Helixly videos list, stats (views, followers, following)
+   - Buttons: [تعارف] [مراسلة] [متابعة] + status: متاح للتعارف / مشغول / خاص
+   - Privacy control: user chooses what is public: Everyone / Friends only / Private (phone always private)
+
+2. DISCOVERY & MATCHMAKING
+   - Homepage section: "مواطنون مقترحون للتعارف" - grid of profiles
+   - Sidebar on every Helixly video: profile of owner
+   - Filter page /citizens: by city, age, interest
+   - Click on any comment name -> goes to /u/username
+
+3. UNIFIED MESSAGING SYSTEM - MOST IMPORTANT - ONE SYSTEM EVERYWHERE
+   - Single messenger component <UnifiedMessenger /> used in: Profile page, under Helixly video, in Market, in Services, in Map
+   - If you send message from profile, same conversation appears when you open his video - same thread ID: conversationId = sorted(user1+user2)
+   - Features: real-time (Supabase Realtime or Pusher), read receipts, typing indicator, block/report, image/file share
+   - Inbox page: /messages - shows all conversations across platform
+   - Notification badge everywhere
+
+4. GDNA AI SMART - Works in EVERY section
+   - AI Assistant as intermediary:
+     a) Matchmaking: analyzes bio + interests + videos and suggests compatible citizens with % compatibility (e.g., توافق 85%)
+     b) Auto-reply: if citizen doesn't reply in 5min, AI says: "مرحبا، سماح مشغولة دابا، بغيتي نخلي ليها رسالة ذكية؟" and takes message
+     c) Auto-translate: messages auto translate AR/FR/EN toggle
+     d) In Market: if user asks about product, AI answers from profile/product data
+     e) In Helixly: under video, AI summarizes video and suggests related citizens
+   - Implementation: create /api/ai/citizen-assistant endpoint that has context of current profile + current section
+
+5. LINK EVERYWHERE IN GDNA ARENA
+   - Helixly: under every video show <CitizenCard mini> with avatar, name, message button
+   - Market/Souk: seller card = Citizen profile linked
+   - Map: show citizens on map by city
+   - Comments: avatar clickable to profile
+
+6. DESIGN
+   - Instagram style: clean white cards, small icons on right vertical, not big yellow buttons
+   - Keep R2 connected - do not dismiss Cloudflare again
+   - Mobile first
+
+DO NOT DISCUSS CODE. BUILD FULL FLOW: profile creation -> discovery -> messaging -> AI integration. Use existing users table, add profiles table if needed. Publish when done.

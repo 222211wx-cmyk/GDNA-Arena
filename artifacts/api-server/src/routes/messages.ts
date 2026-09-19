@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { createHash } from "crypto";
@@ -16,6 +17,7 @@ import { validateContent } from "../lib/moderate";
 import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from "./stars";
 import { broadcastMessageToRoom, broadcastRoomEvent } from "../lib/signaling";
 import { notifyMessageRecipients } from "../lib/message-push";
+import { citizenProjection } from "../lib/citizen-projection";
 import {
   authorizeMessageUpload,
   MAX_ENCRYPTED_ATTACHMENT_BYTES,
@@ -30,6 +32,53 @@ import {
 
 const router: IRouter = Router();
 const pool = _pool!;
+const typingLimit = rateLimit({ windowMs: 60_000, limit: 40, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: req => String(req.session?.userId ?? "anonymous"),
+  message: { error: "Typing updates are too frequent" } });
+const reportLimit = rateLimit({ windowMs: 60 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: req => String(req.session?.userId ?? "anonymous"),
+  message: { error: "Too many reports. Please try later." } });
+
+// Content-free typing metadata is delivered through the existing authenticated /api/ws.
+router.post("/messages/rooms/:id/typing", typingLimit, async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  const roomId = Number(req.params.id);
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  if (!Number.isSafeInteger(roomId) || roomId <= 0 || typeof req.body?.typing !== "boolean") {
+    res.status(400).json({ error: "Invalid typing update" }); return;
+  }
+  if (!await getMembership(roomId, userId)) { res.status(403).json({ error: "Access denied" }); return; }
+  if (await directRoomUnavailable(roomId, userId)) { res.status(403).json({ error: "Conversation unavailable" }); return; }
+  await broadcastRoomEvent(roomId, { type: "chat-typing", userId, typing: req.body.typing });
+  res.json({ success: true });
+});
+
+router.post("/messages/rooms/:id/report", reportLimit, async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  const roomId = Number(req.params.id);
+  const reason = req.body?.reason;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  if (!Number.isSafeInteger(roomId) || roomId <= 0 || typeof reason !== "string" ||
+      reason.trim().length < 5 || reason.length > 1000) {
+    res.status(400).json({ error: "Provide a reason between 5 and 1000 characters" }); return;
+  }
+  if (!await getMembership(roomId, userId)) { res.status(403).json({ error: "Access denied" }); return; }
+  // No decrypted message/attachment is collected. Reporter consciously submits only a reason.
+  const result = await pool.query(
+    `INSERT INTO dm_safety_reports(room_id,reporter_id,reason) VALUES($1,$2,$3)
+     ON CONFLICT(room_id,reporter_id) DO UPDATE SET reason=EXCLUDED.reason RETURNING id`,
+    [roomId, userId, reason.trim()]);
+  res.status(201).json({ reportId: result.rows[0].id });
+});
+
+router.get("/messages/safety-reports", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const [user] = await db.select({ admin: usersTable.isAdmin }).from(usersTable).where(eq(usersTable.id, userId));
+  if (!user?.admin) { res.status(403).json({ error: "Admin required" }); return; }
+  const result = await pool.query("SELECT * FROM dm_safety_reports ORDER BY created_at DESC LIMIT 100");
+  res.json({ reports: result.rows });
+});
 const CHAT_MODERATION_BUDGET_MS = 300;
 const E2E_PREFIX = "e2e:v1:";
 const MAX_E2E_CONTENT_LENGTH = 96_000;
@@ -254,12 +303,15 @@ async function isBlockedPair(a: number, b: number): Promise<boolean> {
   return result.rows.length > 0;
 }
 
-async function directRoomBlocked(roomId: number, userId: number): Promise<boolean> {
+async function directRoomUnavailable(roomId: number, userId: number): Promise<boolean> {
   const members = await pool.query<{ user_id: number }>(
-    "SELECT user_id FROM dm_room_members WHERE room_id=$1", [roomId]);
+    `SELECT m.user_id FROM dm_room_members m JOIN dm_rooms r ON r.id=m.room_id
+     WHERE m.room_id=$1 AND r.type='direct'`, [roomId]);
   if (members.rows.length !== 2) return false;
   const peer = members.rows.find(m => m.user_id !== userId)?.user_id;
-  return peer !== undefined && isBlockedPair(userId, peer);
+  // Always recompute from canonical visibility/mutual-friend policy. A historic
+  // membership is not permission to contact someone after they revoke access.
+  return peer !== undefined && !(await citizenProjection(peer, userId))?.canMessage;
 }
 
 type RsaPublicJwk = {
@@ -450,6 +502,9 @@ router.get("/messages/rooms/:id/e2e-keys", async (req, res): Promise<void> => {
   }
   if (!await getMembership(roomId, userId)) {
     res.status(403).json({ error: "Access denied — not a member of this room" }); return;
+  }
+  if (await directRoomUnavailable(roomId, userId)) {
+    res.status(403).json({ error: "Messaging is unavailable in this conversation" }); return;
   }
   const result = await pool.query<{
     user_id: number;
@@ -676,41 +731,58 @@ router.post("/messages/rooms", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
 
-  const { targetUsername, roomName, type = "direct", icon = "💬" } = req.body as {
-    targetUsername?: string; roomName?: string; type?: string; icon?: string;
+  const { targetUsername, targetUserId, roomName, type = "direct", icon = "💬" } = req.body as {
+    targetUsername?: string; targetUserId?: number; roomName?: string; type?: string; icon?: string;
   };
 
   const [me] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   if (!me) { res.status(404).json({ error: "User not found" }); return; }
 
-  if (type === "direct" && targetUsername) {
+  if (type === "direct") {
+    if ((targetUserId !== undefined && (!Number.isSafeInteger(targetUserId) || targetUserId <= 0)) ||
+        (targetUserId === undefined && (typeof targetUsername !== "string" || !targetUsername.trim()))) {
+      res.status(400).json({ error: "A valid recipient is required" }); return;
+    }
     const [target] = await db.select().from(usersTable)
-      .where(eq(usersTable.username, targetUsername)).limit(1);
+      .where(targetUserId !== undefined ? eq(usersTable.id, targetUserId) : eq(usersTable.username, targetUsername!)).limit(1);
     if (!target) { res.status(404).json({ error: "Citizen not found" }); return; }
     if (target.id === userId) { res.status(400).json({ error: "Cannot DM yourself" }); return; }
-    if (await isBlockedPair(userId, target.id)) {
+    if (!(await citizenProjection(target.id, userId))?.canMessage) {
       res.status(403).json({ error: "Direct messaging is unavailable for this citizen" }); return;
     }
 
-    // Return existing DM if one already exists between these two users
-    const myDMs = await db.select({ roomId: dmRoomMembers.roomId })
-      .from(dmRoomMembers).where(eq(dmRoomMembers.userId, userId));
-    for (const { roomId } of myDMs) {
-      const [room] = await db.select().from(dmRooms)
-        .where(and(eq(dmRooms.id, roomId), eq(dmRooms.type, "direct"))).limit(1);
-      if (!room) continue;
-      const members = await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
-      if (members.length === 2 && members.some(m => m.userId === target.id)) {
-        res.json({ room }); return;
+    const client = await pool.connect();
+    let roomId: number;
+    let created = false;
+    try {
+      await client.query("BEGIN");
+      // Same canonical sorted pair key as arena-withdraw. IDs/history stay numeric and intact.
+      await client.query("SELECT pg_advisory_xact_lock($1::integer,$2::integer)",
+        [Math.min(userId, target.id), Math.max(userId, target.id)]);
+      const existing = await client.query<{ id: number }>(
+        `SELECT r.id FROM dm_rooms r JOIN dm_room_members m ON m.room_id=r.id
+         WHERE r.type='direct' GROUP BY r.id HAVING COUNT(*)=2
+         AND COUNT(DISTINCT m.user_id) FILTER (WHERE m.user_id=$1 OR m.user_id=$2)=2
+         ORDER BY r.id LIMIT 1`, [userId, target.id]);
+      roomId = existing.rows[0]?.id;
+      if (!roomId) {
+        // Membership/key mutation shares the E2EE serialization lock.
+        await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+        const inserted = await client.query<{ id: number }>(
+          "INSERT INTO dm_rooms(type,created_by) VALUES('direct',$1) RETURNING id", [userId]);
+        roomId = inserted.rows[0].id;
+        await client.query(
+          "INSERT INTO dm_room_members(room_id,user_id,username) VALUES($1,$2,$3),($1,$4,$5)",
+          [roomId, userId, me.username, target.id, target.username]);
+        created = true;
       }
-    }
-
-    const [room] = await db.insert(dmRooms).values({ type: "direct", createdBy: userId }).returning();
-    await db.insert(dmRoomMembers).values([
-      { roomId: room.id, userId: me.id,     username: me.username },
-      { roomId: room.id, userId: target.id, username: target.username },
-    ]);
-    res.status(201).json({ room });
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+    const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
+    res.status(created ? 201 : 200).json({ room });
   } else {
     const [room] = await db.insert(dmRooms).values({
       type: "group", name: roomName ?? "Group Room", icon, createdBy: userId,
@@ -742,6 +814,9 @@ router.post("/messages/arena-withdraw", async (req, res): Promise<void> => {
   if (!arenaAdmin) {
     res.status(503).json({ error: "إدارة Arena غير متاحة حالياً" });
     return;
+  }
+  if (!(await citizenProjection(arenaAdmin.id, userId))?.canMessage) {
+    res.status(403).json({ error: "Direct messaging is unavailable for this citizen" }); return;
   }
 
   const content = `طلب جائزة من ${ARENA_WITHDRAW_GAMES[parsed.data.gameId]}`;
@@ -885,6 +960,9 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
   if (!membership) {
     res.status(403).json({ error: "Access denied — not a member of this room" }); return;
   }
+  if (await directRoomUnavailable(roomId, userId)) {
+    res.status(403).json({ error: "Messaging is unavailable in this conversation" }); return;
+  }
 
   // Expired messages are removed for every participant before history is read.
   await pool.query(
@@ -1027,7 +1105,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   const roomMembers = await db.select({ userId: dmRoomMembers.userId })
     .from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId));
   const [room] = await db.select().from(dmRooms).where(eq(dmRooms.id, roomId)).limit(1);
-  if (room?.type === "direct" && await directRoomBlocked(roomId, userId)) {
+  if (room?.type === "direct" && await directRoomUnavailable(roomId, userId)) {
     res.status(403).json({ error: "Messaging is unavailable in this conversation" }); return;
   }
   if (replyToId !== undefined) {
@@ -1205,7 +1283,7 @@ router.put("/messages/rooms/:roomId/messages/:msgId/reaction", async (req, res):
   }
   if (!await getMembership(roomId, userId)) { res.status(403).json({ error: "Access denied" }); return; }
   const room = await pool.query<{type:string}>("SELECT type FROM dm_rooms WHERE id=$1", [roomId]);
-  if (room.rows[0]?.type === "direct" && await directRoomBlocked(roomId, userId)) {
+  if (room.rows[0]?.type === "direct" && await directRoomUnavailable(roomId, userId)) {
     res.status(403).json({ error: "Reactions are unavailable in this conversation" }); return;
   }
   const message = await pool.query("SELECT 1 FROM dm_messages WHERE id=$1 AND room_id=$2", [msgId, roomId]);
@@ -1226,7 +1304,7 @@ router.delete("/messages/rooms/:roomId/messages/:msgId/reaction", async (req, re
     res.status(403).json({ error: "Access denied" }); return;
   }
   const room = await pool.query<{type:string}>("SELECT type FROM dm_rooms WHERE id=$1", [roomId]);
-  if (room.rows[0]?.type === "direct" && await directRoomBlocked(roomId, userId)) {
+  if (room.rows[0]?.type === "direct" && await directRoomUnavailable(roomId, userId)) {
     res.status(403).json({ error: "Reactions are unavailable in this conversation" }); return;
   }
   const message = await pool.query("SELECT 1 FROM dm_messages WHERE id=$1 AND room_id=$2", [msgId, roomId]);

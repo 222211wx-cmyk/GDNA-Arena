@@ -33,11 +33,28 @@ beforeEach(() => {
 });
 
 describe("critical Clips navigation", () => {
-  it("keeps exactly Home, Clips, Search, Profile in the persistent bottom nav", () => {
+  it("does not request private inbox counts for anonymous viewers", async () => {
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    await vi.waitFor(() => expect(document.querySelector('[data-nav="profile"]')?.getAttribute("href")).toBe("/login"));
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/messages/unread-count"))).toBe(false);
+  });
+
+  it("shows the authenticated inbox count using the actual count contract", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/auth/me")) return Response.json({ id: 7, username: "citizen" });
+      if (url.includes("/messages/unread-count")) return Response.json({ count: 3 });
+      return Response.json({ clips: [], notifications: [], unreadCount: 0, hasMore: false });
+    }));
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    await vi.waitFor(() => expect(document.querySelector('[data-nav="inbox"]')?.getAttribute("aria-label")).toBe("Inbox, 3 unread messages"));
+  });
+
+  it("keeps Home, Clips, Search, Inbox, Profile in the persistent bottom nav", () => {
     controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
     const labels = [...document.querySelectorAll(".reels-bottomnav .reels-nav-item > span:last-child")]
       .map(node => node.textContent);
-    expect(labels).toEqual(["Accueil", "Clips", "Recherche", "Profil"]);
+    expect(labels).toEqual(["Accueil", "Clips", "Recherche", "Inbox", "Profil"]);
+    expect(document.querySelector('[data-nav="inbox"]')?.getAttribute("href")).toBe("/messages");
     expect(document.querySelector('.reels-topbar-left a[href="/"]')).not.toBeNull();
     expect(document.querySelector(".reels-title")?.textContent).toBe("GDNA Arena");
   });

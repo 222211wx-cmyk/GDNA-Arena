@@ -5,6 +5,173 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface CitizenSocialMediaInput {
+  /** Multipart image bytes */
+  image: string;
+}
+
+export type CitizenSocialAssistantInputSection = typeof CitizenSocialAssistantInputSection[keyof typeof CitizenSocialAssistantInputSection];
+
+
+export const CitizenSocialAssistantInputSection = {
+  profile: 'profile',
+  matchmaking: 'matchmaking',
+  market: 'market',
+  services: 'services',
+  helixly: 'helixly',
+  map: 'map',
+  translate: 'translate',
+  'auto-reply': 'auto-reply',
+} as const;
+
+export interface CitizenSocialAssistantInput {
+  section: CitizenSocialAssistantInputSection;
+  consent: boolean;
+  /** @maxLength 80 */
+  username?: string;
+  clipId?: number;
+  listingId?: number;
+  /** @maxLength 2000 */
+  prompt?: string;
+  /** @maxLength 4000 */
+  text?: string;
+  /** @maxLength 80 */
+  targetLanguage?: string;
+}
+
+export type CitizenSocialVisibility = typeof CitizenSocialVisibility[keyof typeof CitizenSocialVisibility];
+
+
+export const CitizenSocialVisibility = {
+  everyone: 'everyone',
+  friends: 'friends',
+  private: 'private',
+} as const;
+
+export type CitizenSocialUpdateStatus = typeof CitizenSocialUpdateStatus[keyof typeof CitizenSocialUpdateStatus];
+
+
+export const CitizenSocialUpdateStatus = {
+  available: 'available',
+  busy: 'busy',
+  private: 'private',
+} as const;
+
+export type CitizenSocialUpdateFieldVisibility = {[key: string]: CitizenSocialVisibility};
+
+export interface CitizenSocialUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  displayName?: string;
+  /** @maxLength 1000 */
+  bio?: string;
+  city?: string | null;
+  /** @maxItems 12 */
+  interests?: string[];
+  status?: CitizenSocialUpdateStatus;
+  visibility?: CitizenSocialVisibility;
+  mapDiscoverable?: boolean;
+  aiConsent?: boolean;
+  fieldVisibility?: CitizenSocialUpdateFieldVisibility;
+}
+
+export type CitizenSocialCompatibilityMethod = typeof CitizenSocialCompatibilityMethod[keyof typeof CitizenSocialCompatibilityMethod];
+
+
+export const CitizenSocialCompatibilityMethod = {
+  'shared-interests-city-heuristic': 'shared-interests-city-heuristic',
+} as const;
+
+export interface CitizenSocialCompatibility {
+  percent: number;
+  explanation: string;
+  method: CitizenSocialCompatibilityMethod;
+}
+
+export type CitizenSocialProfileStatus = typeof CitizenSocialProfileStatus[keyof typeof CitizenSocialProfileStatus];
+
+
+export const CitizenSocialProfileStatus = {
+  available: 'available',
+  busy: 'busy',
+  private: 'private',
+} as const;
+
+export type CitizenSocialProfileStats = {
+  views: number;
+  followers: number;
+  following: number;
+};
+
+export type CitizenSocialProfileFieldVisibility = {[key: string]: CitizenSocialVisibility};
+
+export type CitizenSocialProfileVideosItem = {
+  id: number;
+  title: string;
+  url: string;
+  thumbnailUrl: string | null;
+};
+
+export interface CitizenSocialProfile {
+  userId: number;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  coverUrl: string | null;
+  city: string | null;
+  age: number | null;
+  bio: string | null;
+  interests: string[];
+  status: CitizenSocialProfileStatus;
+  visibility: CitizenSocialVisibility;
+  stats: CitizenSocialProfileStats;
+  isFollowing: boolean;
+  isFriend: boolean;
+  isSelf: boolean;
+  canMessage: boolean;
+  mapDiscoverable: boolean;
+  aiConsent?: boolean;
+  fieldVisibility?: CitizenSocialProfileFieldVisibility;
+  compatibility?: CitizenSocialCompatibility;
+  videos: CitizenSocialProfileVideosItem[];
+}
+
+export type CitizenSocialListingInputType = typeof CitizenSocialListingInputType[keyof typeof CitizenSocialListingInputType];
+
+
+export const CitizenSocialListingInputType = {
+  market: 'market',
+  service: 'service',
+} as const;
+
+export interface CitizenSocialListingInput {
+  type: CitizenSocialListingInputType;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  description: string;
+  /**
+     * @minimum 0
+     * @maximum 100000000
+     */
+  price: number;
+  city?: string | null;
+}
+
+export type CitizenSocialListing = CitizenSocialListingInput & {
+  id: number;
+  createdAt: string;
+  seller: CitizenSocialProfile;
+};
+
 export interface ExhaustedClipThumbnail {
   id: number;
   title: string;
@@ -424,6 +591,74 @@ export interface TransactionsResponse {
   transactions: TransactionItem[];
   balance: number;
 }
+
+export type CitizenMetadata200 = {
+  cities?: string[];
+  interests?: string[];
+};
+
+export type CitizenDiscoverParams = {
+city?: string;
+interest?: string;
+/**
+ * @minimum 0
+ * @maximum 130
+ */
+minAge?: number;
+/**
+ * @minimum 0
+ * @maximum 130
+ */
+maxAge?: number;
+matchmaking?: boolean;
+};
+
+export type CitizenDiscover200 = {
+  profiles: CitizenSocialProfile[];
+};
+
+export type CitizenMap200 = {
+  profiles: CitizenSocialProfile[];
+};
+
+export type CitizenUploadMediaParams = {
+kind: CitizenUploadMediaKind;
+};
+
+export type CitizenUploadMediaKind = typeof CitizenUploadMediaKind[keyof typeof CitizenUploadMediaKind];
+
+
+export const CitizenUploadMediaKind = {
+  avatar: 'avatar',
+  cover: 'cover',
+} as const;
+
+export type CitizenUploadMedia200 = {
+  url: string;
+};
+
+export type CitizenListListingsParams = {
+type?: CitizenListListingsType;
+city?: string;
+};
+
+export type CitizenListListingsType = typeof CitizenListListingsType[keyof typeof CitizenListListingsType];
+
+
+export const CitizenListListingsType = {
+  market: 'market',
+  service: 'service',
+} as const;
+
+export type CitizenListListings200 = {
+  listings?: CitizenSocialListing[];
+};
+
+export type CitizenAssistant200 = {
+  text: string;
+  method: string;
+  compatibility?: CitizenSocialCompatibility;
+};
 
 export type GetExhaustedClipThumbnailsParams = {
 /**

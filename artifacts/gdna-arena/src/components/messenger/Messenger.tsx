@@ -23,6 +23,7 @@ import {
   MapPin, Link2, Share2,
 } from "lucide-react";
 import SolidarityRelay from "./SolidarityRelay";
+import { MessengerAssistant } from "./MessengerAssistant";
 import { attachmentSizeError, attachmentUploadQuery } from "./attachment-policy";
 import type { GroupRoom } from "../social/social-types";
 import Avatar from "../social/Avatar";
@@ -282,6 +283,24 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
     setBlockBusy(false);
   }
 
+  async function reportConversation() {
+    if (!activeRoom || !isOnline) { onOffline(); return; }
+    const reason = window.prompt("Report conversation: describe the concern (5–1000 characters). Only this reason is shared with moderators, not your encrypted messages.");
+    if (reason === null) return;
+    if (reason.trim().length < 5 || reason.length > 1000) {
+      showToast("Provide a reason between 5 and 1000 characters"); return;
+    }
+    try {
+      const response = await fetch(api(`/api/messages/rooms/${activeRoom.id}/report`), {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Report failed");
+      showToast("Report submitted to moderators");
+    } catch (error) { showToast(error instanceof Error ? error.message : "Report failed"); }
+  }
+
   const rootStyle: React.CSSProperties = inline
     ? { position: "relative", flex: 1, minHeight: 0, background: BG, display: "flex", flexDirection: "column", overflow: "hidden" }
     : { position: "absolute", inset: 0, background: BG, zIndex: 40, display: "flex", flexDirection: "column", overflow: "hidden" };
@@ -336,6 +355,8 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
             <div className="mt-4 flex items-center gap-1.5 text-muted-foreground text-[11px]">
               <Lock size={12} /> {st.end_to_end_encrypted ?? "End-to-end encrypted on this device"}
             </div>
+            {activeRoom && <Button className="mt-2" variant="outline" size="sm" disabled={!isOnline}
+              onClick={() => void reportConversation()}>Report conversation</Button>}
           </>
         )}
       </div>
@@ -1075,6 +1096,29 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const [activeRoom,  setActiveRoom]  = useState<DmRoom | null>(null);
   const [messages,    setMessages]    = useState<DmMessage[]>([]);
   const [text,        setText]        = useState("");
+  const [peerTyping, setPeerTyping] = useState(false);
+  const lastTypingSent = useRef(0);
+  useEffect(() => {
+    setPeerTyping(false);
+    let timer: ReturnType<typeof setTimeout>;
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<{ roomId: number; userId: number; recipientUserId: number; typing: boolean }>).detail;
+      if (!user || detail?.roomId !== activeRoom?.id || detail.userId === user.id || detail.recipientUserId !== user.id) return;
+      setPeerTyping(detail.typing);
+      clearTimeout(timer);
+      timer = setTimeout(() => setPeerTyping(false), 5000);
+    };
+    window.addEventListener("gdna:chat-typing", receive);
+    return () => { clearTimeout(timer); window.removeEventListener("gdna:chat-typing", receive); };
+  }, [activeRoom?.id, user?.id]);
+  function sendTyping(typing: boolean) {
+    if (!activeRoom || !isOnline || (typing && Date.now() - lastTypingSent.current < 2500)) return;
+    lastTypingSent.current = Date.now();
+    void fetch(api(`/api/messages/rooms/${activeRoom.id}/typing`), {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ typing }),
+    }).catch(() => undefined);
+  }
   const [expireAfterHours, setExpireAfterHours] = useState<number | null>(null);
   const [sending,     setSending]     = useState(false);
   const [showGroupNew, setShowGroupNew] = useState(false);
@@ -1636,7 +1680,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
           ? await decryptMessageForUser(j.message as DmMessage, user.id, st)
           : j.message as DmMessage;
         if (mountedRef.current && activeRoomIdRef.current === roomId) appendMessage(decryptedMessage);
-        if (!override) { setText(""); setReplyTo(null); if (textRef.current) textRef.current.style.height = "auto"; }
+        if (!override) { sendTyping(false); setText(""); setReplyTo(null); if (textRef.current) textRef.current.style.height = "auto"; }
         loadRooms();
         return true;
       } else {
@@ -2195,6 +2239,11 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     </div>
   ) : (
     <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.063)}`, flexShrink: 0 }}>
+      {peerTyping && <p role="status" className="mb-1 text-xs text-muted-foreground">Typing…</p>}
+      {activeRoom?.type === "direct" && <MessengerAssistant key={activeRoom.id}
+        messages={messages.filter(message => message.roomId === activeRoom.id)} userId={user.id}
+        ownUsername={user.username}
+        onDraft={draft => setText(draft)} />}
       <div className="mb-2 flex items-center gap-2 px-1">
         <span className="text-[11px] font-semibold text-muted-foreground">{st.auto_delete}</span>
         <select
@@ -2368,7 +2417,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             ref={textRef}
             value={text}
             rows={1}
-            onChange={e => { setText(e.target.value); autoGrow(); }}
+            onChange={e => { setText(e.target.value); sendTyping(Boolean(e.target.value)); autoGrow(); }}
+            onBlur={() => sendTyping(false)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
             onPaste={onPaste}
             onFocus={() => { setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 250); setShowAttachTray(false); }}

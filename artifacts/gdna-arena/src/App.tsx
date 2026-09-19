@@ -32,10 +32,17 @@ import NotFound from "@/pages/not-found";
 import GlobalStarApp from "@/pages/globalstar-app";
 import LegendsPage from "@/pages/legends";
 import LegendHubPage from "@/pages/legend-hub";
+import ElitePage from "@/pages/elite";
+import EliteProfilePage from "@/pages/elite-profile";
 import PulsePage from "@/pages/pulse";
 import ClipsPage from "@/pages/clips";
 import CitizensPage from "@/pages/citizens";
 import CitizenPage from "@/pages/citizen";
+import CitizenDiscoverPage from "@/pages/citizen-discover";
+import CitizenProfilePage from "@/pages/citizen-profile";
+import CitizenMarketPage from "@/pages/citizen-market";
+import CitizenServicesPage from "@/pages/citizen-services";
+import CitizenMapPage from "@/pages/citizen-map";
 import EmpireEternalPage from "@/pages/empire-eternal";
 import LearnPage from "@/pages/learn";
 import StoriesPage from "@/pages/stories";
@@ -149,10 +156,18 @@ function PageWrapper() {
           <Route path="/games/globalstar/:rest*" component={GlobalStarApp} />
           <Route path="/legends" component={LegendsPage} />
           <Route path="/legends/:id" component={LegendHubPage} />
+          <Route path="/elite" component={ElitePage} />
+          <Route path="/elite/:slug" component={EliteProfilePage} />
           <Route path="/pulse" component={PulsePage} />
           <Route path="/clips" component={ClipsPage} />
           <Route path="/clip" component={ClipsPage} />
-          <Route path="/citizens" component={CitizensPage} />
+          <Route path="/citizens" component={CitizenDiscoverPage} />
+          <Route path="/citizens/ranks" component={CitizensPage} />
+          <Route path="/u/:username" component={CitizenProfilePage} />
+          <Route path="/market" component={CitizenMarketPage} />
+          <Route path="/souk" component={CitizenMarketPage} />
+          <Route path="/services" component={CitizenServicesPage} />
+          <Route path="/map" component={CitizenMapPage} />
           <Route path="/citizen/:username" component={CitizenPage} />
           <Route path="/empire-eternal" component={EmpireEternalPage} />
           <Route path="/learn" component={LearnPage} />

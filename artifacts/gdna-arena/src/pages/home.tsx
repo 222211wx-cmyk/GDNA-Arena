@@ -5,6 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { EliteCarousel } from "@/components/elite/EliteCarousel";
+import HomeCitizenSection from "@/components/citizen/HomeCitizenSection";
 import {
   Crown,
   Flame,
@@ -771,6 +773,9 @@ export default function Home() {
       {/* ── EMPIRE STATS BAR ───────────────────────────────────────── */}
       <StatsBar />
 
+      {/* ── GDNA ELITE CAROUSEL (exactly 11 profiles, Lamine first) ── */}
+      <EliteCarousel />
+
       {/* ── QUICK ACCESS PORTALS ───────────────────────────────────── */}
       <section className="px-4 py-16 max-w-7xl mx-auto">
         <motion.div
@@ -918,6 +923,9 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+
+      {/* ── مواطنون مقترحون للتعارف (opt-in adults only) ──────────────── */}
+      <HomeCitizenSection />
 
       {/* ── JOIN THE EMPIRE CTA ────────────────────────────────────── */}
       {!user && (

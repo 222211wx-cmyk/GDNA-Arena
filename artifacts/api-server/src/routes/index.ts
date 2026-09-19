@@ -15,6 +15,7 @@ import archonRouter from "./archon";
 import legendsRouter from "./legends";
 import pulseRouter from "./pulse";
 import citizensRouter from "./citizens";
+import citizenProfilesRouter from "./citizen-profiles";
 import learnRouter from "./learn";
 import storiesRouter from "./stories";
 import messagesRouter from "./messages";
@@ -102,5 +103,6 @@ router.use(socialHubRouter);
 router.use(shopRouter);
 router.use(smartRouter);
 router.use(searchRouter);
+router.use(citizenProfilesRouter);
 
 export default router;

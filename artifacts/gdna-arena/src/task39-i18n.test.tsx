@@ -54,16 +54,16 @@ function interpolationPlaceholders(value: string): string[] {
 }
 
 describe("Task 39 LangContext translation contract", () => {
-  it("keeps EN/FR/AR/ES/DE at the exact same complete 859-key set with valid values and interpolation parity", () => {
+  it("keeps EN/FR/AR/ES/DE at the exact same complete 861-key set with valid values and interpolation parity", () => {
     const englishKeys = [...getLocaleTranslationKeys("en")].sort();
-    expect(englishKeys).toHaveLength(859);
+    expect(englishKeys).toHaveLength(861);
 
     for (const locale of exposedLocales) {
       const translations = getLocaleTranslations(locale);
       const localeKeys = [...getLocaleTranslationKeys(locale)].sort();
 
       expect(localeKeys, `${locale} must have exactly the English keys`).toEqual(englishKeys);
-      expect(localeKeys).toHaveLength(859);
+      expect(localeKeys).toHaveLength(861);
 
       for (const key of englishKeys) {
         const value = translations[key];

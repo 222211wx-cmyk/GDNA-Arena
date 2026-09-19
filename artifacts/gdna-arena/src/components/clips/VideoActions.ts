@@ -212,10 +212,10 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
   const current = state;
 
   // ── Left-bottom meta: author profile link, title, audio/media label ──
-  // Real profile link (the app routes /citizen/:username); not a fake avatar.
+  // Public citizen identity; never link to the legacy identity page.
   const authorLink = document.createElement("a");
   authorLink.className = "clip-meta-author-link";
-  authorLink.href = `${BASE}citizen/${encodeURIComponent(current.author.username)}`;
+  authorLink.href = `${BASE}u/${encodeURIComponent(current.author.username)}`;
   authorLink.textContent = `@${current.author.username}`;
   authorLink.setAttribute("aria-label", `Open ${current.author.username}'s profile`);
   metaAuthor.replaceChildren(authorLink);
@@ -223,6 +223,42 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
   // Both video and audio clips show the "Original audio" caption line
   // (no invented artist metadata).
   metaAudio.textContent = "Original audio";
+  const citizen = document.createElement("div");
+  citizen.className = "clip-citizen-mini";
+  const citizenLink = authorLink.cloneNode(true) as HTMLAnchorElement;
+  citizenLink.className = "clip-citizen-link";
+  if (current.author.avatarUrl) {
+    const avatar = document.createElement("img");
+    avatar.src = current.author.avatarUrl;
+    avatar.alt = "";
+    avatar.loading = "lazy";
+    citizenLink.prepend(avatar);
+  } else {
+    const initials = document.createElement("span");
+    initials.className = "clip-citizen-initials";
+    initials.setAttribute("aria-hidden", "true");
+    initials.textContent = current.author.username.slice(0, 2).toUpperCase();
+    citizenLink.prepend(initials);
+  }
+  citizen.append(citizenLink);
+  for (const [label, mode] of [["Citizen card", "profile"], ["Message", "message"], ["Ask AI", "assistant"]] as const) {
+    if (mode === "message" && current.isOwner) continue;
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.textContent = label;
+    trigger.dataset.testid = `clip-${mode}-${current.id}`;
+    trigger.addEventListener("click", async () => {
+      trigger.disabled = true;
+      try {
+        const { openClipCitizenPanel } = await import("./ClipCitizenPanel");
+        await openClipCitizenPanel({ mode, clipId: current.id, peerId: current.author.id, peerUsername: current.author.username });
+      } catch (error) {
+        showMessage(status, error instanceof Error ? error.message : "Citizen panel unavailable", true);
+      } finally { trigger.disabled = false; }
+    });
+    citizen.append(trigger);
+  }
+  shell.prepend(citizen);
 
   // ── Heart (like) ─────────────────────────────────────────────────────
   const heart = railButton(current.liked ? "Unlike" : "Like", icons.heart(current.liked));
@@ -268,7 +304,8 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
     } else {
       for (const item of items) {
         const row = document.createElement("p");
-        const author = document.createElement("strong");
+        const author = document.createElement("a");
+        author.href = `${BASE}u/${encodeURIComponent(String(item.username))}`;
         author.textContent = `${item.username}: `;
         row.append(author, document.createTextNode(String(item.content)));
         list.append(row);
@@ -494,12 +531,8 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
     closeMenu();
     message.disabled = true;
     try {
-      const data = await apiJson("/messages/rooms", {
-        method: "POST",
-        body: JSON.stringify({ targetUsername: current.author.username, type: "direct" }),
-      });
-      if (!data?.room?.id) throw new Error("Messenger room was not returned");
-      window.location.assign(`${BASE}messages?room=${encodeURIComponent(data.room.id)}`);
+      const { openUnifiedMessenger } = await import("../messenger/UnifiedMessenger");
+      await openUnifiedMessenger({ peerId: current.author.id, peerUsername: current.author.username, context: `clip:${current.id}` });
     } catch (error) {
       showMessage(status, error instanceof Error ? error.message : "Unable to open messages", true);
       message.disabled = false;
