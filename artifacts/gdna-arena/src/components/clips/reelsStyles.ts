@@ -132,7 +132,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
     transition:opacity .18s ease, transform .18s ease;
   }
   .reels-center-btn:focus-visible{outline:2px solid ${palette.ring};outline-offset:3px}
-  /* Round play glyph — only visible while paused. */
+  /* Persistent play/pause control: listening always remains citizen-controlled. */
   .reels-play{
     position:absolute;
     width:64px;height:64px;border-radius:9999px;
@@ -140,7 +140,9 @@ export function reelsShellCss(palette: Palette, space: string): string {
   }
   .reels-play:hover{background:var(--reels-scrim-strong)}
   .reels-play svg{width:34px;height:34px}
-  .reels-center[data-paused="false"] .reels-play{opacity:0;transform:scale(.7);pointer-events:none}
+  .reels-center[data-paused="false"] .reels-play{opacity:.72;transform:scale(.78)}
+  .reels-center[data-paused="false"] .reels-play:hover,
+  .reels-center[data-paused="false"] .reels-play:focus-visible{opacity:1;transform:scale(.9)}
   /* Always-visible "Plein écran" pill (icon + label), stays during playback. */
   .reels-fs-pill{
     position:absolute;bottom:calc(120px + var(--reels-bottom-safe));

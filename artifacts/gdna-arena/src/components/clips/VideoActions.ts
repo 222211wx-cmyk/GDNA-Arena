@@ -159,6 +159,9 @@ function showSelectableLink(status: HTMLElement, url: string) {
 }
 
 export async function mountVideoActions(options: MountOptions): Promise<VideoActionsHandle> {
+  // Every file-backed Clips surface is one-shot. Ordered feeds decide what comes
+  // next; direct/story/selfie players simply stop at the natural end.
+  options.media.loop = false;
   let state = options.initial;
   // Tracks whether the viewer has mutated like/comment this session. Once true,
   // a late /engagement hydration must not overwrite the user's own value.

@@ -128,6 +128,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   let destroyed = false;
   let suspended = false;
   let activeSlideId: number | null = null;
+  // Invalidates an in-flight natural-end advance whenever the citizen makes a
+  // playback choice. This keeps a late pagination response from overriding it.
+  let playbackIntentVersion = 0;
   let unreadCount = 0;
   let gridToggleBtn: HTMLButtonElement;
 
@@ -197,6 +200,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     loadPlayback: () => void;
     activate: () => void;
     deactivate: () => void;
+    togglePlaybackByUser: () => void;
   };
 
   function createSlide(clip: FeedClip): SlideHandle {
@@ -259,15 +263,49 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     let video: HTMLVideoElement | null = null;
     let playbackRequested = false;
     let actionsMounted = false;
+    let userPaused = false;
+    let naturallyEnded = false;
+    let endAdvanceStarted = false;
 
-    const setPaused = (paused: boolean) => center.setAttribute("data-paused", String(paused));
+    const setPaused = (paused: boolean) => {
+      center.setAttribute("data-paused", String(paused));
+      playBtn.setAttribute("aria-label", paused ? "Lecture" : "Pause");
+      playBtn.innerHTML = paused
+        ? `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`
+        : `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>`;
+    };
+
+    const togglePlaybackByUser = () => {
+      playbackIntentVersion++;
+      if (!video) {
+        userPaused = false;
+        naturallyEnded = false;
+        loadPlayback();
+        const loadedVideo = video as HTMLVideoElement | null;
+        if (loadedVideo) void loadedVideo.play().catch(() => setPaused(true));
+        return;
+      }
+      if (video.paused) {
+        userPaused = false;
+        if (naturallyEnded) {
+          naturallyEnded = false;
+          endAdvanceStarted = false;
+          video.currentTime = 0;
+        }
+        void video.play().catch(() => setPaused(true));
+      } else {
+        userPaused = true;
+        video.pause();
+      }
+    };
 
     function loadPlayback() {
       if (playbackRequested) return;
       playbackRequested = true;
       const v = el("video") as HTMLVideoElement;
       v.playsInline = true;
-      v.loop = true;
+      // Feed progression is ordered; a clip must never silently replay itself.
+      v.loop = false;
       v.preload = "auto";
       v.setAttribute("webkit-playsinline", "true");
       v.src = clip.video_url; // lazy: only requested when the slide activates
@@ -279,6 +317,13 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       });
       v.addEventListener("play", () => setPaused(false));
       v.addEventListener("pause", () => setPaused(true));
+      v.addEventListener("ended", () => {
+        naturallyEnded = true;
+        setPaused(true);
+        if (endAdvanceStarted) return;
+        endAdvanceStarted = true;
+        void advanceAfterNaturalEnd(clip.id, v);
+      });
       mediaWrap.replaceChildren(v);
       mountActions(v);
     }
@@ -406,17 +451,11 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     }
 
     fsBtn.addEventListener("click", toggleFullscreen);
-    playBtn.addEventListener("click", () => {
-      if (!video) { loadPlayback(); return; }
-      if (video.paused) void video.play().catch(() => {});
-      else video.pause();
-    });
+    playBtn.addEventListener("click", togglePlaybackByUser);
     // Tap on media toggles play/pause (does not steal the horizontal gesture).
     mediaWrap.addEventListener("click", event => {
       if ((event.target as HTMLElement).closest(".reels-center-btn")) return;
-      if (!video) { loadPlayback(); return; }
-      if (video.paused) void video.play().catch(() => {});
-      else video.pause();
+      togglePlaybackByUser();
     });
 
     return {
@@ -424,9 +463,14 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       element: slide,
       get video() { return video; },
       loadPlayback,
+      togglePlaybackByUser,
       activate() {
         loadPlayback();
-        if (video) void video.play().catch(() => setPaused(true));
+        // Observer/visibility/overlay restoration may not undo a manual pause or
+        // replay a clip which already reached its natural end.
+        if (video && !userPaused && !naturallyEnded) {
+          void video.play().catch(() => setPaused(true));
+        }
       },
       deactivate() {
         if (video) { video.pause(); video.currentTime = video.currentTime; }
@@ -480,6 +524,33 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       }, { root: track, threshold: [0, 0.6, 1] })
     : null;
 
+  async function advanceAfterNaturalEnd(clipId: number, media: HTMLVideoElement) {
+    if (destroyed || suspended || gridOpen || searchOverlay || notifOverlay ||
+        document.hidden || document.querySelector(".reels-composer:not([hidden])") ||
+        activeSlideId !== clipId) return;
+
+    const intentAtEnd = playbackIntentVersion;
+    let index = slides.findIndex(slide => slide.id === clipId);
+    if (index < 0 || slides[index]?.video !== media) return;
+
+    // The current page may end while another prefetch is already in flight.
+    // loadPage returns that same promise, so only one ordered advance follows it.
+    if (!slides[index + 1] && hasMore) await loadPage();
+
+    if (destroyed || suspended || gridOpen || searchOverlay || notifOverlay ||
+        document.hidden || document.querySelector(".reels-composer:not([hidden])") ||
+        playbackIntentVersion !== intentAtEnd || activeSlideId !== clipId) return;
+    index = slides.findIndex(slide => slide.id === clipId);
+    const next = slides[index + 1];
+    if (!next) return; // Genuine final item: remain stopped; never wrap.
+
+    slides[index]?.deactivate();
+    activeSlideId = next.id;
+    next.element.scrollIntoView({ behavior: "smooth", block: "start" });
+    next.activate();
+    maybeLoadMore(next.id);
+  }
+
   function maybeLoadMore(currentId: number) {
     const index = slides.findIndex(s => s.id === currentId);
     if (index >= slides.length - 3) void loadPage();
@@ -488,62 +559,70 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // ── Pagination / loading ─────────────────────────────────────────────────
   let feedController: AbortController | null = null;
   let degradedBanner: HTMLElement | null = null;
+  let pagePromise: Promise<void> | null = null;
 
-  async function loadPage(reset = false) {
-    if (loading || (!hasMore && !reset)) return;
+  function loadPage(reset = false): Promise<void> {
+    if (loading) return pagePromise ?? Promise.resolve();
+    if (!hasMore && !reset) return Promise.resolve();
     loading = true;
-    if (reset) {
-      feedController?.abort();
-      slides.forEach(s => { s.deactivate(); io?.unobserve(s.element); });
-      slides.length = 0;
-      clipById.clear();
-      nextBefore = null;
-      hasMore = true;
-      activeSlideId = null;
-      track.replaceChildren();
-      showFullState("loading");
-    } else if (slides.length === 0) {
-      showFullState("loading");
-    }
-    const controller = new AbortController();
-    feedController = controller;
-    try {
-      const page = await fetchFeed({ before: nextBefore, limit: PAGE_SIZE, q: searchQuery }, controller.signal);
-      if (destroyed) return;
-      clearFullState();
-      nextBefore = page.nextBefore;
-      hasMore = page.hasMore;
-      for (const clip of page.clips) {
-        if (clipById.has(clip.id)) continue;
-        const handle = createSlide(clip);
-        slides.push(handle);
-        track.append(handle.element);
-        io?.observe(handle.element);
+    let operation!: Promise<void>;
+    operation = (async () => {
+      if (reset) {
+        feedController?.abort();
+        slides.forEach(s => { s.deactivate(); io?.unobserve(s.element); });
+        slides.length = 0;
+        clipById.clear();
+        nextBefore = null;
+        hasMore = true;
+        activeSlideId = null;
+        track.replaceChildren();
+        showFullState("loading");
+      } else if (slides.length === 0) {
+        showFullState("loading");
       }
-      // Without an IntersectionObserver (e.g. non-browser test runtime) activate
-      // the first slide directly so the primary media still plays.
-      if (!hasIO && activeSlideId === null && slides[0]) {
-        activeSlideId = slides[0].id;
-        slides[0].activate();
+      const controller = new AbortController();
+      feedController = controller;
+      try {
+        const page = await fetchFeed({ before: nextBefore, limit: PAGE_SIZE, q: searchQuery }, controller.signal);
+        if (destroyed) return;
+        clearFullState();
+        nextBefore = page.nextBefore;
+        hasMore = page.hasMore;
+        for (const clip of page.clips) {
+          if (clipById.has(clip.id)) continue;
+          const handle = createSlide(clip);
+          slides.push(handle);
+          track.append(handle.element);
+          io?.observe(handle.element);
+        }
+        // Without an IntersectionObserver (e.g. non-browser test runtime) activate
+        // the first slide directly so the primary media still plays.
+        if (!hasIO && activeSlideId === null && slides[0]) {
+          activeSlideId = slides[0].id;
+          slides[0].activate();
+        }
+        if (slides.length === 0) {
+          // A degraded response with no clips is NOT a genuine empty feed — the
+          // service is temporarily throttled. Show an explicit retry action, never
+          // a false "no reels yet" message and never a bare pill on a black screen.
+          showFullState(page.degraded ? "degraded" : "empty");
+        } else if (page.degraded) {
+          // We have content but the tail was degraded — a small non-blocking pill.
+          showDegraded();
+        } else if (degradedBanner) {
+          degradedBanner.remove();
+          degradedBanner = null;
+        }
+      } catch (error) {
+        if (controller.signal.aborted || destroyed) return;
+        if (slides.length === 0) showFullState("error");
+      } finally {
+        loading = false;
+        if (pagePromise === operation) pagePromise = null;
       }
-      if (slides.length === 0) {
-        // A degraded response with no clips is NOT a genuine empty feed — the
-        // service is temporarily throttled. Show an explicit retry action, never
-        // a false "no reels yet" message and never a bare pill on a black screen.
-        showFullState(page.degraded ? "degraded" : "empty");
-      } else if (page.degraded) {
-        // We have content but the tail was degraded — a small non-blocking pill.
-        showDegraded();
-      } else if (degradedBanner) {
-        degradedBanner.remove();
-        degradedBanner = null;
-      }
-    } catch (error) {
-      if (controller.signal.aborted || destroyed) return;
-      if (slides.length === 0) showFullState("error");
-    } finally {
-      loading = false;
-    }
+    })();
+    pagePromise = operation;
+    return operation;
   }
 
   function showDegraded() {
@@ -593,6 +672,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   let gridView: HTMLElement | null = null;
   let gridScrollTop = 0;
   function toggleGrid(open?: boolean) {
+    playbackIntentVersion++;
     gridOpen = open ?? !gridOpen;
     if (gridOpen) {
       slides.forEach(slide => slide.deactivate());
@@ -668,6 +748,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   function openSearch() {
     if (searchOverlay) return;
+    playbackIntentVersion++;
     slides.find(s => s.id === activeSlideId)?.deactivate();
     restoreFocusTo.current = document.activeElement as HTMLElement;
     searchOverlay = el("div", "reels-search", { role: "dialog", "aria-label": "Recherche", "aria-modal": "true", "data-testid": "reels-search" });
@@ -748,6 +829,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   let notifOverlay: HTMLElement | null = null;
   function openNotifications() {
     if (notifOverlay) return;
+    playbackIntentVersion++;
     slides.find(s => s.id === activeSlideId)?.deactivate();
     restoreFocusTo.current = document.activeElement as HTMLElement;
     notifOverlay = el("div", "reels-notif", { role: "dialog", "aria-label": "Notifications", "aria-modal": "true", "data-testid": "reels-notifications" });
@@ -965,7 +1047,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     else if (event.key === "g") { toggleGrid(); }
     else if (event.key === " " || event.key === "Spacebar") {
       const a = slides.find(s => s.id === activeSlideId);
-      if (a?.video) { event.preventDefault(); if (a.video.paused) void a.video.play().catch(() => {}); else a.video.pause(); }
+      if (a?.video) { event.preventDefault(); a.togglePlaybackByUser(); }
     }
   };
   document.addEventListener("keydown", onKey);
@@ -1001,6 +1083,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   return {
     pause() {
+      playbackIntentVersion++;
       suspended = true;
       slides.forEach(slide => slide.deactivate());
     },
@@ -1011,6 +1094,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       }
     },
     destroy() {
+      playbackIntentVersion++;
       destroyed = true;
       io?.disconnect();
       feedController?.abort();

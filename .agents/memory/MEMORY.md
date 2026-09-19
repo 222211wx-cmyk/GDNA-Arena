@@ -9,6 +9,7 @@
 - [API hardening](api-hardening.md) — helmet + tiered rate limits (auth 10/15min, AI 30/5min, global 600/5min) on api-server; trust proxy 1; secure cookies auto in prod.
 - [AMIS call system](amis-calls.md) — call signaling must ride /api/ws (prod router only forwards /api/*); WS upgrades session-authenticated, identity never trusted from client.
 - [Browser call verification](browser-call-verification.md) — test fresh recipients outside Messages; real Web Push needs a normal profile and exact-call notification checks.
+- [Notification prompts](notification-prompt-policy.md) — no unsolicited global activation banners; preserve optional settings and opted-in call notifications.
 - [Browser media verification](browser-media-verification.md) — upload success does not prove audio preservation, timing or cross-browser codec compatibility.
 - [Stars Hall + AI Council](stars-hall.md) — star = roster username + reserved email; AI replies gated on invite; daily council report idempotent via unique report_date.
 - [Chat attachments](chat-attachments.md) — persistent encrypted uploads; the 5 MB image policy must preserve E2EE and other attachment limits.

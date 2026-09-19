@@ -122,6 +122,7 @@ describe("code-based clip player", () => {
     expect(document.querySelector('[aria-label="Fermer le lecteur et afficher la grille"]')?.getAttribute("href"))
       .toBe("/clips?view=grid");
     expect(document.querySelector("audio")?.getAttribute("controlsList")).toBe("nofullscreen");
+    expect((document.querySelector("audio") as HTMLAudioElement).loop).toBe(false);
     expect(document.body.dataset.clipReady).toBe("true");
   });
 

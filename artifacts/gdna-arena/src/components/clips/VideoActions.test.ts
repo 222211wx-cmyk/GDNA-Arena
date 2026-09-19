@@ -19,6 +19,19 @@ beforeEach(() => {
 });
 
 describe("VideoActions", () => {
+  it("defensively disables looping on every mounted clip media element", async () => {
+    const media = document.querySelector("video") as HTMLVideoElement;
+    media.loop = true;
+    await mountVideoActions({
+      host: document.getElementById("actions")!,
+      media,
+      titleElement: document.getElementById("title")!,
+      clipId: 42,
+      initial: { ...state },
+    });
+    expect(media.loop).toBe(false);
+  });
+
   it("persists a heart and reflects the returned count", async () => {
     const fetchMock = vi.fn(async () => Response.json({ liked: true, likeCount: 5 }));
     vi.stubGlobal("fetch", fetchMock);

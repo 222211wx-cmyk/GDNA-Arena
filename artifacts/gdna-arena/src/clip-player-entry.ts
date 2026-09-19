@@ -211,7 +211,8 @@ export function renderClipPlayer(code: string) {
         if (clip.url) {
           const media = document.createElement(clip.contentType.startsWith("audio/") ? "audio" : "video");
           media.controls = true;
-           media.setAttribute("controlsList", "nofullscreen");
+          media.loop = false;
+          media.setAttribute("controlsList", "nofullscreen");
           media.preload = "metadata";
           if (media instanceof HTMLVideoElement) media.playsInline = true;
           media.src = clip.url;
