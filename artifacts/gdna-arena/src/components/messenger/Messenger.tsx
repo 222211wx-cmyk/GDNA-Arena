@@ -2562,7 +2562,20 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
               style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <BackArrow size={22} />
             </button>
-            <div style={{ position: "relative", flexShrink: 0 }}>
+            <div
+              role={activeRoom.type === "direct" ? "button" : undefined}
+              tabIndex={activeRoom.type === "direct" ? 0 : undefined}
+              aria-label={activeRoom.type === "direct" ? `${getPeerName(activeRoom)} — عرض البطاقة` : undefined}
+              data-testid={activeRoom.type === "direct" ? "open-active-citizen-card" : undefined}
+              onClick={activeRoom.type === "direct" ? () => setDrawerUsername(getPeerName(activeRoom)) : undefined}
+              onKeyDown={activeRoom.type === "direct" ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setDrawerUsername(getPeerName(activeRoom));
+                }
+              } : undefined}
+              style={{ position: "relative", flexShrink: 0, cursor: activeRoom.type === "direct" ? "pointer" : "default" }}
+            >
               <Avatar name={getPeerName(activeRoom)} size={40} />
               {(solStatus || call.onlineUsers.includes(getPeerName(activeRoom))) && (
                 <div style={{ position: "absolute", bottom: 0, right: 0, width: 12, height: 12, background: statusColor, borderRadius: "50%", border: "2px solid #000" }} />

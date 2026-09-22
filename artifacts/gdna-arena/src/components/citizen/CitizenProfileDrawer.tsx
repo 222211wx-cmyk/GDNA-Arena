@@ -16,6 +16,7 @@ import {
 import { cn } from "@workspace/gdna-ds/lib/utils";
 import { citizenMediaSrc, citizenFetch } from "@/lib/citizen";
 import { useFollowCitizen, type CitizenProfile, type CitizenVisibility } from "@/hooks/use-citizen";
+import CitizenAssistant from "./CitizenAssistant";
 
 // The drawer is rendered against the dark arena theme (never the citizen-light
 // skin). It composes design-system primitives + tokens only.
@@ -181,9 +182,12 @@ function CitizenProfileHeader({
                 shown — never precise location, and never invented. When the
                 server returns no city we say so instead of guessing. */}
             {citizen.city ? (
-              <span className="inline-flex items-center gap-1" data-testid="text-citizen-city">
-                <MapPin className="size-3.5" /> {citizen.city}
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1" data-testid="text-citizen-city">
+                  <MapPin className="size-3.5" /> {citizen.city}
+                </span>
+                <span data-testid="text-citizen-coordinates-approximate">إحداثيات تقريبية</span>
+              </>
             ) : (
               <span className="inline-flex items-center gap-1" data-testid="text-citizen-city-unavailable">
                 <MapPin className="size-3.5" /> الإحداثيات غير متاحة
@@ -280,6 +284,17 @@ function CitizenProfileActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {citizen.canMessage && (
+        <Button
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => onMessage(citizen)}
+          data-testid="button-message"
+        >
+          <MessageCircle className="size-4" /> مراسلة
+        </Button>
+      )}
+
       <Button
         variant={citizen.isFollowing ? "outline" : "default"}
         className="gap-1.5"
@@ -293,28 +308,14 @@ function CitizenProfileActions({
         {citizen.isFollowing ? "متابَع" : "متابعة"}
       </Button>
 
-      {citizen.canMessage && (
-        <Button
-          variant="outline"
-          className="gap-1.5"
-          onClick={() => onMessage(citizen)}
-          data-testid="button-message"
-        >
-          <MessageCircle className="size-4" /> مراسلة
-        </Button>
-      )}
-
       {/* Dating/تعارف is only surfaced when the citizen is available for it. */}
       {citizen.status === "available" && (
-        <Button
-          variant="outline"
-          className="gap-1.5"
-          onClick={toggleFollow}
-          disabled={follow.isPending}
-          data-testid="button-dating"
-        >
-          <Heart className="size-4" /> تعارف
-        </Button>
+        <CitizenAssistant
+          section="matchmaking"
+          username={citizen.username}
+          triggerLabel="تعارف"
+          className="h-10"
+        />
       )}
     </div>
   );
@@ -369,11 +370,6 @@ function StandaloneCitizenActions({
       {citizen.canMessage && (
         <Button variant="outline" className="gap-1.5" onClick={() => onMessage(citizen)} data-testid="button-message">
           <MessageCircle className="size-4" /> مراسلة
-        </Button>
-      )}
-      {citizen.status === "available" && (
-        <Button variant="outline" className="gap-1.5" onClick={() => void toggleFollow()} disabled={busy} data-testid="button-dating">
-          <Heart className="size-4" /> تعارف
         </Button>
       )}
     </div>

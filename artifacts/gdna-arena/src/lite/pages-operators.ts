@@ -106,6 +106,7 @@ export function operatorsPage(ctx: Ctx): HTMLElement {
   return root;
 }
 
+// hint: Structural and logic conflict. Both design and behavior differ.
 function operatorCard(p: OperatorPack, s: Strings): HTMLElement {
   // Contract invariants: priceStatus is always "unverified", partnershipStatus
   // "not_signed", and the dial code is DISPLAY-ONLY — never a tel: purchase
@@ -143,8 +144,51 @@ function operatorCard(p: OperatorPack, s: Strings): HTMLElement {
     officialLink,
   ]);
 }
+/* Incompatible legacy API implementation retained for merge provenance.
+function operatorCard(p: OperatorPack, s: Strings): HTMLElement {
+  // A tel: activation affordance is shown ONLY when the code is verified AND a
+  // proof record exists. Otherwise the USSD is plain, explicitly-unverified text.
+  const canActivate = p.verified && p.ussdVerified && Boolean(p.proofUrl);
+
+  const ussdRow = canActivate
+    ? el("a", {
+        class: "l-btn l-btn-sm",
+        href: `tel:${encodeURIComponent(p.ussd)}`,
+        text: p.ussd,
+      })
+    : el("div", { class: "l-stack" }, [
+        el("div", { class: "l-small", text: p.ussd }),
+        el("div", { class: "l-small l-muted", text: s.operators_ussd_note }),
+      ]);
+
+  return el("div", { class: "l-card l-stack" }, [
+    el("div", { class: "l-row l-spread l-row-wrap" }, [
+      el("div", { class: "l-grow" }, [
+        el("div", { class: "l-h2", text: p.operator }),
+        el("div", { class: "l-small l-muted", text: p.notes }),
+      ]),
+      el("span", { class: "l-badge l-badge-gold", text: p.userPrice }),
+    ]),
+    // Every unverified pack is explicitly labelled.
+    p.verified
+      ? null
+      : el("div", { class: "l-banner l-banner-warn" }, [
+          el("strong", { text: `${s.operators_unverified}. ` }),
+          el("span", { text: s.operators_indicative }),
+        ]),
+    p.dataAllowance
+      ? el("div", { class: "l-row l-spread" }, [
+          el("span", { class: "l-muted l-small", text: s.operators_data_allowance }),
+          el("span", { class: "l-small", text: p.dataAllowance }),
+        ])
+      : null,
+    ussdRow,
+  ]);
+}
+*/
 
 /* ── My data / savings page ───────────────────────────────────────── */
+// hint: Structural and logic conflict. Both design and behavior differ.
 export function dataPage(ctx: Ctx): HTMLElement {
   const user = getUser();
   const root = el("div", { class: "l-stack" }, [
@@ -187,7 +231,52 @@ export function dataPage(ctx: Ctx): HTMLElement {
   );
   return root;
 }
+/* Incompatible legacy API implementation retained for merge provenance.
+export function dataPage(ctx: Ctx): HTMLElement {
+  const user = getUser();
+  const root = el("div", { class: "l-stack" }, [
+    el("div", { class: "l-h1", text: ctx.s.data_title }),
+    el("div", { class: "l-muted l-small", text: ctx.s.data_intro }),
+    telemetryCard(ctx.s),
+  ]);
 
+  if (!user) {
+    root.appendChild(
+      el("div", { class: "l-card l-stack" }, [
+        el("div", { text: ctx.s.loginRequired }),
+        el("button", {
+          class: "l-btn l-btn-primary l-btn-sm",
+          text: ctx.s.login,
+          onClick: () => ctx.navigate({ kind: "login" }),
+        }),
+      ]),
+    );
+    return root;
+  }
+
+  root.appendChild(
+    section<ScienceSummary>({
+      s: ctx.s,
+      skeletonLines: 5,
+      load: async (signal) => {
+        const res = await safeRead<ScienceSummary>("/api/operators/science", {
+          accountId: user.id,
+          snapshotKey: "operator-science",
+          signal,
+        });
+        return { data: res.data, fromSnapshot: res.fromSnapshot };
+      },
+      // Honest empty state — no seed or sample numbers.
+      isEmpty: (d) => d.empty || d.sampleSize === 0,
+      emptyText: ctx.s.data_no_data,
+      render: (summary) => scienceView(summary, ctx.s),
+    }),
+  );
+  return root;
+}
+*/
+
+// hint: Structural and logic conflict. Both design and behavior differ.
 function scienceView(d: ScienceSummary, s: Strings): HTMLElement {
   const scoreText =
     d.observedRequestSuccessScore == null ? "—" : formatFraction(d.observedRequestSuccessScore);
@@ -228,6 +317,76 @@ function scienceView(d: ScienceSummary, s: Strings): HTMLElement {
     ]),
   ]);
 }
+/* Incompatible legacy API implementation retained for merge provenance.
+function scienceView(d: ScienceSummary, s: Strings): HTMLElement {
+  const scoreText =
+    d.score.value == null ? "—" : `${d.score.value} / ${d.score.max}`;
+
+  const box = el("div", { class: "l-stack" }, [
+    el("div", { class: "l-card l-stack" }, [
+      el("div", { class: "l-row l-spread l-row-wrap" }, [
+        el("div", { class: "l-h2 l-grow", text: s.data_score }),
+        basisBadge(d.score.basis, s),
+      ]),
+      el("div", { class: "l-h1 l-gold", text: scoreText }),
+      el("div", { class: "l-small l-muted", text: `${s.data_method}: ${d.score.method}` }),
+    ]),
+    el("div", { class: "l-card l-stack" }, [
+      el("div", { class: "l-row l-spread l-row-wrap" }, [
+        el("div", { class: "l-h2 l-grow", text: s.data_saved }),
+        basisBadge(d.savings.basis, s),
+      ]),
+      el("div", { class: "l-row l-spread" }, [
+        el("span", { class: "l-muted", text: s.data_saved }),
+        el("span", { class: "l-gold", text: formatBytes(d.savings.bytesSaved) }),
+      ]),
+      el("div", { class: "l-row l-spread" }, [
+        el("span", { class: "l-muted", text: s.data_total }),
+        el("span", { text: formatBytes(d.savings.bytesTotal) }),
+      ]),
+      el("div", { class: "l-row l-spread" }, [
+        el("span", { class: "l-muted", text: s.data_period }),
+        el("span", { text: d.period ?? "—" }),
+      ]),
+      el("div", { class: "l-row l-spread" }, [
+        el("span", { class: "l-muted", text: s.data_samples }),
+        el("span", { text: String(d.sampleSize) }),
+      ]),
+      el("div", { class: "l-small l-muted", text: `${s.data_method}: ${d.savings.method}` }),
+    ]),
+  ]);
+
+  if (d.clips.length > 0) {
+    const clipBox = el("div", { class: "l-card l-stack" }, [
+      el("div", { class: "l-h2", text: s.data_clips }),
+    ]);
+    for (const c of d.clips) {
+      clipBox.appendChild(
+        el("div", { class: "l-stack" }, [
+          el("div", { class: "l-row l-spread l-row-wrap" }, [
+            el("div", { class: "l-small l-grow", text: c.title }),
+            basisBadge(c.savingBasis, s),
+          ]),
+          el("div", { class: "l-row l-spread" }, [
+            el("span", { class: "l-small l-muted", text: s.data_original }),
+            el("span", { class: "l-small", text: formatBytes(c.originalBytes) }),
+          ]),
+          // Only shown when a real derivative exists; never a speculative size.
+          c.alternativeBytes != null
+            ? el("div", { class: "l-row l-spread" }, [
+                el("span", { class: "l-small l-muted", text: s.data_alternative }),
+                el("span", { class: "l-small l-gold", text: formatBytes(c.alternativeBytes) }),
+              ])
+            : null,
+        ]),
+      );
+    }
+    box.appendChild(clipBox);
+  }
+
+  return box;
+}
+*/
 
 function telemetryCard(s: Strings): HTMLElement {
   const input = el("input", { type: "checkbox" }) as HTMLInputElement;

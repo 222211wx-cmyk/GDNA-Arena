@@ -31,11 +31,24 @@ interface PartnerStats {
   authenticatedCitizens: number | null;
   anonymousReferrals: number | null;
   methodology: string;
+  measuredPayloadBytes: number | null;
+  estimatedAvoidedBytes: number | null;
+  sampleSize: number | null;
+  comparisonSampleSize: number | null;
+  observedRequestSuccessScore: number | null;
+  scienceSuppressed: boolean;
+  scienceMethodology: string;
 }
 interface PartnerSourceBreakdown {
   source: string;
   authenticatedCitizens: number;
   anonymousReferrals: number;
+  measuredPayloadBytes: number;
+  estimatedAvoidedBytes: number;
+  sampleSize: number;
+  comparisonSampleSize: number;
+  observedRequestSuccessScore: number | null;
+  scienceMethodology: string;
 }
 interface PartnerInquiry {
   id: number;
@@ -49,9 +62,48 @@ interface PartnerDashboard {
   period: "last_30_days";
   authenticatedCitizens: number;
   anonymousReferrals: number;
+  measuredPayloadBytes: number;
+  estimatedAvoidedBytes: number;
+  sampleSize: number;
+  comparisonSampleSize: number;
+  observedRequestSuccessScore: number | null;
+  scienceMethodology: string;
   sources: PartnerSourceBreakdown[];
   inquiries: PartnerInquiry[];
 }
+/* Incompatible legacy API types retained for merge provenance.
+ * Types mirrored from the superseded operator API contract:
+interface PartnerMetric {
+  key: string;
+  label: string;
+  value: number | null;
+  unit: string;
+  basis: "measured" | "estimated" | "unproven";
+  sampleSize: number;
+  method: string;
+}
+interface PartnerStats {
+  period: { from: string; to: string } | null;
+  metrics: PartnerMetric[];
+  referrals: Record<string, number>;
+  empty: boolean;
+}
+interface PartnerInquiry {
+  id: number;
+  name: string;
+  org: string;
+  email: string;
+  operator: string;
+  message: string;
+  status: string;
+  createdAt: string;
+}
+interface PartnerDashboard {
+  metrics: PartnerMetric[];
+  referrals: Record<string, number>;
+  inquiries: { total: number; items: PartnerInquiry[] };
+  empty: boolean;
+*/
 
 /* ── Compact partner i18n (EN default; AR/FR/ES/DE maintained) ─────── */
 type Key =
@@ -63,7 +115,16 @@ type Key =
   | "adminTitle" | "adminSubtitle" | "adminOnly" | "adminOnlyBody" | "inquiries"
   | "noInquiries" | "loginCta"
   | "authCitizens" | "anonReferrals" | "suppressed" | "methodology"
-  | "sources" | "noBreakdown" | "consentReq";
+  | "sources" | "noBreakdown" | "consentReq"
+  | "sample" | "referrals" | "measured" | "estimated" | "unproven"
+  | "noMetrics" | "status" | "received" | "refresh";
+/* Incompatible legacy copy keys retained for merge provenance.
+  | "sample" | "period" | "referrals" | "refNote" | "contact" | "name" | "org"
+  | "email" | "operator" | "message" | "send" | "sending" | "saved" | "savedBody"
+  | "newInquiry" | "fixFields" | "retry" | "measured" | "estimated" | "unproven"
+  | "adminTitle" | "adminSubtitle" | "adminOnly" | "adminOnlyBody" | "inquiries"
+  | "noInquiries" | "noMetrics" | "status" | "received" | "refresh" | "loginCta";
+*/
 
 const C: Record<Key, Partial<Record<LiteLang, string>> & { en: string }> = {
   title: {
@@ -139,6 +200,12 @@ const C: Record<Key, Partial<Record<LiteLang, string>> & { en: string }> = {
     es: "Se requiere consentimiento para guardar tu consulta.",
     de: "Zur Speicherung ist deine Zustimmung erforderlich.",
   },
+/* Incompatible legacy contact labels retained for merge provenance.
+  name: { en: "Name", ar: "الاسم", fr: "Nom", es: "Nombre", de: "Name" },
+  org: { en: "Organisation", ar: "المؤسسة", fr: "Organisation", es: "Organización", de: "Organisation" },
+  email: { en: "Email", ar: "البريد الإلكتروني", fr: "E-mail", es: "Correo", de: "E-Mail" },
+  operator: { en: "Operator", ar: "المشغّل", fr: "Opérateur", es: "Operador", de: "Anbieter" },
+*/
   message: { en: "Message", ar: "الرسالة", fr: "Message", es: "Mensaje", de: "Nachricht" },
   send: { en: "Send inquiry", ar: "إرسال الطلب", fr: "Envoyer la demande", es: "Enviar consulta", de: "Anfrage senden" },
   sending: { en: "Saving…", ar: "جارٍ الحفظ…", fr: "Enregistrement…", es: "Guardando…", de: "Wird gespeichert…" },
@@ -153,6 +220,9 @@ const C: Record<Key, Partial<Record<LiteLang, string>> & { en: string }> = {
   newInquiry: { en: "New inquiry", ar: "طلب آخر", fr: "Nouvelle demande", es: "Nueva consulta", de: "Neue Anfrage" },
   fixFields: { en: "Please fix the highlighted fields.", ar: "يرجى تصحيح الحقول المميّزة.", fr: "Veuillez corriger les champs signalés.", es: "Corrige los campos marcados.", de: "Bitte markierte Felder korrigieren." },
   retry: { en: "Retry", ar: "إعادة المحاولة", fr: "Réessayer", es: "Reintentar", de: "Erneut" },
+  measured: { en: "Measured", ar: "مقيس", fr: "Mesuré", es: "Medido", de: "Gemessen" },
+  estimated: { en: "Estimated", ar: "مُقدَّر", fr: "Estimé", es: "Estimado", de: "Geschätzt" },
+  unproven: { en: "Unproven", ar: "غير مثبت", fr: "Non prouvé", es: "No probado", de: "Unbewiesen" },
   authCitizens: { en: "Authenticated citizens", ar: "المواطنون المسجّلون", fr: "Citoyens authentifiés", es: "Ciudadanos autenticados", de: "Authentifizierte Bürger" },
   anonReferrals: { en: "Anonymous referrals", ar: "الإحالات المجهولة", fr: "Parrainages anonymes", es: "Referidos anónimos", de: "Anonyme Empfehlungen" },
   suppressed: {
@@ -172,6 +242,18 @@ const C: Record<Key, Partial<Record<LiteLang, string>> & { en: string }> = {
     fr: "Totaux du programme opérateurs et demandes commerciales. Non masqués pour les administrateurs.",
     es: "Totales del programa de operadores y consultas comerciales. Sin suprimir para administradores.",
     de: "Programm-Gesamtzahlen und Geschäftsanfragen. Für Admins nicht unterdrückt.",
+/* Incompatible legacy metric labels retained for merge provenance.
+  measured: { en: "Measured", ar: "مقيس", fr: "Mesuré", es: "Medido", de: "Gemessen" },
+  estimated: { en: "Estimated", ar: "مُقدَّر", fr: "Estimé", es: "Estimado", de: "Geschätzt" },
+  unproven: { en: "Unproven", ar: "غير مثبت", fr: "Non prouvé", es: "No probado", de: "Unbewiesen" },
+  adminTitle: { en: "Partner dashboard", ar: "لوحة الشركاء", fr: "Tableau de bord partenaires", es: "Panel de socios", de: "Partner-Dashboard" },
+  adminSubtitle: {
+    en: "Operator-programme metrics and business inquiries. Figures are labelled by basis.",
+    ar: "مقاييس برنامج المشغّلين وطلبات الأعمال. كل رقم مُعنون بأساسه.",
+    fr: "Métriques du programme opérateurs et demandes commerciales. Chaque chiffre est étiqueté par base.",
+    es: "Métricas del programa de operadores y consultas comerciales. Cada cifra lleva su base.",
+    de: "Kennzahlen des Anbieterprogramms und Geschäftsanfragen. Zahlen sind nach Basis gekennzeichnet.",
+*/
   },
   adminOnly: { en: "Admins only", ar: "للمشرفين فقط", fr: "Administrateurs uniquement", es: "Solo administradores", de: "Nur für Admins" },
   adminOnlyBody: {
@@ -193,25 +275,34 @@ const C: Record<Key, Partial<Record<LiteLang, string>> & { en: string }> = {
 function t(key: Key, lang: LiteLang): string {
   return C[key][lang] ?? C[key].en;
 }
-function basisText(basis: PartnerMetric["basis"], lang: LiteLang): string {
-  return basis === "measured" ? t("measured", lang) : basis === "estimated" ? t("estimated", lang) : t("unproven", lang);
-}
-function metricValue(m: PartnerMetric): string {
-  if (m.value == null) return "—";
-  if (m.unit === "percent") return `${m.value}%`;
-  if (m.unit === "bytes") return formatBytes(m.value);
-  return String(m.value);
-}
-function metricCard(m: PartnerMetric, lang: LiteLang): HTMLElement {
+
+function metricCard(label: string, value: string, basis: "measured" | "estimated", lang: LiteLang): HTMLElement {
   return el("div", { class: "l-card l-stack" }, [
     el("div", { class: "l-row l-spread l-row-wrap" }, [
-      el("div", { class: "l-small l-muted l-grow", text: m.label }),
-      el("span", { class: m.basis === "measured" ? "l-badge l-badge-gold" : "l-badge", text: basisText(m.basis, lang) }),
+      el("div", { class: "l-small l-muted l-grow", text: label }),
+      el("span", {
+        class: basis === "measured" ? "l-badge l-badge-gold" : "l-badge",
+        text: t(basis, lang),
+      }),
     ]),
-    el("div", { class: "l-h1 l-gold", text: metricValue(m) }),
-    el("div", { class: "l-small l-muted", text: m.method }),
-    el("div", { class: "l-small l-muted", text: `${t("sample", lang)}: ${m.sampleSize}` }),
+    el("div", { class: "l-h1 l-gold", text: value }),
   ]);
+}
+
+function programmeMetrics(
+  d: Pick<PartnerStats, "authenticatedCitizens" | "anonymousReferrals" | "measuredPayloadBytes" | "estimatedAvoidedBytes" | "observedRequestSuccessScore">,
+  lang: LiteLang,
+): HTMLElement[] {
+  const score = d.observedRequestSuccessScore == null
+    ? "—"
+    : `${Math.round(d.observedRequestSuccessScore * 100)}%`;
+  return [
+    metricCard(t("authCitizens", lang), d.authenticatedCitizens == null ? "—" : String(d.authenticatedCitizens), "measured", lang),
+    metricCard(t("anonReferrals", lang), d.anonymousReferrals == null ? "—" : String(d.anonymousReferrals), "measured", lang),
+    metricCard(stringsFor(lang).data_total, d.measuredPayloadBytes == null ? "—" : formatBytes(d.measuredPayloadBytes), "measured", lang),
+    metricCard(stringsFor(lang).data_avoided, d.estimatedAvoidedBytes == null ? "—" : formatBytes(d.estimatedAvoidedBytes), "estimated", lang),
+    metricCard(stringsFor(lang).data_score, score, "measured", lang),
+  ];
 }
 
 /* ── /partners/operators ───────────────────────────────────────────── */
@@ -254,28 +345,15 @@ export function partnersOperatorsPage(ctx: Ctx): HTMLElement {
         });
         return { data: res.data, fromSnapshot: res.fromSnapshot };
       },
-      isEmpty: (d) => d.empty || d.metrics.length === 0,
-      emptyText: t("statsEmpty", lang),
       render: (stats) => {
         const box = el("div", { class: "l-stack" });
-        for (const m of stats.metrics) box.appendChild(metricCard(m, lang));
-        const refs = Object.entries(stats.referrals || {});
-        if (refs.length > 0) {
-          box.appendChild(
-            el("div", { class: "l-card l-stack" }, [
-              el("div", { class: "l-h2", text: t("referrals", lang) }),
-              el("div", { class: "l-row l-row-wrap" },
-                refs.map(([src, n]) =>
-                  el("span", { class: "l-badge", text: `${src}: ${Number(n) || 0}` }),
-                ),
-              ),
-              el("div", { class: "l-small l-muted", text: t("refNote", lang) }),
-            ]),
-          );
+        for (const card of programmeMetrics(stats, lang)) box.appendChild(card);
+        if (stats.suppressed || stats.scienceSuppressed) {
+          box.appendChild(el("div", { class: "l-banner l-banner-warn", text: t("suppressed", lang) }));
         }
-        if (stats.period) {
-          box.appendChild(el("div", { class: "l-small l-muted", text: `${t("period", lang)}: ${stats.period.from} → ${stats.period.to}` }));
-        }
+        box.appendChild(el("div", { class: "l-small l-muted", text: stats.methodology }));
+        box.appendChild(el("div", { class: "l-small l-muted", text: stats.scienceMethodology }));
+        box.appendChild(el("div", { class: "l-small l-muted", text: `${t("period", lang)}: ${stats.period}` }));
         return box;
       },
     }),
@@ -286,18 +364,15 @@ export function partnersOperatorsPage(ctx: Ctx): HTMLElement {
   return root;
 }
 
-const OPERATORS = ["Inwi", "Orange", "Maroc Telecom", "Other"];
-
 function contactForm(lang: LiteLang): HTMLElement {
   const host = el("div", { class: "l-card l-stack" });
 
   function renderForm(): void {
     const err = el("div", {});
-    const nameIn = el("input", { class: "l-input", type: "text", name: "name" }) as HTMLInputElement;
-    const orgIn = el("input", { class: "l-input", type: "text", name: "org" }) as HTMLInputElement;
-    const emailIn = el("input", { class: "l-input", type: "email", name: "email" }) as HTMLInputElement;
-    const opSel = el("select", { class: "l-select", name: "operator" }, OPERATORS.map((o) => el("option", { value: o, text: o }))) as HTMLSelectElement;
+    const companyIn = el("input", { class: "l-input", type: "text", name: "company" }) as HTMLInputElement;
+    const emailIn = el("input", { class: "l-input", type: "email", name: "contactEmail" }) as HTMLInputElement;
     const msgIn = el("textarea", { class: "l-input", rows: 5, name: "message" }) as HTMLTextAreaElement;
+    const consentIn = el("input", { type: "checkbox", name: "consent" }) as HTMLInputElement;
     const btn = el("button", { class: "l-btn l-btn-primary", type: "submit", text: t("send", lang) }) as HTMLButtonElement;
 
     const field = (label: string, input: HTMLElement) =>
@@ -305,11 +380,10 @@ function contactForm(lang: LiteLang): HTMLElement {
 
     const form = el("form", { class: "l-stack" }, [
       el("div", { class: "l-h2", text: t("contact", lang) }),
-      field(t("name", lang), nameIn),
-      field(t("org", lang), orgIn),
-      field(t("email", lang), emailIn),
-      field(t("operator", lang), opSel),
+      field(t("company", lang), companyIn),
+      field(t("contactEmail", lang), emailIn),
       field(t("message", lang), msgIn),
+      el("label", { class: "l-switch" }, [consentIn, el("span", { text: t("consent", lang) })]),
       err,
       el("div", { class: "l-row" }, [btn]),
     ]) as HTMLFormElement;
@@ -317,17 +391,17 @@ function contactForm(lang: LiteLang): HTMLElement {
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const payload = {
-        name: nameIn.value.trim(),
-        org: orgIn.value.trim(),
-        email: emailIn.value.trim(),
-        operator: opSel.value,
+        company: companyIn.value.trim(),
+        contactEmail: emailIn.value.trim(),
         message: msgIn.value.trim(),
+        consent: consentIn.checked,
+        website: "",
       };
       const invalid =
-        payload.name.length < 2 ||
-        payload.org.length < 2 ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email) ||
-        payload.message.length < 10;
+        payload.company.length < 2 ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.contactEmail) ||
+        payload.message.length < 10 ||
+        !payload.consent;
       if (invalid) {
         mount(err, el("div", { class: "l-banner l-banner-err", text: t("fixFields", lang) }));
         return;
@@ -335,7 +409,7 @@ function contactForm(lang: LiteLang): HTMLElement {
       btn.disabled = true;
       btn.textContent = t("sending", lang);
       mount(err);
-      void postJson<{ saved: boolean; id: number }>("/api/partners/contact", payload)
+      void postJson<{ received: boolean; emailSent: false }>("/api/partners/contact", payload)
         .then(() => renderSaved())
         .catch((e2: unknown) => {
           const msg = e2 instanceof ApiError && e2.message ? e2.message : t("fixFields", lang);
@@ -418,44 +492,48 @@ export function partnersDashboardPage(ctx: Ctx): HTMLElement {
 function dashboardView(d: PartnerDashboard, lang: LiteLang): HTMLElement {
   const box = el("div", { class: "l-stack" });
 
-  // Metrics
-  if (d.metrics.length === 0) {
-    box.appendChild(el("div", { class: "l-card l-muted", text: t("noMetrics", lang) }));
-  } else {
-    for (const m of d.metrics) box.appendChild(metricCard(m, lang));
-  }
+  for (const card of programmeMetrics(d, lang)) box.appendChild(card);
+  box.appendChild(el("div", { class: "l-small l-muted", text: d.scienceMethodology }));
 
-  // Referrals
-  const refs = Object.entries(d.referrals || {}).filter(([k]) => k !== "period");
-  box.appendChild(
-    el("div", { class: "l-card l-stack" }, [
-      el("div", { class: "l-h2", text: t("referrals", lang) }),
-      el("div", { class: "l-row l-row-wrap" },
-        refs.map(([src, n]) => el("span", { class: "l-badge", text: `${src}: ${Number(n) || 0}` })),
-      ),
-      el("div", { class: "l-small l-muted", text: t("refNote", lang) }),
-    ]),
-  );
+  const sources = el("div", { class: "l-card l-stack" }, [
+    el("div", { class: "l-h2", text: t("sources", lang) }),
+  ]);
+  if (d.sources.length === 0) {
+    sources.appendChild(el("div", { class: "l-muted l-small", text: t("noBreakdown", lang) }));
+  } else {
+    for (const source of d.sources) {
+      sources.appendChild(
+        el("div", { class: "l-stack" }, [
+          el("div", { class: "l-h2 l-gold", text: source.source }),
+          el("div", { class: "l-small", text: `${t("authCitizens", lang)}: ${source.authenticatedCitizens}` }),
+          el("div", { class: "l-small", text: `${t("anonReferrals", lang)}: ${source.anonymousReferrals}` }),
+          el("div", { class: "l-small", text: `${stringsFor(lang).data_total}: ${formatBytes(source.measuredPayloadBytes)}` }),
+          el("div", { class: "l-small", text: `${stringsFor(lang).data_avoided}: ${formatBytes(source.estimatedAvoidedBytes)}` }),
+          el("div", { class: "l-small l-muted", text: source.scienceMethodology }),
+        ]),
+      );
+    }
+  }
+  box.appendChild(sources);
 
   // Inquiries
   const inqBox = el("div", { class: "l-card l-stack" }, [
-    el("div", { class: "l-h2", text: `${t("inquiries", lang)} (${d.inquiries.total})` }),
+    el("div", { class: "l-h2", text: `${t("inquiries", lang)} (${d.inquiries.length})` }),
   ]);
-  if (d.inquiries.items.length === 0) {
+  if (d.inquiries.length === 0) {
     inqBox.appendChild(el("div", { class: "l-muted l-small", text: t("noInquiries", lang) }));
   } else {
-    for (const q of d.inquiries.items) {
+    for (const q of d.inquiries) {
       inqBox.appendChild(
         el("div", { class: "l-card l-stack" }, [
           el("div", { class: "l-row l-spread l-row-wrap" }, [
             el("div", { class: "l-grow" }, [
-              el("div", { class: "l-h2", text: q.name }),
-              el("div", { class: "l-small l-muted", text: `${q.org} · ${q.operator}` }),
+              el("div", { class: "l-h2", text: q.company }),
+              el("div", { class: "l-small l-muted", text: q.contactEmail }),
             ]),
-            el("span", { class: "l-badge l-badge-gold", text: q.status }),
+            el("span", { class: "l-badge l-badge-gold", text: formatDate(q.createdAt) }),
           ]),
           el("div", { class: "l-small", text: q.message }),
-          el("div", { class: "l-small l-muted", text: `${q.email} · ${formatDate(q.createdAt)}` }),
         ]),
       );
     }
