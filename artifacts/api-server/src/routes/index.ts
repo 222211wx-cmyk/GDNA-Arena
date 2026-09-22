@@ -50,10 +50,16 @@ import communicationGroupsRouter from "./communication-groups";
 import browserPushRouter from "./browser-push";
 import adminClipThumbnailsRouter from "./admin-clip-thumbnails";
 import r2Router from "./r2";
+import gdnaRouter from "./gdna";
+import liteRouter from "./lite";
+import operatorsRouter from "./operators";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(operatorsRouter);
+router.use(liteRouter);
+router.use(gdnaRouter);
 router.use(authRouter);
 router.use(leaderboardRouter);
 router.use(chatRouter);

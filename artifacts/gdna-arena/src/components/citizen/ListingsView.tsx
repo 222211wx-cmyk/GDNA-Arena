@@ -18,6 +18,7 @@ import {
 import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
 import { CitizenShell } from "@/components/citizen/CitizenShell";
 import CitizenAssistant from "@/components/citizen/CitizenAssistant";
+import GdnaAssistButton from "@/components/gdna/GdnaAssistButton";
 import { UnifiedMessenger } from "@/components/messenger/UnifiedMessenger";
 import { citizenProfileHref, citizenMediaSrc } from "@/lib/citizen";
 import { useCitizenMeta } from "@/hooks/use-citizen";
@@ -45,6 +46,11 @@ export default function ListingsView({ type }: { type: ListingType }) {
         </h1>
         <div className="flex items-center gap-2">
           <CitizenAssistant section={isMarket ? "market" : "services"} triggerLabel="مساعد" />
+          <GdnaAssistButton
+            section="souk"
+            label="GDNA"
+            prompt={isMarket ? "ساعدني في السوق. راجع النص قبل الإرسال." : "ساعدني في الخدمات. راجع النص قبل الإرسال."}
+          />
           <CreateListingDialog type={type} cities={meta.data?.cities ?? []} />
         </div>
       </div>

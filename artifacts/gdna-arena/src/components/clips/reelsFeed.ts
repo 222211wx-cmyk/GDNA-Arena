@@ -25,7 +25,7 @@ import {
 import { mountVideoActions, type VideoActionState } from "./VideoActions";
 
 const BASE = import.meta.env.BASE_URL;
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 5;
 
 type NavRoute = { key: string; label: string; href: string; icon: (active: boolean) => string };
 
@@ -274,6 +274,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
     let video: HTMLVideoElement | null = null;
     let playbackRequested = false;
+    let resumeTime = 0;
     let actionsMounted = false;
     let userPaused = false;
     let naturallyEnded = false;
@@ -312,7 +313,15 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     };
 
     function loadPlayback() {
-      if (playbackRequested) return;
+      slides.forEach(other => { if (other.id !== clip.id) other.deactivate(); });
+      if (playbackRequested) {
+        if (video && !video.isConnected) {
+          video.src = clip.video_url;
+          mediaWrap.prepend(video);
+          video.addEventListener("loadedmetadata", () => { if (video) video.currentTime = resumeTime; }, { once: true });
+        }
+        return;
+      }
       playbackRequested = true;
       const v = el("video") as HTMLVideoElement;
       v.playsInline = true;
@@ -322,12 +331,37 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       v.setAttribute("webkit-playsinline", "true");
       v.src = clip.video_url; // lazy: only requested when the slide activates
       video = v;
+      let mediaError: HTMLElement | null = null;
+      v.addEventListener("error", () => {
+        if (!v.isConnected || !v.hasAttribute("src")) return;
+        mediaError?.remove();
+        mediaError = el("div", "reels-media-error", { role: "alert" });
+        const text = el("p");
+        text.textContent = "Impossible de lire ce clip. Vérifiez la connexion ou réessayez.";
+        const retry = el("button", "reels-btn", { type: "button" });
+        retry.textContent = "Réessayer";
+        retry.onclick = event => {
+          event.stopPropagation();
+          v.src = clip.video_url;
+          v.load();
+          void v.play().catch(() => setPaused(true));
+        };
+        mediaError.append(text, retry);
+        mediaWrap.append(mediaError);
+        setPaused(true);
+      });
       v.addEventListener("loadeddata", () => {
+        mediaError?.remove(); mediaError = null;
         const portrait = v.videoHeight >= v.videoWidth;
         slide.setAttribute("data-orient", portrait ? "portrait" : "landscape");
         if (poster) poster.style.display = "none";
       });
-      v.addEventListener("play", () => setPaused(false));
+      v.addEventListener("play", () => {
+        // A manual click is a playback intent too; never allow a second player.
+        slides.forEach(other => { if (other.id !== clip.id) other.deactivate(); });
+        activeSlideId = clip.id;
+        setPaused(false);
+      });
       v.addEventListener("pause", () => setPaused(true));
       v.addEventListener("ended", () => {
         naturallyEnded = true;
@@ -485,7 +519,14 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         }
       },
       deactivate() {
-        if (video) { video.pause(); video.currentTime = video.currentTime; }
+        if (video?.isConnected) {
+          resumeTime = video.currentTime;
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+          video.remove();
+          if (poster) { poster.style.display = ""; mediaWrap.prepend(poster); }
+        }
         setPaused(true);
       },
     } as SlideHandle;
@@ -627,7 +668,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         }
       } catch (error) {
         if (controller.signal.aborted || destroyed) return;
+        console.error("Clips feed request or rendering failed", error);
         if (slides.length === 0) showFullState("error");
+        else showDegraded();
       } finally {
         loading = false;
         if (pagePromise === operation) pagePromise = null;
@@ -641,6 +684,10 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     if (degradedBanner) return;
     degradedBanner = el("div", "reels-degraded-banner", { role: "status" });
     degradedBanner.textContent = "Service momentanément ralenti — réessayez";
+    const retry = el("button", "reels-btn", { type: "button" });
+    retry.textContent = "Réessayer";
+    retry.onclick = () => { void loadPage(true); };
+    degradedBanner.append(retry);
     shell.append(degradedBanner);
   }
 

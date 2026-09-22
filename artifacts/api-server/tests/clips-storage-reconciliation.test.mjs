@@ -51,6 +51,20 @@ const valid = (name, overrides = {}) => ({
   ...overrides,
 });
 
+test("reconciliation protects both historical JPEG and new WebP retry reservations", () => {
+  const source = `clip_${hex(40)}.mp4`;
+  const hash = crypto.createHash("sha256").update(source).digest("hex").slice(0, 32);
+  const names = ["jpg", "webp"].map(ext => `thumb_retry_40_${hash}.${ext}`);
+  const report = reconcileClipStorage({
+    objects: names.map(name => valid(name)),
+    clips: [{ id: 40, object_name: source, thumbnail_object_name: null }],
+    queuedNames: [], scope: { bucket: "private", prefix: "app/clips/" },
+    startedAt: "2026-06-01T00:00:00.000Z", now,
+  });
+  assert.equal(report.candidates.length, 0);
+  assert.ok(report.inventory.every(item => item.reason === "deterministic-retry-candidate"));
+});
+
 test("reconciliation protects retained originals and reserved compression outputs", () => {
   const source = `clip_${hex(40)}.mp4`;
   const derived = `clip_${hex(41)}.mp4`;

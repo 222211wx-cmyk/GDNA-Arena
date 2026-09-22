@@ -1,559 +1,65 @@
-import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import {
-  Search, Trophy, Music, Film, Newspaper, Landmark,
-  Gamepad2, LogOut, Globe, LayoutDashboard, Wallet,
-  Menu, X, Mic2, Bell, ChevronRight, BrainCircuit, MessageSquare, Mail, User, ShoppingBag, ImageOff, Crown, Users
-} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
-import { Scale } from "lucide-react";
-import { NotificationBell } from "@/components/NotificationBell";
-import { localeForLang, localeSurfacesAText } from "@/i18n/locale-surfaces-a-copy";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup,
+  DropdownMenuRadioItem, DropdownMenuTrigger,
+} from "@workspace/gdna-ds/components/ui/dropdown-menu";
+import { cn } from "@workspace/gdna-ds/lib/utils";
 
-const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+const COPY = {
+  ar: ["أرينا", "أنا", "حيوان", "المراسلات - MESSAGERI", "اجتماعي - جهات الاتصال", "Search", "مستشار"],
+  en: ["ARENA", "Me", "Animals", "MESSAGERI", "Social - Contacts", "Search", "Advisor"],
+  fr: ["ARENA", "Moi", "Animaux", "MESSAGERI", "Social - Contacts", "Search", "Conseiller"],
+  es: ["ARENA", "Yo", "Animales", "MESSAGERI", "Social - Contactos", "Search", "Asesor"],
+  de: ["ARENA", "Ich", "Tiere", "MESSAGERI", "Sozial - Kontakte", "Search", "Berater"],
+} as const;
 
-// ── Nav items ──────────────────────────────────────────────────────────────────
-// جميع الأقسام ظاهرة فالتنقل الرئيسي
-const NAV_ITEMS = [
-  { labelKey: "nav_home",     emoji: null,  icon: null,                        path: "/",          highlight: false },
-  { labelKey: "nav_elite",    emoji: null,  icon: <Crown size={15} />,          path: "/elite",     highlight: true  },
-  { labelKey: "nav_arena",    emoji: "⚔️", icon: <Gamepad2 size={15} />,       path: "/games",     highlight: true  },
-  { labelKey: "nav_shop",     emoji: "🛒", icon: <ShoppingBag size={15} />,    path: "/shop",      highlight: true  },
-  { labelKey: "nav_missions", emoji: "🎯", icon: <BrainCircuit size={15} />,   path: "/growth",    highlight: true  },
-  { labelKey: "nav_fortress", emoji: "🏰", icon: <BrainCircuit size={15} />,   path: "/fortress",  highlight: true  },
-  { labelKey: "nav_sport",    emoji: "⚽", icon: <Trophy size={15} />,         path: "/sport",     highlight: false },
-  { labelKey: "nav_music",    emoji: "🎵", icon: <Music size={15} />,          path: "/music",     highlight: false },
-  { labelKey: "nav_cinema",   emoji: "🎬", icon: <Film size={15} />,           path: "/cinema",    highlight: false },
-  { labelKey: "nav_news",     emoji: "📰", icon: <Newspaper size={15} />,      path: "/news",      highlight: false },
-  { labelKey: "nav_heritage", emoji: "🏛️", icon: <Landmark size={15} />,      path: "/chronicle", highlight: false },
-  { labelKey: "nav_clips",    emoji: "🎬", icon: <Film size={15} />,           path: "/clips",     highlight: false },
-  { labelKey: "nav_smart",    emoji: "🧠", icon: <BrainCircuit size={15} />,   path: "/smart",     highlight: false },
-];
-
-// ── Four-door modules — exact brand names, no emojis, module-isolated ────────────
-// AMIS is admin-only site control (adminOnly). MESSAGERI and SOCIAL are public.
-const MODULE_ITEMS = [
-  { labelKey: "nav_messageri", icon: <Mail size={15} />,          path: "/messages", adminOnly: false },
-  { labelKey: "nav_social",    icon: <MessageSquare size={15} />, path: "/social",   adminOnly: false },
-  { labelKey: "nav_citizens",  icon: <Users size={15} />,         path: "/citizens", adminOnly: false },
-  { labelKey: "nav_amis",      icon: <User size={15} />,          path: "/amis",     adminOnly: true  },
-];
-
+/** The owner's single, flat navigation. Existing sections retain their routes. */
 export function Navbar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [langOpen, setLangOpen]     = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [unreadDMs, setUnreadDMs]   = useState(0);
-
-  const langRef   = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLDivElement>(null);
-
   const [location] = useLocation();
-  const { user, logout } = useAuth();
-  const { t, lang, setLang } = useLang();
-  const locale = localeForLang(lang);
-
-  useEffect(() => {
-    // Unread badges are identity-bound too. Clear synchronously and abort the
-    // previous citizen's request before polling for the new account.
-    setUnreadDMs(0);
-    if (!user) return;
-    const controller = new AbortController();
-    const fetchUnread = async () => {
-      try {
-        const r = await fetch("/api/messages/unread-count", {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        if (r.ok && !controller.signal.aborted) {
-          const d = await r.json() as { count: number };
-          if (!controller.signal.aborted) setUnreadDMs(d.count ?? 0);
-        }
-      } catch { /* aborted/network error — keep the safe zero state */ }
-    };
-    void fetchUnread();
-    const t = setInterval(() => void fetchUnread(), 30_000);
-    return () => {
-      controller.abort();
-      clearInterval(t);
-    };
-  }, [user?.id]);
-
-  // Close dropdowns on outside click
-  useEffect(() => {
-    function onDown(e: MouseEvent) {
-      if (langRef.current   && !langRef.current.contains(e.target as Node))   setLangOpen(false);
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, []);
-
-  const isActive = (path: string) =>
-    path === "/" ? location === "/" : location === path || location.startsWith(path + "/");
-
-  const currentFlag = LANGS.find((l) => l.code === lang)?.flag ?? "🌐";
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      window.location.href = `${BASE()}/search?q=${encodeURIComponent(searchQuery.trim())}`;
-    }
-  };
+  const { user } = useAuth();
+  const { lang, setLang } = useLang();
+  const labels = COPY[lang as keyof typeof COPY] ?? COPY.en;
+  // There is no standalone animal product: use the existing content search.
+  const paths = ["/", user ? "/u/me" : "/login",
+    `/search?q=${encodeURIComponent(labels[2])}`,
+    "/messages", "/social", "/search", "/chat"];
 
   return (
-    <header className="w-full sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-primary/20">
-
-      {/* ── Main bar ── */}
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-
-        {/* Logo — IMPERIAL HELIX CROWN */}
-        <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
-          <svg width="38" height="38" viewBox="0 0 44 44" fill="none"
-            className="transition-all duration-300 group-hover:drop-shadow-[0_0_10px_rgba(201,168,76,0.8)]">
-
-            {/* Outer ring */}
-            <circle cx="22" cy="22" r="20" stroke="#C9A84C" strokeWidth="0.75"
-              strokeOpacity="0.35" strokeDasharray="4 2.5" fill="none"/>
-
-            {/* Crown */}
-            <line x1="14" y1="14" x2="30" y2="14" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round"/>
-            <polyline points="14,14 14,7 17,10 22,5 27,10 30,7 30,14"
-              stroke="#FFD700" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
-            <path d="M14 14 L14 7 L17 10 L22 5 L27 10 L30 7 L30 14 Z"
-              fill="#C9A84C" fillOpacity="0.12"/>
-            <circle cx="14" cy="14" r="1.5" fill="#FFD700"/>
-            <circle cx="22" cy="5"  r="2"   fill="#FFD700"/>
-            <circle cx="30" cy="14" r="1.5" fill="#FFD700"/>
-
-            {/* DNA left strand — gold */}
-            <path d="M14 14 C22 18 30 22 22 26 C14 30 22 34 22 39"
-              stroke="#C9A84C" strokeWidth="2" strokeLinecap="round" fill="none"/>
-
-            {/* DNA right strand — cyan */}
-            <path d="M30 14 C22 18 14 22 22 26 C30 30 22 34 22 39"
-              stroke="#00D4FF" strokeWidth="2" strokeLinecap="round" fill="none"/>
-
-            {/* Rungs */}
-            <line x1="17" y1="18" x2="27" y2="18" stroke="#C9A84C" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
-            <line x1="14.5" y1="22" x2="29.5" y2="22" stroke="#C9A84C" strokeWidth="1" strokeOpacity="0.7" strokeLinecap="round"/>
-            <circle cx="22" cy="22" r="1.2" fill="#C9A84C"/>
-            <line x1="17" y1="26" x2="27" y2="26" stroke="#C9A84C" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round"/>
-            <circle cx="22" cy="39" r="2" fill="#C9A84C" fillOpacity="0.6"/>
-          </svg>
-
-          {/* Wordmark — keep the public brand visible beside the mark at every
-              viewport size; Arabic users see the localized name. */}
-          <span
-            className="font-black text-sm sm:text-base tracking-[0.12em] whitespace-nowrap"
-            dir={lang === "ar" ? "rtl" : "ltr"}
-            style={{ color: "hsl(var(--primary))", letterSpacing: lang === "ar" ? "0" : "0.12em", fontFamily: "inherit" }}
-            aria-label={lang === "ar" ? "أرينا" : "ARENA"}
-          >
-            {lang === "ar" ? "أرينا" : "ARENA"}
-          </span>
-        </Link>
-
-        {/* ── Desktop nav ── */}
-        <nav className="hidden md:flex min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto scrollbar-hide xl:justify-center">
-          {NAV_ITEMS.map((item) => {
-            const active    = isActive(item.path);
-            const featured  = item.highlight && !active;
-            const isDM      = item.path === "/messages";
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                  active
-                    ? "text-primary bg-primary/10 border-b-2 border-primary"
-                    : featured
-                      ? "text-primary border-b-2 border-primary/60 hover:bg-primary/10"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                {item.emoji
-                  ? <span className="text-base leading-none">{item.emoji}</span>
-                  : item.icon}
-                {t(item.labelKey)}
-                {isDM && unreadDMs > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
-                    {unreadDMs > 9 ? "9+" : unreadDMs}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-
-          {/* Four-door modules — exact brand names, module-isolated */}
-          {MODULE_ITEMS.filter((m) => !m.adminOnly || user?.isAdmin).map((item) => {
-            const active = isActive(item.path);
-            const isDM   = item.path === "/messages";
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                data-testid={`nav-module-${item.path.replace("/", "")}`}
-                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                  active
-                    ? "text-primary bg-primary/10 border-b-2 border-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                {item.icon}
-                {t(item.labelKey)}
-                {isDM && unreadDMs > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
-                    {unreadDMs > 9 ? "9+" : unreadDMs}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-
-          {/* PRESS — gold special tab */}
-          <Link
-            href="/press"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-black tracking-wider transition-all ml-1 ${
-              isActive("/press")
-                ? "bg-primary text-primary-foreground shadow-[0_0_16px_hsl(var(--primary)/0.4)]"
-                : "border border-primary/40 text-primary hover:bg-primary/10"
-            }`}
-          >
-            <Mic2 size={14} />
-            {t("press")}
-          </Link>
-
-          {/* Admin-only: clip thumbnail repair tool */}
-          {user?.isAdmin && (
-            <Link
-              href="/admin/clips/thumbnails"
-              data-testid="nav-admin-clip-thumbnails"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                isActive("/admin/clips/thumbnails")
-                  ? "text-primary bg-primary/10 border-b-2 border-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              }`}
-            >
-              <ImageOff size={15} />
-              Clip Thumbnails
+    <header className="sticky top-0 z-50 border-b border-border bg-background text-foreground">
+      <nav aria-label={lang === "ar" ? "التنقل الرئيسي" : "Main navigation"}
+        className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-3 py-2 scrollbar-hide">
+        {paths.map((href, index) => (
+          <Button key={index} variant="ghost" size="sm" asChild
+            className={cn("shrink-0 whitespace-nowrap",
+              index === 0 && "font-bold",
+              location === href && "bg-muted text-foreground")}>
+            <Link href={href} aria-current={location === href ? "page" : undefined}
+              data-testid={index === 3 ? "nav-module-messages" : index === 4 ? "nav-module-social" : `nav-primary-${index}`}>
+              {labels[index]}
             </Link>
-          )}
-        </nav>
-
-        {/* ── Right controls ── */}
-        <div className="flex items-center gap-2 shrink-0">
-
-          {/* Search — desktop */}
-          <div ref={searchRef} className="hidden lg:block relative">
-            <form onSubmit={handleSearch}>
-              <div className="flex items-center bg-secondary/80 border border-border/50 rounded-full px-3 py-1.5 gap-2 focus-within:border-primary/50 focus-within:bg-secondary transition-all">
-                <Search size={15} className="text-muted-foreground shrink-0" />
-                <input
-                  type="text"
-                  placeholder={t("nav_search_placeholder")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent outline-none text-foreground text-sm w-44 placeholder:text-muted-foreground"
-                />
-              </div>
-            </form>
-          </div>
-
-          {/* Search icon — tablet */}
-          <button
-            onClick={() => setSearchOpen(!searchOpen)}
-            className="lg:hidden text-muted-foreground hover:text-primary transition-colors p-1.5"
-          >
-            <Search size={18} />
-          </button>
-
-          {/* Notification */}
-          <NotificationBell />
-
-          {/* Legal Center link */}
-          <Link
-            href="/legal"
-            title={t("legal_title")}
-            className="hidden md:flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors text-xs border border-border hover:border-primary/30 rounded-lg px-2 py-1"
-          >
-            <Scale size={12} />
-            <span className="hidden lg:block">{t("legal_title")}</span>
-          </Link>
-
-          {/* Language */}
-          <div ref={langRef} className="relative hidden md:block">
-            <button
-              onClick={() => setLangOpen(!langOpen)}
-              className="flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors text-sm border border-border/50 rounded-lg px-2 py-1 hover:border-primary/30"
-            >
-              <Globe size={13} />
-              <span>{currentFlag}</span>
-            </button>
-            {langOpen && (
-              <div className="absolute right-0 top-full mt-2 w-36 bg-popover border border-primary/20 rounded-xl overflow-hidden shadow-2xl z-50">
-                {LANGS.map((l) => (
-                  <button
-                    key={l.code}
-                    onClick={() => { setLang(l.code as Lang); setLangOpen(false); }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-primary/10 transition-colors ${
-                      lang === l.code ? "text-primary font-bold" : "text-muted-foreground"
-                    }`}
-                  >
-                    <span>{l.flag}</span>
-                    <span>{l.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* User controls */}
-          {user ? (
-            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-border/50">
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-1 text-xs text-primary font-black uppercase tracking-widest hover:text-primary/80 transition-colors"
-              >
-                <Trophy size={12} />
-                {user.balance.toLocaleString(locale)}
-              </Link>
-              <Link href="/wallet"    title={t("wallet")}    className="text-muted-foreground hover:text-primary transition-colors"><Wallet         size={16} /></Link>
-              <Link href="/dashboard" title={t("dashboard")} className="text-muted-foreground hover:text-primary transition-colors"><LayoutDashboard size={16} /></Link>
-              <button
-                onClick={() => {
-                  void logout().catch(error =>
-                    window.alert(error instanceof Error ? error.message : localeSurfacesAText(lang, "logoutFailed")));
-                }}
-                title={t("logout")}
-                className="text-muted-foreground hover:text-destructive transition-colors"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-          ) : (
-            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-border/50">
-              <Link href="/login"    className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium">{t("login")}</Link>
-              <Link href="/register" className="text-sm font-bold px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/40 hover:bg-primary hover:text-primary-foreground transition-all">
-                {t("register")}
-              </Link>
-            </div>
-          )}
-
-          {/* Mobile toggle */}
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden text-muted-foreground hover:text-primary transition-colors p-1"
-          >
-            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Tablet search bar (below main bar) ── */}
-      {searchOpen && (
-          <div className="lg:hidden border-t border-border/60 px-4 py-2">
-          <form onSubmit={handleSearch}>
-            <div className="flex items-center bg-secondary rounded-full px-4 py-2 gap-2 border border-border/50 focus-within:border-primary/50 transition-all">
-              <Search size={15} className="text-muted-foreground shrink-0" />
-              <input
-                autoFocus
-                type="text"
-                placeholder={t("nav_search_placeholder")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent outline-none text-foreground text-sm flex-1 placeholder:text-muted-foreground"
-              />
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ── Mobile horizontal nav strip ── */}
-      <div className="md:hidden flex w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain gap-1 px-3 py-2 border-t border-border/60 scrollbar-hide">
-        {NAV_ITEMS.map((item) => {
-          const active   = isActive(item.path);
-          const featured = item.highlight && !active;
-          const isDM     = item.path === "/messages";
-          return (
-            <Link
-              key={item.path}
-              href={item.path}
-              onClick={() => setMobileOpen(false)}
-              className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                active
-                  ? "text-primary bg-primary/10"
-                  : featured
-                    ? "text-primary border-b border-primary/60"
-                    : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {item.emoji ? <span>{item.emoji}</span> : item.icon}
-              {t(item.labelKey)}
-              {isDM && unreadDMs > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
-                  {unreadDMs > 9 ? "9+" : unreadDMs}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-        {MODULE_ITEMS.filter((m) => !m.adminOnly || user?.isAdmin).map((item) => {
-          const active = isActive(item.path);
-          const isDM   = item.path === "/messages";
-          return (
-            <Link
-              key={item.path}
-              href={item.path}
-              data-testid={`nav-module-mobile-${item.path.replace("/", "")}`}
-              className={`relative flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                active ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {item.icon}
-              {t(item.labelKey)}
-              {isDM && unreadDMs > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
-                  {unreadDMs > 9 ? "9+" : unreadDMs}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-        <Link
-          href="/press"
-          onClick={() => setMobileOpen(false)}
-          className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
-            isActive("/press")
-              ? "bg-primary text-primary-foreground border-primary"
-              : "border-primary/40 text-primary"
-          }`}
-        >
-          <Mic2 size={12} />
-          PRESS
-        </Link>
-      </div>
-
-      {/* ── Mobile full menu ── */}
-      {mobileOpen && (
-        <div className="md:hidden border-t border-border bg-background/98 px-4 py-4 space-y-1">
-
-          {/* Nav links */}
-          {[...NAV_ITEMS, { labelKey: "nav_press", emoji: "📡", icon: <Mic2 size={16} />, path: "/press", highlight: false }].map((item) => {
-            const active   = isActive(item.path);
-            const featured = item.highlight && !active;
-            const isDM     = item.path === "/messages";
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                onClick={() => setMobileOpen(false)}
-                className={`relative flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
-                  active
-                    ? "text-primary bg-primary/10"
-                    : featured
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                <span className="text-xl leading-none">{item.emoji ?? item.icon ?? "›"}</span>
-                {t(item.labelKey)}
-                {isDM && unreadDMs > 0 && (
-                  <span className="ml-auto min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
-                    {unreadDMs > 9 ? "9+" : unreadDMs}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-
-          {/* Four-door modules */}
-          <div className="pt-2 border-t border-border space-y-1">
-            {MODULE_ITEMS.filter((m) => !m.adminOnly || user?.isAdmin).map((item) => {
-              const active = isActive(item.path);
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  onClick={() => setMobileOpen(false)}
-                  data-testid={`nav-module-menu-${item.path.replace("/", "")}`}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
-                    active ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  {item.icon}
-                  {t(item.labelKey)}
-                </Link>
-              );
-            })}
-            {user?.isAdmin && (
-              <Link
-                href="/admin/clips/thumbnails"
-                onClick={() => setMobileOpen(false)}
-                data-testid="nav-admin-clip-thumbnails-menu"
-                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold transition-all ${
-                  isActive("/admin/clips/thumbnails")
-                    ? "text-primary bg-primary/10"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                <ImageOff size={16} />
-                Clip Thumbnails
-              </Link>
-            )}
-          </div>
-
-          {/* Growth / AI */}
-          <div className="pt-2 border-t border-border">
-            <Link href="/growth" onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 px-3 py-3 rounded-xl text-base font-semibold text-primary hover:bg-primary/10 transition-all">
-              <BrainCircuit size={16} />
-              ARCHON SYSTEM
-            </Link>
-          </div>
-
-          {/* User */}
-          {user ? (
-            <div className="pt-2 border-t border-border space-y-1">
-              <Link href="/dashboard" onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-muted-foreground hover:text-foreground transition-all">
-                <LayoutDashboard size={16} className="text-primary" /> {t("dashboard")}
-              </Link>
-              <Link href="/wallet" onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-muted-foreground hover:text-foreground transition-all">
-                <Wallet size={16} className="text-primary" /> {t("wallet")}
-              </Link>
-              <button onClick={() => {
-                setMobileOpen(false);
-                void logout().catch(error =>
-                  window.alert(error instanceof Error ? error.message : localeSurfacesAText(lang, "logoutFailed")));
-              }}
-                className="flex items-center gap-3 px-3 py-3 rounded-xl text-base text-destructive w-full hover:bg-destructive/10 transition-all">
-                <LogOut size={16} /> {t("logout")}
-              </button>
-            </div>
-          ) : (
-            <div className="pt-2 border-t border-border flex gap-2">
-              <Link href="/login"    onClick={() => setMobileOpen(false)} className="flex-1 text-center py-3 rounded-xl border border-primary/30 text-primary font-bold text-sm">{t("login")}</Link>
-              <Link href="/register" onClick={() => setMobileOpen(false)} className="flex-1 text-center py-3 rounded-xl bg-primary/10 border border-primary/40 text-primary font-bold text-sm">{t("register")}</Link>
-            </div>
-          )}
-
-          {/* Language */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-            {LANGS.map((l) => (
-              <button key={l.code} onClick={() => { setLang(l.code as Lang); setMobileOpen(false); }}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                  lang === l.code ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:border-primary/40"
-                }`}>
-                {l.flag} {l.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+          </Button>
+        ))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="shrink-0"
+              aria-label={lang === "ar" ? "اللغة" : "Language"}>
+              {lang === "ar" ? "SA" : lang.toUpperCase()}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup value={lang} onValueChange={value => setLang(value as Lang)}>
+              {LANGS.map(language => (
+                <DropdownMenuRadioItem key={language.code} value={language.code}>
+                  {language.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </nav>
     </header>
   );
 }

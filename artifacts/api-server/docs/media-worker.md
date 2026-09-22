@@ -1,8 +1,20 @@
 # Clip media worker
 
-New clips upload original bytes directly to the existing R2 bucket (configured as
-helixly-clips). API receives metadata and ETags, never new clip binary. Historical
+New clips use bounded browser video compression before direct upload to the existing
+R2 bucket (configured as helixly-clips) when supported, targeting 480p/800 kbps
+with audio preserved. Unsupported browsers explicitly fall back to original-byte
+upload and server processing. API receives metadata and ETags, never new clip binary. Historical
 R2/GCS playback and chat attachment limits are unchanged.
+
+Reserved derivative names retain the historical `_720p.mp4` suffix for compatibility
+with persisted jobs, validation, and cleanup. The suffix is not the current encode
+resolution; do not rename existing objects or reservations.
+
+New video thumbnails are bounded WebP objects created by the queued thumbnail
+worker, never encoded during reads. Their `.webp` names and `image/webp` metadata
+match their actual bytes. Existing JPEG pointers remain served as `image/jpeg`
+without conversion. Deletion and reconciliation track both historical `.jpg`
+and new `.webp` deterministic retry candidates.
 
 ## Processes and deployment
 
@@ -41,7 +53,7 @@ enqueues once. It returns 202 with sessionId, state and statusUrl. Clients must
 poll owner-only `GET /api/upload/status/:sessionId`; acceptance is not publication.
 States: queued, processing, ready (receipt), failed (error). Unverified files never
 enter the clips table/feed. Worker verifies real stream type and duration >=60s,
-encodes video to <=720p/AAC (`_720p.mp4`) or audio AAC, verifies output, then commits
+encodes video to <=480p at 800 kbps with AAC audio, or audio-only AAC, verifies output, then commits
 publication and ready state together. Original pointer is retained.
 
 Legacy binary `/api/clips` POST, `/api/clip/upload`, upload-simple, upload-final,

@@ -78,6 +78,9 @@ import FinanceOnboarding from "@/pages/finance-onboarding";
 import AdminFinance from "@/pages/admin-finance";
 import AdminClipThumbnailsPage from "@/pages/admin-clip-thumbnails";
 import RoyalVerificationPage from "@/pages/royal-verification";
+// NOTE: /partners/operators and /partners/dashboard are served through the Lite
+// shell (see vite `liteShell` + src/lite/pages-partners.ts) at their exact root
+// URLs, so they are intentionally NOT React routes here.
 
 const queryClient = new QueryClient();
 

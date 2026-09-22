@@ -417,6 +417,10 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
       `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
       await deleteAccountClips(client, userId);
       await deleteAccountCitizenSocial(client, userId);
+      await client.query("DELETE FROM dm_send_receipts WHERE sender_id=$1", [userId]);
+      // Account erasure is a soft-delete: FK cascades alone cannot erase AI memory.
+      await client.query("DELETE FROM gdna_memory WHERE user_id=$1", [userId]);
+      await client.query("DELETE FROM gdna_audit WHERE user_id=$1", [userId]);
       // Only erase display names from records with an immutable ownership link.
       // Never match historical snapshots by username: bots, stars, and seeded
       // records can legitimately reuse a citizen's display name.

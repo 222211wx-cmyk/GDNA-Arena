@@ -59,6 +59,12 @@ import type {
   DeclineCallParams,
   ErrorResponse,
   ExhaustedClipThumbnailsPage,
+  GdnaAnswer,
+  GdnaEvolution,
+  GdnaMemory,
+  GdnaMemoryRemoval,
+  GdnaQuestion,
+  GdnaStatus,
   GetClipsFeedParams,
   GetExhaustedClipThumbnailsParams,
   GetGsFiguresParams,
@@ -111,6 +117,458 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getAskGdnaUrl = () => {
+
+
+
+
+  return `/api/gdna/ask`
+}
+
+/**
+ * Authenticated, bounded GDNA assistance. Identity is taken only from the session. Memory is opt-in.
+ */
+export const askGdna = async (gdnaQuestion: GdnaQuestion, options?: Parameters<typeof customFetch>[1]): Promise<GdnaAnswer> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GdnaAnswer>(getAskGdnaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(gdnaQuestion)
+  }
+);}
+
+
+
+
+
+export const getAskGdnaMutationKey = () => ['askGdna'] as const;
+
+export const getAskGdnaMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askGdna>>, TError,AskGdnaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof askGdna>>, TError,AskGdnaMutationVariables, TContext> => {
+
+const mutationKey = getAskGdnaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof askGdna>>, AskGdnaMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  askGdna(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AskGdnaMutationResult = NonNullable<Awaited<ReturnType<typeof askGdna>>>
+    export type AskGdnaMutationBody = BodyType<GdnaQuestion>
+    export type AskGdnaMutationError = ErrorType<void>
+    export type AskGdnaMutationVariables = {data: BodyType<GdnaQuestion>}
+
+    export const useAskGdna = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askGdna>>, TError,AskGdnaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof askGdna>>,
+        TError,
+        AskGdnaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAskGdnaMutationOptions(options), queryClient);
+    }
+
+export const getGetGdnaStatusUrl = () => {
+
+
+
+
+  return `/api/gdna/status`
+}
+
+export const getGdnaStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<GdnaStatus> => {
+
+  return customFetch<GdnaStatus>(getGetGdnaStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGdnaStatusQueryKey = () => {
+    return [
+    `/api/gdna/status`
+    ] as const;
+    }
+
+
+export const getGetGdnaStatusQueryOptions = <TData = Awaited<ReturnType<typeof getGdnaStatus>>, TError = ErrorType<void>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGdnaStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGdnaStatus>>> = ({ signal }) => getGdnaStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGdnaStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetGdnaStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getGdnaStatus>>>
+export type GetGdnaStatusQueryError = ErrorType<void>
+
+
+export function useGetGdnaStatus<TData = Awaited<ReturnType<typeof getGdnaStatus>>, TError = ErrorType<void>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGdnaStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getGdnaStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGdnaStatus<TData = Awaited<ReturnType<typeof getGdnaStatus>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGdnaStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getGdnaStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGdnaStatus<TData = Awaited<ReturnType<typeof getGdnaStatus>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetGdnaStatus<TData = Awaited<ReturnType<typeof getGdnaStatus>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetGdnaStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGdnaEvolutionLogUrl = () => {
+
+
+
+
+  return `/api/gdna/evolution-log`
+}
+
+export const getGdnaEvolutionLog = async ( options?: Parameters<typeof customFetch>[1]): Promise<GdnaEvolution> => {
+
+  return customFetch<GdnaEvolution>(getGetGdnaEvolutionLogUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGdnaEvolutionLogQueryKey = () => {
+    return [
+    `/api/gdna/evolution-log`
+    ] as const;
+    }
+
+
+export const getGetGdnaEvolutionLogQueryOptions = <TData = Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError = ErrorType<void>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGdnaEvolutionLogQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGdnaEvolutionLog>>> = ({ signal }) => getGdnaEvolutionLog({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetGdnaEvolutionLogQueryResult = NonNullable<Awaited<ReturnType<typeof getGdnaEvolutionLog>>>
+export type GetGdnaEvolutionLogQueryError = ErrorType<void>
+
+
+export function useGetGdnaEvolutionLog<TData = Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError = ErrorType<void>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGdnaEvolutionLog>>,
+          TError,
+          Awaited<ReturnType<typeof getGdnaEvolutionLog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGdnaEvolutionLog<TData = Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGdnaEvolutionLog>>,
+          TError,
+          Awaited<ReturnType<typeof getGdnaEvolutionLog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGdnaEvolutionLog<TData = Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetGdnaEvolutionLog<TData = Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaEvolutionLog>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetGdnaEvolutionLogQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGdnaMemoryUrl = () => {
+
+
+
+
+  return `/api/gdna/memory`
+}
+
+export const getGdnaMemory = async ( options?: Parameters<typeof customFetch>[1]): Promise<GdnaMemory> => {
+
+  return customFetch<GdnaMemory>(getGetGdnaMemoryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGdnaMemoryQueryKey = () => {
+    return [
+    `/api/gdna/memory`
+    ] as const;
+    }
+
+
+export const getGetGdnaMemoryQueryOptions = <TData = Awaited<ReturnType<typeof getGdnaMemory>>, TError = ErrorType<void>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaMemory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGdnaMemoryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGdnaMemory>>> = ({ signal }) => getGdnaMemory({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGdnaMemory>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetGdnaMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof getGdnaMemory>>>
+export type GetGdnaMemoryQueryError = ErrorType<void>
+
+
+export function useGetGdnaMemory<TData = Awaited<ReturnType<typeof getGdnaMemory>>, TError = ErrorType<void>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaMemory>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGdnaMemory>>,
+          TError,
+          Awaited<ReturnType<typeof getGdnaMemory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGdnaMemory<TData = Awaited<ReturnType<typeof getGdnaMemory>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaMemory>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getGdnaMemory>>,
+          TError,
+          Awaited<ReturnType<typeof getGdnaMemory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetGdnaMemory<TData = Awaited<ReturnType<typeof getGdnaMemory>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaMemory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetGdnaMemory<TData = Awaited<ReturnType<typeof getGdnaMemory>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getGdnaMemory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetGdnaMemoryQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteGdnaMemoryUrl = () => {
+
+
+
+
+  return `/api/gdna/memory`
+}
+
+export const deleteGdnaMemory = async (gdnaMemoryRemoval?: GdnaMemoryRemoval, options?: Parameters<typeof customFetch>[1]): Promise<GdnaMemory> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GdnaMemory>(getDeleteGdnaMemoryUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(gdnaMemoryRemoval)
+  }
+);}
+
+
+
+
+
+export const getDeleteGdnaMemoryMutationKey = () => ['deleteGdnaMemory'] as const;
+
+export const getDeleteGdnaMemoryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteGdnaMemory>>, TError,DeleteGdnaMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteGdnaMemory>>, TError,DeleteGdnaMemoryMutationVariables, TContext> => {
+
+const mutationKey = getDeleteGdnaMemoryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteGdnaMemory>>, DeleteGdnaMemoryMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  deleteGdnaMemory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteGdnaMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteGdnaMemory>>>
+    export type DeleteGdnaMemoryMutationBody = BodyType<GdnaMemoryRemoval> | undefined
+    export type DeleteGdnaMemoryMutationError = ErrorType<void>
+    export type DeleteGdnaMemoryMutationVariables = {data?: BodyType<GdnaMemoryRemoval>}
+
+    export const useDeleteGdnaMemory = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteGdnaMemory>>, TError,DeleteGdnaMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteGdnaMemory>>,
+        TError,
+        DeleteGdnaMemoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteGdnaMemoryMutationOptions(options), queryClient);
+    }
 
 export const getPresignClipUploadUrl = () => {
 

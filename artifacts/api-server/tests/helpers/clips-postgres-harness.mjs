@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -41,7 +41,7 @@ export async function clipsFixture(t, database) {
   let replicaNumber = 0;
   let schemaCreated = false;
   const state = {
-    objects: new Map(), writes: [], deletes: [], deleteCalls: [], generations: [], warnings: [],
+    objects: new Map(), writeMetadata: new Map(), writes: [], deletes: [], deleteCalls: [], generations: [], warnings: [],
     generate: async () => Buffer.from([0xff, 0xd8, 1, 2, 0xff, 0xd9]),
     beforeWrite: async () => {},
     beforeDelete: async () => {},
@@ -93,13 +93,14 @@ export async function clipsFixture(t, database) {
         return Readable.from([range ? bytes.subarray(range.start, range.end + 1) : bytes]);
       },
       async getMetadata() { return [{ size: state.objects.get(key)?.length ?? 0 }]; },
-      createWriteStream() {
+      createWriteStream(options) {
         const chunks = [];
         return new Writable({
           write(chunk, _encoding, done) { chunks.push(Buffer.from(chunk)); done(); },
           final(done) {
             Promise.resolve(state.beforeWrite(key)).then(() => {
               state.objects.set(key, Buffer.concat(chunks));
+              state.writeMetadata.set(key, options?.metadata);
               state.writes.push(key);
               done();
             }, done);
@@ -186,6 +187,10 @@ export async function clipsFixture(t, database) {
   const b = await replica("b");
   // Production DDL, in the private search_path only.
   await a.ensureClipsTables();
+  // New derivative deletion hooks rely on the additive manifest schema.
+  await observer.query(await readFile(path.resolve(apiRoot, "../../lib/db/drizzle/lite-media.sql"), "utf8"));
+  await observer.query(await readFile(path.join(apiRoot, "scripts/clip-media-jobs.sql"), "utf8"));
+  await observer.query("CREATE TABLE citizen_profiles (user_id INTEGER PRIMARY KEY, avatar_url TEXT, cover_url TEXT)");
   // Publish owns this durable schema in production; the isolated integration
   // schema mirrors migration 0022 without adding application startup DDL.
   await observer.query(`
@@ -233,7 +238,8 @@ export async function clipsFixture(t, database) {
     if (thumbnailObjectName) state.objects.set(thumbnailObjectName, Buffer.from(`poster-${id}`));
     return {
       id, objectName, thumbnailObjectName,
-      posterName: a.retryThumbnailName(id, objectName),
+      posterName: a.retryThumbnailName(id, objectName, "webp"),
+      legacyPosterName: a.retryThumbnailName(id, objectName),
     };
   }
   return {

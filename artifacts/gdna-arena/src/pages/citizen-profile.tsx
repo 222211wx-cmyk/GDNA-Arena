@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import {
-  MapPin, Eye, UserPlus, UserCheck, Heart, Camera, Loader2,
+  MapPin, Camera, Loader2,
   Lock, Pencil, Check, X, Sparkles, LogIn, CalendarClock,
 } from "lucide-react";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
@@ -21,13 +21,15 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@w
 import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
 import { CitizenShell } from "@/components/citizen/CitizenShell";
 import CitizenAssistant from "@/components/citizen/CitizenAssistant";
-import { UnifiedMessenger } from "@/components/messenger/UnifiedMessenger";
+import GdnaAssistButton from "@/components/gdna/GdnaAssistButton";
+import { openUnifiedMessenger } from "@/components/messenger/UnifiedMessenger";
+import { CitizenProfileDrawer } from "@/components/citizen/CitizenProfileDrawer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCaptureBirthDate } from "@/hooks/use-citizen-eligibility";
 import { citizenMediaSrc } from "@/lib/citizen";
 import {
   useCitizenProfile, useMyCitizenProfile, useUpdateMyProfile, useUploadProfileMedia,
-  useFollowCitizen, useCitizenMeta,
+  useCitizenMeta,
   type CitizenProfile, type CitizenStatus, type CitizenVisibility, type CitizenField,
 } from "@/hooks/use-citizen";
 
@@ -129,100 +131,35 @@ export default function CitizenProfilePage() {
 }
 
 // ── Public (view-only) profile ────────────────────────────────────────────────
+// /u/:username renders the SAME shared CitizenProfileDrawer component in
+// fullscreen mode, keeping the page's existing AI/GDNA tools intact.
 function PublicProfile({ profile }: { profile: CitizenProfile; username: string }) {
-  const follow = useFollowCitizen();
-  const initials = (profile.displayName || profile.username).slice(0, 2).toUpperCase();
-  const toggle = () => follow.mutate({ username: profile.username, follow: !profile.isFollowing });
+  const [, navigate] = useLocation();
+
+  const onMessage = async (citizen: CitizenProfile) => {
+    // Opens the existing conversation with this citizen (never sends a message).
+    try { await openUnifiedMessenger({ peerId: citizen.userId, peerUsername: citizen.username, context: "citizen-profile" }); }
+    catch { navigate("/messages"); }
+  };
 
   return (
-    <>
-      <ProfileHeader profile={profile} initials={initials} />
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          variant={profile.isFollowing ? "outline" : "default"}
-          className="gap-1.5"
-          onClick={toggle}
-          disabled={follow.isPending}
-          data-testid="button-follow"
-        >
-          {profile.isFollowing ? <><UserCheck className="size-4" /> متابَع</> : <><UserPlus className="size-4" /> متابعة</>}
-        </Button>
-        {profile.status === "available" && (
-          <Button variant="outline" className="gap-1.5" onClick={toggle} data-testid="button-taaruf">
-            <Heart className="size-4" /> تعارف
-          </Button>
-        )}
-        {profile.canMessage && (
-          <UnifiedMessenger peerId={profile.userId} peerUsername={profile.username} context="citizen-profile" triggerLabel="مراسلة" />
-        )}
-        <CitizenAssistant section="matchmaking" username={profile.username} triggerLabel="توافق" />
-      </div>
-      <ProfileBody profile={profile} />
-    </>
-  );
-}
-
-// ── Shared header (cover + avatar + stats) ─────────────────────────────────────
-function ProfileHeader({ profile, initials }: { profile: CitizenProfile; initials: string }) {
-  return (
-    <Card className="overflow-hidden border bg-card">
-      <div className="relative h-32 w-full bg-muted md:h-40">
-        {profile.coverUrl && (
-          <img src={citizenMediaSrc(profile.coverUrl)} alt="" className="h-full w-full object-cover" />
-        )}
-      </div>
-      <CardContent className="px-4 pb-4 pt-0">
-        <div className="-mt-10 flex items-end gap-3">
-          <Avatar className="size-20 border-4 border-card">
-            {profile.avatarUrl && <AvatarImage src={citizenMediaSrc(profile.avatarUrl)} alt={profile.displayName} />}
-            <AvatarFallback className="bg-secondary text-lg text-secondary-foreground">{initials}</AvatarFallback>
-          </Avatar>
+    <CitizenProfileDrawer
+      citizen={profile}
+      isOpen
+      fullscreen
+      onClose={() => {}}
+      onMessage={onMessage}
+      tools={
+        <div className="flex flex-wrap items-center gap-2">
+          <CitizenAssistant section="matchmaking" username={profile.username} triggerLabel="توافق" />
+          <GdnaAssistButton
+            section="hisn"
+            label="GDNA"
+            prompt={`ساعدني بخصوص ملف المواطن @${profile.username}. راجع النص قبل الإرسال.`}
+          />
         </div>
-        <div className="mt-2">
-          <h1 className="text-xl font-bold leading-tight" data-testid="text-display-name">{profile.displayName}</h1>
-          <span className="text-sm text-muted-foreground">@{profile.username}</span>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          {profile.city && <span className="inline-flex items-center gap-1"><MapPin className="size-3.5" /> {profile.city}</span>}
-          {profile.age != null && <span>{profile.age} سنة</span>}
-        </div>
-        <div className="mt-3 flex gap-4 text-sm">
-          <span className="inline-flex items-center gap-1"><Eye className="size-4 text-muted-foreground" /> {profile.stats.views}</span>
-          <span data-testid="stat-followers"><b>{profile.stats.followers}</b> <span className="text-muted-foreground">متابِع</span></span>
-          <span data-testid="stat-following"><b>{profile.stats.following}</b> <span className="text-muted-foreground">متابَع</span></span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ProfileBody({ profile }: { profile: CitizenProfile }) {
-  return (
-    <div className="mt-4 space-y-4">
-      {profile.bio && (
-        <Card className="border bg-card"><CardContent className="p-4"><p className="whitespace-pre-wrap text-sm">{profile.bio}</p></CardContent></Card>
-      )}
-      {profile.interests.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {profile.interests.map((i) => (
-            <Badge key={i} variant="secondary" className="font-normal">{i}</Badge>
-          ))}
-        </div>
-      )}
-      {profile.videos.length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
-          {profile.videos.map((v) => (
-            <a key={v.id} href={v.url} className="block overflow-hidden rounded-md border bg-muted" data-testid={`video-${v.id}`}>
-              {v.thumbnailUrl ? (
-                <img src={citizenMediaSrc(v.thumbnailUrl)} alt={v.title} className="aspect-square w-full object-cover" />
-              ) : (
-                <div className="flex aspect-square items-center justify-center text-xs text-muted-foreground">{v.title}</div>
-              )}
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
+      }
+    />
   );
 }
 
@@ -308,18 +245,45 @@ function OwnProfile({ profile }: { profile: CitizenProfile }) {
     );
   };
 
+  // Persist a privacy visibility change (الحرية الشخصية) through the existing
+  // update API. onSuccess of useUpdateMyProfile patches the shared me/profile
+  // caches, so the change is reflected wherever this profile is shown.
+  const changeVisibility = (nextVisibility: CitizenVisibility) => {
+    setVisibility(nextVisibility);
+    update.mutate(
+      { visibility: nextVisibility },
+      {
+        onSuccess: () => toast({ title: "تم تحديث الخصوصية" }),
+        onError: (e) => {
+          setVisibility(profile.visibility); // revert to the server value on failure
+          toast({ title: "تعذّر تحديث الخصوصية", description: (e as Error).message, variant: "destructive" });
+        },
+      },
+    );
+  };
+
   if (!editing) {
+    // /u/me now uses the SAME shared CitizenProfileDrawer (fullscreen). The
+    // editor and AI tools live in the drawer's tools slot; the privacy toggle
+    // is wired to the existing update API.
     return (
-      <>
-        <ProfileHeader profile={profile} initials={initials} />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button className="gap-1.5" onClick={() => setEditing(true)} data-testid="button-edit-profile">
-            <Pencil className="size-4" /> تعديل الملف
-          </Button>
-          <CitizenAssistant section="profile" username={profile.username} triggerLabel="تحسين النبذة" defaultPrompt={profile.bio ?? ""} />
-        </div>
-        <ProfileBody profile={profile} />
-      </>
+      <CitizenProfileDrawer
+        citizen={profile}
+        isOpen
+        fullscreen
+        onClose={() => {}}
+        onMessage={() => {}}
+        onVisibilityChange={changeVisibility}
+        visibilityPending={update.isPending}
+        tools={
+          <div className="flex flex-wrap gap-2">
+            <Button className="gap-1.5" onClick={() => setEditing(true)} data-testid="button-edit-profile">
+              <Pencil className="size-4" /> تعديل الملف
+            </Button>
+            <CitizenAssistant section="profile" username={profile.username} triggerLabel="تحسين النبذة" defaultPrompt={profile.bio ?? ""} />
+          </div>
+        }
+      />
     );
   }
 

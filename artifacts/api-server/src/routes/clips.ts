@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { enqueueLiteMediaDeletion } from "../lib/lite-media-cleanup.js";
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { createClipsFeedHandler } from "./clips-feed.js";
@@ -485,6 +486,7 @@ router.delete("/clips/:id", async (req, res): Promise<void> => {
       clip.thumbnail_object_name,
       clip.processing_output_object,
       retryThumbnailName(id, clip.object_name),
+      retryThumbnailName(id, clip.object_name, "webp"),
     ].filter((name): name is string => Boolean(name)))];
     const encoding = await client.query(
       "SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired", [clipCompressionLock(id)],
@@ -495,6 +497,7 @@ router.delete("/clips/:id", async (req, res): Promise<void> => {
       return;
     }
     // Transactional outbox: never commit a deletion without its cleanup work.
+    await enqueueLiteMediaDeletion(client, id);
     // If COMMIT's response is lost, only committed queue rows can touch storage.
     await client.query(
       `INSERT INTO clip_storage_cleanup (object_name, clip_id)
@@ -539,7 +542,7 @@ router.get("/clips/thumbnail/:id", async (req, res): Promise<void> => {
     );
     const name = rows[0]?.thumbnail_object_name;
     if (!name) { res.status(404).end(); return; }
-    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Content-Type", name.endsWith(".webp") ? "image/webp" : "image/jpeg");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "private, max-age=3600");
     const stream = clipFile(name).createReadStream();

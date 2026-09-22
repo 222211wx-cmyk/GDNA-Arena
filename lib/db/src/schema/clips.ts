@@ -66,6 +66,26 @@ export const clipsTable = pgTable("clips", {
     .where(sql`${table.processingStatus} IN ('queued', 'processing')`),
 }));
 
+export const clipLiteMediaTable = pgTable("clip_lite_media", {
+  clipId: integer("clip_id").notNull().references(() => clipsTable.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  state: text("state").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  retryAt: timestamp("retry_at", { withTimezone: true }).notNull().defaultNow(),
+  sourceObject: text("source_object"),
+  outputObject: text("output_object"),
+  mirrorObject: text("mirror_object"),
+  sha256: text("sha256"),
+  sizeBytes: integer("size_bytes"),
+  mime: text("mime"),
+  durationSec: doublePrecision("duration_sec"),
+  mirrorVerifiedAt: timestamp("mirror_verified_at", { withTimezone: true }),
+  error: text("error"),
+}, t => ({
+  pk: primaryKey({ columns: [t.clipId, t.kind] }),
+  due: index("clip_lite_media_due").on(t.retryAt, t.clipId),
+}));
+
 export const clipMediaJobsTable = pgTable("clip_media_jobs", {
   sessionId: uuid("session_id").primaryKey().references(() => r2ClipUploadsTable.id, {onDelete:"cascade"}),
   state: text("state").notNull().default("queued"),

@@ -16,6 +16,8 @@ async function resume(id?: string) {
   for (const record of records) {
     if (id && record.id !== id) continue;
     if (record.status === "paused" || record.status === "published" || record.serverOwned) continue;
+    // Native encoding needs a visible document; never bypass it from Sync.
+    if (record.preparation === "pending") continue;
     try {
       const receipt = await runQueuedUpload(record.id, owner, new AbortController().signal, (percent, uploaded, speed, state) => {
         void broadcast({ type: "CLIP_UPLOAD_PROGRESS", id: record.id, owner, percent, uploaded, speed, state });

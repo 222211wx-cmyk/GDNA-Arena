@@ -24,7 +24,7 @@ async function temporary(run: (directory: string) => Promise<void>) {
 
 function probe(path: string) {
   const result = spawnSync("ffprobe", [
-    "-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name,width,height,duration,display_aspect_ratio",
+    "-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name,width,height,duration,display_aspect_ratio,bit_rate",
     "-of", "json", path,
   ], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
@@ -32,7 +32,7 @@ function probe(path: string) {
     format: { duration: string };
     streams: Array<{
       codec_type: string; codec_name: string; width?: number; height?: number;
-      duration?: string; display_aspect_ratio?: string;
+      duration?: string; display_aspect_ratio?: string; bit_rate?: string;
     }>;
   };
 }
@@ -130,7 +130,7 @@ test("force transcodes below the legacy threshold and retains an encoded result 
   });
 });
 
-test("real 61s video compresses to <=720p with its audio and duration preserved", async () => {
+test("real 61s video compresses to <=480p/800kbps with its audio and duration preserved", async () => {
   await temporary(async directory => {
     const input = join(directory, "source.mkv"), output = join(directory, "output.mp4");
     fixture(input, true);
@@ -139,8 +139,9 @@ test("real 61s video compresses to <=720p with its audio and duration preserved"
     const video = encoded.streams.find(stream => stream.codec_type === "video")!;
     const audio = encoded.streams.find(stream => stream.codec_type === "audio")!;
     assert.equal(video.codec_name, "h264");
-    assert.equal(video.height, 720);
-    assert.equal(video.width, 1280);
+    assert.equal(video.height, 480);
+    assert.ok(video.width! <= 854 && video.width! % 2 === 0);
+    assert.ok(Number(video.bit_rate) > 0 && Number(video.bit_rate) <= 840000);
     assert.equal(video.display_aspect_ratio, "16:9");
     assert.equal(audio.codec_name, "aac");
     assert.ok(Math.abs(Number(encoded.format.duration) - Number(original.format.duration)) < 0.15);

@@ -3,8 +3,22 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
+const net = require('node:net');
 
 let metroProcess = null;
+let metroPort;
+const metroUrl = (pathname) => `http://localhost:${metroPort}${pathname}`;
+
+async function reserveBuildPort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const port = server.address().port;
+  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  return port;
+}
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -65,12 +79,27 @@ function publicHttpsHost(value, name) {
 }
 
 function getDeploymentDomain() {
+  const production = process.env.NODE_ENV === 'production' || process.env.REPLIT_DEPLOYMENT === '1';
+  const configuredHost = (value, name) => {
+    const host = publicHttpsHost(value, name);
+    if (production && (host === process.env.REPLIT_DEV_DOMAIN || /\.replit\.dev(?::\d+)?$/i.test(host))) {
+      throw new Error(`${name} cannot use a workspace preview hostname for production.`);
+    }
+    return host;
+  };
   if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
-    return publicHttpsHost(process.env.REPLIT_INTERNAL_APP_DOMAIN, 'REPLIT_INTERNAL_APP_DOMAIN');
+    return configuredHost(process.env.REPLIT_INTERNAL_APP_DOMAIN, 'REPLIT_INTERNAL_APP_DOMAIN');
   }
 
   if (process.env.EXPO_PUBLIC_DOMAIN) {
-    return publicHttpsHost(process.env.EXPO_PUBLIC_DOMAIN, 'EXPO_PUBLIC_DOMAIN');
+    return configuredHost(process.env.EXPO_PUBLIC_DOMAIN, 'EXPO_PUBLIC_DOMAIN');
+  }
+
+  // Workspace-only verification needs a real hostname too. Publish must supply
+  // its authoritative hostname; never bake a workspace preview into production.
+  if (!production && process.env.REPLIT_DEV_DOMAIN) {
+    console.log('Workspace verification build: using the configured preview hostname, not a production release.');
+    return publicHttpsHost(process.env.REPLIT_DEV_DOMAIN, 'REPLIT_DEV_DOMAIN');
   }
 
   console.error(
@@ -120,10 +149,10 @@ function clearMetroCache() {
 
 async function checkMetroHealth() {
   try {
-    const response = await fetch('http://localhost:8081/status', {
+    const response = await fetch(metroUrl('/status'), {
       signal: AbortSignal.timeout(5000),
     });
-    return response.ok;
+    return response.ok && (await response.text()).trim() === 'packager-status:running';
   } catch {
     return false;
   }
@@ -134,11 +163,8 @@ function getExpoPublicReplId() {
 }
 
 async function startMetro(expoPublicDomain, expoPublicReplId) {
-  const isRunning = await checkMetroHealth();
-  if (isRunning) {
-    console.log('Metro already running');
-    return;
-  }
+  // Own a dedicated build bundler: never reuse or disturb a preview server.
+  metroPort = await reserveBuildPort();
 
   console.log('Starting Metro...');
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
@@ -154,7 +180,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 
   metroProcess = spawn(
     'pnpm',
-    ['exec', 'expo', 'start', '--clear', '--no-dev', '--minify', '--localhost'],
+    ['exec', 'expo', 'start', '--port', String(metroPort), '--clear', '--no-dev', '--minify', '--localhost'],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
@@ -178,6 +204,9 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 
   for (let i = 0; i < 60; i++) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (metroProcess.exitCode !== null) {
+      throw new Error(`Build Metro exited with code ${metroProcess.exitCode}`);
+    }
 
     const healthy = await checkMetroHealth();
     if (healthy) {
@@ -186,8 +215,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
     }
   }
 
-  console.error('Metro timeout');
-  process.exit(1);
+  throw new Error('Build Metro timeout');
 }
 
 async function downloadFile(url, outputPath) {
@@ -242,7 +270,7 @@ async function downloadBundle(platform, timestamp) {
     'entry',
   );
   const bundlePath = path.relative(workspaceRoot, entryPath);
-  const url = new URL(`http://localhost:8081/${bundlePath}.bundle`);
+  const url = new URL(metroUrl(`/${bundlePath}.bundle`));
   url.searchParams.set('platform', platform);
   url.searchParams.set('dev', 'false');
   url.searchParams.set('hot', 'false');
@@ -270,7 +298,7 @@ async function downloadManifest(platform) {
 
   try {
     console.log(`Fetching ${platform} manifest...`);
-    const response = await fetch('http://localhost:8081/manifest', {
+    const response = await fetch(metroUrl('/manifest'), {
       headers: { 'expo-platform': platform },
       signal: controller.signal,
     });
@@ -354,7 +382,7 @@ function extractAssets(timestamp) {
       const originalPath = match[1];
       const filename = match[3] + '.' + match[4];
 
-      const tempUrl = new URL(`http://localhost:8081${originalPath}`);
+      const tempUrl = new URL(metroUrl(originalPath));
       const unstablePath = tempUrl.searchParams.get('unstable_path');
 
       if (!unstablePath) {
@@ -396,7 +424,7 @@ async function downloadAssets(assets, timestamp) {
   const failures = [];
 
   const downloadPromises = assets.map(async (asset) => {
-    const tempUrl = new URL(`http://localhost:8081${asset.originalPath}`);
+    const tempUrl = new URL(metroUrl(asset.originalPath));
     const unstablePath = tempUrl.searchParams.get('unstable_path');
 
     if (!unstablePath) {
@@ -469,7 +497,7 @@ function updateBundleUrls(timestamp, baseUrl) {
     bundle = bundle.replace(
       /httpServerLocation:"(\/[^"]+)"/g,
       (_match, capturedPath) => {
-        const tempUrl = new URL(`http://localhost:8081${capturedPath}`);
+        const tempUrl = new URL(metroUrl(capturedPath));
         const unstablePath = tempUrl.searchParams.get('unstable_path');
 
         if (!unstablePath) {

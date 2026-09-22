@@ -1,215 +1,359 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Loader2, Zap } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  Crown,
+  AlertTriangle,
+  Cpu,
+  ScrollText,
+  Database,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
-import { Input } from "@workspace/gdna-ds/components/ui/input";
+import { Textarea } from "@workspace/gdna-ds/components/ui/textarea";
 import { Card } from "@workspace/gdna-ds/components/ui/card";
+import { Badge } from "@workspace/gdna-ds/components/ui/badge";
+import { Checkbox } from "@workspace/gdna-ds/components/ui/checkbox";
+import { Label } from "@workspace/gdna-ds/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@workspace/gdna-ds/components/ui/sheet";
 import { useLang } from "@/contexts/LangContext";
-import { COMMUNITY_T } from "@/i18n/community-pages";
-import { surfaceText } from "@/i18n/community-admin-surfaces-copy";
+import { gdnaCopy, GDNA_PERSONA } from "@/lib/gdna-copy";
+import { GdnaError, type GdnaAskResult, type GdnaSection } from "@/lib/gdna-core";
+import { useGdnaStatus, useGdnaAsk } from "@/hooks/use-gdna";
+import { parseGdnaChatIntent } from "@/lib/gdna-assist";
+import GdnaSectionTabs from "@/components/gdna/GdnaSectionTabs";
+import GdnaUsageMeter from "@/components/gdna/GdnaUsageMeter";
+import GdnaMemoryPanel from "@/components/gdna/GdnaMemoryPanel";
+import GdnaEvolutionPanel from "@/components/gdna/GdnaEvolutionPanel";
+import GdnaReviewDialog from "@/components/gdna/GdnaReviewDialog";
+import { GdnaCitations, GdnaSuggestions } from "@/components/gdna/GdnaCitations";
 
-interface Message {
+interface ChatMessage {
+  id: string;
   role: "user" | "assistant";
   content: string;
+  result?: GdnaAskResult;
 }
 
-const SUGGESTED: Record<string, string[]> = {
-  en: ["✅ Is my Smart System active?", "How do I earn coins?", "Best strategy for games?", "Explain play-to-earn"],
-  ar: ["✅ هل النظام الذكي نشط؟ أعطني تقريري", "كيف أربح عملات؟", "أفضل استراتيجية للألعاب؟", "اشرح play-to-earn"],
-  fr: ["✅ Smart System actif? Montre mon rapport", "Comment gagner des pièces?", "Meilleure stratégie pour les jeux?", "Explique le play-to-earn"],
-  dz: ["✅ واش النظام الذكي نشط؟ عطيني تقريري", "كيفاش نربح كوينز؟", "أفضل استراتيجية؟", "شرح ليا play-to-earn"],
-  es: ["✅ ¿Está activo mi sistema inteligente?", "¿Cómo gano monedas?", "¿La mejor estrategia para juegos?", "Explica play-to-earn"],
-  de: ["✅ Ist mein Smart System aktiv?", "Wie verdiene ich Coins?", "Was ist die beste Spielstrategie?", "Erkläre Play-to-Earn"],
-};
-
-const WELCOME: Record<string, string> = {
-  en: "Neural grid online. ✅ GDN-SMART SYSTEM: ACTIVE — monitoring Gaming, Education, Business, Social, Competitions & XP in real time. Ask me for your personalised report.",
-  ar: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، الأعمال، الاجتماعي، المسابقات وXP في الوقت الفعلي. اسألني عن تقريرك الشخصي.",
-  fr: "Grille neurale en ligne. ✅ GDN-SMART SYSTEM: ACTIF — surveillance Gaming, Education, Business, Social, Competitions & XP en temps reel. Demandez votre rapport personnalise.",
-  dz: "الشبكة العصبية متصلة. ✅ نظام GDN-SMART: نشط — يراقب الألعاب، التعليم، البيزنس، السوشيال وXP. سول على تقريرك الشخصي.",
-  es: "Red neuronal en línea. ✅ GDN-SMART SYSTEM: ACTIVO — supervisa juegos, educación, negocios, redes sociales, competiciones y XP en tiempo real. Pídeme tu informe personalizado.",
-  de: "Neuronales Netzwerk online. ✅ GDN-SMART SYSTEM: AKTIV — überwacht Gaming, Bildung, Business, Social, Wettbewerbe und XP in Echtzeit. Frag mich nach deinem persönlichen Bericht.",
-};
+let idCounter = 0;
+const nextId = () => `m${++idCounter}`;
 
 export default function ChatPage() {
   const { lang } = useLang();
-  const ct = COMMUNITY_T[lang] ?? COMMUNITY_T.en;
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: WELCOME[lang] ?? WELCOME.en },
-  ]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const c = gdnaCopy(lang);
+  const search = useSearch();
 
+  const status = useGdnaStatus();
+  const ask = useGdnaAsk();
+
+  const [section, setSection] = useState<GdnaSection>("hisn");
+  const [input, setInput] = useState("");
+  const [remember, setRemember] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: nextId(), role: "assistant", content: GDNA_PERSONA[lang] ?? GDNA_PERSONA.en },
+  ]);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState("");
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const intentHandled = useRef<string | null>(null);
+
+  // Reset persona line on language change (only the seed message).
   useEffect(() => {
-    setMessages([{ role: "assistant", content: WELCOME[lang] ?? WELCOME.en }]);
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0].role === "assistant") {
+        return [{ id: prev[0].id, role: "assistant", content: GDNA_PERSONA[lang] ?? GDNA_PERSONA.en }];
+      }
+      return prev;
+    });
   }, [lang]);
+
+  // Handle assistance-entrypoint intent: set section + open review dialog (never auto-send).
+  useEffect(() => {
+    if (intentHandled.current === search) return;
+    intentHandled.current = search;
+    const intent = parseGdnaChatIntent(search);
+    if (intent.section) setSection(intent.section);
+    if (intent.draft && intent.review) {
+      setReviewDraft(intent.draft);
+      setReviewOpen(true);
+    } else if (intent.draft) {
+      setInput(intent.draft);
+    }
+  }, [search]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, ask.isPending]);
 
-  const sendMessage = async (text?: string) => {
-    const msg = (text ?? input).trim();
-    if (!msg || loading) return;
+  const submit = useCallback(
+    (text: string) => {
+      const msg = text.trim();
+      if (!msg || ask.isPending) return;
 
-    const userMessage: Message = { role: "user", content: msg };
-    const history = messages.slice(1);
+      const userMsg: ChatMessage = { id: nextId(), role: "user", content: msg };
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ message: msg, history }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-         throw new Error(errData.error ?? ct.server_error);
-      }
-
-      const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
-    } catch (err: unknown) {
-       setError(err instanceof Error ? err.message : ct.connection_failed);
-    } finally {
-      setLoading(false);
-    }
-  };
+      ask.mutate(
+        { query: msg, section, remember },
+        {
+          onSuccess: (data) => {
+            setMessages((prev) => [
+              ...prev,
+              { id: nextId(), role: "assistant", content: data.reply, result: data },
+            ]);
+            setRemember(false);
+          },
+        },
+      );
+    },
+    [ask, section, remember],
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      submit(input);
     }
   };
 
-  const suggested = SUGGESTED[lang] ?? SUGGESTED.en;
+  const errorText = useMemo(() => {
+    if (!ask.isError) return null;
+    const err = ask.error;
+    if (err instanceof GdnaError) {
+      if (err.status === 429) return c.quotaReached;
+      if (err.status === 503) return c.unavailable;
+      return err.message || c.errorGeneric;
+    }
+    return c.errorGeneric;
+  }, [ask.isError, ask.error, c]);
+
+  const usage = status.data?.usage;
+  const modeAvailable = status.data?.available ?? true;
 
   return (
-    <div dir={lang === "ar" ? "rtl" : "ltr"} lang={lang === "de" ? "de-DE" : lang} className="min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto p-4 md:p-8">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-6"
-      >
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <div className="p-3 rounded-full bg-primary/20 neon-glow">
-            <Bot className="w-8 h-8 text-primary" />
+    <div
+      dir={lang === "ar" ? "rtl" : "ltr"}
+      lang={lang === "de" ? "de-DE" : lang}
+      className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-5xl flex-col gap-4 p-4 md:p-6"
+    >
+      {/* Header */}
+      <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid size-12 shrink-0 place-items-center rounded-full bg-primary/15 text-primary neon-glow">
+            <Crown className="size-6" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-black uppercase tracking-wider neon-text-glow">
-            {surfaceText(lang, "chatTitle")}
-          </h1>
-          <span className="flex items-center gap-1 text-xs text-green-400 bg-green-400/10 border border-green-400/30 px-2 py-1 rounded-full">
-             <Zap className="w-3 h-3" /> {ct.online}
-          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-black uppercase tracking-wider md:text-3xl">{c.title}</h1>
+              <StatusBadge available={modeAvailable} mode={status.data?.mode} />
+            </div>
+            <p className="text-sm text-muted-foreground">{c.subtitle}</p>
+          </div>
         </div>
-        <p className="text-muted-foreground text-sm uppercase tracking-widest">
-          {surfaceText(lang, "chatSubtitle")}
-        </p>
-      </motion.div>
 
-      <Card className="flex-1 bg-card/30 border-primary/20 p-4 overflow-y-auto mb-4 space-y-4 min-h-[400px] max-h-[55vh]">
-        <AnimatePresence initial={false}>
-          {messages.map((msg, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              data-testid={`message-${i}`}
-            >
-              {msg.role === "assistant" && (
-                <div className="shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/40">
-                  <Bot className="w-4 h-4 text-primary" />
-                </div>
-              )}
-              <div
-                className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground font-medium rounded-ee-sm"
-                    : "bg-card border border-primary/20 text-foreground rounded-es-sm"
-                }`}
-                dir="auto"
-              >
-                {msg.content}
-              </div>
-              {msg.role === "user" && (
-                <div className="shrink-0 w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center border border-primary/50">
-                  <User className="w-4 h-4 text-primary" />
-                </div>
-              )}
-            </motion.div>
-          ))}
-
-          {loading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex gap-3 justify-start"
-            >
-              <div className="shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/40">
-                <Bot className="w-4 h-4 text-primary" />
-              </div>
-              <div className="bg-card border border-primary/20 px-4 py-3 rounded-2xl rounded-es-sm flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                 <span className="text-muted-foreground text-sm">GDN-AI — {ct.thinking}</span>
-              </div>
-            </motion.div>
+        {/* Side panels + usage */}
+        <div className="flex flex-wrap items-center gap-2">
+          {usage && (
+            <div className="min-w-40 rounded-md border border-border bg-card px-3 py-2">
+              <GdnaUsageMeter usage={usage} />
+            </div>
           )}
-        </AnimatePresence>
-
-        {error && (
-          <div className="text-center text-destructive text-sm py-2">{error}</div>
-        )}
-        <div ref={bottomRef} />
-      </Card>
-
-      {messages.length <= 1 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {suggested.map((q) => (
-            <button
-              key={q}
-              onClick={() => sendMessage(q)}
-              className="text-xs px-3 py-2 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
-              dir="auto"
-            >
-              {q}
-            </button>
-          ))}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-open-memory">
+                <Database className="size-4" /> {c.memory}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side={lang === "ar" ? "left" : "right"} className="w-full p-0 sm:max-w-md">
+              <SheetHeader className="sr-only">
+                <SheetTitle>{c.memory}</SheetTitle>
+              </SheetHeader>
+              <GdnaMemoryPanel />
+            </SheetContent>
+          </Sheet>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-open-evolution">
+                <ScrollText className="size-4" /> {c.evolution}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side={lang === "ar" ? "left" : "right"} className="w-full p-0 sm:max-w-md">
+              <SheetHeader className="sr-only">
+                <SheetTitle>{c.evolution}</SheetTitle>
+              </SheetHeader>
+              <GdnaEvolutionPanel />
+            </SheetContent>
+          </Sheet>
         </div>
+      </header>
+
+      {/* Section selector */}
+      <GdnaSectionTabs value={section} onChange={setSection} />
+
+      {/* Provider unavailable banner */}
+      {status.isError && (
+        <Card className="flex items-center justify-between gap-3 border-destructive/40 bg-destructive/10 p-3">
+          <span className="flex items-center gap-2 text-sm text-destructive">
+            <AlertTriangle className="size-4 shrink-0" /> {c.unavailable}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => void status.refetch()}>
+            {c.retry}
+          </Button>
+        </Card>
       )}
 
-      <div className="flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={surfaceText(lang, "chatPlaceholder")}
-          className="flex-1 h-12 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary"
-          disabled={loading}
-          dir="auto"
-          data-testid="input-chat"
-           aria-label={surfaceText(lang, "chatPlaceholder")}
-        />
-        <Button
-          onClick={() => sendMessage()}
-          disabled={!input.trim() || loading}
-          className="h-12 px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold neon-glow transition-all"
-          data-testid="button-send"
-        >
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-           <span className="sr-only">{ct.send_message}</span>
-        </Button>
-      </div>
+      {/* Conversation */}
+      <Card className="flex flex-1 flex-col overflow-hidden border-primary/20 bg-card/40">
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          <AnimatePresence initial={false}>
+            {messages.map((m) => (
+              <motion.div
+                key={m.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                data-testid={`message-${m.role}`}
+              >
+                <div className={`max-w-[85%] ${m.role === "user" ? "" : "w-full"}`}>
+                  <div
+                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      m.role === "user"
+                        ? "bg-primary font-medium text-primary-foreground"
+                        : "border border-primary/20 bg-card text-foreground"
+                    }`}
+                    dir="auto"
+                  >
+                    {m.role === "assistant" && m.result && (
+                      <div className="mb-2 flex items-center gap-2">
+                        <Badge variant="secondary" className="uppercase">{m.result.agent}</Badge>
+                        <Badge variant={m.result.mode === "llm" ? "default" : "outline"}>
+                          {m.result.mode === "llm" ? c.modeLlm : c.modeRules}
+                        </Badge>
+                      </div>
+                    )}
+                    <p className="whitespace-pre-wrap">{m.content}</p>
+                  </div>
+                  {m.role === "assistant" && m.result && (
+                    <>
+                      <GdnaCitations citations={m.result.citations} />
+                      <GdnaSuggestions suggestions={m.result.suggestions} />
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+
+            {ask.isPending && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex justify-start"
+              >
+                <div className="flex items-center gap-2 rounded-2xl border border-primary/20 bg-card px-4 py-3">
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">{c.thinking}</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {errorText && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <span className="flex items-center gap-2">
+                <AlertTriangle className="size-4 shrink-0" /> {errorText}
+              </span>
+              <Button variant="outline" size="sm" onClick={() => ask.reset()}>
+                {c.retry}
+              </Button>
+            </div>
+          )}
+
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Composer */}
+        <div className="border-t border-primary/20 bg-card/60 p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Checkbox
+              id="gdna-remember"
+              checked={remember}
+              onCheckedChange={(v) => setRemember(v === true)}
+              data-testid="checkbox-remember"
+            />
+            <Label htmlFor="gdna-remember" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="size-3.5" /> {c.memoryConsent}
+            </Label>
+          </div>
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={c.placeholder}
+              className="max-h-40 min-h-12 flex-1 resize-none bg-background/50"
+              disabled={ask.isPending}
+              dir="auto"
+              data-testid="input-chat"
+              aria-label={c.placeholder}
+            />
+            <Button
+              onClick={() => submit(input)}
+              disabled={!input.trim() || ask.isPending}
+              className="h-12 px-5 font-bold neon-glow"
+              data-testid="button-send"
+            >
+              {ask.isPending ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
+              <span className="sr-only">{c.send}</span>
+            </Button>
+          </div>
+          {status.data && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Cpu className="size-3" />
+              {c.agents}: {status.data.agents.map((a) => a.name).join(" · ")}
+            </p>
+          )}
+        </div>
+      </Card>
+
+      <GdnaReviewDialog
+        open={reviewOpen}
+        section={section}
+        draft={reviewDraft}
+        onOpenChange={setReviewOpen}
+        onConfirm={(text) => {
+          setReviewOpen(false);
+          submit(text);
+        }}
+      />
     </div>
+  );
+}
+
+function StatusBadge({ available, mode }: { available: boolean; mode?: "llm" | "rules" }) {
+  const { lang } = useLang();
+  const c = gdnaCopy(lang);
+  if (!available) {
+    return (
+      <Badge variant="destructive" data-testid="gdna-status-badge">
+        {c.unavailable}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant={mode === "rules" ? "outline" : "default"} data-testid="gdna-status-badge">
+      {c.available}
+      {mode ? ` · ${mode === "llm" ? c.modeLlm : c.modeRules}` : ""}
+    </Badge>
   );
 }

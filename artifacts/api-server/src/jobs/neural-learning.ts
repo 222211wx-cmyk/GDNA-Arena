@@ -9,6 +9,7 @@
 import { pool } from "@workspace/db";
 import { ingestMemory, getNeuralStatus } from "../lib/neural-core.js";
 import { createOptionalOpenAI } from "../lib/openai-client.js";
+import { logger } from "../lib/logger.js";
 
 let cycleNumber = 0;
 let lastFullEvolution = 0;
@@ -227,6 +228,8 @@ async function detectPatterns(): Promise<void> {
 
 // ── Main learning loop ────────────────────────────────────────
 export async function runNeuralLearningCycle(): Promise<void> {
+  // GDNA's separately approved proxy credentials never authorize legacy ingestion.
+  if (!process.env.OPENAI_API_KEY?.trim()) return;
   cycleNumber++;
   console.log(`[ENC] 🔄 Learning cycle #${cycleNumber} started`);
 
@@ -248,6 +251,10 @@ export async function runNeuralLearningCycle(): Promise<void> {
 
 // ── Start the perpetual learning engine ──────────────────────
 export function startNeuralLearningJob(): void {
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    logger.info("Legacy neural learning disabled: no legacy OpenAI credentials");
+    return;
+  }
   if (!isEvolutionEnabled()) console.log("[ENC-EVOLVE] Disabled by configuration");
   console.log("[ENC] 🧠 EMPIRE NEURAL CORE — SELF-LEARNING ENGINE ACTIVATED");
 

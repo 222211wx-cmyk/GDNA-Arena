@@ -44,7 +44,8 @@ describe("ultra-light clip bootstrap", () => {
     // (and its src assigned) only when a slide is activated by the observer —
     // never eagerly for every clip, and never with a broad preload.
     expect(feed).toContain("function loadPlayback()");
-    expect(feed).toContain("if (playbackRequested) return");
+    expect(feed).toContain("if (playbackRequested)");
+    expect(feed).toContain('video.removeAttribute("src")');
     expect(feed).toContain("IntersectionObserver");
     expect(feed).not.toMatch(/autoplay/i);
   });
@@ -75,7 +76,8 @@ describe("ultra-light clip bootstrap", () => {
     // Foreground-only fallback uses the exact File; durable resume uses stored
     // original bytes, not metadata fingerprints.
     expect(transport).toContain("new WeakMap<File, string>()");
-    expect(transport).toContain("enqueueFile(file, metadata, owner)");
+    expect(transport).toContain("enqueueFile(file, metadata, owner, true)");
+    expect(transport).toContain("storePreparedFile(record, original, file, controller.signal)");
     expect(transport).toContain("navigator.locks.request(lockName(id)");
     expect(transport).not.toContain("localStorage");
     expect(transport).not.toContain("contentHash");

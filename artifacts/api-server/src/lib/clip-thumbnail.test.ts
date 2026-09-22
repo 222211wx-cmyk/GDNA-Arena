@@ -101,17 +101,18 @@ function realWebmFixture(): Buffer {
   }
 }
 
-test("generates a bounded JPEG from a real moov-at-end MP4 using range reads", async () => {
+test("generates a bounded WebP from a real moov-at-end MP4 using range reads", async () => {
   const fixture = realMoovAtEndFixture();
   const moov = fixture.indexOf(Buffer.from("moov"));
   const mdat = fixture.indexOf(Buffer.from("mdat"));
   assert.ok(moov > mdat, "fixture must put moov after media data");
 
   const source = fakeFile(fixture);
-  const jpeg = await generateClipThumbnail(source.file);
-  assert.deepEqual([...jpeg.subarray(0, 2)], [0xff, 0xd8]);
-  assert.deepEqual([...jpeg.subarray(-2)], [0xff, 0xd9]);
-  assert.ok(jpeg.length <= 256 * 1024);
+  const webp = await generateClipThumbnail(source.file);
+  assert.equal(webp.toString("ascii", 0, 4), "RIFF");
+  assert.equal(webp.toString("ascii", 8, 12), "WEBP");
+  assert.equal(webp.readUInt32LE(4), webp.length - 8);
+  assert.ok(webp.length <= 256 * 1024);
 
   const dimensions = spawnSync("ffprobe", [
     "-v", "error",
@@ -119,7 +120,7 @@ test("generates a bounded JPEG from a real moov-at-end MP4 using range reads", a
     "-show_entries", "stream=width,height",
     "-of", "csv=p=0:s=x",
     "-i", "pipe:0",
-  ], { input: jpeg });
+  ], { input: webp });
   assert.equal(dimensions.status, 0, dimensions.stderr.toString());
   const [width, height] = dimensions.stdout.toString().trim().split("x").map(Number);
   assert.ok(width <= 480 && height <= 480, `${width}x${height} exceeds bounds`);
@@ -134,11 +135,11 @@ test("rejects malformed media and destroys every GCS stream", async () => {
   assert.ok(source.streams.every((stream) => stream.destroyed));
 });
 
-test("generates a JPEG from a real WebM fixture", async () => {
+test("generates a WebP from a real WebM fixture", async () => {
   const source = fakeFile(realWebmFixture());
-  const jpeg = await generateClipThumbnail(source.file);
-  assert.deepEqual([...jpeg.subarray(0, 2)], [0xff, 0xd8]);
-  assert.deepEqual([...jpeg.subarray(-2)], [0xff, 0xd9]);
+  const webp = await generateClipThumbnail(source.file);
+  assert.equal(webp.toString("ascii", 0, 4), "RIFF");
+  assert.equal(webp.toString("ascii", 8, 12), "WEBP");
 });
 
 test("enforces the aggregate input byte bound", async () => {

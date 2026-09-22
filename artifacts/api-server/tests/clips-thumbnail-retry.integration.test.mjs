@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { isolatedPostgres } from "./helpers/isolated-postgres.mjs";
 import { clipsFixture, eventually } from "./helpers/clips-postgres-harness.mjs";
@@ -21,6 +22,38 @@ test.after(async () => {
       assert.deepEqual(leaked.rows, [], "all temporary schemas must be removed");
     } finally { await database.close(); }
   }
+});
+
+test("new WebP posters persist and stream correct MIME while legacy JPEG remains unchanged", async t => {
+  const f = await clipsFixture(t, database);
+  const clip = await f.seed(501);
+  const legacy = await f.seed(502, { thumbnailObjectName: "thumb_historical.jpg" });
+  const encode = codec => {
+    const result = spawnSync("ffmpeg", [
+      "-v", "error", "-f", "lavfi", "-i", "color=c=blue:s=32x32",
+      "-frames:v", "1", "-threads", "1", "-c:v", codec, "-f", "image2pipe", "pipe:1",
+    ]);
+    assert.equal(result.status, 0, result.stderr.toString());
+    return result.stdout;
+  };
+  const webp = encode("libwebp");
+  const jpeg = encode("mjpeg");
+  assert.equal(webp.toString("ascii", 8, 12), "WEBP");
+  f.state.generate = async () => webp;
+  f.state.objects.set(legacy.thumbnailObjectName, jpeg);
+  assert.equal(await f.a.runClipThumbnailRetryBatch(), 1);
+  assert.match(clip.posterName, /\.webp$/);
+  assert.match(clip.legacyPosterName, /\.jpg$/);
+  assert.notEqual(clip.posterName, clip.legacyPosterName);
+  assert.equal(f.state.writeMetadata.get(clip.posterName).contentType, "image/webp");
+  const base = await f.http();
+  for (const [id, mime, bytes] of [[501, "image/webp", webp], [502, "image/jpeg", jpeg]]) {
+    const response = await fetch(`${base}/clips/thumbnail/${id}`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), mime);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  }
+  assert.deepEqual(f.state.writes, [clip.posterName], "legacy JPEG must never be overwritten");
 });
 
 test("separate replicas exclude one another using a real advisory lock, then hand off", { timeout: 20000 }, async t => {
@@ -156,9 +189,9 @@ test("DELETE blocks on publication, then removes original and poster but preserv
   release.release();
   assert.equal(await worker, 1);
   assert.equal((await deletion).status, 204);
-  await eventually(() => f.state.deletes.length === 2, "both stored objects must be removed");
+  await eventually(() => f.state.deletes.length === 3, "original and both thumbnail formats must be removed");
   assert.deepEqual(f.state.writes, [clip.posterName], "publication must complete before deletion");
-  assert.deepEqual([...f.state.deletes].sort(), [clip.objectName, clip.posterName].sort());
+  assert.deepEqual([...f.state.deletes].sort(), [clip.objectName, clip.posterName, clip.legacyPosterName].sort());
   assert.equal(f.state.objects.size, 0);
   assert.equal((await f.observer.query("SELECT * FROM clips")).rowCount, 0);
   assert.equal((await f.observer.query("SELECT * FROM clip_views")).rowCount, 0);
@@ -187,7 +220,7 @@ test("DELETE rejects non-owners, handles missing clips, and allows admins withou
   assert.equal((await f.observer.query("SELECT * FROM clips")).rowCount, 0);
   assert.equal((await f.observer.query("SELECT * FROM content_fingerprints")).rowCount, 1);
   assert.equal(f.state.objects.size, 0);
-  assert.deepEqual([...f.state.deletes].sort(), [clip.objectName, clip.posterName].sort());
+  assert.deepEqual([...f.state.deletes].sort(), [clip.objectName, clip.posterName, clip.legacyPosterName].sort());
 });
 
 test("repaired routes keep feed, retitle, streaming, and view accounting separate", { timeout: 20000 }, async t => {

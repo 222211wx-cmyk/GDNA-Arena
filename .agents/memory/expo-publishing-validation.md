@@ -20,3 +20,5 @@ Background media capabilities require an installed native build and physical-pho
 **Why:** The custom publishing build can collide with a different managed service's development port, although native compilation itself is valid. Avoid stopping unrelated services just to clear that port.
 
 **How to apply:** Distinguish a port/startup failure in local release tooling from an actual bundle error. An iOS/Android production export validates native bundles, but does not prove the complete custom publishing process succeeded.
+
+The custom publishing builder must allocate its own temporary Metro port and pass it consistently to readiness, bundle, manifest, and asset requests. Never reuse a preview packager or stop another service to free port 8081. Verify the Metro status body, not just HTTP 200, and fail promptly if the child exits. Full workspace builds reproduced a collision with the mockup preview; isolated temporary-port builds successfully produced both native bundles and assets.

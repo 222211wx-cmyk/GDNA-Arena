@@ -1,4 +1,5 @@
-import { enqueueFile, readQueue, saveQueue, removeQueue, storeProcessingJob, lockName, type QueueRecord } from "./uploadQueue";
+import { enqueueFile, readQueue, saveQueue, removeQueue, storeProcessingJob, storePreparedFile, lockName, type QueueRecord } from "./uploadQueue";
+import { prepareClip } from "./prepareClip";
 const R2_API = `${import.meta.env.BASE_URL}api/upload/presign`;
 const CLIPS_CREATE_API = `${import.meta.env.BASE_URL}api/upload/complete`;
 export const UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024;
@@ -19,12 +20,13 @@ export type ClipUploadMetadata = {
   durationSec: number | null;
 };
 
-export type ClipUploadState = "uploading" | "offline" | "stalled" | "processing";
+export type ClipUploadState = "uploading" | "offline" | "stalled" | "processing" | "preparing";
 export type ClipUploadProgress = (
   percent: number,
   uploadedBytes: number,
   speedBytesPerSecond: number,
   state: ClipUploadState,
+  message?: string,
 ) => void;
 
 type SavedUpload = {
@@ -490,7 +492,8 @@ export async function runQueuedUpload(id: string, owner: number, parent: AbortSi
   return navigator.locks.request(lockName(id), { mode: "exclusive", signal: parent }, async () => {
     parent.throwIfAborted();
     if (await currentUploadOwner(parent) !== owner) throw new Error("Ce transfert appartient à un autre compte");
-    const { record, file } = await readQueue(id, owner);
+    const { record, file: storedFile } = await readQueue(id, owner);
+    let file = storedFile;
     if (record.serverOwned) return pollProcessingJob(record, parent, progress);
     if (!resumePaused && record.status === "paused") return null;
     const controller = new AbortController();
@@ -508,6 +511,28 @@ export async function runQueuedUpload(id: string, owner: number, parent: AbortSi
     try {
       await saveQueue(record);
       if (!file) throw new Error("Fichier local introuvable");
+      if (record.preparation === "pending" && !record.sessionId) {
+        const original = file;
+        const prepared = await prepareClip(original, controller.signal, (percent, message) => progress(percent, 0, 0, "preparing", message));
+        file = prepared.file;
+        record.preparation = prepared.mode;
+        record.preparationMessage = prepared.message;
+        record.name = file.name;
+        record.size = file.size;
+        record.metadata = { ...record.metadata, contentType: file.type || record.metadata.contentType };
+        progress(100, 0, 0, "preparing", "Enregistrement durable de la vidéo préparée…");
+        try {
+          await storePreparedFile(record, original, file, controller.signal);
+        } catch (error) {
+          // Never persist a transformed descriptor pointing at original bytes.
+          record.preparation = "pending";
+          record.name = original.name; record.size = original.size;
+          record.metadata = { ...record.metadata, contentType: original.type || record.metadata.contentType };
+          throw error;
+        }
+      }
+      if (record.preparationMessage) progress(0, 0, 0, "preparing", record.preparationMessage);
+      controller.signal.throwIfAborted();
       const body = await runR2Upload(file, record.metadata, saved, controller.signal, (percent, bytes, speed, state) => {
         record.uploaded = bytes;
         record.status = state === "processing" ? "processing" : "uploading";
@@ -548,6 +573,11 @@ export async function discardQueuedUpload(id: string, owner: number) {
     if (await currentUploadOwner() !== owner) throw new Error("Compte différent");
     const { record } = await readQueue(id, owner);
     if (record.serverOwned) { await removeQueue(id, owner); return; }
+    if (record.preparation === "pending" && !record.sessionId) {
+      // Preparation precedes initiation: there is no remote upload to recover.
+      await removeQueue(id, owner);
+      return;
+    }
     // Recover an initiation whose response was lost before sessionId was saved.
     const signal = new AbortController().signal;
     const sessionId = record.sessionId ?? (await r2Json({
@@ -567,13 +597,15 @@ export async function uploadClip(file: File, metadata: ClipUploadMetadata, signa
   const owner = await currentUploadOwner(signal);
   let record: QueueRecord;
   try {
-    record = await enqueueFile(file, metadata, owner);
+    record = await enqueueFile(file, metadata, owner, true);
   } catch (error) {
     const message = `Stockage local impossible (${error instanceof Error ? error.message : "quota"}). Transfert au premier plan uniquement; reprise après fermeture indisponible.`;
     // Legacy consumers must not silently claim durable success.
     if (!options?.onForegroundOnly) throw new Error(message);
     options.onForegroundOnly(message);
-    return uploadForeground(file, metadata, signal, progress, owner);
+    const prepared = await prepareClip(file, signal, (percent, detail) => progress(percent, 0, 0, "preparing", detail));
+    progress(0, 0, 0, "preparing", prepared.message);
+    return uploadForeground(prepared.file, { ...metadata, contentType: prepared.file.type }, signal, progress, owner);
   }
   options?.onStored?.(record);
   if (signal.aborted) {

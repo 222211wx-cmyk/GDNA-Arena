@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import SolidarityRelay from "./SolidarityRelay";
 import { MessengerAssistant } from "./MessengerAssistant";
+import { MessengerCitizenDrawer } from "../citizen/MessengerCitizenDrawer";
+import type { CitizenProfile } from "../../hooks/use-citizen";
 import { attachmentSizeError, attachmentUploadQuery } from "./attachment-policy";
 import type { GroupRoom } from "../social/social-types";
 import Avatar from "../social/Avatar";
@@ -1094,6 +1096,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const [rooms,       setRooms]       = useState<DmRoom[]>([]);
   const [roomQuery,   setRoomQuery]   = useState("");
   const [activeRoom,  setActiveRoom]  = useState<DmRoom | null>(null);
+  // Citizen card drawer opened from a conversation row (same page, no navigation).
+  const [drawerUsername, setDrawerUsername] = useState<string | null>(null);
   const [messages,    setMessages]    = useState<DmMessage[]>([]);
   const [text,        setText]        = useState("");
   const [peerTyping, setPeerTyping] = useState(false);
@@ -2897,10 +2901,26 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
               {filteredRooms.map(room => {
                 const peerName = getPeerName(room);
                 const isOnline = room.type === "direct" && call.onlineUsers.includes(peerName);
+                const isDirect = room.type === "direct";
+                // For direct rooms, tapping the avatar/name opens the citizen
+                // drawer on the same page; tapping the row body opens the room.
+                const openCard = (event: React.MouseEvent) => {
+                  event.stopPropagation();
+                  if (isDirect) setDrawerUsername(peerName);
+                  else openRoom(room);
+                };
                 return (
                   <button key={room.id} onClick={() => openRoom(room)}
                     style={{ textAlign: "start", padding: "11px 10px", borderRadius: 12, border: "none", cursor: "pointer", background: "transparent", display: "flex", gap: 12, alignItems: "center", width: "100%", borderBottom: "1px solid #ffffff06" }}>
-                    <div style={{ position: "relative", flexShrink: 0 }}>
+                    <span
+                      role={isDirect ? "button" : undefined}
+                      tabIndex={isDirect ? 0 : undefined}
+                      onClick={isDirect ? openCard : undefined}
+                      onKeyDown={isDirect ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCard(event as unknown as React.MouseEvent); } } : undefined}
+                      aria-label={isDirect ? `${peerName} — عرض البطاقة` : undefined}
+                      data-testid={isDirect ? `open-citizen-card-${peerName}` : undefined}
+                      style={{ position: "relative", flexShrink: 0, cursor: isDirect ? "pointer" : "inherit", display: "inline-flex" }}
+                    >
                       {room.type === "group"
                         ? <div style={{ width: 48, height: 48, background: "#222", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}><Users size={22} style={{ color: "#666" }} /></div>
                         : <Avatar name={peerName} size={48} />
@@ -2908,10 +2928,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                       {isOnline && (
                         <div style={{ position: "absolute", bottom: 1, right: 1, width: 12, height: 12, background: "#22c55e", borderRadius: "50%", border: "2px solid #000" }} />
                       )}
-                    </div>
+                    </span>
                     <div style={{ flex: 1, overflow: "hidden" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                        <p style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
+                        <p
+                          onClick={isDirect ? openCard : undefined}
+                          style={{ margin: 0, fontWeight: 800, color: "#fff", fontSize: 15.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5, cursor: isDirect ? "pointer" : "inherit" }}
+                        >
                           {peerName}
                           {room.muted && <BellOff size={12} style={{ color: "#666", flexShrink: 0 }} />}
                         </p>
@@ -3111,6 +3134,14 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
           fullscreen page — no ancestor transform can trap position:fixed,
           and the site navbar stays underneath (zIndex 1200 > navbar z-50). */}
       {variant === "full" && chatPage && createPortal(chatPage, document.body)}
+
+      {/* Citizen card drawer opened from a conversation row — same page, no route
+          navigation. Its "message" action opens the existing conversation. */}
+      <MessengerCitizenDrawer
+        username={drawerUsername}
+        onClose={() => setDrawerUsername(null)}
+        onMessage={(citizen: CitizenProfile) => { setDrawerUsername(null); void openDmWith(citizen.username); }}
+      />
 
       <AnimatePresence>
         {toast && <Toast msg={toast} onDone={() => setToast("")} />}

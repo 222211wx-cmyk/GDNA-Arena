@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { CLIENT_MESSAGE_ID, messageRequestHash, messageReplay, saveMessageReceipt } from "../lib/message-idempotency";
+import { expectedSenderGuard } from "../lib/message-sender-guard";
 import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
@@ -1060,11 +1062,11 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
 });
 
 // ── POST /messages/rooms/:id/send (members only) ──────────────────────────────
-router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
+router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
-  const roomId = parseInt(req.params.id);
-  if (isNaN(roomId)) { res.status(400).json({ error: "Invalid room ID" }); return; }
+  const roomId = Number(req.params.id);
+  if (!Number.isSafeInteger(roomId) || roomId < 1 || roomId > 2147483647) { res.status(400).json({ error: "Invalid room ID" }); return; }
 
   // Membership gate — prevents IDOR and XP farming from external rooms
   const membership = await getMembership(roomId, userId);
@@ -1085,6 +1087,13 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
   const encryptedEnvelope = typeof content === "string" && content.startsWith(E2E_PREFIX)
     ? parseE2eEnvelope(content)
     : null;
+  const clientMessageId = req.body.clientMessageId;
+  if (clientMessageId !== undefined && (typeof clientMessageId !== "string" ||
+      !CLIENT_MESSAGE_ID.test(clientMessageId) || !encryptedEnvelope)) {
+    res.status(400).json({ error: "clientMessageId requires a UUID and an encrypted envelope" }); return;
+  }
+  const requestHash = messageRequestHash([roomId, content?.trim() ?? null,
+    audioUrl ?? null, videoUrl ?? null, fileUrl ?? null, type, replyToId ?? null, expireAfterHours ?? null]);
   if (typeof content === "string" && content.startsWith("e2e:") && !encryptedEnvelope) {
     res.status(400).json({ error: "Invalid encrypted message" }); return;
   }
@@ -1139,6 +1148,32 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
       // Serializes device registration/revocation and encrypted sends. The
       // final key-set comparison and INSERT share this transaction.
       await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+      // Recheck membership under the same lock used for group membership changes.
+      const currentMember = await client.query("SELECT 1 FROM dm_room_members WHERE room_id=$1 AND user_id=$2 FOR SHARE", [roomId, userId]);
+      if (!currentMember.rows.length) {
+        await client.query("ROLLBACK");
+        res.status(403).json({ error: "Access denied — not a member of this room" }); return;
+      }
+      if (clientMessageId) {
+        const replay = await messageReplay(client, userId, clientMessageId, requestHash);
+        if (replay.conflict || replay.message) {
+          if (replay.conflict) {
+            await client.query("ROLLBACK");
+            res.status(409).json({ error: "clientMessageId already used for another payload" }); return;
+          }
+          // Receipts retain only identity, never a second copy of deleted/expired ciphertext.
+          const original = await client.query(`SELECT id,room_id AS "roomId",user_id AS "userId",username,
+            content,audio_url AS "audioUrl",video_url AS "videoUrl",file_url AS "fileUrl",type,
+            is_read AS "isRead",reply_to_id AS "replyToId",expires_at AS "expiresAt",created_at AS "createdAt"
+            FROM dm_messages WHERE id=$1 AND user_id=$2 AND room_id=$3
+            AND (expires_at IS NULL OR expires_at>now())`, [replay.message.id, userId, roomId]);
+          await client.query("ROLLBACK");
+          if (!original.rows.length) { res.status(410).json({ error: "Previously sent message is no longer available" }); return; }
+          res.json({ message: { ...original.rows[0], replyTo: null,
+            reactions: { support: 0, listen: 0, celebrate: 0 }, myReaction: null }, xpEarned: 0, replayed: true });
+          return;
+        }
+      }
       const registered = await client.query<{
         user_id: number;
         device_id: string | null;
@@ -1187,6 +1222,7 @@ router.post("/messages/rooms/:id/send", async (req, res): Promise<void> => {
         ],
       );
       msg = inserted.rows[0];
+      if (clientMessageId) await saveMessageReceipt(client, userId, clientMessageId, requestHash, { id: msg.id });
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});

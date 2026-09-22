@@ -1,10 +1,10 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { buildSync } from "esbuild";
 
 // PORT only needed for dev server — build doesn't use it
@@ -13,13 +13,44 @@ const port = Number(process.env.PORT || 3000);
 // BASE_PATH: "/" in production (served at root), "/gdna-arena" fallback for local dev
 const basePath = process.env.BASE_PATH || "/";
 
+function isLitePath(pathname: string, base: string): boolean {
+  const relative = pathname.slice(base.length) || "/";
+  return relative === "/lite" ||
+    relative.startsWith("/lite/") ||
+    relative === "/partners/operators" ||
+    relative === "/partners/operators/" ||
+    relative === "/partners/dashboard" ||
+    relative === "/partners/dashboard/";
+}
+
+function liteShell(): Plugin {
+  return {
+    name: "gdna-lite-shell",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const url = new URL(req.url || "/", "http://localhost");
+        const base = basePath.replace(/\/$/, "");
+        if (isLitePath(url.pathname, base)) {
+          req.url = `${base}/lite.html${url.search}`;
+        }
+        next();
+      });
+    },
+  };
+}
+
 function pwaServiceWorker() {
+  const liteSyncSource = buildSync({
+    entryPoints: [path.resolve(import.meta.dirname, "src/lib/lite-sync-worker.ts")],
+    bundle: true, write: false, format: "iife", globalName: "GDNA_LITE_SYNC",
+    platform: "browser", target: "es2022", minify: true,
+  }).outputFiles[0].text;
   const uploadWorkerSource = buildSync({
     entryPoints: [path.resolve(import.meta.dirname, "src/components/clips/uploadWorker.ts")],
     bundle: true, write: false, format: "iife", platform: "browser", target: "es2022",
     define: { "import.meta.env.BASE_URL": JSON.stringify(basePath.endsWith("/") ? basePath : `${basePath}/`) },
   }).outputFiles[0].text;
-  const pushWorkerSource = readFileSync(path.resolve(import.meta.dirname, "src/service-worker.js"), "utf8") + "\n" + uploadWorkerSource;
+  const pushWorkerSource = liteSyncSource + "\n" + readFileSync(path.resolve(import.meta.dirname, "src/service-worker.js"), "utf8") + "\n" + uploadWorkerSource;
   return {
     name: "gdna-safe-pwa-service-worker",
     configureServer(server: { middlewares: { use: (route: string, handler: (_req: unknown, res: { setHeader: (name: string, value: string) => void; end: (body: string) => void }) => void) => void } }) {
@@ -35,12 +66,47 @@ self.addEventListener("activate", event => event.waitUntil(self.clients.claim())
 ${pushWorkerSource}`);
       });
     },
-    generateBundle(_: unknown, bundle: Record<string, { fileName: string; type: string }>) {
+    writeBundle() {
       const normalizedBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
-      // Do not make installation download every lazy application chunk. Runtime
-      // assets are cached only after they are actually requested.
-      const precache = [`${normalizedBase}index.html`];
-      const versionInputs = Object.values(bundle).map(asset => asset.fileName).sort();
+      const output = path.resolve(import.meta.dirname, "dist/public");
+      type ManifestEntry = { file: string; imports?: string[]; dynamicImports?: string[]; css?: string[]; assets?: string[] };
+      const manifest = JSON.parse(readFileSync(path.join(output, ".vite/manifest.json"), "utf8")) as Record<string, ManifestEntry>;
+      const liteFiles = new Set<string>(["index.html", "lite.html", "manifest.json", "favicon.svg", "lite-icon-192.png", "lite-icon-512.png"]);
+      const visited = new Set<string>();
+      const visit = (key: string) => {
+        if (visited.has(key)) return;
+        visited.add(key);
+        const entry = manifest[key];
+        if (!entry) throw new Error(`Missing Lite manifest entry: ${key}`);
+        liteFiles.add(entry.file);
+        for (const asset of [...(entry.css || []), ...(entry.assets || [])]) liteFiles.add(asset);
+        // Only the static first-load closure belongs in the shell. In particular,
+        // operator/dashboard page modules remain on-demand and must not make the
+        // complete partner graph part of install-time precaching.
+        for (const dependency of entry.imports || []) visit(dependency);
+      };
+      visit("index.html");
+      visit("lite.html");
+      const liteKey = Object.keys(manifest).find(key => key === "src/lite-entry.ts");
+      if (liteKey) visit(liteKey);
+      // Real static paths work without production rewrite changes. Unknown
+      // /lite/:username routes use the host's existing index.html SPA fallback,
+      // whose tiny bootstrap selects Lite before importing any React code.
+      const liteHtml = readFileSync(path.join(output, "lite.html"), "utf8");
+      for (const route of [
+        "lite",
+        "lite/in",
+        "lite/africa",
+        "lite/brasil",
+        "partners/operators",
+        "partners/dashboard",
+      ]) {
+        mkdirSync(path.join(output, route), { recursive: true });
+        writeFileSync(path.join(output, route, "index.html"), liteHtml);
+      }
+      const precache = [...liteFiles].map(file => `${normalizedBase}${file}`);
+      writeFileSync(path.join(output, "lite-precache.json"), JSON.stringify([...liteFiles], null, 2));
+      const versionInputs = [...liteFiles].sort().map(file => readFileSync(path.join(output, file)));
       const version = createHash("sha256").update(versionInputs.join("|")).digest("hex").slice(0, 12);
       const source = `/* Generated at build time. Private API, AMIS, and key material are never cached. */
 const VERSION = ${JSON.stringify(version)};
@@ -48,15 +114,18 @@ const SHELL_CACHE = "gdna-arena-shell-" + VERSION;
 const PUBLIC_CACHE = "gdna-arena-public-" + VERSION;
 const PRECACHE = ${JSON.stringify(precache)};
 const BASE = ${JSON.stringify(normalizedBase)};
-const PUBLIC_API_PATHS = new Set([
-  BASE + "api/legends",
-  BASE + "api/pulse/events",
-  BASE + "api/pulse/stats"
-]);
 const OFFLINE_CLIENTS = new Set();
 const isSameOrigin = url => url.origin === self.location.origin;
-const isStaticAsset = request => request.destination === "style" || request.destination === "script" ||
-  request.destination === "image" || request.destination === "font" || new URL(request.url).pathname.startsWith(BASE + "assets/");
+const isLiteNavigation = pathname => {
+  const relative = pathname.slice(BASE.length - 1) || "/";
+  return relative === "/lite" || relative.startsWith("/lite/") ||
+    relative === "/partners/operators" || relative === "/partners/operators/" ||
+    relative === "/partners/dashboard" || relative === "/partners/dashboard/";
+};
+const isStaticAsset = request => {
+  const pathname = new URL(request.url).pathname;
+  return pathname.startsWith(BASE + "assets/") || PRECACHE.includes(pathname);
+};
 self.addEventListener("install", event => event.waitUntil(caches.open(SHELL_CACHE).then(cache => cache.addAll(PRECACHE)).then(() => self.skipWaiting())));
 self.addEventListener("activate", event => event.waitUntil(
   caches.keys()
@@ -84,22 +153,14 @@ self.addEventListener("fetch", event => {
     return;
   }
   const url = new URL(request.url);
-  // Only three explicitly public, non-personalized endpoints may be cached.
-  // Auth/session/private API responses, AMIS data, and key material are excluded.
+   // No API response enters shared CacheStorage, including authenticated variants
+   // of otherwise public endpoints. Account snapshots belong in UI IndexedDB.
   if (url.pathname === BASE + "api" || url.pathname.startsWith(BASE + "api/")) {
-    if (!PUBLIC_API_PATHS.has(url.pathname)) return;
-    event.respondWith(fetch(request).then(response => {
-      if (response.ok && response.type === "basic") {
-        const copy = response.clone();
-        void caches.open(PUBLIC_CACHE).then(cache => cache.put(request, copy));
-      }
-      return response;
-    }).catch(async () => (await caches.match(request)) || Response.error()));
     return;
   }
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).then(response => response).catch(async () =>
-      (await caches.match(BASE + "index.html")) || Response.error()));
+       (await caches.match(BASE + (isLiteNavigation(url.pathname) ? "lite.html" : "index.html"))) || Response.error()));
     return;
   }
   if (!isStaticAsset(request)) return;
@@ -113,7 +174,7 @@ self.addEventListener("fetch", event => {
 });
 
 ${pushWorkerSource}`;
-      this.emitFile({ type: "asset", fileName: "sw.js", source });
+      writeFileSync(path.join(output, "sw.js"), source);
     },
   };
 }
@@ -124,6 +185,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    liteShell(),
     pwaServiceWorker(),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
@@ -147,6 +209,13 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname),
   // Keep FFmpeg's relative module-worker URL intact in development.
   build: {
+    manifest: true,
+    rollupOptions: {
+      input: {
+        app: path.resolve(import.meta.dirname, "index.html"),
+        lite: path.resolve(import.meta.dirname, "lite.html"),
+      },
+    },
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
   },

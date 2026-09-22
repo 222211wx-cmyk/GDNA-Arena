@@ -3,11 +3,11 @@ name: Clips upload transport decisions
 description: Owner-directed Clips compression and resumable upload policy, plus integrity constraints
 ---
 
-Never compress citizen Clips in the browser. Upload the original directly to R2 in resumable parts and let the server process it.
+Use bounded browser video compression before resumable R2 transfer when supported; target 480p at 800 kbps while preserving audio. Retain an explicit original-upload/server-processing fallback for unsupported browsers.
 
-**Why:** On 2026-09-19 the owner reported severe mobile stalls and explicitly reversed the earlier same-day request for ffmpeg.wasm. This latest instruction removes optional browser encoding too, not just automatic compression.
+**Why:** On 2026-09-21 the owner explicitly reversed the original-only policy and requested browser compression to reduce transfer size. Earlier reports of mobile stalls still require cancellable preparation and truthful unsupported-browser handling.
 
-**How to apply:** Do not reintroduce FFmpeg WASM, MediaRecorder recompression, large encoder downloads, or a “compress before uploading” option. Keep metadata inspection bounded and lightweight. Measure transfer time independently of server processing; 137 MB under a minute requires sufficient real uplink bandwidth.
+**How to apply:** Avoid large encoder downloads on cold routes. Verify real audio, duration, and transformed-file resume identity. Measure preparation separately from transfer and server processing; do not promise universally sub-minute completion.
 
 Treat browser duration as an untrusted hint, not a prerequisite for an enabled Publish button.
 
@@ -27,7 +27,7 @@ Always retain a chosen audio/video file and show its name/size immediately. The 
 
 **How to apply:** No publication-type/rights/footage declarations. Enforce the 10 GiB file maximum consistently, preserve selection on failure/cancellation, enforce duration again on the server, and show “خاص دقيقة الفوق” for short files. Do not remove unrelated chat attachment limits.
 
-All new clips still undergo server transcoding; video targets at most 720p, while audio uses AAC.
+All new clips still undergo server transcoding; video targets at most 480p at 800 kbps, while audio uses AAC. Keep the historical `_720p.mp4` reserved-object suffix unchanged: it is a storage identity contract, not a current-resolution promise.
 
 **Why:** The later architecture specification superseded the earlier above-100-MiB-only rule. Transcoding does not reduce the original upload transfer, and no transfer can progress at zero bandwidth.
 

@@ -41,11 +41,11 @@ async function cleanupRows(f) {
   `)).rows;
 }
 
-test("DELETE durably enqueues three distinct names and retries each independently", { timeout: 20000 }, async t => {
+test("DELETE durably enqueues original and both thumbnail formats and retries each independently", { timeout: 20000 }, async t => {
   const f = await clipsFixture(t, database);
   const clip = await f.seed(100, { thumbnailObjectName: "stored_poster_100.jpg" });
   f.state.objects.set(clip.posterName, Buffer.from("deterministic-candidate"));
-  const names = [clip.objectName, clip.thumbnailObjectName, clip.posterName];
+  const names = [clip.objectName, clip.thumbnailObjectName, clip.posterName, clip.legacyPosterName];
   const failBefore = clip.thumbnailObjectName;
   const loseResponse = clip.posterName;
   f.state.beforeDelete = async name => {
@@ -99,7 +99,7 @@ test("outage backoff persists across fresh replicas and destroyed database sessi
   assert.equal((await remove(base, clip.id)).status, 204);
   await eventually(async () => {
     const rows = await cleanupRows(f);
-    return rows.length === 3 && rows.every(row => row.attempts === 1);
+    return rows.length === 4 && rows.every(row => row.attempts === 1);
   }, "the immediate best-effort pass must persist its claims");
 
   const fresh = await f.freshReplica();
@@ -108,7 +108,7 @@ test("outage backoff persists across fresh replicas and destroyed database sessi
 
   for (let attempt = 1; attempt <= 11; attempt++) {
     const rows = await cleanupRows(f);
-    assert.equal(rows.length, 3);
+    assert.equal(rows.length, 4);
     assert.ok(rows.every(row => row.attempts === attempt));
     const expected = Math.min(300 * 2 ** (attempt - 1), 24 * 60 * 60);
     for (const row of rows) {
@@ -143,7 +143,7 @@ test("outage backoff persists across fresh replicas and destroyed database sessi
   f.state.beforeDelete = async () => {};
   await f.observer.query("UPDATE clip_storage_cleanup SET retry_at=NOW()-INTERVAL '1 second'");
   const recovered = await f.freshReplica();
-  assert.equal(await recovered.runClipStorageCleanupBatch(), 3);
+  assert.equal(await recovered.runClipStorageCleanupBatch(), 4);
   assert.deepEqual(await cleanupRows(f), []);
   assert.equal(f.state.objects.size, 0);
   assert.equal(await recovered.runClipThumbnailRetryBatch(), 0, "deleted clips cannot be regenerated");
@@ -166,14 +166,14 @@ test("restart after storage success but failed database acknowledgement finishes
   const base = await f.http();
   assert.equal((await remove(base, clip.id)).status, 204, "committed deletion still succeeds");
   const queued = await cleanupRows(f);
-  assert.equal(queued.length, 2);
+  assert.equal(queued.length, 3);
   assert.equal(queued.find(row => row.object_name === clip.objectName).attempts, 1);
   assert.equal(f.state.objects.has(clip.objectName), false, "storage succeeded before DB failure");
   assert.equal((await f.observer.query("SELECT * FROM clips")).rowCount, 0);
 
   await f.observer.query("DROP TRIGGER reject_cleanup_ack ON clip_storage_cleanup");
   const fresh = await f.freshReplica();
-  assert.equal(await fresh.runClipStorageCleanupBatch(), 1, "unattempted candidate is still due");
+  assert.equal(await fresh.runClipStorageCleanupBatch(), 2, "both unattempted thumbnail formats are still due");
   assert.equal((await cleanupRows(f)).length, 1, "failed ack retains its persisted backoff");
   await f.observer.query("UPDATE clip_storage_cleanup SET retry_at=NOW()-INTERVAL '1 second'");
   assert.equal(await fresh.runClipStorageCleanupBatch(), 1, "missing original is safely re-deleted");
@@ -196,14 +196,14 @@ test("already-missing objects are acknowledged idempotently and duplicate names 
   assert.equal((await remove(base, clip.id)).status, 204);
   await eventually(async () => (await cleanupRows(f)).length === 0,
     "ignoreNotFound deletes should clear every queue row");
-  assert.equal(f.state.deleteCalls.length, 2);
+  assert.equal(f.state.deleteCalls.length, 3);
   assert.deepEqual(
     f.state.deleteCalls.map(call => call.key).sort(),
-    [clip.objectName, clip.posterName].sort(),
+    [clip.objectName, clip.posterName, clip.legacyPosterName].sort(),
   );
   assert.ok(f.state.deleteCalls.every(call => call.options?.ignoreNotFound === true));
   assert.equal(await f.b.runClipStorageCleanupBatch(clip.id), 0);
-  assert.equal(f.state.deleteCalls.length, 2, "acknowledged work is not processed twice");
+  assert.equal(f.state.deleteCalls.length, 3, "acknowledged work is not processed twice");
 });
 
 test("concurrent replicas claim disjoint bounded batches", { timeout: 20000 }, async t => {

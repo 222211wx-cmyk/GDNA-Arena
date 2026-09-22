@@ -5,6 +5,110 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type GdnaQuestionSection = typeof GdnaQuestionSection[keyof typeof GdnaQuestionSection];
+
+
+export const GdnaQuestionSection = {
+  hisn: 'hisn',
+  helixly: 'helixly',
+  souk: 'souk',
+  guard: 'guard',
+  dev: 'dev',
+} as const;
+
+export interface GdnaQuestion {
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  query: string;
+  section: GdnaQuestionSection;
+  remember?: boolean;
+}
+
+export interface GdnaUsage {
+  used: number;
+  limit: number;
+}
+
+export interface GdnaCitation {
+  label: string;
+  url?: string;
+}
+
+export interface GdnaSuggestion {
+  title: string;
+  description: string;
+  url?: string;
+}
+
+export type GdnaAnswerMode = typeof GdnaAnswerMode[keyof typeof GdnaAnswerMode];
+
+
+export const GdnaAnswerMode = {
+  llm: 'llm',
+  rules: 'rules',
+} as const;
+
+export interface GdnaAnswer {
+  reply: string;
+  mode: GdnaAnswerMode;
+  agent: string;
+  citations: GdnaCitation[];
+  suggestions: GdnaSuggestion[];
+  usage: GdnaUsage;
+  auditId: string;
+}
+
+export type GdnaStatusMode = typeof GdnaStatusMode[keyof typeof GdnaStatusMode];
+
+
+export const GdnaStatusMode = {
+  llm: 'llm',
+  rules: 'rules',
+} as const;
+
+export type GdnaStatusAgentsItem = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+export type GdnaStatusPlatform = { [key: string]: unknown };
+
+export interface GdnaStatus {
+  available: boolean;
+  mode: GdnaStatusMode;
+  agents: GdnaStatusAgentsItem[];
+  usage: GdnaUsage;
+  platform: GdnaStatusPlatform;
+}
+
+export type GdnaEvolutionEntriesItem = {
+  id: string;
+  agent: string;
+  summary: string;
+  createdAt: string;
+};
+
+export interface GdnaEvolution {
+  entries: GdnaEvolutionEntriesItem[];
+}
+
+export type GdnaMemoryEntriesItem = {
+  id: string;
+  content: string;
+  createdAt: string;
+};
+
+export interface GdnaMemory {
+  entries: GdnaMemoryEntriesItem[];
+}
+
+export interface GdnaMemoryRemoval {
+  id?: string;
+}
+
 export type ClipUploadStatusState = typeof ClipUploadStatusState[keyof typeof ClipUploadStatusState];
 
 

@@ -104,6 +104,11 @@ export function reelsShellCss(palette: Palette, space: string): string {
     width:100%;max-height:100%;
     display:flex;align-items:center;justify-content:center;
   }
+  .reels-media-error{
+    position:absolute;inset:0;z-index:12;display:grid;place-content:center;text-align:center;
+    gap:calc(${space} * 3);padding:calc(${space} * 4);
+    background:${palette.background};color:${palette.foreground};
+  }
   .reels-slide video{
     display:block;width:100%;height:auto;
     max-height:100%;object-fit:contain;background:transparent;

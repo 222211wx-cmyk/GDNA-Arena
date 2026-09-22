@@ -23,6 +23,7 @@ function swipe(target: EventTarget, fromX: number, toX: number, y = 300) {
 let controller: ReelsController;
 
 beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
   document.body.innerHTML = '<div id="root"></div>';
   window.history.replaceState(null, "", "/clips");
   // resolveIdentity + loadPage both hit fetch; return an empty, non-degraded feed.
@@ -33,6 +34,19 @@ beforeEach(() => {
 });
 
 describe("critical Clips navigation", () => {
+  it("requests five clips and offers a visible recovery action after a failed feed request", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/auth/me")) return Response.json({}, { status: 401 });
+      return Response.json({}, { status: 503 });
+    }));
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-state-error"] button')).not.toBeNull());
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("limit=5"))).toBe(true);
+    vi.mocked(fetch).mockResolvedValue(Response.json({ clips: [], hasMore: false }));
+    document.querySelector<HTMLButtonElement>('[data-testid="reels-state-error"] button')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-state-empty"]')).not.toBeNull());
+  });
   it("does not request private inbox counts for anonymous viewers", async () => {
     controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
     await vi.waitFor(() => expect(document.querySelector('[data-nav="profile"]')?.getAttribute("href")).toBe("/login"));
@@ -162,11 +176,18 @@ describe("Reels natural-end progression", () => {
     await vi.waitFor(() => expect(document.querySelectorAll("video")).toHaveLength(1));
     const first = document.querySelector("video") as HTMLVideoElement;
     expect(first.loop).toBe(false);
+    first.dispatchEvent(new Event("error"));
+    expect(document.querySelector(".reels-media-error [type=button]")?.textContent).toBe("Réessayer");
+    first.dispatchEvent(new Event("loadeddata"));
+    expect(document.querySelector(".reels-media-error")).toBeNull();
     first.dispatchEvent(new Event("play"));
     expect(document.querySelector(".reels-play")?.getAttribute("aria-label")).toBe("Pause");
 
     first.dispatchEvent(new Event("ended"));
-    await vi.waitFor(() => expect(document.querySelectorAll("video")).toHaveLength(2));
+    await vi.waitFor(() => expect(document.querySelector('[data-clip-id="1"] video')).not.toBeNull());
+    expect(document.querySelectorAll("video")).toHaveLength(1);
+    expect(first.isConnected).toBe(false);
+    expect(first.hasAttribute("src")).toBe(false);
     const secondSlide = document.querySelector<HTMLElement>('[data-clip-id="1"]')!;
     expect(secondSlide.scrollIntoView).toHaveBeenCalledOnce();
     expect((secondSlide.querySelector("video") as HTMLVideoElement).loop).toBe(false);
@@ -223,7 +244,7 @@ describe("Reels natural-end progression", () => {
     await vi.waitFor(() => expect(feedCalls).toBe(2));
     controller.pause();
     releasePage();
-    await vi.waitFor(() => expect(document.querySelectorAll("video")).toHaveLength(1));
+    await vi.waitFor(() => expect(document.querySelectorAll("video")).toHaveLength(0));
 
     expect(feedCalls).toBe(2);
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
@@ -253,7 +274,7 @@ describe("Reels natural-end progression", () => {
     await vi.waitFor(() => expect(feedCalls).toBe(2));
     document.querySelector<HTMLButtonElement>('[aria-label="Rechercher"]')!.click();
     releasePage();
-    await vi.waitFor(() => expect(document.querySelectorAll("video")).toHaveLength(1));
+    await vi.waitFor(() => expect(document.querySelectorAll("video")).toHaveLength(0));
 
     expect(document.querySelector('[data-testid="reels-search"]')).not.toBeNull();
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();

@@ -30,7 +30,8 @@ function designTokensPlugin(): Plugin {
   };
 }
 
-const rawPort = process.env.PORT;
+export default defineConfig(async ({ command }) => {
+const rawPort = process.env.PORT ?? (command === "build" ? "3000" : undefined);
 
 if (!rawPort) {
   throw new Error(
@@ -44,7 +45,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
+const basePath = process.env.BASE_PATH ?? (command === "build" ? "/gdna-ds/" : undefined);
 
 if (!basePath) {
   throw new Error(
@@ -52,7 +53,7 @@ if (!basePath) {
   );
 }
 
-export default defineConfig({
+return defineConfig({
   base: basePath,
   plugins: [
     designTokensPlugin(),
@@ -89,4 +90,5 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
   },
+});
 });

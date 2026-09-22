@@ -15,7 +15,7 @@ export const CLIP_THUMBNAIL_LOCK_KEY = 1;
 let running = false;
 let timer: NodeJS.Timeout | undefined;
 
-async function storePoster(name: string, jpeg: Buffer): Promise<void> {
+async function storePoster(name: string, webp: Buffer): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   timeout.unref();
@@ -23,11 +23,11 @@ async function storePoster(name: string, jpeg: Buffer): Promise<void> {
     // Unlike a Promise.race around save(), abort destroys the writer before
     // releasing the clip lock rather than leaving application-level retries.
     await pipeline(
-      Readable.from([jpeg]),
+      Readable.from([webp]),
       clipFile(name).createWriteStream({
         resumable: false,
         timeout: 10_000,
-        metadata: { contentType: "image/jpeg", cacheControl: "private, max-age=3600" },
+        metadata: { contentType: "image/webp", cacheControl: "private, max-age=3600" },
       }),
       { signal: controller.signal },
     );
@@ -95,9 +95,9 @@ export async function runClipThumbnailRetryBatch(signal?: AbortSignal): Promise<
           await client.query("ROLLBACK");
           continue; // Deleted, already completed, frozen, or being deleted.
         }
-        const name = retryThumbnailName(candidate.id, rows[0].object_name);
-        const jpeg = await generateClipThumbnail(clipFile(rows[0].object_name),signal);
-        await storePoster(name, jpeg);
+        const name = retryThumbnailName(candidate.id, rows[0].object_name, "webp");
+        const webp = await generateClipThumbnail(clipFile(rows[0].object_name),signal);
+        await storePoster(name, webp);
         await client.query(
           `UPDATE clips SET thumbnail_object_name=$2
            WHERE id=$1 AND thumbnail_object_name IS NULL AND content_type LIKE 'video/%'`, [candidate.id, name],

@@ -1,7 +1,7 @@
 import type { RequestHandler } from "express";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
 
-export const DEFAULT_CLIPS_FEED_LIMIT = 3;
+export const DEFAULT_CLIPS_FEED_LIMIT = 5;
 export const MAX_CLIPS_FEED_LIMIT = 10;
 // Covers a cold managed-Postgres checkout while remaining bounded. The SQL has
 // its own shorter statement timeout, so this is not permission for a slow query.

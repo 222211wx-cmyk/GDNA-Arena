@@ -18,7 +18,7 @@
 - [AMIS unified messenger](amis-messenger.md) — one shared Messenger component (full/embedded/widget) powers all 3 chat surfaces; mute/settings in raw SQL columns; call-history logs only in useCall.
 - [Realtime messenger delivery](realtime-messenger-delivery.md) — authenticated room pushes fan out to every active user socket; direct-message moderation has a bounded fail-open latency budget.
 - [Empire CLIPS rules](empire-clips.md) — simple name/code publishing; all media ≥60s with no upper duration, no rights gates; preserve historical data and view accounting.
-- [Clips upload transport](clips-upload-transport.md) — original-only R2 uploads through 10 GiB; no browser encoding; queued media work must stay separate from lightweight site requests.
+- [Clips upload transport](clips-upload-transport.md) — browser 480p/800kbps compression before resumable R2 uploads through 10 GiB, explicit original/server fallback; queued media work stays separate from lightweight site requests.
 - [Clips storage mutations](clips-storage-mutations.md) — fast multi-chunk uploads hit independent per-object storage quotas; preserve CAS safety when retrying.
 - [Light route bundling](light-route-bundling.md) — Vite can merge conditional-import preload lists; measure actual cold requests, not just bundle sizes.
 - [Empire Pulse](empire-pulse.md) — social feed at /pulse; DB tables pulse_posts/pulse_events/pulse_post_likes; 15 seeded international events (FIFA WC 2026 + UCL Final = LIVE); rewards +20 XP per post; stats at /api/pulse/stats.
@@ -32,6 +32,7 @@
 - [Royal Reserve policy](royal-reserve-policy.md) — messaging calls are free, without credit or reserve consent; preserve legacy finance records and require internet.
 - [Drizzle peer alignment](drizzle-peer-alignment.md) — Firebase Admin can split Drizzle type identities through optional OpenTelemetry peers; align consumers, not query casts.
 - [Optional AI policy](optional-ai-policy.md) — keep core availability independent of AI credentials and credits; no automatic paid-provider replacement.
+- [Operator evidence policy](operator-evidence-policy.md) — referrals are not pack verification; distinguish measured traffic, modeled savings and uptime before making operator claims.
 - [API generator compatibility](api-generator-compatibility.md) — generator defaults can misidentify workspace Zod and React Query versions; keep targets explicit.
 - [Completion merge validation](completion-merge-validation.md) — completion can merge concurrent changes before checks; repair the current merged file, not the previously tested snapshot.
 - [Clip media probing](clip-media-probing.md) — seek-related loopback resets are normal; distinguish client disconnects from fatal storage errors.

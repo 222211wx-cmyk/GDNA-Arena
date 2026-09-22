@@ -17,6 +17,68 @@ tags:
   - name: wallet
   - name: globalstar
 paths:
+  /gdna/ask:
+    post:
+      operationId: askGdna
+      description: Authenticated, bounded GDNA assistance. Identity is taken only from the session. Memory is opt-in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GdnaQuestion" }
+      responses:
+        "200":
+          description: Explicit LLM or deterministic rules response
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdnaAnswer" }
+        "401": { description: Login required }
+        "400": { description: Invalid question }
+        "503": { description: Knowledge or storage unavailable }
+  /gdna/status:
+    get:
+      operationId: getGdnaStatus
+      responses:
+        "200":
+          description: Authenticated coordinator capability and account usage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdnaStatus" }
+        "401": { description: Login required }
+  /gdna/evolution-log:
+    get:
+      operationId: getGdnaEvolutionLog
+      responses:
+        "200":
+          description: Capability-version changes only, no user prompts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdnaEvolution" }
+        "401": { description: Login required }
+  /gdna/memory:
+    get:
+      operationId: getGdnaMemory
+      responses:
+        "200":
+          description: Own consented account memory only
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdnaMemory" }
+        "401": { description: Login required }
+    delete:
+      operationId: deleteGdnaMemory
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GdnaMemoryRemoval" }
+      responses:
+        "200":
+          description: Remaining own entries; omit id to clear all own memory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GdnaMemory" }
+        "401": { description: Login required }
   /upload/presign:
     post:
       operationId: presignClipUpload
@@ -1052,6 +1114,91 @@ paths:
 
 components:
   schemas:
+    GdnaQuestion:
+      type: object
+      required: [query, section]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 4000 }
+        section: { type: string, enum: [hisn, helixly, souk, guard, dev] }
+        remember: { type: boolean, default: false }
+    GdnaUsage:
+      type: object
+      required: [used, limit]
+      properties:
+        used: { type: integer }
+        limit: { type: integer }
+    GdnaCitation:
+      type: object
+      required: [label]
+      properties:
+        label: { type: string }
+        url: { type: string }
+    GdnaSuggestion:
+      type: object
+      required: [title, description]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        url: { type: string }
+    GdnaAnswer:
+      type: object
+      required: [reply, mode, agent, citations, suggestions, usage, auditId]
+      properties:
+        reply: { type: string }
+        mode: { type: string, enum: [llm, rules] }
+        agent: { type: string }
+        citations: { type: array, items: { $ref: "#/components/schemas/GdnaCitation" } }
+        suggestions: { type: array, items: { $ref: "#/components/schemas/GdnaSuggestion" } }
+        usage: { $ref: "#/components/schemas/GdnaUsage" }
+        auditId: { type: string }
+    GdnaStatus:
+      type: object
+      required: [available, mode, agents, usage, platform]
+      properties:
+        available: { type: boolean }
+        mode: { type: string, enum: [llm, rules] }
+        agents:
+          type: array
+          items:
+            type: object
+            required: [id, name, description]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+        usage: { $ref: "#/components/schemas/GdnaUsage" }
+        platform: { type: object, additionalProperties: true }
+    GdnaEvolution:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            required: [id, agent, summary, createdAt]
+            properties:
+              id: { type: string }
+              agent: { type: string }
+              summary: { type: string }
+              createdAt: { type: string }
+    GdnaMemory:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            required: [id, content, createdAt]
+            properties:
+              id: { type: string }
+              content: { type: string }
+              createdAt: { type: string }
+    GdnaMemoryRemoval:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
     ClipUploadStatus:
       type: object
       required: [sessionId, state, statusUrl]

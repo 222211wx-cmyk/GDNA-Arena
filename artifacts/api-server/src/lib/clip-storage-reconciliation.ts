@@ -49,6 +49,7 @@ export function reconcileClipStorage(input: {
     if (clip.processing_output_object) protectedNames.set(clip.processing_output_object, "pending-compression-output");
     if (clip.thumbnail_object_name) protectedNames.set(clip.thumbnail_object_name, "stored-thumbnail");
     protectedNames.set(retryThumbnailName(clip.id, clip.object_name), "deterministic-retry-candidate");
+    protectedNames.set(retryThumbnailName(clip.id, clip.object_name, "webp"), "deterministic-retry-candidate");
   }
   const queued = new Set(input.queuedNames);
   const seen = new Set<string>();
@@ -60,11 +61,16 @@ export function reconcileClipStorage(input: {
     if (object.name.startsWith(".uploads/") || object.name.startsWith("clip_upload_")) {
       return ["protected", "resumable-upload-namespace"];
     }
-    const retry = /^thumb_retry_([1-9]\d*)_[0-9a-f]{32}\.jpg$/.exec(object.name);
+    // Lite has its own durable reservations and deletion outbox; the legacy
+    // orphan reconciler must never infer these derivatives are unreferenced.
+    if (/^(?:r2:clips\/derived\/)?lite-(?:mirror-)?(?:audio|poster)-/.test(object.name)) {
+      return ["protected", "lite-media-outbox-namespace"];
+    }
+    const retry = /^thumb_retry_([1-9]\d*)_[0-9a-f]{32}\.(?:jpg|webp)$/.exec(object.name);
     // Also hold historical candidate hashes for an extant clip.
     if (retry && clipIds.has(retry[1])) return ["protected", "retry-for-live-clip"];
     if (queued.has(object.name)) return ["protected", "already-queued"];
-    if (!/^(clip_[0-9a-f]{32}\.(mp4|mov|webm|mp3|m4a|aac|ogg|wav|flac)|thumb_[0-9a-f]{32}\.jpg)$/.test(object.name) && !retry) {
+    if (!/^(clip_[0-9a-f]{32}\.(mp4|mov|webm|mp3|m4a|aac|ogg|wav|flac)|thumb_[0-9a-f]{32}\.(jpg|webp))$/.test(object.name) && !retry) {
       return ["held", "unrecognized-name"];
     }
     const created = Date.parse(object.timeCreated ?? "");

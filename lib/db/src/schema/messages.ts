@@ -1,4 +1,12 @@
-import { pgTable, serial, text, integer, boolean, timestamp, numeric, uniqueIndex, jsonb, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp, numeric, uniqueIndex, jsonb, primaryKey, uuid } from "drizzle-orm/pg-core";
+
+export const dmSendReceipts = pgTable("dm_send_receipts", {
+  senderId: integer("sender_id").notNull(),
+  clientMessageId: uuid("client_message_id").notNull(),
+  requestHash: text("request_hash").notNull(),
+  message: jsonb("message").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({ pk: primaryKey({ columns: [t.senderId, t.clientMessageId] }) }));
 
 export const dmRooms = pgTable("dm_rooms", {
   id: serial("id").primaryKey(),

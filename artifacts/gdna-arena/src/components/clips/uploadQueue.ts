@@ -13,6 +13,11 @@ export type QueueRecord = {
   serverOwned?: boolean;
   uploaded: number;
   error?: string;
+  preparation?: "pending" | "compressed" | "original";
+  preparationMessage?: string;
+  originalFingerprint?: string;
+  transformedFingerprint?: string;
+  originalSize?: number;
 };
 const DATABASE = "helixly-clips-uploads-v1";
 export const lockName = (id: string) => `helixly-clip:${id}`;
@@ -43,10 +48,10 @@ async function transaction<T>(stores: string[], mode: IDBTransactionMode, work: 
   });
 }
 
-export async function enqueueFile(file: File, metadata: ClipUploadMetadata, owner: number): Promise<QueueRecord> {
+export async function enqueueFile(file: File, metadata: ClipUploadMetadata, owner: number, prepare = false): Promise<QueueRecord> {
   if (!navigator.locks) throw new Error("Verrouillage multi-onglets indisponible");
   const id = crypto.randomUUID();
-  const record: QueueRecord = { id, owner, name: file.name, size: file.size, metadata, requestId: id, completed: [], status: "pending", uploaded: 0 };
+  const record: QueueRecord = { id, owner, name: file.name, size: file.size, metadata, requestId: id, completed: [], status: "pending", uploaded: 0, ...(prepare ? { preparation: "pending" as const, originalSize: file.size } : {}) };
   // Structured clone stores the actual bytes, never an unsafe partial fingerprint.
   // Transaction completion, not request success, establishes durability.
   await transaction<void>(["records", "files"], "readwrite", tx => {
@@ -54,6 +59,35 @@ export async function enqueueFile(file: File, metadata: ClipUploadMetadata, owne
     tx.objectStore("records").put(record);
   });
   return record;
+}
+
+/** SHA-256 tree fingerprint over every byte, with bounded 5 MiB hash buffers.
+ * Versioned deliberately: this is not a conventional whole-file SHA-256. */
+export async function fingerprint(file: Blob, signal: AbortSignal): Promise<string> {
+  const hashes: Uint8Array[] = [];
+  for (let offset = 0; offset < file.size; offset += 5 * 1024 * 1024) {
+    signal.throwIfAborted();
+    hashes.push(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.slice(offset, offset + 5 * 1024 * 1024).arrayBuffer())));
+  }
+  signal.throwIfAborted();
+  const manifest = new Uint8Array(hashes.length * 32);
+  hashes.forEach((hash, index) => manifest.set(hash, index * 32));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", manifest));
+  return `sha256-tree-5m-v1:${file.size}:${Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Commit the transformed bytes and identity BEFORE any multipart initiation.
+ * Keep the original separately until server acceptance; interrupted preparation
+ * can resume from the durable source, while retries reuse the finished output. */
+export async function storePreparedFile(record: QueueRecord, original: File, prepared: File, signal: AbortSignal) {
+  record.originalFingerprint = await fingerprint(original, signal);
+  record.transformedFingerprint = prepared === original ? record.originalFingerprint : await fingerprint(prepared, signal);
+  signal.throwIfAborted();
+  await transaction<void>(["records", "files"], "readwrite", tx => {
+    tx.objectStore("files").put(original, `${record.id}:original`);
+    tx.objectStore("files").put(prepared, record.id);
+    tx.objectStore("records").put(record);
+  });
 }
 
 export async function listQueue(owner: number): Promise<QueueRecord[]> {
@@ -84,6 +118,7 @@ export async function storeProcessingJob(record: QueueRecord) {
   await transaction<void>(["records", "files"], "readwrite", tx => {
     tx.objectStore("records").put({ ...record, serverOwned: true, status: "processing", uploaded: record.size });
     tx.objectStore("files").delete(record.id);
+    tx.objectStore("files").delete(`${record.id}:original`);
   });
 }
 
@@ -107,6 +142,7 @@ export async function removeQueue(id: string, owner: number) {
       if (request.result?.owner !== owner) { tx.abort(); return; }
       store.delete(id);
       tx.objectStore("files").delete(id);
+      tx.objectStore("files").delete(`${id}:original`);
     };
   });
 }

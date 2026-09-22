@@ -5,6 +5,7 @@ import { enqueueFile, listQueue, readQueue, removeQueue, saveQueue } from "./upl
 import { discardQueuedUpload, markQueuedPaused, runQueuedUpload, uploadClip, UPLOAD_CHUNK_BYTES, MAX_CLIP_BYTES, validateClipSize } from "./clipUpload";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import * as preparation from "./prepareClip";
 
 const metadata = { title: "Mon clip", contentType: "video/mp4", durationSec: null };
 function locks() {
@@ -22,6 +23,46 @@ beforeEach(() => {
   vi.stubGlobal("XMLHttpRequest", undefined);
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+describe("prepared byte identity and recovery", () => {
+  it("atomically keeps distinct fingerprints and resumes transformed bytes without encoding twice", async () => {
+    const original = new File(["source video bytes"], "source.mp4", { type: "video/mp4" });
+    const transformed = new File(["encoded"], "source-480p.webm", { type: "video/webm" });
+    const encode = vi.spyOn(preparation, "prepareClip").mockResolvedValue({
+      file: transformed, mode: "compressed", message: "Prepared test output",
+    });
+    const record = await enqueueFile(original, metadata, 7, true);
+    const { calls } = api();
+    const controller = new AbortController();
+    await expect(runQueuedUpload(record.id, 7, controller.signal, (_p, _b, _s, _state, message) => {
+      if (message === "Prepared test output") controller.abort();
+    })).rejects.toMatchObject({ name: "AbortError" });
+    const recovered = await readQueue(record.id, 7);
+    expect(recovered.file?.type).toBe("video/webm");
+    expect(await recovered.file?.text()).toBe("encoded");
+    expect(recovered.record.metadata.originalFilename).toBeUndefined();
+    expect(recovered.record.originalFingerprint).toMatch(/^sha256-tree-5m-v1:/);
+    expect(recovered.record.originalFingerprint).not.toBe(recovered.record.transformedFingerprint);
+    expect(calls.some(call => call.body.action === "initiate")).toBe(false);
+    await runQueuedUpload(record.id, 7, new AbortController().signal, vi.fn());
+    expect(encode).toHaveBeenCalledOnce();
+    expect(calls.find(call => call.body.action === "initiate")?.body).toMatchObject({ size: 7, contentType: "video/webm" });
+  });
+
+  it("does not send pending preparation through the background worker", async () => {
+    const record = await enqueueFile(new File(["video"], "v.mp4", { type: "video/mp4" }), metadata, 7, true);
+    api();
+    await expect(runQueuedUpload(record.id, 7, new AbortController().signal, vi.fn())).rejects.toThrow("Ouvrez Clips");
+    expect((await readQueue(record.id, 7)).record.preparation).toBe("pending");
+  });
+  it("discards an unprepared source locally without creating an R2 multipart session", async () => {
+    const record = await enqueueFile(new File(["video"], "v.mp4", { type: "video/mp4" }), metadata, 7, true);
+    const { calls } = api();
+    await discardQueuedUpload(record.id, 7);
+    expect(await listQueue(7)).toEqual([]);
+    expect(calls.some(call => call.body.action === "initiate")).toBe(false);
+  });
+});
 
 function api(parts: { partNumber: number; etag: string; size: number }[] = []) {
   const calls: { url: string; body: Record<string, unknown> }[] = [];

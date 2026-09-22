@@ -101,9 +101,10 @@ export async function transcodeClipFile(
     "-protocol_whitelist", "file,pipe", "-threads", "1", "-i", sourcePath,
     ...(kind === "video" ? [
       "-map", "0:v:0", "-map", "0:a?",
-      "-vf", "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+      "-vf", "scale=w='min(854,iw)':h='min(480,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
       "-filter_threads", "1", "-c:v", "libx264", "-preset", "fast",
-      "-crf", "28", "-pix_fmt", "yuv420p", "-threads", "1",
+      "-b:v", "800k", "-maxrate", "800k", "-bufsize", "1600k",
+      "-pix_fmt", "yuv420p", "-threads", "1",
     ] : ["-map", "0:a", "-vn"]),
     "-c:a", "aac", "-b:a", "128k",
     "-map_metadata", "-1", "-map_chapters", "-1",

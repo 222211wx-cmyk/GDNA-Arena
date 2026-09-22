@@ -82,6 +82,7 @@ root.innerHTML = `
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
      <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 10 GiB (10 737 418 240 octets)</p>
     <div id="progress-wrap" hidden>
+      <p id="preparation-status" role="status" aria-live="polite"></p>
       <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress>
       <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p>
     </div>
@@ -195,7 +196,7 @@ async function refreshPendingUploads() {
         updateSubmitState();
         try {
           const published = await runQueuedUpload(record.id, uploadOwner, controller.signal,
-            (percent, bytes, speed, state) => reportUploadProgress(record.size, percent, bytes, speed, state));
+            (percent, bytes, speed, state, message) => reportUploadProgress(record.size, percent, bytes, speed, state, message));
           if (published) {
             const clearedSelection = finalizePublication(published, record.id);
             if (clearedSelection) reloadFeedAfterPublish();
@@ -467,8 +468,18 @@ function reportUploadProgress(
   percent: number,
   uploadedBytes: number | undefined,
   speedBytesPerSecond: number,
-  uploadState: "uploading" | "offline" | "stalled" | "processing",
+  uploadState: Parameters<ClipUploadProgress>[3],
+  message?: string,
 ) {
+  if (uploadState === "preparing") {
+    element<HTMLParagraphElement>("preparation-status").textContent = message ?? "Préparation de la vidéo…";
+    progress.value = percent;
+    status.textContent = "Préparation avant transfert — Pause pour interrompre. Aucune garantie d’envoi en une minute : débit réseau et durée du média déterminent le temps total.";
+    submit.textContent = `Préparation ${Math.floor(percent)}%…`;
+    return;
+  }
+  // The transfer may be much smaller than the source after preparation.
+  if (uploadedBytes && percent > 0) total = Math.round(uploadedBytes * 100 / percent);
   const uploaded = uploadedBytes ?? Math.min(total, Math.round(total * percent / 100));
   const displayPercent = Math.floor(percent);
   progress.value = percent;
@@ -540,8 +551,9 @@ form.addEventListener("submit", async event => {
       uploadedBytes,
       speedBytesPerSecond,
       uploadState,
+      message,
     ): void => {
-      reportUploadProgress(file.size, percent, uploadedBytes, speedBytesPerSecond, uploadState);
+      reportUploadProgress(file.size, percent, uploadedBytes, speedBytesPerSecond, uploadState, message);
     };
     if (selectedQueueId) activeQueueId = selectedQueueId;
     const published = selectedQueueId && uploadOwner !== null
@@ -598,7 +610,21 @@ composer.addEventListener("keydown", event => { if (event.key === "Escape") clos
 
 function mountReelsFeed() {
   reels?.destroy();
-  reels = mountReels(reelsRoot, { onOpenComposer: openComposer });
+  try {
+    reels = mountReels(reelsRoot, { onOpenComposer: openComposer });
+  } catch (error) {
+    console.error("Clips feed mount failed", error);
+    reelsRoot.replaceChildren();
+    const message = document.createElement("p");
+    message.setAttribute("role", "alert");
+    message.textContent = "Impossible d’ouvrir Clips. Réessayez ou revenez à l’accueil.";
+    const retry = document.createElement("button");
+    retry.textContent = "Réessayer";
+    retry.onclick = mountReelsFeed;
+    const home = document.createElement("a");
+    home.href = BASE; home.textContent = "Accueil";
+    reelsRoot.append(message, retry, home);
+  }
 }
 
 /** After a successful publish, refresh the feed and return to it. */

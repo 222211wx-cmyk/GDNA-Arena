@@ -20,4 +20,6 @@ export * from "./browser-push";
 export * from "./clip-original-registrations";
 export * from "./clips";
 export * from "./message-safety-reports";
+export * from "./gdna";
+export * from "./operators";
 

@@ -197,8 +197,10 @@ export function r2File(reference: string): ClipStorageFile {
     },
     createReadStream(range = {}) {
       const stream = new PassThrough();
+      const controller = new AbortController();
       let source: Readable | undefined;
       stream.once("close", () => {
+        controller.abort();
         if (source && !source.destroyed) source.destroy();
       });
       const config = r2Config();
@@ -211,8 +213,9 @@ export function r2File(reference: string): ClipStorageFile {
         : undefined;
       void r2Client().send(new GetObjectCommand({
         Bucket: config.bucket, Key: key, Range,
-      })).then(result => {
+      }), { abortSignal: controller.signal }).then(result => {
         source = nodeBody(result.Body);
+        if (stream.destroyed) { source.destroy(); return; }
         source.on("error", error => stream.destroy(error));
         source.pipe(stream);
       }, error => stream.destroy(error as Error));

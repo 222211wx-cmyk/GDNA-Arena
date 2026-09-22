@@ -203,7 +203,7 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number,
       "-vf", "scale=480:480:force_original_aspect_ratio=decrease",
       "-an", "-sn", "-dn",
       "-threads", "1",
-      "-c:v", "mjpeg", "-q:v", "5",
+      "-c:v", "libwebp", "-quality", "75",
       "-f", "image2pipe", "pipe:1",
     ];
     const spawned = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -235,11 +235,12 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number,
         if (code !== 0) {
           return reject(new Error(`ffmpeg thumbnail generation failed (${signal ?? code}): ${stderr.trim() || "unknown error"}`));
         }
-        const jpeg = Buffer.concat(output, outputBytes);
-        if (jpeg.length < 4 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8 || jpeg.at(-2) !== 0xff || jpeg.at(-1) !== 0xd9) {
-          return reject(new Error("ffmpeg did not produce a valid JPEG thumbnail"));
+        const webp = Buffer.concat(output, outputBytes);
+        if (webp.length < 20 || webp.toString("ascii", 0, 4) !== "RIFF" ||
+            webp.toString("ascii", 8, 12) !== "WEBP" || webp.readUInt32LE(4) !== webp.length - 8) {
+          return reject(new Error("ffmpeg did not produce a valid WebP thumbnail"));
         }
-        resolve(jpeg);
+        resolve(webp);
       });
       timeout = setTimeout(() => {
         terminalError = new Error("Thumbnail generation timed out");
@@ -258,7 +259,7 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number,
 }
 
 /**
- * Generates one bounded JPEG preview from a GCS-backed video object.
+ * Generates one bounded WebP preview from a provider-backed video object.
  *
  * At most two calls run concurrently. Additional calls reject immediately so
  * thumbnail work cannot become an unbounded in-process queue.

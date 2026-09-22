@@ -159,6 +159,11 @@ export function MessengerAssistant({ messages, userId, ownUsername, onDraft }: {
           Open my profile to enable AI permission
         </a>
       </Button>}
+      <Button size="sm" variant="link" asChild data-testid="messenger-gdna-link">
+        <a href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/chat?section=hisn&review=1`}>
+          Open GDNA control surface (never receives your encrypted messages)
+        </a>
+      </Button>
       <Input value={text} maxLength={4000} onChange={event => setText(event.target.value)}
         placeholder="Paste text to translate, or describe your own follow-up…" aria-label="Text explicitly shared with AI" />
       <div className="flex flex-wrap items-center gap-2">

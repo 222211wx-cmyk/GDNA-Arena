@@ -90,15 +90,27 @@ export async function fetchFeed(
 ): Promise<FeedResponse> {
   const params = new URLSearchParams();
   if (opts.before != null) params.set("before", String(opts.before));
-  params.set("limit", String(Math.min(Math.max(opts.limit ?? 8, 1), 10)));
+  params.set("limit", String(Math.min(Math.max(opts.limit ?? 5, 1), 5)));
   if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
-  const data = await getJson<FeedResponse>(`/clips/feed?${params.toString()}`, signal);
-  return {
-    clips: Array.isArray(data.clips) ? data.clips : [],
-    hasMore: Boolean(data.hasMore),
-    nextBefore: data.nextBefore ?? null,
-    degraded: Boolean(data.degraded),
-  };
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  // A feed metadata request must produce a retry state rather than an infinite
+  // loading shell. This deadline is unrelated to encoding or multipart uploads.
+  const timer = setTimeout(() => controller.abort(new Error("Le fil met trop de temps à répondre. Réessayez.")), 15_000);
+  try {
+    const data = await getJson<FeedResponse>(`/clips/feed?${params.toString()}`, controller.signal);
+    return {
+      clips: Array.isArray(data.clips) ? data.clips : [],
+      hasMore: Boolean(data.hasMore),
+      nextBefore: data.nextBefore ?? null,
+      degraded: Boolean(data.degraded),
+    };
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
 }
 
 export async function fetchEngagement(clipId: number, signal?: AbortSignal): Promise<Engagement> {

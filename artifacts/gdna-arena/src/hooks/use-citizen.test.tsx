@@ -34,6 +34,7 @@ import {
   useCitizenViewerScope,
   useMyCitizenProfile,
   useCitizenProfile,
+  useUpdateMyProfile,
 } from "./use-citizen";
 
 function wrapper(qc: QueryClient) {
@@ -151,5 +152,37 @@ describe("useCitizenProfile isolation", () => {
 
     expect(qc.getQueryData(citizenKeys.profile("u:1", "sara"))).toMatchObject({ isFollowing: true });
     expect(qc.getQueryData(citizenKeys.profile("u:2", "sara"))).toMatchObject({ isFollowing: false });
+  });
+});
+
+describe("useUpdateMyProfile privacy visibility", () => {
+  it("persists a visibility change via the existing API and reflects it on the shared me + profile caches", async () => {
+    authState = { user: { id: 1, isAdult: true }, loading: false };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+    // Seed the shared caches with the owner's current (public) profile.
+    const seeded = { userId: 1, username: "alice", isSelf: true, visibility: "everyone" as const };
+    qc.setQueryData(citizenKeys.me("u:1"), seeded);
+    qc.setQueryData(citizenKeys.profile("u:1", "alice"), seeded);
+
+    // The server returns the updated profile with the new visibility.
+    citizenFetch.mockResolvedValueOnce({ ...seeded, visibility: "friends" });
+
+    const { result } = renderHook(() => useUpdateMyProfile(), { wrapper: wrapper(qc) });
+
+    await result.current.mutateAsync({ visibility: "friends" });
+
+    // Only the visibility change is sent, through the existing PUT endpoint.
+    expect(citizenFetch).toHaveBeenCalledWith(
+      "/api/citizen-profiles/me",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ visibility: "friends" }) }),
+    );
+
+    // Both shared caches now reflect the new visibility, so any surface showing
+    // this profile (drawer, /u/:username, discovery) sees the change.
+    await waitFor(() => {
+      expect(qc.getQueryData(citizenKeys.me("u:1"))).toMatchObject({ visibility: "friends" });
+      expect(qc.getQueryData(citizenKeys.profile("u:1", "alice"))).toMatchObject({ visibility: "friends" });
+    });
   });
 });

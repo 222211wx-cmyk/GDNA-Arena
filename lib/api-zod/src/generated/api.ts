@@ -9,6 +9,88 @@ import * as zod from 'zod';
 
 
 /**
+ * Authenticated, bounded GDNA assistance. Identity is taken only from the session. Memory is opt-in.
+ */
+export const askGdnaBodyQueryMax = 4000;
+
+export const askGdnaBodyRememberDefault = false;
+
+export const AskGdnaBody = zod.object({
+  "query": zod.string().min(1).max(askGdnaBodyQueryMax),
+  "section": zod.enum(['hisn', 'helixly', 'souk', 'guard', 'dev']),
+  "remember": zod.boolean().default(askGdnaBodyRememberDefault)
+})
+
+export const AskGdnaResponse = zod.object({
+  "reply": zod.string(),
+  "mode": zod.enum(['llm', 'rules']),
+  "agent": zod.string(),
+  "citations": zod.array(zod.object({
+  "label": zod.string(),
+  "url": zod.string().optional()
+})),
+  "suggestions": zod.array(zod.object({
+  "title": zod.string(),
+  "description": zod.string(),
+  "url": zod.string().optional()
+})),
+  "usage": zod.object({
+  "used": zod.number().int(),
+  "limit": zod.number().int()
+}),
+  "auditId": zod.string()
+})
+
+
+export const GetGdnaStatusResponse = zod.object({
+  "available": zod.boolean(),
+  "mode": zod.enum(['llm', 'rules']),
+  "agents": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string()
+})),
+  "usage": zod.object({
+  "used": zod.number().int(),
+  "limit": zod.number().int()
+}),
+  "platform": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetGdnaEvolutionLogResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.string(),
+  "agent": zod.string(),
+  "summary": zod.string(),
+  "createdAt": zod.string()
+}))
+})
+
+
+export const GetGdnaMemoryResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.string(),
+  "content": zod.string(),
+  "createdAt": zod.string()
+}))
+})
+
+
+export const DeleteGdnaMemoryBody = zod.object({
+  "id": zod.string().uuid().optional()
+})
+
+export const DeleteGdnaMemoryResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.string(),
+  "content": zod.string(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
  * Owner-authorized direct R2 multipart upload. 5 MiB parts, maximum 10 GiB (2048 parts). No clip bytes accepted.
  */
 export const presignClipUploadBodyTitleMax = 120;

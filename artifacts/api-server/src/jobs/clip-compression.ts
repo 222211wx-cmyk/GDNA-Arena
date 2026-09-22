@@ -127,10 +127,13 @@ export async function runClipCompressionBatch(signal?: AbortSignal): Promise<num
          processing_status='ready', processing_output_object=NULL WHERE id=$1`,
         [candidate.id, output.filename, output.contentType, output.size],
       );
-      const priorPoster = retryThumbnailName(candidate.id, candidate.object_name);
+      const priorPosters = [
+        retryThumbnailName(candidate.id, candidate.object_name),
+        retryThumbnailName(candidate.id, candidate.object_name, "webp"),
+      ];
       // upload_object_name is a durable RETAINED original, not merely an
       // idempotency key. Optimization never authorizes deletion of its source.
-      await enqueue([locked.rows[0].thumbnail_object_name === priorPoster ? null : priorPoster]);
+      await enqueue(priorPosters.filter(name => name !== locked.rows[0].thumbnail_object_name));
     } else {
       await client.query(
         `UPDATE clips SET processing_status='unchanged', processing_output_object=NULL WHERE id=$1`, [candidate.id],
