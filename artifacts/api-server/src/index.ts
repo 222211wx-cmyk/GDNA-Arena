@@ -1,5 +1,5 @@
 import http from "http";
-import app, { sessionMiddleware } from "./app";
+import app, { sessionMiddleware, sessionStoreReady } from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import { attachSignalingServer } from "./lib/signaling.js";
@@ -1387,7 +1387,8 @@ async function autoSeedTestUsers() {
 
 // Development may retain legacy table initializers. Production startup never
 // performs schema DDL; Publish owns the production schema.
-prepareDevelopmentDatabase()
+sessionStoreReady
+  .then(() => prepareDevelopmentDatabase())
   .then(() => autoSeedTestUsers())
   .then(() => {
     const fortress = smartFortress.START();
@@ -1432,4 +1433,8 @@ prepareDevelopmentDatabase()
       if (err) { console.error(err); process.exit(1); }
       console.log(`[SERVER] Listening on port ${port} (HTTP + WebSocket /api/ws)`);
     });
+  })
+  .catch(err => {
+    logger.error(err, "API startup failed (session store or database unavailable)");
+    process.exit(1);
   });

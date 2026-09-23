@@ -5,6 +5,7 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { SharedFirestore, setAuthoritativeFirestore } from "./helpers/call-signal-firebase-mock.mjs";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -18,6 +19,8 @@ await build({
     plugin.onResolve({ filter: /^\.\/firebase-call-push$/ }, () => ({ path: firebaseMock, external: true }));
   } }],
 });
+// esbuild's ESM bundle of pg uses a CommonJS require for Node built-ins.
+globalThis.require = createRequire(import.meta.url);
 const store = await import(pathToFileURL(output).href);
 
 test("group Agora join authorization requires the selected accepting device", async () => {
@@ -34,4 +37,21 @@ test("group Agora join authorization requires the selected accepting device", as
   // A later room join does not retroactively reveal or authorize this private
   // invitation, even if that user is now a room member.
   assert.equal(store.isStoredGroupCallParticipant(answered, 30), false);
+});
+
+test("group call storage retains every wrapped recipient beyond eight devices and fingerprints", async () => {
+  setAuthoritativeFirestore(new SharedFirestore());
+  const ids = Array.from({ length: 12 }, (_, index) => `group_device_${String(index).padStart(16, "0")}`);
+  const devices = Object.fromEntries(ids.map(id => [id, "x".repeat(342)]));
+  const fingerprints = Object.fromEntries(ids.map(id => [id, "f".repeat(43)]));
+  const created = await store.createGroupCall({
+    roomId: 8, creatorId: 10, type: "voice", e2e: { devices, fingerprints },
+    participants: [
+      { userId: 10, username: "creator", status: "accepted", deviceId: ids[0], sessionTag: "test-session:creator-session" },
+      { userId: 20, username: "member", status: "invited" },
+    ],
+  });
+  const restored = await store.getGroupCall(created.callId);
+  assert.deepEqual(restored.e2e.devices, devices);
+  assert.deepEqual(restored.e2e.fingerprints, fingerprints);
 });

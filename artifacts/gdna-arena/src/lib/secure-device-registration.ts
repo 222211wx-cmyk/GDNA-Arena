@@ -4,6 +4,9 @@ import { apiPath } from "@/lib/network";
 export const SECURE_DEVICE_CAPACITY_CODE = "SECURE_DEVICE_CAPACITY";
 export const SECURE_DEVICE_CAPACITY_MESSAGE =
   "بلغت الحد الأقصى للأجهزة الآمنة. ألغِ جهازاً قديماً ثم أعد المحاولة. · Limite d’appareils sécurisés atteinte. Révoquez un ancien appareil puis réessayez.";
+export const SECURE_DEVICE_IDENTITY_CONFLICT_CODE = "SECURE_DEVICE_IDENTITY_CONFLICT";
+export const SECURE_DEVICE_IDENTITY_CONFLICT_MESSAGE =
+  "معرّف هذا الجهاز مرتبط بمفتاح آخر. استعد الهوية الأصلية بمفتاحها الخاص أو سجّل هوية جديدة بمعرّف جهاز جديد صراحةً. لا تحذف المفتاح الحالي أو تُلغِ الأجهزة تلقائياً. · Cet identifiant appartient à une autre clé. Restaurez l’identité privée d’origine ou inscrivez explicitement un nouvel appareil avec un nouvel identifiant. Ne supprimez aucune clé et ne révoquez aucun appareil automatiquement.";
 
 export class SecureDeviceRegistrationError extends Error {
   constructor(
@@ -41,14 +44,16 @@ async function registrationError(response: Response): Promise<SecureDeviceRegist
   const capacity = response.status === 409 &&
     (body.code === SECURE_DEVICE_CAPACITY_CODE ||
       (typeof body.error === "string" && /device limit|capacity/i.test(body.error)));
+  const identityConflict = response.status === 409 && body.code === SECURE_DEVICE_IDENTITY_CONFLICT_CODE;
   const detail = typeof body.error === "string"
     ? body.error
     : typeof body.message === "string" ? body.message : "";
   return new SecureDeviceRegistrationError(
-    capacity ? SECURE_DEVICE_CAPACITY_MESSAGE : (detail || `Secure device registration failed (HTTP ${response.status}).`),
+    identityConflict ? SECURE_DEVICE_IDENTITY_CONFLICT_MESSAGE :
+      capacity ? SECURE_DEVICE_CAPACITY_MESSAGE : (detail || `Secure device registration failed (HTTP ${response.status}).`),
     response.status,
     typeof body.code === "string" ? body.code : capacity ? SECURE_DEVICE_CAPACITY_CODE : "SECURE_DEVICE_REGISTRATION_FAILED",
-    capacity,
+    capacity || identityConflict,
   );
 }
 

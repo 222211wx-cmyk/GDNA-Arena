@@ -96,6 +96,7 @@ describe("useCall signaling reconnect", () => {
 
   beforeEach(() => {
     sockets = [];
+    getUserMedia.mockClear();
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", TestWebSocket);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
@@ -108,6 +109,16 @@ describe("useCall signaling reconnect", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("does not send an offer before the socket registration acknowledgement", async () => {
+    const { result, unmount } = renderHook(() => useCall({ id: 7, username: "caller" }));
+    await act(async () => { sockets[0].open(); });
+    await act(async () => { await result.current.startCall("recipient", false); });
+    expect(sentTypes(sockets[0]).map(frame => frame.type)).toEqual(["register"]);
+    expect(result.current.callStatus).toBe("idle");
+    expect(getUserMedia).not.toHaveBeenCalled();
+    unmount();
   });
 
   it("keeps a ringing recipient intact and resumes it after a signaling socket restart", async () => {
@@ -309,6 +320,35 @@ describe("useCall signaling reconnect", () => {
     });
     expect(request).toHaveBeenCalledTimes(2);
     expect(result.current.secureCallRegistrationStatus).toBe("ready");
+    unmount();
+  });
+
+  it("does not retry identity-conflict 409 on focus, reconnect, or timers", async () => {
+    const request = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: vi.fn().mockResolvedValue({
+        code: "SECURE_DEVICE_IDENTITY_CONFLICT",
+        error: "Secure device ID belongs to a different key",
+      }),
+    });
+    vi.stubGlobal("fetch", request);
+
+    const { result, unmount } = renderHook(() => useCall({ id: 7, username: "recipient" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.secureCallRegistrationStatus).toBe("error");
+    expect(result.current.secureCallRegistrationError).toContain("معرّف هذا الجهاز");
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(request).toHaveBeenCalledTimes(1);
     unmount();
   });
 

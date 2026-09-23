@@ -23,7 +23,7 @@ export interface GroupCall {
   type: GroupCallType;
   status: "active" | "ended";
   participants: GroupParticipant[];
-  e2e: { devices: Record<string, string> };
+  e2e: { devices: Record<string, string>; fingerprints?: Record<string, string> };
 }
 
 export interface GroupRemoteTrack {
@@ -106,7 +106,11 @@ function asGroupCall(value: unknown): GroupCall | null {
     type: rawType === "voice" ? "audio" : rawType,
     status: source.status,
     participants: source.participants,
-    e2e: { devices: devices as Record<string, string> },
+    e2e: { devices: devices as Record<string, string>,
+      fingerprints: source.e2e && typeof source.e2e === "object" &&
+        (source.e2e as { fingerprints?: unknown }).fingerprints &&
+        typeof (source.e2e as { fingerprints?: unknown }).fingerprints === "object"
+        ? (source.e2e as { fingerprints: Record<string, string> }).fingerprints : undefined },
   };
 }
 
@@ -314,7 +318,7 @@ export function useGroupCall(user: AuthUser | null, directCallStatus: CallStatus
         roomId,
         type,
         deviceId: identity.deviceId,
-        e2e: { devices },
+        e2e: { devices, fingerprints: Object.fromEntries(keyData.keys.map(key => [key.deviceId, key.fingerprint])) },
       });
       const durableCall = await getDurableCall((created as { callId?: string }).callId ?? "", created);
       if (!durableCall) throw new Error("The group call was created without a valid durable roster.");

@@ -83,9 +83,9 @@ router.get("/messages/safety-reports", async (req, res): Promise<void> => {
 });
 const CHAT_MODERATION_BUDGET_MS = 300;
 const E2E_PREFIX = "e2e:v1:";
-const MAX_E2E_CONTENT_LENGTH = 96_000;
-const MAX_E2E_DEVICES = 8;
-const E2E_DEVICE_TTL = "90 days";
+// Envelope size, not an account's device count, bounds encrypted delivery.
+// Each RSA-wrapped device key adds roughly 500 bytes to the wire payload.
+const MAX_E2E_CONTENT_LENGTH = 512_000;
 const MESSAGE_EXPIRY_HOURS = new Set([1, 6, 12, 24, 168, 720, 2160]);
 const ARENA_WITHDRAW_GAMES = {
   "neon-racer": "Neon Racer",
@@ -375,7 +375,7 @@ function parseE2eEnvelope(value: string): {
       Array.isArray(envelope.keys)
     ) return null;
     const entries = Object.entries(envelope.keys as Record<string, unknown>);
-    if (entries.length === 0 || entries.length > 256) return null;
+    if (entries.length === 0) return null;
     const recipients: E2eEnvelopeRecipient[] = [];
     for (const [rawRecipient, rawEntry] of entries) {
       const match = /^(\d+)\.([A-Za-z0-9_-]{16,80})$/.exec(rawRecipient);
@@ -418,28 +418,16 @@ router.put("/messages/e2e/key", async (req, res): Promise<void> => {
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
-    await client.query(
-      `DELETE FROM dm_user_e2ee_keys WHERE updated_at < now() - $1::interval`,
-      [E2E_DEVICE_TTL],
-    );
-    const existing = await client.query(
-      `SELECT 1 FROM dm_user_e2ee_keys WHERE user_id=$1 AND device_id=$2`,
+    const existing = await client.query<{ fingerprint: string }>(
+      `SELECT fingerprint FROM dm_user_e2ee_keys WHERE user_id=$1 AND device_id=$2`,
       [userId, deviceId],
     );
-    if (!existing.rows.length) {
-      const count = await client.query<{ count: string }>(
-        `SELECT COUNT(*)::text AS count FROM dm_user_e2ee_keys WHERE user_id=$1`,
-        [userId],
-      );
-      if (Number(count.rows[0]?.count ?? 0) >= MAX_E2E_DEVICES) {
-        await client.query("ROLLBACK");
-        res.status(409).json({
-          code: "SECURE_DEVICE_CAPACITY",
-          error: "Secure device limit reached; revoke an old device first",
-          maxDevices: MAX_E2E_DEVICES,
-        });
-        return;
-      }
+    // A device ID identifies a private key. Never silently replace its public
+    // half: old ciphertext would become unreadable on this same device ID.
+    if (existing.rows.length && existing.rows[0].fingerprint !== fingerprint) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ code: "SECURE_DEVICE_IDENTITY_CONFLICT", error: "Secure device ID belongs to a different key; preserve your existing private identity or enroll a new device" });
+      return;
     }
     await client.query(
       `INSERT INTO dm_user_e2ee_keys (user_id, device_id, public_key, fingerprint, updated_at)
@@ -466,9 +454,9 @@ router.get("/messages/e2e/devices", async (req, res): Promise<void> => {
   const result = await pool.query(
     `SELECT device_id, fingerprint, updated_at
      FROM dm_user_e2ee_keys
-     WHERE user_id=$1 AND updated_at >= now() - $2::interval
+     WHERE user_id=$1
      ORDER BY updated_at DESC`,
-    [userId, E2E_DEVICE_TTL],
+    [userId],
   );
   res.json({ devices: result.rows });
 });
@@ -522,10 +510,9 @@ router.get("/messages/rooms/:id/e2e-keys", async (req, res): Promise<void> => {
      FROM dm_room_members m
      LEFT JOIN dm_user_e2ee_keys k
        ON k.user_id = m.user_id
-      AND k.updated_at >= now() - $2::interval
      WHERE m.room_id = $1
      ORDER BY m.user_id`,
-    [roomId, E2E_DEVICE_TTL],
+    [roomId],
   );
   res.json({
     keys: result.rows
@@ -558,10 +545,9 @@ router.get("/messages/e2e/users/:username/key", async (req, res): Promise<void> 
      FROM users u
      LEFT JOIN dm_user_e2ee_keys k
        ON k.user_id = u.id
-      AND k.updated_at >= now() - $2::interval
      WHERE lower(u.username) = lower($1)
      ORDER BY k.updated_at DESC`,
-    [username, E2E_DEVICE_TTL],
+    [username],
   );
   const row = target.rows[0];
   if (!row) { res.status(404).json({ error: "Citizen not found" }); return; }
@@ -1187,10 +1173,9 @@ router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): P
          FROM dm_room_members m
          LEFT JOIN dm_user_e2ee_keys k
            ON k.user_id = m.user_id
-          AND k.updated_at >= now() - $2::interval
          WHERE m.room_id = $1
          FOR SHARE OF m`,
-        [roomId, E2E_DEVICE_TTL],
+        [roomId],
       );
       if (registered.rows.some(row => !row.device_id || !row.fingerprint)) {
         await client.query("ROLLBACK");

@@ -3,6 +3,7 @@ name: Session persistence & username login
 description: Why sessions persist in Postgres and citizen authentication uses username plus password without email
 ---
 - Sessions live in a `user_sessions` Postgres table (connect-pg-simple). **Why:** in-memory sessions were wiped on every republish/restart, logging out every citizen — the owner's biggest production complaint.
+- A transient auth-check failure is not logout; only an authoritative unauthorized response clears verified identity. **Why:** network/server failures had been presented as needing registration again. **How to apply:** gate initial verification, but keep calls and conversations mounted during routine refreshes and offer retry without erasing the session.
 - `createTableIfMissing` of connect-pg-simple is broken in the bundled (esbuild) prod build — it reads `table.sql` from disk. The table is created manually at startup in app.ts. Keep it that way.
 - Usernames are trimmed on register/login and matched case-insensitively; the database enforces case-insensitive username uniqueness. **Why:** whitespace/case mismatches must never force citizens to create duplicate accounts.
 - FINAL login design (owner decision, Aug 20, 2026): username + password only. Citizen registration/login must never request email, send verification or recovery codes, or depend on Resend/SMTP. Register → logged in instantly; remember-me = 30d rolling cookie; password change only from settings while logged in.

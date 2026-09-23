@@ -69,7 +69,7 @@ export default function Login() {
   const copy = coreCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
 
-  const [mode, setMode] = useState<"choice" | "auth">(user ? "choice" : "choice");
+  const [mode, setMode] = useState<"choice" | "auth">("choice");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -81,7 +81,7 @@ export default function Login() {
     setError("");
     setIsLoading(true);
     try {
-      await login(username, password, rememberMe);
+       await login(username.trim(), password, rememberMe);
       setMode("choice");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : copy.authFailed);

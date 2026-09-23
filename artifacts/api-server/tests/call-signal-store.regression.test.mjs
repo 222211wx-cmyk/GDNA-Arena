@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { createRequire } from "node:module";
 import {
   CallPushError,
   SharedFirestore,
@@ -17,6 +18,15 @@ const apiRoot = path.resolve(here, "..");
 const storeSource = path.join(apiRoot, "src/lib/call-signal-store.ts");
 const signalingSource = path.join(apiRoot, "src/lib/signaling.ts");
 const callStateMock = path.join(here, "helpers/call-signal-firebase-mock.mjs");
+function mockOptionalPush(plugin) {
+  plugin.onResolve({ filter: /^\.\/(?:firebase-call-push|browser-push)$/ }, args =>
+    ({ path: args.path, namespace: "optional-push-test" }));
+  plugin.onLoad({ filter: /.*/, namespace: "optional-push-test" }, () => ({
+    contents: `export async function sendAuthoritativeIncomingCallPush() {}
+      export async function sendBrowserCallTerminalPush() {}`,
+    loader: "js",
+  }));
+}
 
 async function loadReplica(label) {
   const destination = path.join(await mkdtemp(path.join(os.tmpdir(), "call-signal-store-")), `${label}.mjs`);
@@ -30,6 +40,7 @@ async function loadReplica(label) {
     plugins: [{
       name: "test-call-state-db",
       setup(plugin) {
+        mockOptionalPush(plugin);
         plugin.onResolve({ filter: /^\.\/call-state-db$/ }, (args) => {
           if (args.importer === storeSource) return { path: callStateMock, external: true };
           return undefined;
@@ -52,6 +63,7 @@ async function loadSignalingReplica(label) {
     plugins: [{
       name: "test-signaling-dependencies",
       setup(plugin) {
+        mockOptionalPush(plugin);
         plugin.onLoad({ filter: /signaling\.ts$/ }, async (args) => ({
           contents: `${await readFile(args.path, "utf8")}\nexport { subscribeCalls };\n`,
           loader: "ts",
@@ -77,6 +89,8 @@ async function loadSignalingReplica(label) {
 // Separate esbuild outputs deliberately create independent module graphs. Their
 // only shared dependency is the adapter above, just like separate API replicas
 // sharing Firestore rather than process memory.
+// Bundled ESM dependencies (firebase-admin/pg) still require Node built-ins.
+globalThis.require = createRequire(import.meta.url);
 const [replicaA, replicaB, signalingReplicaA, signalingReplicaB] = await Promise.all([
   loadReplica("a"), loadReplica("b"), loadSignalingReplica("a"), loadSignalingReplica("b"),
 ]);

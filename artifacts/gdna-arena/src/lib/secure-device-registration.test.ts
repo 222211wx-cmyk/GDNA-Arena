@@ -4,6 +4,7 @@ import {
   isTerminalSecureDeviceError,
   registerSecureDevice,
   SECURE_DEVICE_CAPACITY_CODE,
+  SECURE_DEVICE_IDENTITY_CONFLICT_CODE,
 } from "./secure-device-registration";
 import { ensureDeviceIdentity } from "./amis-e2ee";
 
@@ -75,6 +76,29 @@ describe("shared secure-device registration", () => {
     expect(ensureDeviceIdentity).toHaveBeenCalledTimes(1);
     // Registration owns no IndexedDB deletion path; it only reads/creates the
     // persistent identity and publishes its public half.
+    expect(request).toHaveBeenCalledWith("/api/messages/e2e/key", expect.objectContaining({ method: "PUT" }));
+  });
+
+  it("makes same-device different-key 409 terminal with identity-specific Arabic recovery, never deleting the private key", async () => {
+    const request = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: vi.fn().mockResolvedValue({
+        code: SECURE_DEVICE_IDENTITY_CONFLICT_CODE,
+        error: "Secure device ID belongs to a different key; preserve your existing private identity or enroll a new device",
+      }),
+    });
+    vi.stubGlobal("fetch", request);
+
+    const error = await registerSecureDevice(7).catch(value => value);
+    expect(isTerminalSecureDeviceError(error)).toBe(true);
+    expect(error.code).toBe(SECURE_DEVICE_IDENTITY_CONFLICT_CODE);
+    expect(error.message).toContain("معرّف هذا الجهاز مرتبط بمفتاح آخر");
+    expect(error.message).toContain("لا تحذف المفتاح الحالي");
+    expect(error.message).not.toContain("الحد الأقصى");
+    expect(error.message).not.toContain("ألغِ جهازاً قديماً");
+    expect(ensureDeviceIdentity).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith("/api/messages/e2e/key", expect.objectContaining({ method: "PUT" }));
   });
 });

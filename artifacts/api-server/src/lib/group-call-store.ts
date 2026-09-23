@@ -21,7 +21,7 @@ export interface GroupCallRecord {
   type: "video" | "voice";
   status: "active" | "ended";
   transport: { provider: "agora"; version: 1 };
-  e2e: { devices: Record<string, string> };
+  e2e: { devices: Record<string, string>; fingerprints?: Record<string, string> };
   participants: GroupParticipant[];
   createdAt: Date;
   endedAt?: Date;
@@ -56,7 +56,8 @@ function canonical(callId: string, value: Record<string, unknown>): GroupCallRec
   return {
     callId, channel: value.channel as string, roomId: value.roomId as number, creatorId: value.creatorId as number,
     type: value.type, status: value.status, transport: { provider: "agora", version: 1 },
-    e2e: { devices: devices as Record<string, string> }, participants,
+    e2e: { devices: devices as Record<string, string>,
+      fingerprints: (value.e2e as Record<string, unknown>).fingerprints as Record<string, string> | undefined }, participants,
     createdAt: date(value.createdAt), endedAt: value.endedAt ? date(value.endedAt) : undefined,
   };
 }

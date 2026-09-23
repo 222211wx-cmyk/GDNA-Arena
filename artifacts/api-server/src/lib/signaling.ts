@@ -97,7 +97,12 @@ async function currentCallBlocked(callerId: number, calleeId: number) {
   return result.rows.length > 0;
 }
 function envelopeMatches(rows: { device_id: string; fingerprint: string }[], envelope: E2eCallEnvelope | undefined) {
-  if (!envelope?.devices || typeof envelope.devices !== "object") return false;
+  if (!envelope?.devices || typeof envelope.devices !== "object" || Array.isArray(envelope.devices) ||
+    JSON.stringify(envelope.devices).length > 256_000) return false;
+  if (!Object.entries(envelope.devices).every(([id, key]) =>
+    /^[A-Za-z0-9_-]{16,80}$/.test(id) &&
+    typeof key?.fingerprint === "string" && /^[A-Za-z0-9_-]{43}$/.test(key.fingerprint) &&
+    typeof key?.wrappedSecret === "string" && /^[A-Za-z0-9_+/=-]{100,1000}$/.test(key.wrappedSecret))) return false;
   const offered = Object.entries(envelope.devices).map(([id, key]) => `${id}.${key?.fingerprint}`).sort();
   const registered = rows.map(key => `${key.device_id}.${key.fingerprint}`).sort();
   return offered.length > 0 && offered.length === registered.length && offered.every((key, i) => key === registered[i]);
@@ -105,7 +110,7 @@ function envelopeMatches(rows: { device_id: string; fingerprint: string }[], env
 async function validateEnvelope(calleeId: number, envelope: E2eCallEnvelope | undefined) {
   if (!pool) return false;
   const rows = await pool.query<{ device_id: string; fingerprint: string }>(
-    `SELECT device_id, fingerprint FROM dm_user_e2ee_keys WHERE user_id=$1 AND updated_at >= now() - interval '90 days'`, [calleeId],
+    `SELECT device_id, fingerprint FROM dm_user_e2ee_keys WHERE user_id=$1`, [calleeId],
   );
   return envelopeMatches(rows.rows, envelope);
 }
@@ -429,7 +434,11 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             (current.transport.provider === "webrtc" && !current.deferredMedia && !validDescription(msg.answer, "answer")) ||
             (current.transport.provider === "webrtc" && current.deferredMedia && msg.answer !== null && !validDescription(msg.answer, "answer")) ||
             (current.transport.provider === "agora" && msg.answer !== null) ||
-            await currentCallBlocked(current.caller.id, self.userId) || !await validateEnvelope(self.userId, current.e2e as E2eCallEnvelope | undefined)) { return; }
+            await currentCallBlocked(current.caller.id, self.userId)) { return; }
+          if (!await validateEnvelope(self.userId, current.e2e as E2eCallEnvelope | undefined)) {
+            send(ws, { type: "call-unavailable", callId: msg.callId, code: "SECURE_DEVICE_KEYS_CHANGED" });
+            return;
+          }
           const accepted = await answerAuthoritativeCall(msg.callId, self.userId, self.sessionId, self.deviceId, msg.answer);
           if (!accepted) { send(ws, { type: "call-ended", callId: msg.callId, by: "server", code: "INVITATION_NO_LONGER_RINGING" }); return; }
           broadcastToUser(accepted.caller.id, { type: "call-accepted", from: accepted.callee.name, callId: accepted.callId, answer: msg.answer, deferredMedia: accepted.deferredMedia, transport: accepted.transport, signalId: `${accepted.callId}:accepted` });

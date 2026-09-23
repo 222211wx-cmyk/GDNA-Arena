@@ -99,22 +99,22 @@ app.use((req, res, next) => isClipUploadRequest(req.path) ? next() : formBody(re
 
 // Exported so the WebSocket signaling server can authenticate upgrades
 // against the same session store.
-if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
-  logger.error("SESSION_SECRET is not set in production — sessions are using an insecure fallback secret!");
-}
 // Persistent session store (PostgreSQL) — sessions survive server restarts
 // and republishes, so citizens stay logged in instead of being kicked out.
 const PgStore = connectPgSimple(session);
 // Create the table ourselves — the store's createTableIfMissing reads a .sql
 // file from disk, which breaks in the bundled production build.
-if (pool) {
-  pool.query(`
+// Do not serve requests before the store is ready. In particular, unrelated
+// legacy schema changes must not prevent the session table from being created.
+export const sessionStoreReady = pool.query(`
     CREATE TABLE IF NOT EXISTS "user_sessions" (
       "sid" varchar NOT NULL COLLATE "default" PRIMARY KEY,
       "sess" json NOT NULL,
       "expire" timestamp(6) NOT NULL
     );
     CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire");
+  `);
+void sessionStoreReady.then(() => pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false;
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uniq ON users (LOWER(email));
     CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uniq ON users (LOWER(username));
@@ -131,7 +131,7 @@ if (pool) {
       read_receipts boolean NOT NULL DEFAULT true,
       updated_at timestamptz NOT NULL DEFAULT now()
     );
-  `).then(async () => {
+  `)).then(async () => {
     // Legacy admin bootstrap remains independent from citizen authentication.
     // It sends no mail and does not make email part of register/login.
     // Bootstrap admin access: grant is_admin to emails listed in ADMIN_EMAILS
@@ -147,8 +147,7 @@ if (pool) {
       if (result.rowCount) logger.info(`Granted admin to ${result.rowCount} account(s)`);
     }
     return undefined;
-  }).catch((err) => logger.error(err, "Failed to create session table / auth indexes"));
-}
+  }).catch((err) => logger.error(err, "Failed to update legacy auth indexes / schema"));
 // Never run production with a forgeable fallback secret — refuse to start.
 const sessionSecret = process.env.SESSION_SECRET
   ?? (process.env.NODE_ENV === "production"
@@ -165,8 +164,9 @@ export const sessionMiddleware = session({
   // citizens are never asked to log in again.
   rolling: true,
   cookie: {
-    // "auto" + trust proxy: secure cookies on HTTPS (production), plain in dev
-    secure: process.env.NODE_ENV === "production" ? "auto" : false,
+    // Production cookies must never silently downgrade to non-Secure if the
+    // reverse proxy loses X-Forwarded-Proto. trust proxy 1 reads that header.
+    secure: process.env.NODE_ENV === "production",
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: "lax",

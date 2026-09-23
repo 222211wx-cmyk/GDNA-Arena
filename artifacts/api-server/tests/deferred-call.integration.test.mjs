@@ -168,6 +168,11 @@ test("deferred WebRTC invitations authenticate, bind one callee, and support Fir
 
   const config = await responseJson(await request("/call-push/config"), 200);
   assert.equal(typeof config.enabled, "boolean");
+  const rtc = await responseJson(await request("/rtc/ice-servers", { headers: { cookie: caller.cookie } }), 200);
+  if (rtc.provider !== "webrtc" && rtc.provider !== "hybrid") {
+    t.skip("deferred WebRTC requires the configured WebRTC/hybrid provider; this deployment uses Agora");
+    return;
+  }
   // Configured deployments use Firestore as canonical state; local runs
   // without Firebase web configuration exercise the bounded WS fallback.
   const credit = await responseJson(await request("/billing/credit", {

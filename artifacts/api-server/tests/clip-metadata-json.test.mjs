@@ -44,6 +44,12 @@ test("only direct-upload metadata routes parse 2048 ETags within bounded 256 KiB
       assert.equal((await post(endpoint,manifest)).status,413,endpoint+" retains default 100KiB");
       assert.equal((await post(endpoint,JSON.stringify({padding:"x".repeat(99*1024)}))).status,200);
     }
+    for(const endpoint of ["/api/messages/rooms/42/send","/api/communication/groups"]){
+      const encrypted=await post(endpoint,JSON.stringify({padding:"x".repeat(512*1024)}));
+      assert.equal(encrypted.status,200,endpoint+" accepts a bounded multi-device envelope");
+      assert.equal((await post(endpoint,JSON.stringify({padding:"x".repeat(768*1024)}))).status,413);
+    }
+    assert.equal((await post("/api/messages/rooms/not-a-room/send",manifest)).status,413);
   }finally{
     if(server)await new Promise(resolve=>server.close(resolve));
     await rm(directory,{recursive:true,force:true});

@@ -154,6 +154,12 @@ function mediaFailureMessage(err: unknown, device: "microphone" | "camera" = "mi
   if (name === "NotSupportedError") {
     return `${icon} هذا المتصفح لا يدعم الوصول إلى ${label}`;
   }
+  // A successful permission grant does not establish Agora token, channel,
+  // encryption, or publishing readiness. Never mislabel an SDK/setup failure
+  // as a microphone permission failure.
+  if (device === "microphone" && (name || code || err instanceof Error)) {
+    return "تعذّر إعداد اتصال الوسائط الآمن — تحقق من اتصال Agora وإعداد القناة ثم أعد المحاولة";
+  }
   return `${icon} تعذّر الوصول إلى ${label} — تأكد من الإذن والجهاز ثم أعد المحاولة`;
 }
 
@@ -719,7 +725,6 @@ export function useCall(user: { id: number; username: string } | null) {
       try {
         const identity = await registerSecureDevice(user.id);
         if (cancelled) return;
-        if (cancelled) return;
         attempt = 0;
         terminal = false;
         secureCallRegistrationReadyRef.current = true;
@@ -732,7 +737,7 @@ export function useCall(user: { id: number; username: string } | null) {
         setSecureCallRegistrationError(
           error instanceof Error ? error.message : "Secure device registration failed.",
         );
-        // Capacity is terminal until the citizen explicitly revokes a device.
+        // Capacity and identity conflicts require explicit citizen recovery.
         // Do not hammer PUT on timers, focus, visibility, or reconnect.
         terminal = isTerminalSecureDeviceError(error);
         if (!terminal) {
@@ -2084,7 +2089,9 @@ export function useCall(user: { id: number; username: string } | null) {
           // Callee side safety: if a block denial races an incoming banner, clear it.
           setIncomingCall(null);
           showCallError(
-            msg.code === "CALL_SIGNALING_UNAVAILABLE"
+             msg.code === "SECURE_DEVICE_KEYS_CHANGED"
+               ? "🔐 تغيّرت مفاتيح الأجهزة الآمنة — اطلب مكالمة جديدة بعد تحديث الأجهزة"
+               : msg.code === "CALL_SIGNALING_UNAVAILABLE"
               ? "إشارات المكالمة غير متاحة حالياً. لم يتم بدء مسار بديل — أعد المحاولة بعد استعادة الاتصال."
               : msg.code === "MEDIA_PROTOCOL_MISMATCH"
               ? "إصدار وسائط المكالمة غير متوافق — حدّث الصفحة وحاول مجدداً"
@@ -2277,8 +2284,12 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("أنت غير متصل بالشبكة — لا يمكن بدء مكالمة الآن");
       return;
     }
-    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+    if (wsRef.current?.readyState !== WebSocket.OPEN || !registeredSocketRef.current) {
       showCallError("الاتصال بالشبكة منقطع — انتظر ثوانٍ وأعد المحاولة");
+      return;
+    }
+    if (!secureCallRegistrationReadyRef.current) {
+      showCallError("🔐 الجهاز الآمن غير مسجل بعد — انتظر التسجيل أو أعد المحاولة من إعدادات الأجهزة");
       return;
     }
     const callId = `call_${crypto.randomUUID().replace(/-/g, "")}`;

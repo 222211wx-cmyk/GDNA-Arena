@@ -122,7 +122,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const existing = await db
     .select()
     .from(usersTable)
-    .where(sql`LOWER(${usersTable.username}) = ${username.toLowerCase()}`)
+    .where(sql`LOWER(${usersTable.username}) = LOWER(${username})`)
     .limit(1);
 
   if (existing.length > 0) {
@@ -223,7 +223,9 @@ router.post("/auth/birth-date", async (req, res): Promise<void> => {
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   try {
-  const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+  // Trim only surrounding whitespace. Removing internal spaces could map an
+  // existing "a b" account onto another citizen's "ab" account.
+  const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   // "Se souvenir de moi" — must be explicitly true; omitted = standard 7 days
   const rememberMe = req.body?.rememberMe === true;
@@ -232,18 +234,20 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db
+  const matches = await db
     .select()
     .from(usersTable)
-    .where(sql`LOWER(${usersTable.username}) = ${username}`)
+    .where(sql`LOWER(${usersTable.username}) = LOWER(${username})`)
     .orderBy(usersTable.id)
-    .limit(1);
+    .limit(2);
 
-  if (!user) {
+  // Legacy duplicates must never be resolved by picking an arbitrary account.
+  if (matches.length !== 1) {
     // Generic message (same as wrong password) — prevents account enumeration
     res.status(401).json({ error: "الاسم أو كلمة السر غير صحيحة — Nom ou mot de passe incorrect" });
     return;
   }
+  const [user] = matches;
 
   let valid = false;
   try {
@@ -375,15 +379,28 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, userId))
-    .limit(1);
+  let user: typeof usersTable.$inferSelect | undefined;
+  try {
+    [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+  } catch (err) {
+    req.log.error(err, "Session identity lookup unavailable");
+    res.status(503).json({ error: "Session temporarily unavailable — please retry" });
+    return;
+  }
 
   if (!user) {
     const sessionId = req.sessionID;
-    await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+    try {
+      await new Promise<void>((resolve, reject) => req.session.destroy(err => err ? reject(err) : resolve()));
+    } catch (err) {
+      req.log.error(err, "Unable to revoke missing-account session");
+      res.status(503).json({ error: "Session temporarily unavailable — please retry" });
+      return;
+    }
     disconnectSessionSockets(sessionId);
     clearSessionCookie(res);
     res.status(401).json({ error: "User not found" });

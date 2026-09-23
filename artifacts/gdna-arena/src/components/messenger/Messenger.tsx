@@ -63,6 +63,8 @@ import {
   isTerminalSecureDeviceError,
   registerSecureDevice,
   SECURE_DEVICE_CAPACITY_MESSAGE,
+  SECURE_DEVICE_IDENTITY_CONFLICT_CODE,
+  type SecureDeviceRegistrationError,
 } from "@/lib/secure-device-registration";
 
 const BG      = "#0a0a0a";   // app background
@@ -199,7 +201,7 @@ function SecureDeviceManager({
       if (!response.ok) throw new Error("تعذر تحميل الأجهزة الآمنة · Impossible de charger les appareils sécurisés.");
       const data = await response.json() as { devices?: SecureDeviceRow[] };
       setCurrentDeviceId(identity.deviceId);
-      setDevices((data.devices ?? []).slice(0, 8));
+      setDevices(data.devices ?? []);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Secure devices unavailable");
     } finally {
@@ -239,7 +241,7 @@ function SecureDeviceManager({
         <div className="min-w-0 flex-1">
           <p className="m-0 text-[13px] font-semibold text-card-foreground">الأجهزة الآمنة · Appareils sécurisés</p>
           <p className="mt-1 mb-0 text-[11px] text-muted-foreground">
-            8 أجهزة كحد أقصى. لا يتم إلغاء أي جهاز أو حذف أي مفتاح تلقائياً. · 8 appareils maximum. Aucun appareil ni aucune clé n’est supprimé automatiquement.
+            الأجهزة النشطة مرتبطة بمفاتيحها الخاصة. لا تُلغَ الأجهزة أو تُحذف المفاتيح تلقائياً. · Les appareils actifs conservent leurs clés privées. Aucune clé n’est supprimée automatiquement.
           </p>
         </div>
         <Button type="button" size="sm" variant="outline" disabled={loading || !isOnline} onClick={() => void load()}>
@@ -1271,7 +1273,9 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const [menuMsgId,   setMenuMsgId]   = useState<number | null>(null);
   const [isMobile,    setIsMobile]    = useState(typeof window !== "undefined" && window.innerWidth < 640);
   const [e2eReady,     setE2eReady]    = useState(false);
-  const [e2eCapacityBlocked, setE2eCapacityBlocked] = useState(false);
+  const [e2eTerminalError, setE2eTerminalError] = useState<SecureDeviceRegistrationError | null>(null);
+  const e2eCapacityBlocked = e2eTerminalError?.code === "SECURE_DEVICE_CAPACITY";
+  const terminalRegistrationAccountRef = useRef<number | null>(null);
   // Controls the + attachment tray inside the composer
   const [showAttachTray, setShowAttachTray] = useState(false);
   const [showLinkComposer, setShowLinkComposer] = useState(false);
@@ -1432,10 +1436,12 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     try {
       await registerSecureDevice(user.id);
       setE2eReady(true);
-      setE2eCapacityBlocked(false);
+      setE2eTerminalError(null);
+      terminalRegistrationAccountRef.current = null;
     } catch (error) {
       setE2eReady(false);
-      setE2eCapacityBlocked(isTerminalSecureDeviceError(error));
+      setE2eTerminalError(isTerminalSecureDeviceError(error) ? error : null);
+      terminalRegistrationAccountRef.current = isTerminalSecureDeviceError(error) ? user.id : null;
       throw error;
     }
   }, [isOnline, offlineToast, user?.id]);
@@ -1456,9 +1462,11 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   useEffect(() => {
     if (!user) {
       setE2eReady(false);
-      setE2eCapacityBlocked(false);
+      setE2eTerminalError(null);
+      terminalRegistrationAccountRef.current = null;
       return;
     }
+    if (terminalRegistrationAccountRef.current === user.id) return;
     void ensureE2eRegistered().catch(() => {});
   }, [ensureE2eRegistered, user?.id]);
 
@@ -2783,6 +2791,12 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
               <MoreVertical size={20} />
             </button>
           </div>
+          {e2eTerminalError?.code === SECURE_DEVICE_IDENTITY_CONFLICT_CODE && (
+            <div role="alert" data-testid="secure-device-identity-conflict"
+              className="w-full border-b border-destructive-border bg-destructive/10 px-3 py-2 text-start text-xs font-semibold text-destructive">
+              {e2eTerminalError.message}
+            </div>
+          )}
           {e2eCapacityBlocked && (
             <button
               type="button"

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createCipheriv, generateKeyPairSync, privateDecrypt, publicEncrypt, randomBytes } from "node:crypto";
 import test from "node:test";
 import WebSocket from "ws";
 
@@ -41,10 +41,10 @@ async function register(username) {
       birthDate: "1990-01-01",
     }),
   });
-  await responseJson(response, 201);
+  const account = await responseJson(response, 201);
   const setCookie = response.headers.get("set-cookie");
   assert.ok(setCookie);
-  return { username, cookie: setCookie.split(";", 1)[0] };
+  return { id: account.id, username, cookie: setCookie.split(";", 1)[0] };
 }
 
 class Probe {
@@ -132,6 +132,123 @@ async function establishRinging(caller, callee, callId, calleeName, e2e) {
   caller.send(offerMessage(callId, calleeName, e2e));
   await Promise.all([ready, incoming]);
 }
+
+test("more than eight encrypted devices remain available for messaging and direct calls", async t => {
+  const caller = await register(unique("mc"));
+  const callee = await register(unique("md"));
+  const callerSocket = await connect(caller.cookie);
+  const calleeSocket = await connect(callee.cookie);
+  t.after(async () => {
+    await Promise.allSettled([callerSocket.close(), calleeSocket.close()]);
+    await Promise.allSettled([
+      request("/auth/me", { method: "DELETE", headers: { cookie: caller.cookie } }),
+      request("/auth/me", { method: "DELETE", headers: { cookie: callee.cookie } }),
+    ]);
+  });
+
+  const devices = {};
+  const envelopeRecipients = [];
+  for (let i = 0; i < 12; i++) {
+    const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const deviceId = unique(`device${i}`);
+    const key = await responseJson(await request("/messages/e2e/key", {
+      method: "PUT", headers: { cookie: callee.cookie },
+      body: JSON.stringify({ deviceId, publicKey: publicKey.export({ format: "jwk" }) }),
+    }), 200);
+    envelopeRecipients.push({ userId: callee.id, deviceId, publicKey, privateKey, fingerprint: key.fingerprint });
+  }
+  const callSecret = randomBytes(32).toString("base64url");
+  for (const recipient of envelopeRecipients) {
+    devices[recipient.deviceId] = {
+      wrappedSecret: publicEncrypt({ key: recipient.publicKey, oaepHash: "sha256" }, Buffer.from(callSecret)).toString("base64url"),
+      fingerprint: recipient.fingerprint,
+    };
+    assert.equal(privateDecrypt({ key: recipient.privateKey, oaepHash: "sha256" },
+      Buffer.from(devices[recipient.deviceId].wrappedSecret, "base64url")).toString(), callSecret);
+  }
+  const ownPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const ownDeviceId = unique("senderdevice");
+  const ownKey = await responseJson(await request("/messages/e2e/key", {
+    method: "PUT", headers: { cookie: caller.cookie },
+    body: JSON.stringify({ deviceId: ownDeviceId, publicKey: ownPair.publicKey.export({ format: "jwk" }) }),
+  }), 200);
+  envelopeRecipients.push({
+    userId: caller.id, deviceId: ownDeviceId, publicKey: ownPair.publicKey,
+    privateKey: ownPair.privateKey, fingerprint: ownKey.fingerprint,
+  });
+  const listed = await responseJson(await request("/messages/e2e/devices", { headers: { cookie: callee.cookie } }), 200);
+  assert.equal(listed.devices.length, 12);
+  const keys = await responseJson(await request(`/messages/e2e/users/${callee.username}/key`, {
+    headers: { cookie: caller.cookie },
+  }), 200);
+  assert.equal(keys.keys.length, 12, "all active fingerprints must be returned to the caller");
+  const { room } = await responseJson(await request("/messages/rooms", {
+    method: "POST", headers: { cookie: caller.cookie },
+    body: JSON.stringify({ targetUsername: callee.username }),
+  }), 201);
+  const roomKeys = await responseJson(await request(`/messages/rooms/${room.id}/e2e-keys`, {
+    headers: { cookie: caller.cookie },
+  }), 200);
+  assert.equal(roomKeys.keys.length, 13, "message sender and all 12 recipient identities are included");
+  const aesKey = randomBytes(32);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", aesKey, iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify({ kind: "text", text: "encrypted delivery beyond eight devices" })), cipher.final(), cipher.getAuthTag()]);
+  const wrapped = Object.fromEntries(envelopeRecipients.map(recipient => [
+    `${recipient.userId}.${recipient.deviceId}`,
+    { wrappedKey: publicEncrypt({ key: recipient.publicKey, oaepHash: "sha256" }, aesKey).toString("base64url"),
+      fingerprint: recipient.fingerprint },
+  ]));
+  for (const recipient of envelopeRecipients) {
+    assert.deepEqual(privateDecrypt({ key: recipient.privateKey, oaepHash: "sha256" },
+      Buffer.from(wrapped[`${recipient.userId}.${recipient.deviceId}`].wrappedKey, "base64url")), aesKey);
+  }
+  const content = "e2e:v1:" + Buffer.from(JSON.stringify({
+    v: 1, alg: "RSA-OAEP-256/A256GCM", iv: iv.toString("base64url"),
+    ciphertext: ciphertext.toString("base64url"), keys: wrapped,
+  })).toString("base64url");
+  const delivered = await responseJson(await request(`/messages/rooms/${room.id}/send`, {
+    method: "POST", headers: { cookie: caller.cookie }, body: JSON.stringify({ content, type: "text" }),
+  }), 201);
+  assert.equal(delivered.message.content, content, "server persists only the complete opaque encrypted envelope");
+  const staleKeys = { ...wrapped, [`${callee.id}.${envelopeRecipients[0].deviceId}`]: {
+    ...wrapped[`${callee.id}.${envelopeRecipients[0].deviceId}`], fingerprint: "f".repeat(43),
+  } };
+  const staleContent = "e2e:v1:" + Buffer.from(JSON.stringify({
+    v: 1, alg: "RSA-OAEP-256/A256GCM", iv: iv.toString("base64url"),
+    ciphertext: ciphertext.toString("base64url"), keys: staleKeys,
+  })).toString("base64url");
+  const rejected = await request(`/messages/rooms/${room.id}/send`, {
+    method: "POST", headers: { cookie: caller.cookie },
+    body: JSON.stringify({ content: staleContent, type: "text" }),
+  });
+  assert.equal(rejected.status, 409, "wrong fingerprint cannot bypass exact active-device validation");
+  const differentKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey;
+  const collision = await request("/messages/e2e/key", {
+    method: "PUT", headers: { cookie: callee.cookie },
+    body: JSON.stringify({ deviceId: envelopeRecipients[0].deviceId, publicKey: differentKey.export({ format: "jwk" }) }),
+  });
+  assert.equal(collision.status, 409, "registration must never replace a device's existing private-key identity");
+
+  const rtc = await responseJson(await request("/rtc/ice-servers", { headers: { cookie: caller.cookie } }), 200);
+  const transport = rtc.provider === "webrtc" ? directTransport : { provider: "agora", version: 1 };
+  const callId = unique("manycall");
+  const ready = callerSocket.waitFor(message => message.type === "call-ready" && message.callId === callId);
+  const incoming = calleeSocket.waitFor(message => message.type === "call-incoming" && message.callId === callId);
+  callerSocket.send({
+    type: "call-offer", to: callee.username, callId, offer: transport.provider === "agora" ? null : validOffer,
+    video: false, transport, e2e: { devices },
+  });
+  await Promise.all([ready, incoming]);
+  const accepted = callerSocket.waitFor(message => message.type === "call-accepted" && message.callId === callId);
+  calleeSocket.send({
+    type: "call-answer", to: caller.username, callId,
+    answer: transport.provider === "agora" ? null : validAnswer, transport,
+  });
+  await accepted;
+  callerSocket.send({ type: "call-end", to: callee.username, callId });
+  await calleeSocket.waitFor(message => message.type === "call-ended" && message.callId === callId);
+});
 
 test("direct call setup cancellation cannot orphan a pending offer", async t => {
   const caller = await register(unique("dcr"));
