@@ -12,13 +12,13 @@ import type { FeedPost } from "./social-types";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 
 // ── TrendingSection ───────────────────────────────────────────────────────────
-function TrendingSection({ st, dir }: { st: Record<string, string>; dir: string }) {
+function TrendingSection({ st, dir, refreshKey }: { st: Record<string, string>; dir: string; refreshKey: number }) {
   const [data, setData] = useState<{ topPosts: any[]; hashtags: { tag: string; count: number }[] } | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     fetch(api("/api/social/v2/trending")).then(r => r.json()).then(j => setData(j)).catch(() => {});
-  }, []);
+  }, [refreshKey]);
 
   if (!data || (data.hashtags.length === 0 && data.topPosts.length === 0)) return null;
 
@@ -96,6 +96,7 @@ export default function FeedTab({ user }: Props) {
   const [loading,  setLoading]  = useState(false);
   const [posting,  setPosting]  = useState(false);
   const [savedSet, setSavedSet] = useState<Set<number>>(new Set());
+  const [trendingRefreshKey, setTrendingRefreshKey] = useState(0);
 
   const loadFeed = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -171,6 +172,16 @@ export default function FeedTab({ user }: Props) {
     }
   }
 
+  function handleDeleted(postId: number) {
+    setPosts(previous => previous.filter(post => post.id !== postId));
+    setSavedSet(previous => {
+      const next = new Set(previous);
+      next.delete(postId);
+      return next;
+    });
+    setTrendingRefreshKey(previous => previous + 1);
+  }
+
   const filtered = filter === "all" ? posts : posts.filter(p => p.domain === filter);
 
   return (
@@ -229,7 +240,7 @@ export default function FeedTab({ user }: Props) {
       )}
 
       {/* Trending */}
-      <TrendingSection st={st} dir={dir} />
+      <TrendingSection st={st} dir={dir} refreshKey={trendingRefreshKey} />
 
       {/* Feed scope */}
       <div style={{ display: "flex", gap: 6 }}>
@@ -264,6 +275,7 @@ export default function FeedTab({ user }: Props) {
         <FeedCard key={post.id} post={post} user={user} st={st} dir={dir}
           saved={savedSet.has(post.id)}
           onSaveToggle={() => toggleSave(post.id)}
+          onDeleted={handleDeleted}
         />
       ))}
     </div>

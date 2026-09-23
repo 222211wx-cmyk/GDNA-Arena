@@ -43,6 +43,8 @@ type MountOptions = {
   contentType?: string | null;
   /** App shell that must enter fullscreen so persistent navigation stays visible. */
   fullscreenTarget?: HTMLElement;
+  /** Removes the deleted clip from the owning surface after the durable API succeeds. */
+  onDeleted?: (clipId: number) => void | Promise<void>;
 };
 
 /**
@@ -608,6 +610,31 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
       });
     });
     menu.append(edit);
+
+    // Delete is deliberately gated by both the server-derived engagement owner
+    // flag and a resolved authenticated identity. Usernames are display data and
+    // are never used as authorization evidence.
+    if (!options.saveDisabled && options.accountId !== null && options.accountId !== undefined) {
+      const remove = menuItem("Delete clip", icons.more());
+      remove.classList.add("clip-menu-item-destructive");
+      remove.addEventListener("click", async () => {
+        closeMenu();
+        if (!window.confirm("Delete this published clip permanently?")) return;
+        remove.disabled = true;
+        try {
+          await apiJson(`/clips/${current.id}`, { method: "DELETE" });
+          options.media.pause();
+          options.media.removeAttribute("src");
+          options.media.load();
+          showMessage(status, "Clip deleted");
+          await options.onDeleted?.(current.id);
+        } catch (error) {
+          showMessage(status, error instanceof Error ? error.message : "Could not delete the clip", true);
+          remove.disabled = false;
+        }
+      });
+      menu.append(remove);
+    }
   }
 
   // Rail order: heart, comment, share, bookmark/save, three-dots.

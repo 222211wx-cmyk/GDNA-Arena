@@ -16,6 +16,7 @@ import {
   follow,
   markAllNotificationsRead,
   markNotificationRead,
+  deleteClip,
   resolveIdentity,
   unfollow,
   type FeedClip,
@@ -377,48 +378,44 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     function mountActions(v: HTMLVideoElement) {
       if (actionsMounted) return;
       actionsMounted = true;
-      const initial: VideoActionState = {
-        id: clip.id,
-        code: clip.code ?? null,
-        title: clip.title,
-        author: { id: clip.author.id, username: clip.author.username, avatarUrl: clip.author.avatarUrl },
-        isOwner: identity.status === "authenticated" && identity.accountId === clip.author.id,
-        liked: false,
-        likeCount: 0,
-        commentCount: 0,
-        saved: clip.saved,
-        saveCount: clip.saveCount,
-        shareCount: clip.shareCount,
-      };
-      // The feed row lacks liked/likeCount/commentCount — hydrate from engagement.
-      void mountVideoActions({
-        host: actionsHost,
-        media: v,
-        titleElement: caption, // the visible on-screen caption is the edit target
-        clipId: clip.id,
-        code: clip.code ?? null,
-        accountId: identity.status === "authenticated" ? identity.accountId : null,
-        saveDisabled: identity.status === "unknown",
-        contentType: clip.content_type ?? undefined,
-        fullscreenTarget: shell,
-        initial,
-      }).then(handle => {
-        actionsHandle = handle;
+      // Ownership comes only from the authenticated engagement contract. Await
+      // identity too: an unresolved/missing identity must never expose Delete.
+      void Promise.all([identityPromise, fetchEngagement(clip.id).catch(() => null)]).then(async ([resolved, eng]) => {
+        if (!v.isConnected || destroyed) return;
+        identity = resolved;
+        if (eng) {
+          clip.saved = eng.saved;
+          clip.saveCount = eng.saveCount;
+          clip.shareCount = eng.shareCount;
+        }
+        const initial: VideoActionState = {
+          id: clip.id,
+          code: clip.code ?? null,
+          title: clip.title,
+          author: { id: clip.author.id, username: clip.author.username, avatarUrl: clip.author.avatarUrl },
+          isOwner: resolved.status === "authenticated" && Boolean(eng?.isOwner),
+          liked: eng?.liked ?? false,
+          likeCount: eng?.likeCount ?? 0,
+          commentCount: eng?.commentCount ?? 0,
+          saved: eng?.saved ?? clip.saved,
+          saveCount: eng?.saveCount ?? clip.saveCount,
+          shareCount: eng?.shareCount ?? clip.shareCount,
+        };
+        actionsHandle = await mountVideoActions({
+          host: actionsHost,
+          media: v,
+          titleElement: caption,
+          clipId: clip.id,
+          code: clip.code ?? null,
+          accountId: resolved.status === "authenticated" ? resolved.accountId : null,
+          saveDisabled: resolved.status === "unknown",
+          contentType: clip.content_type ?? undefined,
+          fullscreenTarget: shell,
+          initial,
+          onDeleted: removeClip,
+        });
         decorateOverlay(v);
-        // Apply any engagement snapshot that resolved before the mount finished.
         if (pendingEngagement) actionsHandle.hydrate(pendingEngagement);
-      }).catch(() => {});
-      // Hydrate liked/likeCount/commentCount from engagement. This is the fix for
-      // controls resetting to 0 after reload: the feed row omits these fields, so
-      // we merge the real persisted state into the mounted rail (without ever
-      // clobbering a like/comment the viewer changed in the meantime).
-      void fetchEngagement(clip.id).then(eng => {
-        clip.saved = eng.saved;
-        clip.saveCount = eng.saveCount;
-        clip.shareCount = eng.shareCount;
-        const snapshot = { liked: eng.liked, likeCount: eng.likeCount, commentCount: eng.commentCount };
-        if (actionsHandle) actionsHandle.hydrate(snapshot);
-        else pendingEngagement = snapshot;
       }).catch(() => {});
     }
 
@@ -609,6 +606,31 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     if (index >= slides.length - 3) void loadPage();
   }
 
+  function removeClip(clipId: number) {
+    playbackIntentVersion++;
+    const index = slides.findIndex(slide => slide.id === clipId);
+    const removed = index >= 0 ? slides[index] : undefined;
+    removed?.deactivate();
+    if (removed) {
+      io?.unobserve(removed.element);
+      removed.element.remove();
+      slides.splice(index, 1);
+    }
+    clipById.delete(clipId);
+    gridClips = gridClips.filter(clip => clip.id !== clipId);
+    gridView?.querySelector(`[data-clip-id="${clipId}"]`)?.remove();
+    if (activeSlideId === clipId) {
+      const next = slides[index] ?? slides[index - 1] ?? null;
+      activeSlideId = next?.id ?? null;
+      if (next && !gridOpen && !suspended) {
+        next.element.scrollIntoView({ behavior: "auto", block: "start" });
+        next.activate();
+      } else if (!next && !gridOpen) {
+        showFullState("empty");
+      }
+    }
+  }
+
   // ── Pagination / loading ─────────────────────────────────────────────────
   let feedController: AbortController | null = null;
   let degradedBanner: HTMLElement | null = null;
@@ -780,6 +802,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       view.append(empty);
     } else {
       for (const clip of gridClips) {
+        const item = el("div", "reels-grid-item", { "data-clip-id": String(clip.id) });
         const cell = el("button", "reels-grid-cell", { type: "button", "aria-label": clip.title || clip.author.username });
         if (clip.thumb) {
           const img = el("img", undefined, { alt: "", loading: "lazy", decoding: "async" }) as HTMLImageElement;
@@ -799,7 +822,32 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         meta.append(gridTitle, gridAuthor);
         cell.append(meta);
         cell.addEventListener("click", () => openFromGrid(clip.id));
-        grid.append(cell);
+        item.append(cell);
+        grid.append(item);
+        void identityPromise.then(async resolved => {
+          if (resolved.status !== "authenticated" || !item.isConnected) return;
+          const engagement = await fetchEngagement(clip.id);
+          if (engagement.isOwner && item.isConnected) {
+            const remove = iconButton("Delete clip", "×", "reels-grid-delete");
+            remove.addEventListener("click", async event => {
+              event.stopPropagation();
+              if (!window.confirm("Delete this published clip permanently?")) return;
+              remove.disabled = true;
+              try {
+                await deleteClip(clip.id);
+                removeClip(clip.id);
+                if (gridClips.length === 0) void buildGrid();
+              } catch (error) {
+                remove.disabled = false;
+                status.textContent = error instanceof Error ? error.message : "Could not delete the clip";
+                status.classList.add("error");
+                status.setAttribute("role", "alert");
+                view.prepend(status);
+              }
+            });
+            item.append(remove);
+          }
+        }).catch(() => {});
       }
       view.append(grid);
     }

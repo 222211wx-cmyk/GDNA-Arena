@@ -2,6 +2,7 @@ import { tokens } from "@workspace/gdna-ds/tokens";
 import { mountVideoActions, type VideoActionState } from "./components/clips/VideoActions";
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
 import { reelsIcons } from "./components/clips/reelsIcons";
+import { fetchEngagement } from "./components/clips/reelsApi";
 
 const BASE = import.meta.env.BASE_URL;
 const FETCH_TIMEOUT_MS = 12_000;
@@ -224,7 +225,8 @@ export function renderClipPlayer(code: string) {
           configureMediaSession(clip, media);
           // Wait for identity before mounting actions so device-only saves are
           // scoped correctly (or disabled when identity is unknown).
-          const identity = await identityPromise;
+           const identity = await identityPromise;
+           const engagement = await fetchEngagement(clip.id).catch(() => null);
           await mountVideoActions({
             host: actions,
             media,
@@ -240,14 +242,20 @@ export function renderClipPlayer(code: string) {
               code: clip.code,
               title: clip.name,
               author: clip.author,
-              isOwner: clip.isOwner,
-              liked: clip.liked,
-              likeCount: clip.likeCount,
-              commentCount: clip.commentCount,
-              saved: clip.saved,
-              saveCount: clip.saveCount,
-              shareCount: clip.shareCount,
+               isOwner: identity.status === "authenticated" && Boolean(engagement?.isOwner),
+               liked: engagement?.liked ?? clip.liked,
+               likeCount: engagement?.likeCount ?? clip.likeCount,
+               commentCount: engagement?.commentCount ?? clip.commentCount,
+               saved: engagement?.saved ?? clip.saved,
+               saveCount: engagement?.saveCount ?? clip.saveCount,
+               shareCount: engagement?.shareCount ?? clip.shareCount,
             } satisfies VideoActionState,
+             onDeleted: () => {
+               media.pause();
+               media.removeAttribute("src");
+               media.load();
+               window.location.assign(`${BASE}clips?view=grid`);
+             },
           });
           document.title = `${name.textContent} — HELIXLY`;
           return;

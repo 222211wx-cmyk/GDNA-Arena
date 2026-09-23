@@ -88,6 +88,34 @@ describe("clip player identity + bookmark scope", () => {
 });
 
 describe("code-based clip player", () => {
+  it("deletes an owned direct clip and returns toward the grid after cleaning media", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const requests: Array<[string, RequestInit | undefined]> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      requests.push([url, init]);
+      if (url.includes("/api/auth/me")) return json({ id: 7, username: "producer" });
+      if (url.includes("/engagement")) return json({ engagement: {
+        id: 42, code: "HELX-123456", title: "My song",
+        author: { id: 7, username: "producer", avatarUrl: null },
+        isOwner: true, liked: false, likeCount: 4, commentCount: 2,
+        saved: false, saveCount: 0, shareCount: 0,
+      } });
+      if (url.endsWith("/api/clips/42") && init?.method === "DELETE") return json({ deleted: true });
+      return json(clipBody());
+    }));
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const { renderClipPlayer } = await import("./clip-player-entry");
+    renderClipPlayer("HELX-123456");
+    await vi.waitFor(() => expect(document.querySelector('[aria-label="Delete clip"]')).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('[aria-label="More actions"]')!.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="Delete clip"]')!.click();
+    await vi.waitFor(() => expect(requests.some(([url, init]) =>
+      url.endsWith("/api/clips/42") && init?.method === "DELETE")).toBe(true));
+    await vi.waitFor(() => expect(document.querySelector("audio")?.hasAttribute("src")).toBe(false));
+  });
+
   it("loads a direct URL and uses the correct native media element", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       clip: {

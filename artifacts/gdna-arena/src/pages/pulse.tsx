@@ -3,10 +3,22 @@ import SmartDomainWidget from "@/components/SmartDomainWidget";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import {
-  Zap, Send, Heart, Globe, Trophy, Cpu, Music, Film,
-  Briefcase, TrendingUp, Users, Coins, Star, Crown,
-  Radio, Calendar, Flame, MessageSquare, Eye
+  Send, Heart, Globe, Trophy, Cpu, Music, Film,
+  Briefcase, Users, Coins, Star, Crown,
+  AlertCircle, Radio, Calendar, Flame, Loader2, MessageSquare, Trash2
 } from "lucide-react";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@workspace/gdna-ds/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import type { Lang } from "@/contexts/LangContext";
@@ -16,7 +28,7 @@ import { formatSurfaceDate, formatSurfaceNumber } from "@/i18n/locale-surfaces-b
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Post {
-  id: number; username: string; content: string; domain: string;
+  id: number; userId: number | null; username: string; content: string; domain: string;
   type: string; likes: number; createdAt: string;
 }
 interface Event {
@@ -56,6 +68,17 @@ const TYPE_COLORS: Record<string, string> = {
 const DOMAIN_COLORS: Record<string, string> = {
   sport: "#22d3ee", tech: "#a78bfa", music: "#f472b6",
   business: "#4ade80", cinema: "#fb923c", general: "#C9A84C",
+};
+
+const DELETE_COPY: Record<Lang, {
+  action: string; title: string; description: string; cancel: string;
+  confirm: string; pending: string; failed: string;
+}> = {
+  en: { action: "Delete", title: "Delete this post?", description: "This permanently removes the post and its likes, comments, reactions, and saves. This cannot be undone.", cancel: "Cancel", confirm: "Delete post", pending: "Deleting…", failed: "Could not delete this post. Please try again." },
+  ar: { action: "حذف", title: "حذف هذا المنشور؟", description: "سيؤدي هذا إلى حذف المنشور نهائياً مع إعجاباته وتعليقاته وتفاعلاته وعمليات حفظه. لا يمكن التراجع عن ذلك.", cancel: "إلغاء", confirm: "حذف المنشور", pending: "جارٍ الحذف…", failed: "تعذّر حذف المنشور. حاول مرة أخرى." },
+  fr: { action: "Supprimer", title: "Supprimer cette publication ?", description: "La publication, ses mentions J’aime, commentaires, réactions et enregistrements seront définitivement supprimés.", cancel: "Annuler", confirm: "Supprimer", pending: "Suppression…", failed: "Impossible de supprimer cette publication. Réessayez." },
+  es: { action: "Eliminar", title: "¿Eliminar esta publicación?", description: "La publicación y sus Me gusta, comentarios, reacciones y elementos guardados se eliminarán permanentemente.", cancel: "Cancelar", confirm: "Eliminar", pending: "Eliminando…", failed: "No se pudo eliminar la publicación. Inténtalo de nuevo." },
+  de: { action: "Löschen", title: "Diesen Beitrag löschen?", description: "Der Beitrag sowie seine Likes, Kommentare, Reaktionen und Speicherungen werden dauerhaft gelöscht.", cancel: "Abbrechen", confirm: "Beitrag löschen", pending: "Wird gelöscht…", failed: "Der Beitrag konnte nicht gelöscht werden. Bitte erneut versuchen." },
 };
 
 function timeAgo(dateStr: string, t: (key: string) => string, lang: Lang) {
@@ -151,11 +174,22 @@ function EventsPanel({ events, lang }: { events: Event[]; lang: Lang }) {
 }
 
 // ── Post Card ─────────────────────────────────────────────────────────────────
-function PostCard({ post, onLike, lang }: { post: Post; onLike: (id: number) => Promise<boolean>; lang: Lang }) {
+function PostCard({ post, onLike, onDeleted, currentUserId, lang }: {
+  post: Post;
+  onLike: (id: number) => Promise<boolean>;
+  onDeleted: (id: number) => void;
+  currentUserId?: number;
+  lang: Lang;
+}) {
   const [liked, setLiked] = useState(false);
   const [likeError, setLikeError] = useState(false);
   const { t } = useLang();
   const domColor = DOMAIN_COLORS[post.domain] ?? "#C9A84C";
+  const deleteCopy = DELETE_COPY[lang];
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const deletePendingRef = useRef(false);
 
   const handleLike = async () => {
     if (liked) return;
@@ -164,6 +198,31 @@ function PostCard({ post, onLike, lang }: { post: Post; onLike: (id: number) => 
     if (!await onLike(post.id)) {
       setLiked(false);
       setLikeError(true);
+    }
+  };
+
+  const deletePost = async () => {
+    if (deletePendingRef.current) return;
+    deletePendingRef.current = true;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await fetch(`/api/pulse/post/${post.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setDeleteError(body.error ?? deleteCopy.failed);
+        return;
+      }
+      setDeleteOpen(false);
+      onDeleted(post.id);
+    } catch {
+      setDeleteError(deleteCopy.failed);
+    } finally {
+      deletePendingRef.current = false;
+      setDeleting(false);
     }
   };
 
@@ -191,11 +250,54 @@ function PostCard({ post, onLike, lang }: { post: Post; onLike: (id: number) => 
           {/* Content */}
           <p className="text-sm text-foreground/90 leading-relaxed mb-3">{post.content}</p>
           {/* Actions */}
-          <button onClick={() => void handleLike()} aria-label={gameLocaleText(lang, "likeAction")}
-            className={`flex items-center gap-1.5 text-xs transition-all active:scale-95 ${liked ? "text-red-400" : "text-muted-foreground hover:text-red-400"}`}>
-            <Heart className={`w-4 h-4 ${liked ? "fill-red-400" : ""}`} />
-            {formatSurfaceNumber(lang, post.likes + (liked ? 1 : 0))}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => void handleLike()} aria-label={gameLocaleText(lang, "likeAction")}
+              className={`flex items-center gap-1.5 text-xs transition-all active:scale-95 ${liked ? "text-red-400" : "text-muted-foreground hover:text-red-400"}`}>
+              <Heart className={`w-4 h-4 ${liked ? "fill-red-400" : ""}`} />
+              {formatSurfaceNumber(lang, post.likes + (liked ? 1 : 0))}
+            </button>
+            {currentUserId === post.userId && (
+              <AlertDialog open={deleteOpen} onOpenChange={(open) => {
+                if (!deleting) {
+                  setDeleteOpen(open);
+                  if (open) setDeleteError("");
+                }
+              }}>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm"
+                    className="h-7 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    data-testid={`button-delete-pulse-post-${post.id}`}>
+                    <Trash2 className="h-3.5 w-3.5" /> {deleteCopy.action}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent data-testid={`dialog-delete-pulse-post-${post.id}`}>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{deleteCopy.title}</AlertDialogTitle>
+                    <AlertDialogDescription>{deleteCopy.description}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  {deleteError && (
+                    <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert" data-testid={`text-delete-pulse-post-error-${post.id}`}>
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{deleteError}</span>
+                    </div>
+                  )}
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deleting}>{deleteCopy.cancel}</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      disabled={deleting}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void deletePost();
+                      }}
+                      data-testid={`button-confirm-delete-pulse-post-${post.id}`}>
+                      {deleting ? <><Loader2 className="h-4 w-4 animate-spin" />{deleteCopy.pending}</> : deleteCopy.confirm}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
           {likeError && <p className="mt-1 text-xs text-destructive" role="alert">{gameLocaleText(lang, "likeFailed")}</p>}
         </div>
       </div>
@@ -284,6 +386,7 @@ function ComposeBox({ onPosted }: { onPosted: () => void }) {
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 export default function PulsePage() {
+  const { user } = useAuth();
   const { t, lang } = useLang();
   const dir = lang === "ar" ? "rtl" : "ltr";
   const [posts, setPosts]     = useState<Post[]>([]);
@@ -339,6 +442,18 @@ export default function PulsePage() {
     } catch {
       return false;
     }
+  };
+
+  const handleDeleted = (postId: number) => {
+    setPosts(previous => previous.filter(post => post.id !== postId));
+    void loadPosts(true);
+    void fetch("/api/pulse/stats", { credentials: "include" })
+      .then(response => {
+        if (!response.ok) throw new Error("stats");
+        return response.json() as Promise<Stats>;
+      })
+      .then(setStats)
+      .catch(() => {});
   };
 
   const liveCount = events.filter(e => e.isLive).length;
@@ -407,7 +522,7 @@ export default function PulsePage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {posts.map(p => <PostCard key={p.id} post={p} onLike={handleLike} lang={lang} />)}
+                {posts.map(p => <PostCard key={p.id} post={p} onLike={handleLike} onDeleted={handleDeleted} currentUserId={user?.id} lang={lang} />)}
               </div>
             )}
           </div>

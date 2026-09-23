@@ -18,6 +18,7 @@
 - [AMIS unified messenger](amis-messenger.md) — one shared Messenger component (full/embedded/widget) powers all 3 chat surfaces; mute/settings in raw SQL columns; call-history logs only in useCall.
 - [Realtime messenger delivery](realtime-messenger-delivery.md) — authenticated room pushes fan out to every active user socket; direct-message moderation has a bounded fail-open latency budget.
 - [Empire CLIPS rules](empire-clips.md) — simple name/code publishing; all media ≥60s with no upper duration, no rights gates; preserve historical data and view accounting.
+- [Publication retention](publication-retention.md) — published Clips and social posts never expire by age; owners delete with confirmation, while moderation stays intact.
 - [Clips upload transport](clips-upload-transport.md) — browser 480p/800kbps compression before resumable R2 uploads through 10 GiB, explicit original/server fallback; queued media work stays separate from lightweight site requests.
 - [Clips storage mutations](clips-storage-mutations.md) — fast multi-chunk uploads hit independent per-object storage quotas; preserve CAS safety when retrying.
 - [Light route bundling](light-route-bundling.md) — Vite can merge conditional-import preload lists; measure actual cold requests, not just bundle sizes.

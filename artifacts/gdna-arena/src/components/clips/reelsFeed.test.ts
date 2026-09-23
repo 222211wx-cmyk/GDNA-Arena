@@ -237,6 +237,35 @@ describe("Reels natural-end progression", () => {
     expect(secondSlide.scrollIntoView).toHaveBeenCalledOnce();
   });
 
+  it("removes a successfully deleted owner clip and activates the next clip", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/api/auth/me")) return Response.json({ id: 7, username: "producer" });
+      if (url.includes("/api/clips/feed")) {
+        return Response.json({ clips: [feedClip(2), feedClip(1)], hasMore: false, nextBefore: null });
+      }
+      if (url.includes("/engagement")) {
+        const id = url.includes("/2/") ? 2 : 1;
+        return Response.json({ engagement: {
+          id, code: null, title: `Clip ${id}`, author: { id: 7, username: "producer", avatarUrl: null },
+          isOwner: true, liked: false, likeCount: 0, commentCount: 0,
+          saved: false, saveCount: 0, shareCount: 0,
+        } });
+      }
+      if (url.endsWith("/api/clips/2") && init?.method === "DELETE") {
+        return Response.json({ deleted: true });
+      }
+      return Response.json({});
+    }));
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    await vi.waitFor(() => expect(document.querySelector('[data-clip-id="2"] [aria-label="Delete clip"]')).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('[data-clip-id="2"] [aria-label="More actions"]')!.click();
+    document.querySelector<HTMLButtonElement>('[data-clip-id="2"] [aria-label="Delete clip"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-clip-id="2"]')).toBeNull());
+    expect(document.querySelector('[data-clip-id="1"] video')).not.toBeNull();
+    expect(document.querySelectorAll("video")).toHaveLength(1);
+  });
+
   it("leaves the genuine final item stopped and keeps play/pause visible", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.includes("/api/auth/me")) return Response.json({}, { status: 401 });

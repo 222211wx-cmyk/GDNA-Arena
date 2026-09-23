@@ -118,6 +118,10 @@ export async function fetchEngagement(clipId: number, signal?: AbortSignal): Pro
   return data.engagement;
 }
 
+export async function deleteClip(clipId: number): Promise<void> {
+  await sendJson(`/clips/${clipId}`, "DELETE");
+}
+
 /** Resolve the viewer. Only a 401 confirms anonymous; other failures stay unknown. */
 export async function resolveIdentity(timeoutMs = 8_000): Promise<Identity> {
   const controller = new AbortController();

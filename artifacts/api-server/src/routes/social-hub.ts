@@ -12,6 +12,7 @@ import { pool as _pool } from "@workspace/db";
 import { validateContent } from "../lib/moderate";
 import { isValidAttachmentUrl } from "./messages";
 import { pushNotification } from "./notifications";
+import { deletePulsePostForOwner } from "../lib/delete-pulse-post";
 
 const pool = _pool!;
 const router: IRouter = Router();
@@ -152,6 +153,21 @@ router.post("/social/v2/post", async (req, res): Promise<void> => {
   }).returning();
 
   res.status(201).json({ post: { ...post, commentCount: 0 } });
+});
+
+// DELETE /api/social/v2/post/:id — shared canonical Pulse/Social post deletion
+router.delete("/social/v2/post/:id", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const postId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(postId) || postId < 1) {
+    res.status(400).json({ error: "Invalid ID" }); return;
+  }
+
+  const result = await deletePulsePostForOwner(postId, userId);
+  if (result === "not_found") { res.status(404).json({ error: "Post not found" }); return; }
+  if (result === "forbidden") { res.status(403).json({ error: "Only the post owner can delete it" }); return; }
+  res.json({ deleted: true, postId });
 });
 
 // POST /api/social/v2/post/:id/like

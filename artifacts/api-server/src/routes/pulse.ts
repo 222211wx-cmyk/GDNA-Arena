@@ -5,6 +5,7 @@ import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { pushNotification } from "./notifications";
 import { getRate } from "./rights";
 import { multiplierForUserId } from "../lib/levels.js";
+import { deletePulsePostForOwner } from "../lib/delete-pulse-post";
 
 const router: IRouter = Router();
 
@@ -55,6 +56,23 @@ router.post("/pulse/post", async (req, res): Promise<void> => {
 
   const [post] = await db.insert(pulsePosts).values({ userId, username, content: content.trim(), domain, type }).returning();
   res.status(201).json({ post, xpEarned: userId ? 20 : 0 });
+});
+
+// ── DELETE /pulse/post/:id ───────────────────────────────────────────────────
+// Pulse and Social Hub expose the same pulse_posts identities, so both routes
+// delegate to one owner-only transactional deletion implementation.
+router.delete("/pulse/post/:id", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const postId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(postId) || postId < 1) {
+    res.status(400).json({ error: "Invalid ID" }); return;
+  }
+
+  const result = await deletePulsePostForOwner(postId, userId);
+  if (result === "not_found") { res.status(404).json({ error: "Post not found" }); return; }
+  if (result === "forbidden") { res.status(403).json({ error: "Only the post owner can delete it" }); return; }
+  res.json({ deleted: true, postId });
 });
 
 // ── POST /pulse/post/:id/like ─────────────────────────────────────────────────

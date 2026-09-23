@@ -320,8 +320,9 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-grid{
     display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px;
   }
+  .reels-grid-item{position:relative;aspect-ratio:9/16;overflow:hidden;background:${palette.card}}
   .reels-grid-cell{
-    position:relative;aspect-ratio:9/16;overflow:hidden;
+    position:absolute;inset:0;overflow:hidden;
     background:${palette.card};border:0;padding:0;cursor:pointer;
   }
   .reels-grid-cell img{width:100%;height:100%;object-fit:cover;display:block}
@@ -336,6 +337,13 @@ export function reelsShellCss(palette: Palette, space: string): string {
     color:var(--reels-on-media);font-size:.6875rem;display:grid;gap:calc(${space} * 1);text-align:start;
   }
   .reels-grid-cell:focus-visible{outline:2px solid ${palette.ring};outline-offset:-2px}
+  .reels-grid-delete{
+    position:absolute;z-index:2;top:calc(${space} * 2);right:calc(${space} * 2);
+    width:36px;height:36px;border-radius:9999px;border:1px solid ${palette.border};
+    background:${palette.destructive};color:${palette.destructiveForeground};
+    font-size:1.25rem;font-weight:800;cursor:pointer;
+  }
+  .reels-grid-delete:disabled{opacity:.55;cursor:default}
 
   /* ── Search overlay ───────────────────────────────────────────────────── */
   .reels-search{

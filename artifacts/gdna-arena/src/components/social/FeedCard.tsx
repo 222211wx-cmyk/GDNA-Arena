@@ -3,7 +3,19 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageSquare, Share2, Bookmark, BookmarkCheck } from "lucide-react";
+import { AlertCircle, Bookmark, BookmarkCheck, Loader2, MessageSquare, Share2, Trash2 } from "lucide-react";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@workspace/gdna-ds/components/ui/alert-dialog";
 import Avatar from "./Avatar";
 import { GOLD, GOLD_A, DOMAIN_ICONS, timeAgo, api, useSocialI18n } from "./social-i18n";
 import type { FeedPost, Comment } from "./social-types";
@@ -133,9 +145,10 @@ interface Props {
   dir: string;
   saved: boolean;
   onSaveToggle: () => void;
+  onDeleted: (postId: number) => void;
 }
 
-export default function FeedCard({ post, user, saved, onSaveToggle }: Props) {
+export default function FeedCard({ post, user, saved, onSaveToggle, onDeleted }: Props) {
   const { st, dir, locale } = useSocialI18n();
   const { isOnline } = useConnectivity();
   const [comments,       setComments]       = useState<Comment[]>([]);
@@ -144,6 +157,35 @@ export default function FeedCard({ post, user, saved, onSaveToggle }: Props) {
   const [expanded,       setExpanded]       = useState(false);
   const [sending,        setSending]        = useState(false);
   const [shareToast,     setShareToast]     = useState(false);
+  const [deleteOpen,     setDeleteOpen]     = useState(false);
+  const [deleting,       setDeleting]       = useState(false);
+  const [deleteError,    setDeleteError]    = useState("");
+  const deletePendingRef = useRef(false);
+
+  async function deletePost() {
+    if (deletePendingRef.current || !isOnline) return;
+    deletePendingRef.current = true;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await fetch(api(`/api/social/v2/post/${post.id}`), {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setDeleteError(body.error ?? "Could not delete this post. Please try again.");
+        return;
+      }
+      setDeleteOpen(false);
+      onDeleted(post.id);
+    } catch {
+      setDeleteError("Could not delete this post. Please try again.");
+    } finally {
+      deletePendingRef.current = false;
+      setDeleting(false);
+    }
+  }
 
   function handleShare() {
     navigator.clipboard.writeText(`${window.location.origin}/social#post-${post.id}`).catch(() => {});
@@ -241,6 +283,56 @@ export default function FeedCard({ post, user, saved, onSaveToggle }: Props) {
           label={saved ? st.saved : st.save}
           onClick={onSaveToggle} active={saved} color={GOLD}
           disabled={!user || !isOnline} />
+        {user?.id === post.userId && (
+          <AlertDialog open={deleteOpen} onOpenChange={(open) => {
+            if (!deleting) {
+              setDeleteOpen(open);
+              if (open) setDeleteError("");
+            }
+          }}>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto gap-1.5 px-2.5 py-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={!isOnline}
+                data-testid={`button-delete-social-post-${post.id}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent data-testid={`dialog-delete-social-post-${post.id}`}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes the post and its likes, comments, reactions, and saves. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {deleteError && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert" data-testid={`text-delete-social-post-error-${post.id}`}>
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={deleting || !isOnline}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void deletePost();
+                  }}
+                  data-testid={`button-confirm-delete-social-post-${post.id}`}
+                >
+                  {deleting ? <><Loader2 className="h-4 w-4 animate-spin" />Deleting…</> : "Delete post"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {/* Comments */}
