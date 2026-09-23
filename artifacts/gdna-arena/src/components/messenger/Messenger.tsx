@@ -59,6 +59,11 @@ import {
   type SecureAttachmentMetadata,
   type SecureMessagePayload,
 } from "@/lib/amis-e2ee";
+import {
+  isTerminalSecureDeviceError,
+  registerSecureDevice,
+  SECURE_DEVICE_CAPACITY_MESSAGE,
+} from "@/lib/secure-device-registration";
 
 const BG      = "#0a0a0a";   // app background
 const BG_BAR  = "#111111";   // header / tab bars
@@ -159,6 +164,122 @@ function WebPushRow({
   );
 }
 
+interface SecureDeviceRow {
+  device_id: string;
+  fingerprint: string;
+  updated_at: string;
+}
+
+function SecureDeviceManager({
+  userId,
+  capacityBlocked,
+  retryRegistration,
+  showToast,
+  isOnline,
+}: {
+  userId?: number;
+  capacityBlocked: boolean;
+  retryRegistration: () => Promise<void>;
+  showToast: (message: string) => void;
+  isOnline: boolean;
+}) {
+  const [devices, setDevices] = useState<SecureDeviceRow[]>([]);
+  const [currentDeviceId, setCurrentDeviceId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [revoking, setRevoking] = useState("");
+
+  const load = useCallback(async () => {
+    if (!userId || !isOnline) return;
+    setLoading(true);
+    try {
+      const [identity, response] = await Promise.all([
+        ensureDeviceIdentity(userId),
+        fetch(api("/api/messages/e2e/devices"), { credentials: "include", cache: "no-store" }),
+      ]);
+      if (!response.ok) throw new Error("تعذر تحميل الأجهزة الآمنة · Impossible de charger les appareils sécurisés.");
+      const data = await response.json() as { devices?: SecureDeviceRow[] };
+      setCurrentDeviceId(identity.deviceId);
+      setDevices((data.devices ?? []).slice(0, 8));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Secure devices unavailable");
+    } finally {
+      setLoading(false);
+    }
+  }, [isOnline, showToast, userId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const revoke = async (device: SecureDeviceRow) => {
+    if (device.device_id === currentDeviceId || !isOnline) return;
+    const warning = "إلغاء هذا الجهاز قد يمنعه من قراءة الرسائل القديمة المشفرة له. لن تُحذف مفاتيح هذا الجهاز تلقائياً. · Révoquer cet appareil peut lui faire perdre l’accès aux anciens messages chiffrés. Ses clés privées ne seront jamais effacées automatiquement.";
+    if (!window.confirm(warning)) return;
+    setRevoking(device.device_id);
+    try {
+      const response = await fetch(api(`/api/messages/e2e/devices/${encodeURIComponent(device.device_id)}`), {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({} as { error?: string }));
+        throw new Error(data.error ?? "Device revocation failed");
+      }
+      setDevices(current => current.filter(item => item.device_id !== device.device_id));
+      showToast("تم إلغاء الجهاز. اضغط إعادة المحاولة لتسجيل هذا الجهاز. · Appareil révoqué. Appuyez sur Réessayer.");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Device revocation failed");
+    } finally {
+      setRevoking("");
+    }
+  };
+
+  return (
+    <section className="mt-4 rounded-lg border border-border bg-muted/20 p-3" data-testid="secure-device-manager">
+      <div className="flex items-start gap-2">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <p className="m-0 text-[13px] font-semibold text-card-foreground">الأجهزة الآمنة · Appareils sécurisés</p>
+          <p className="mt-1 mb-0 text-[11px] text-muted-foreground">
+            8 أجهزة كحد أقصى. لا يتم إلغاء أي جهاز أو حذف أي مفتاح تلقائياً. · 8 appareils maximum. Aucun appareil ni aucune clé n’est supprimé automatiquement.
+          </p>
+        </div>
+        <Button type="button" size="sm" variant="outline" disabled={loading || !isOnline} onClick={() => void load()}>
+          {loading ? "…" : "↻"}
+        </Button>
+      </div>
+      {capacityBlocked && (
+        <div role="alert" className="mt-3 rounded-md border border-destructive-border bg-destructive/10 p-2 text-xs text-destructive" data-testid="secure-device-capacity">
+          {SECURE_DEVICE_CAPACITY_MESSAGE}
+        </div>
+      )}
+      <div className="mt-3 space-y-2">
+        {devices.map(device => {
+          const current = device.device_id === currentDeviceId;
+          return (
+            <div key={device.device_id} className="flex items-center gap-2 rounded-md border border-border/60 p-2 text-xs">
+              <div className="min-w-0 flex-1">
+                <p className="m-0 truncate font-medium text-foreground">
+                  {current ? "هذا الجهاز · Cet appareil" : `…${device.device_id.slice(-8)}`}
+                </p>
+                <p className="m-0 truncate text-[10px] text-muted-foreground">{device.fingerprint}</p>
+              </div>
+              {!current && (
+                <Button type="button" size="sm" variant="destructive" disabled={revoking === device.device_id || !isOnline} onClick={() => void revoke(device)}>
+                  {revoking === device.device_id ? "…" : "إلغاء · Révoquer"}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {capacityBlocked && (
+        <Button type="button" className="mt-3 w-full" disabled={!isOnline} data-testid="retry-secure-device-registration" onClick={() => void retryRegistration()}>
+          إعادة المحاولة بعد الإلغاء · Réessayer après révocation
+        </Button>
+      )}
+    </section>
+  );
+}
+
 // ── Settings panel ────────────────────────────────────────────────────────────
 interface MsgSettings { notifications: boolean; readReceipts: boolean }
 
@@ -171,7 +292,7 @@ function ToggleRow({ label, value, onChange, disabled = false }: { label: string
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline, notificationPermission, firebaseStatus, pushEnabled, enableCallNotifications }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline, notificationPermission, firebaseStatus, pushEnabled, enableCallNotifications, secureDeviceCapacityBlocked = false, retrySecureDeviceRegistration = async () => {} }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
@@ -189,6 +310,8 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   firebaseStatus: FirebaseStatus;
   pushEnabled: boolean;
   enableCallNotifications?: () => void | Promise<unknown>;
+  secureDeviceCapacityBlocked?: boolean;
+  retrySecureDeviceRegistration?: () => Promise<void>;
 }) {
   const [settings, setSettings] = useState<MsgSettings | null>(null);
   const [muted, setMuted] = useState(activeRoom?.muted ?? false);
@@ -357,6 +480,15 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
             <div className="mt-4 flex items-center gap-1.5 text-muted-foreground text-[11px]">
               <Lock size={12} /> {st.end_to_end_encrypted ?? "End-to-end encrypted on this device"}
             </div>
+            {!activeRoom && (
+              <SecureDeviceManager
+                userId={currentUserId}
+                capacityBlocked={secureDeviceCapacityBlocked}
+                retryRegistration={retrySecureDeviceRegistration}
+                showToast={showToast}
+                isOnline={isOnline}
+              />
+            )}
             {activeRoom && <Button className="mt-2" variant="outline" size="sm" disabled={!isOnline}
               onClick={() => void reportConversation()}>Report conversation</Button>}
           </>
@@ -1139,6 +1271,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const [menuMsgId,   setMenuMsgId]   = useState<number | null>(null);
   const [isMobile,    setIsMobile]    = useState(typeof window !== "undefined" && window.innerWidth < 640);
   const [e2eReady,     setE2eReady]    = useState(false);
+  const [e2eCapacityBlocked, setE2eCapacityBlocked] = useState(false);
   // Controls the + attachment tray inside the composer
   const [showAttachTray, setShowAttachTray] = useState(false);
   const [showLinkComposer, setShowLinkComposer] = useState(false);
@@ -1186,7 +1319,6 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const textRef     = useRef<HTMLTextAreaElement>(null);
   const pollRef     = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const attachTrayRef = useRef<HTMLDivElement>(null);
-  const e2eRegistrationRef = useRef<Promise<void> | null>(null);
 
   const isWidget = variant === "widget";
 
@@ -1297,30 +1429,34 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const ensureE2eRegistered = useCallback(async () => {
     if (!user) throw new Error("Login required");
     if (!isOnline) throw new Error(offlineToast);
-    if (!e2eRegistrationRef.current) {
-      e2eRegistrationRef.current = (async () => {
-        const identity = await ensureDeviceIdentity(user.id);
-        const response = await fetch(api("/api/messages/e2e/key"), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId: identity.deviceId, publicKey: identity.publicKey }),
-          credentials: "include",
-        });
-        if (!response.ok) throw new Error("Secure device registration failed");
-        setE2eReady(true);
-      })().catch(error => {
-        e2eRegistrationRef.current = null;
-        setE2eReady(false);
-        throw error;
-      });
+    try {
+      await registerSecureDevice(user.id);
+      setE2eReady(true);
+      setE2eCapacityBlocked(false);
+    } catch (error) {
+      setE2eReady(false);
+      setE2eCapacityBlocked(isTerminalSecureDeviceError(error));
+      throw error;
     }
-    await e2eRegistrationRef.current;
   }, [isOnline, offlineToast, user?.id]);
+
+  const retryE2eRegistration = useCallback(async () => {
+    try {
+      // Start every mounted secure surface together so the shared helper
+      // collapses them into one PUT for this account/device.
+      const registration = ensureE2eRegistered();
+      call.retrySecureCallRegistration?.();
+      await registration;
+      setToast("تم تسجيل الجهاز الآمن · Appareil sécurisé enregistré");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Secure device registration failed");
+    }
+  }, [call, ensureE2eRegistered]);
 
   useEffect(() => {
     if (!user) {
-      e2eRegistrationRef.current = null;
       setE2eReady(false);
+      setE2eCapacityBlocked(false);
       return;
     }
     void ensureE2eRegistered().catch(() => {});
@@ -2526,6 +2662,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             firebaseStatus={callExtras.firebaseStatus}
             pushEnabled={callExtras.pushEnabled}
             enableCallNotifications={callExtras.enableCallNotifications}
+            secureDeviceCapacityBlocked={e2eCapacityBlocked}
+            retrySecureDeviceRegistration={retryE2eRegistration}
             currentUserId={user?.id}
             onMuteChanged={(roomId, muted) => {
               setRooms(prev => prev.map(r => r.id === roomId ? { ...r, muted } : r));
@@ -2557,6 +2695,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
           ? (SOLIDARITY_STATUS_COLORS[solStatus] ?? "#6b7280")
           : (call.onlineUsers.includes(getPeerName(activeRoom)) ? "#22c55e" : "#ffffff40");
         return (
+          <>
           <div style={{ padding: "10px 12px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: BG_BAR, borderBottom: `1px solid ${GOLD_A(0.071)}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button onClick={() => { stopVoiceNote(true); activeRoomIdRef.current = null; setActiveRoom(null); onActiveRoomChange?.(null); setShowEmoji(false); setShowAttachTray(false); setReplyTo(null); }} title={st.back ?? "Back"}
               style={{ width: 38, height: 38, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent", color: GOLD, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -2644,6 +2783,21 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
               <MoreVertical size={20} />
             </button>
           </div>
+          {e2eCapacityBlocked && (
+            <button
+              type="button"
+              data-testid="open-secure-device-recovery"
+              onClick={() => {
+                activeRoomIdRef.current = null;
+                setActiveRoom(null);
+                setTab("settings");
+              }}
+              className="w-full border-0 border-b border-destructive-border bg-destructive/10 px-3 py-2 text-start text-xs font-semibold text-destructive"
+            >
+              {SECURE_DEVICE_CAPACITY_MESSAGE} — إدارة الأجهزة · Gérer les appareils
+            </button>
+          )}
+          </>
         );
       })()}
 
@@ -3078,6 +3232,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             firebaseStatus={callExtras.firebaseStatus}
             pushEnabled={callExtras.pushEnabled}
             enableCallNotifications={callExtras.enableCallNotifications}
+            secureDeviceCapacityBlocked={e2eCapacityBlocked}
+            retrySecureDeviceRegistration={retryE2eRegistration}
           />
         )}
 

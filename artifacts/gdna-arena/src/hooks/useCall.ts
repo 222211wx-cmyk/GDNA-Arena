@@ -29,6 +29,11 @@ import {
   ensureDeviceIdentity,
   type E2ERecipientKey,
 } from "@/lib/amis-e2ee";
+import {
+  clearSecureDeviceRegistration,
+  isTerminalSecureDeviceError,
+  registerSecureDevice,
+} from "@/lib/secure-device-registration";
 import { apiPath, websocketUrl } from "@/lib/network";
 import { trackCallDeviceOutcome } from "@/lib/analytics";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
@@ -691,6 +696,7 @@ export function useCall(user: { id: number; username: string } | null) {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let attempt = 0;
     let running = false;
+    let terminal = false;
 
     const clearRetry = () => {
       if (retryTimer) clearTimeout(retryTimer);
@@ -700,33 +706,22 @@ export function useCall(user: { id: number; username: string } | null) {
       // Focus/visibility and reconnect events only recover a failed/incomplete
       // registration. They never revalidate a ready device, disturb the live
       // socket, or transiently regress readiness.
-      if (cancelled || running || !navigator.onLine || (!manual && secureCallRegistrationReadyRef.current)) return;
+      if (cancelled || running || !navigator.onLine ||
+        (!manual && (secureCallRegistrationReadyRef.current || terminal))) return;
       running = true;
       clearRetry();
       if (manual || attempt === 0) setSecureCallRegistrationStatus("registering");
       if (manual) {
         attempt = 0;
+        terminal = false;
         setSecureCallRegistrationError(null);
       }
       try {
-        const identity = await ensureDeviceIdentity(user.id);
+        const identity = await registerSecureDevice(user.id);
         if (cancelled) return;
-        const response = await fetch(apiPath("/api/messages/e2e/key"), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId: identity.deviceId, publicKey: identity.publicKey }),
-          credentials: "include",
-        });
-        if (!response.ok) {
-          let detail = "";
-          try {
-            const body = await response.json() as { error?: unknown; message?: unknown };
-            detail = typeof body.error === "string" ? body.error : typeof body.message === "string" ? body.message : "";
-          } catch { /* response had no JSON error body */ }
-          throw new Error(detail || `Secure device registration failed (HTTP ${response.status}).`);
-        }
         if (cancelled) return;
         attempt = 0;
+        terminal = false;
         secureCallRegistrationReadyRef.current = true;
         setSecureCallRegistrationStatus("ready");
         setSecureCallRegistrationError(null);
@@ -737,8 +732,13 @@ export function useCall(user: { id: number; username: string } | null) {
         setSecureCallRegistrationError(
           error instanceof Error ? error.message : "Secure device registration failed.",
         );
-        const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt++, 5));
-        retryTimer = setTimeout(() => void register(), delay);
+        // Capacity is terminal until the citizen explicitly revokes a device.
+        // Do not hammer PUT on timers, focus, visibility, or reconnect.
+        terminal = isTerminalSecureDeviceError(error);
+        if (!terminal) {
+          const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt++, 5));
+          retryTimer = setTimeout(() => void register(), delay);
+        }
       } finally {
         running = false;
       }
@@ -757,6 +757,7 @@ export function useCall(user: { id: number; username: string } | null) {
     return () => {
       cancelled = true;
       secureCallRegistrationReadyRef.current = false;
+      clearSecureDeviceRegistration(user.id);
       clearRetry();
       secureCallRegistrationRetryRef.current = null;
       window.removeEventListener("online", retryOnReconnect);

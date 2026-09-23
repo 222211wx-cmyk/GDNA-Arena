@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { decryptCallSecret, encryptCallSecret, ensureDeviceIdentity, type E2ERecipientKey } from "@/lib/amis-e2ee";
+import { decryptCallSecret, encryptCallSecret, type E2ERecipientKey } from "@/lib/amis-e2ee";
+import { registerSecureDevice } from "@/lib/secure-device-registration";
 import { apiPath } from "@/lib/network";
 import { AgoraRTC, fetchAgoraToken, GROUP_APIS as groups, type GroupCallType } from "@/client/lib/communication";
 import type { AuthUser } from "@/contexts/AuthContext";
@@ -169,14 +170,7 @@ export function useGroupCall(user: AuthUser | null, directCallStatus: CallStatus
 
   const ensureRegisteredDevice = useCallback(async () => {
     if (!user) throw new Error("Sign in to use group calls.");
-    const identity = await ensureDeviceIdentity(user.id);
-    const registration = await fetch(apiPath("/api/messages/e2e/key"), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ deviceId: identity.deviceId, publicKey: identity.publicKey }),
-    });
-    if (!registration.ok) throw new Error("Your secure call device could not be registered.");
+    const identity = await registerSecureDevice(user.id);
     deviceIdRef.current = identity.deviceId;
     return identity;
   }, [user]);

@@ -433,7 +433,11 @@ router.put("/messages/e2e/key", async (req, res): Promise<void> => {
       );
       if (Number(count.rows[0]?.count ?? 0) >= MAX_E2E_DEVICES) {
         await client.query("ROLLBACK");
-        res.status(409).json({ error: "Secure device limit reached; revoke an old device first" });
+        res.status(409).json({
+          code: "SECURE_DEVICE_CAPACITY",
+          error: "Secure device limit reached; revoke an old device first",
+          maxDevices: MAX_E2E_DEVICES,
+        });
         return;
       }
     }

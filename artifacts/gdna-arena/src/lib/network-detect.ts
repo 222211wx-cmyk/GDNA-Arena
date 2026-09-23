@@ -23,6 +23,13 @@ export function getAutoLiteReferral(search: string): string | null {
   const normalized = raw.trim().toLowerCase();
   return AUTO_LITE_REFS.has(normalized) ? normalized : null;
 }
+/** Explicit full messenger links must never lose rooms/tools to an automatic redirect. */
+export function shouldAutoRedirectToLite(route: string, forced: boolean, referral: string | null): boolean {
+  const path = route.replace(/\/+$/, "") || "/";
+  if (path === "/messages" || path.startsWith("/messages/")) return false;
+  if (path === "/clip" || path === "/clips" || /^\/clip\/HELX-\d{6}$/.test(path)) return false;
+  return forced || referral !== null;
+}
 export function getNetworkState(): NetworkState {
   const c = connection();
   const effectiveType = c?.effectiveType || "unknown";

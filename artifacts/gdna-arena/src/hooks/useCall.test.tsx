@@ -20,7 +20,7 @@ vi.mock("@/lib/network", () => ({
   websocketUrl: () => "ws://arena.test/ws",
 }));
 vi.mock("@/lib/amis-e2ee", () => ({
-  ensureDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "device", publicKey: "key" }),
+  ensureDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "device", publicKey: "key", fingerprint: "fingerprint" }),
   encryptCallSecret: vi.fn(),
   decryptCallSecret: vi.fn(),
 }));
@@ -268,6 +268,47 @@ describe("useCall signaling reconnect", () => {
       await Promise.resolve();
     });
     expect(request).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it("treats device-capacity 409 as terminal until an explicit retry", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: vi.fn().mockResolvedValue({
+          code: "SECURE_DEVICE_CAPACITY",
+          error: "Secure device limit reached; revoke an old device first",
+        }),
+      })
+      // Represents the explicit retry after the citizen confirms revocation.
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", request);
+
+    const { result, unmount } = renderHook(() => useCall({ id: 7, username: "recipient" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.secureCallRegistrationStatus).toBe("error");
+    expect(result.current.secureCallRegistrationError).toContain("بلغت الحد الأقصى");
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.retrySecureCallRegistration();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(result.current.secureCallRegistrationStatus).toBe("ready");
     unmount();
   });
 
