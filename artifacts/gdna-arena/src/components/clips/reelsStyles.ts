@@ -314,6 +314,9 @@ export function reelsShellCss(palette: Palette, space: string): string {
     padding-bottom:calc(var(--reels-bottom-safe) + 68px);
     overflow-y:auto;
   }
+  .reels-grid-pagination{
+    display:flex;align-items:center;justify-content:center;gap:calc(${space} * 3);
+  }
   .reels-grid{
     display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px;
   }

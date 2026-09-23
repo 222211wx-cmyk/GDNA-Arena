@@ -34,6 +34,46 @@ beforeEach(() => {
 });
 
 describe("critical Clips navigation", () => {
+  it("loads grid pages of six lazily without constructing a video player", async () => {
+    window.history.replaceState(null, "", "/clips?view=grid");
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/auth/me")) return Response.json({}, { status: 401 });
+      const second = url.includes("before=95");
+      return Response.json({
+        clips: Array.from({ length: second ? 2 : 6 }, (_, i) => ({
+          id: (second ? 94 : 100) - i, title: `Clip ${i}`, thumb: "/poster.webp",
+          author: { username: "tester" },
+        })),
+        hasMore: !second, nextBefore: second ? null : 95,
+      });
+    }));
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    await vi.waitFor(() => expect(document.querySelectorAll(".reels-grid-cell")).toHaveLength(6));
+    expect(document.querySelector("video")).toBeNull();
+    expect(document.querySelector(".reels-grid img")?.getAttribute("loading")).toBe("lazy");
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("/clips/feed"))).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("limit=6"))).toBe(true);
+    const buttons = () => document.querySelectorAll<HTMLButtonElement>(".reels-grid-pagination button");
+    expect(buttons()[0].disabled).toBe(true);
+    buttons()[1].click();
+    await vi.waitFor(() => expect(document.querySelectorAll(".reels-grid-cell")).toHaveLength(2));
+    expect(buttons()[1].disabled).toBe(true);
+    expect(document.querySelector("video")).toBeNull();
+    buttons()[0].click();
+    await vi.waitFor(() => expect(document.querySelectorAll(".reels-grid-cell")).toHaveLength(6));
+  });
+
+  it("lets a failed grid request retry without starting the reel feed", async () => {
+    window.history.replaceState(null, "", "/clips?view=grid");
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({}, { status: 503 })));
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-grid"]')?.textContent).toContain("Réessayer"));
+    vi.mocked(fetch).mockImplementation(async () => Response.json({ clips: [], hasMore: false }));
+    document.querySelector<HTMLButtonElement>('[data-testid="reels-grid"] button')!.click();
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-grid"]')?.textContent).toContain("Aucun Reel"));
+    expect(document.querySelector("video")).toBeNull();
+  });
+
   it("requests five clips and offers a visible recovery action after a failed feed request", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {

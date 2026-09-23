@@ -650,7 +650,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         }
         // Without an IntersectionObserver (e.g. non-browser test runtime) activate
         // the first slide directly so the primary media still plays.
-        if (!hasIO && activeSlideId === null && slides[0]) {
+        if (!hasIO && !gridOpen && activeSlideId === null && slides[0]) {
           activeSlideId = slides[0].id;
           slides[0].activate();
         }
@@ -730,17 +730,23 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // ── Three-column grid ────────────────────────────────────────────────────
   let gridView: HTMLElement | null = null;
   let gridScrollTop = 0;
+  let gridController: AbortController | null = null;
+  let gridPage = 0;
+  const gridCursors: (number | null)[] = [null];
+  let gridClips: FeedClip[] = [];
   function toggleGrid(open?: boolean) {
     playbackIntentVersion++;
     gridOpen = open ?? !gridOpen;
     if (gridOpen) {
       slides.forEach(slide => slide.deactivate());
-      buildGrid();
+      void buildGrid();
       requestAnimationFrame(() => { if (gridView) gridView.scrollTop = gridScrollTop; });
     } else {
+      gridController?.abort();
       gridScrollTop = gridView?.scrollTop ?? gridScrollTop;
       gridView?.remove();
       gridView = null;
+      if (slides.length === 0) void loadPage();
     }
     gridToggleBtn.innerHTML = reelsIcons.grid(gridOpen);
     gridToggleBtn.setAttribute("aria-pressed", String(gridOpen));
@@ -750,21 +756,33 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     window.history.replaceState(null, "", url);
   }
 
-  function buildGrid() {
+  async function buildGrid() {
+    gridController?.abort();
+    const controller = new AbortController();
+    gridController = controller;
     gridView?.remove();
     gridView = el("div", "reels-grid-view", { "data-testid": "reels-grid" });
+    const view = gridView;
+    const status = el("p", "reels-muted", { role: "status" });
+    status.textContent = "Chargement…";
+    view.append(status);
+    shell.append(view);
+    try {
+    const page = await fetchFeed({ before: gridCursors[gridPage], limit: 6, q: searchQuery }, controller.signal);
+    if (controller.signal.aborted || destroyed || !gridOpen) return;
+    if (page.degraded) throw new Error("Feed temporarily unavailable");
+    gridClips = page.clips.slice(0, 6);
+    view.replaceChildren();
     const grid = el("div", "reels-grid");
-    if (slides.length === 0) {
+    if (gridClips.length === 0) {
       const empty = el("p", "reels-fullstate reels-muted");
       empty.textContent = "Aucun Reel à afficher.";
-      gridView.append(empty);
+      view.append(empty);
     } else {
-      for (const handle of slides) {
-        const clip = clipById.get(handle.id);
-        if (!clip) continue;
+      for (const clip of gridClips) {
         const cell = el("button", "reels-grid-cell", { type: "button", "aria-label": clip.title || clip.author.username });
         if (clip.thumb) {
-          const img = el("img", undefined, { alt: "", loading: "lazy" }) as HTMLImageElement;
+          const img = el("img", undefined, { alt: "", loading: "lazy", decoding: "async" }) as HTMLImageElement;
           img.src = `${BASE.replace(/\/$/, "")}${clip.thumb}`;
           cell.append(img);
         } else {
@@ -783,13 +801,44 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         cell.addEventListener("click", () => openFromGrid(clip.id));
         grid.append(cell);
       }
-      gridView.append(grid);
+      view.append(grid);
     }
-    shell.append(gridView);
+    const nav = el("nav", "reels-grid-pagination", { "aria-label": "Pagination" });
+    const previous = el("button", "reels-btn", { type: "button" });
+    previous.textContent = "Précédent";
+    previous.disabled = gridPage === 0;
+    previous.onclick = () => { gridPage--; void buildGrid(); };
+    const label = el("span", "reels-muted", { role: "status" });
+    label.textContent = `Page ${gridPage + 1}`;
+    const next = el("button", "reels-btn", { type: "button" });
+    next.textContent = "Suivant";
+    next.disabled = !page.hasMore || page.nextBefore == null;
+    next.onclick = () => {
+      gridCursors[gridPage + 1] = page.nextBefore;
+      gridPage++;
+      void buildGrid();
+    };
+    nav.append(previous, label, next);
+    view.append(nav);
+    } catch {
+      if (controller.signal.aborted || destroyed || !gridOpen) return;
+      status.textContent = "Impossible de charger la grille.";
+      const retry = el("button", "reels-btn", { type: "button" });
+      retry.textContent = "Réessayer";
+      retry.onclick = () => void buildGrid();
+      view.replaceChildren(status, retry);
+    }
   }
 
   function openFromGrid(clipId: number) {
     gridScrollTop = gridView?.scrollTop ?? gridScrollTop;
+    const clip = gridClips.find(item => item.id === clipId);
+    if (clip && !slides.some(slide => slide.id === clipId)) {
+      const selected = createSlide(clip);
+      slides.push(selected);
+      track.append(selected.element);
+      io?.observe(selected.element);
+    }
     toggleGrid(false);
     const handle = slides.find(s => s.id === clipId);
     if (handle) {
@@ -1137,7 +1186,8 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   searchQuery = query.get("q")?.trim() ?? "";
   const initialGrid = query.get("view") === "grid";
   if (query.get("search") === "1") queueMicrotask(openSearch);
-  void loadPage().then(() => { if (initialGrid && !destroyed) toggleGrid(true); });
+  if (initialGrid) toggleGrid(true);
+  else void loadPage();
 
   document.body.dataset.clipReady = "true";
 
@@ -1159,6 +1209,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       disposeInbox?.();
       io?.disconnect();
       feedController?.abort();
+      gridController?.abort();
       searchController?.abort();
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVisibility);

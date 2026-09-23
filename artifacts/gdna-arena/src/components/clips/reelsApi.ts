@@ -90,7 +90,7 @@ export async function fetchFeed(
 ): Promise<FeedResponse> {
   const params = new URLSearchParams();
   if (opts.before != null) params.set("before", String(opts.before));
-  params.set("limit", String(Math.min(Math.max(opts.limit ?? 5, 1), 5)));
+  params.set("limit", String(Math.min(Math.max(opts.limit ?? 5, 1), 6)));
   if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
