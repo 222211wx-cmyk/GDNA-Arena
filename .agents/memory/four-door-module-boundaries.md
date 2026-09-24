@@ -3,6 +3,16 @@ name: Four-door module boundaries
 description: Product-level ownership rules for Arena Qaisypro entry and primary modules.
 ---
 
+## Current umbrella and delivery policy
+
+The official Helixly platform must continue to include every existing component and service. Separate tab links and identities are entry points within that platform, not permission to remove features or split away the main platform.
+
+**Why:** The owner explicitly confirmed that division into tabs must preserve the complete official platform, with Clips (Hc) and Messages (Hm) validated first.
+
+**How to apply:** Focus implementation and verification on those first two sections before starting work on the remaining tabs, then proceed one tab at a time. The newer homepage entries (Clips, Messages, Arena, Social) supersede the older four-door presentation described below; do not restore the older entry layout based on this historical note.
+
+## Earlier module ownership guidance
+
 Arena Qaisypro keeps all existing features but presents four independent entry doors:
 - AMIS is admin-only and owns site control, missions, 70/30 finance, wallet, and statistics.
 - MESSAGERI owns public/group/legend and non-private-citizen messaging.
