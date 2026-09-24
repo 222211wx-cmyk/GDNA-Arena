@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getAutoLiteReferral, shouldAutoRedirectToLite } from "./network-detect";
 
 describe("full messenger route preservation", () => {
-  it.each(["/messages", "/messages/", "/messages/123"])("never redirects %s on constrained networks or referrals", (route) => {
+  it.each(["/messagerie", "/messagerie/", "/messages", "/messages/", "/messages/123"])("never redirects %s on constrained networks or referrals", (route) => {
     expect(shouldAutoRedirectToLite(route, true, "inwi")).toBe(false);
     expect(shouldAutoRedirectToLite(route, true, null)).toBe(false);
     expect(shouldAutoRedirectToLite(route, false, "star6")).toBe(false);

@@ -26,7 +26,7 @@ export function getAutoLiteReferral(search: string): string | null {
 /** Explicit full messenger links must never lose rooms/tools to an automatic redirect. */
 export function shouldAutoRedirectToLite(route: string, forced: boolean, referral: string | null): boolean {
   const path = route.replace(/\/+$/, "") || "/";
-  if (path === "/messages" || path.startsWith("/messages/")) return false;
+  if (path === "/messagerie" || path === "/messages" || path.startsWith("/messages/")) return false;
   if (path === "/clip" || path === "/clips" || /^\/clip\/HELX-\d{6}$/.test(path)) return false;
   return forced || referral !== null;
 }

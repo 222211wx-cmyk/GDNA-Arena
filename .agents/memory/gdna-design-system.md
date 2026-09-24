@@ -8,7 +8,7 @@ description: gdna-arena consumes @workspace/gdna-ds; theme rules and migration d
 - **Why gold primary, not the old token file's neon blue:** the app's visible brand (nav, buttons, crown logo) is gold; neon blue lives on as the accent role.
 - gdna-arena's local `src/components/ui/`, `lib/utils.ts`, `hooks/use-toast.ts` were DELETED — imports come from `@workspace/gdna-ds/...`. Do not reintroduce local copies; only one global `Toaster` (in App.tsx — a duplicate in globalstar-app.tsx caused double toasts once).
 - **How to apply:** new UI in gdna-arena should use token classes (bg-primary etc.). External floating contact buttons are forbidden; messaging stays exclusively inside the empire's own messenger.
-- Main nav remains flat, but the owner explicitly narrowed its labels on 2026-09-21 to أرينا | أنا | حيوان | المراسلات - MESSAGERI | اجتماعي - جهات الاتصال | Search | مستشار | SA.
+- Main nav remains flat; the owner subsequently explicitly approved showing only CLIPS and Messagerie, with the language selector retained as a utility.
 - **Why:** This explicit latest request supersedes the earlier requirement to expose every section in the top bar. Preserve existing feature routes rather than deleting unrelated sections.
 
 Clips has a specific exception to the main-site flat navigation rule: use four persistent destinations (Home, Clips, Search, Profile), with secondary destinations available in its menu.

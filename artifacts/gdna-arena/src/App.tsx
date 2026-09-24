@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@workspace/gdna-ds/components/ui/toaster";
 import { TooltipProvider } from "@workspace/gdna-ds/components/ui/tooltip";
@@ -177,6 +177,9 @@ function PageWrapper() {
           <Route path="/stories" component={StoriesPage} />
           <Route path="/events" component={EventsPage} />
           <Route path="/messages" component={MessagesPage} />
+          <Route path="/messagerie">
+            <Redirect to={`/messages${window.location.search}${window.location.hash}`} />
+          </Route>
           <Route path="/missed-calls" component={MissedCallsPage} />
           <Route path="/celebrations" component={CelebrationsPage} />
           <Route path="/press" component={PressPage} />
