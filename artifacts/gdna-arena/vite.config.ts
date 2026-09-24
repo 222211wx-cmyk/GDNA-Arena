@@ -104,6 +104,13 @@ ${pushWorkerSource}`);
         mkdirSync(path.join(output, route), { recursive: true });
         writeFileSync(path.join(output, route, "index.html"), liteHtml);
       }
+      // Section install start URLs must resolve even on static hosts without an
+      // SPA rewrite rule. They retain index.html's early per-route metadata.
+      const appHtml = readFileSync(path.join(output, "index.html"), "utf8");
+      for (const route of ["clips", "clip", "messages", "messagerie"]) {
+        mkdirSync(path.join(output, route), { recursive: true });
+        writeFileSync(path.join(output, route, "index.html"), appHtml);
+      }
       const precache = [...liteFiles].map(file => `${normalizedBase}${file}`);
       writeFileSync(path.join(output, "lite-precache.json"), JSON.stringify([...liteFiles], null, 2));
       const versionInputs = [...liteFiles].sort().map(file => readFileSync(path.join(output, file)));

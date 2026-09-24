@@ -58,6 +58,8 @@ style.textContent = `
   #reels-root main{padding:0;margin:0;max-width:none}
   #reels-root main > header{display:none}
   .reels-css-fullscreen{background:${palette.background}}
+  .reels-install-help{position:absolute;z-index:30;top:calc(${space} * 18);inset-inline:calc(${space} * 4);padding:calc(${space} * 3);background:${palette.card};color:${palette.cardForeground};border:1px solid ${palette.border};border-radius:${tokens.radius}}
+  .reels-install-help button{margin-inline-start:calc(${space} * 2)}
 `;
 document.head.appendChild(style);
 

@@ -12,7 +12,8 @@ describe("ultra-light clip bootstrap", () => {
     expect(main).toContain('import("./app-entry")');
     expect(main).not.toContain('isClipRoute ? import("./clip-entry")');
     expect(main).toContain('rawRoute.replace(/\\/+$/');
-    expect(main).toContain('data-testid", "clip-startup-retry"');
+    expect(main).toContain('retry.setAttribute("data-testid", `${surface}-startup-retry`)');
+    expect(main).toContain('showStartupError("تعذر تشغيل صفحة الكليبز. تحقق من الاتصال وحاول مجدداً.", "clip")');
     expect(main).toContain("window.location.reload()");
     expect(clip).not.toMatch(/from\s+["']react|from\s+["'].\/App|index\.css|AuthProvider/i);
     expect(clip).not.toMatch(/prepareVideo|ffmpeg|MediaRecorder/);

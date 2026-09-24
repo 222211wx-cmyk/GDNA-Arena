@@ -24,6 +24,7 @@ import {
   type NotificationItem,
 } from "./reelsApi";
 import { mountVideoActions, type VideoActionState } from "./VideoActions";
+import { getInstallLang, installText, requestSectionInstall } from "../../lib/section-install";
 
 const BASE = import.meta.env.BASE_URL;
 const PAGE_SIZE = 5;
@@ -103,9 +104,22 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   title.textContent = "GDNA Arena";
   topLeft.append(homeLink);
   const topRight = el("div", "reels-topbar-right");
+  const installBtn = iconButton(installText(getInstallLang(), "clipsButton"), "Hc");
+  installBtn.dataset.testid = "install-clips";
+  installBtn.addEventListener("click", () => {
+    void requestSectionInstall("clips").then(message => {
+      const help = el("div", "reels-install-help", { role: "status" });
+      help.textContent = message;
+      const close = iconButton(installText(getInstallLang(), "dismiss"), "×");
+      close.addEventListener("click", () => help.remove());
+      help.append(close);
+      shell.querySelector(".reels-install-help")?.remove();
+      shell.append(help);
+    });
+  });
   const searchBtn = iconButton("Rechercher", reelsIcons.search());
   const moreBtn = iconButton("Menu", reelsIcons.hamburger());
-  topRight.append(searchBtn, moreBtn);
+  topRight.append(installBtn, searchBtn, moreBtn);
   topbar.append(topLeft, title, topRight);
 
   // Feed track
