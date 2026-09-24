@@ -6,6 +6,7 @@ import { useLang } from "@/contexts/LangContext";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { EliteCarousel } from "@/components/elite/EliteCarousel";
+import { PlatformLauncher } from "@/components/home/PlatformLauncher";
 import HomeCitizenSection from "@/components/citizen/HomeCitizenSection";
 import {
   Crown,
@@ -554,6 +555,8 @@ export default function Home() {
       className="min-h-screen bg-background text-foreground"
       dir={lang === "ar" ? "rtl" : "ltr"}
     >
+      <PlatformLauncher />
+
       {/* ── LIVE EVENTS TICKER ─────────────────────────────────────── */}
       <LiveTicker />
 
