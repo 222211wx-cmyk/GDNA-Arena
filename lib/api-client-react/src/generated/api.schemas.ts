@@ -5,6 +5,28 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface ExpoPushInstallation {
+  /**
+     * @minLength 16
+     * @maxLength 128
+     */
+  installationId: string;
+  /** @pattern ^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,256}\]$ */
+  token: string;
+}
+
+export interface ExpoPushRemoval {
+  /**
+     * @minLength 16
+     * @maxLength 128
+     */
+  installationId: string;
+}
+
+export interface ExpoPushCallStatus {
+  active: boolean;
+}
+
 export type GdnaQuestionSection = typeof GdnaQuestionSection[keyof typeof GdnaQuestionSection];
 
 

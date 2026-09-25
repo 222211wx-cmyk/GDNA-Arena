@@ -57,6 +57,8 @@ type MountOptions = {
 export type VideoActionsHandle = {
   /** Merge a later engagement snapshot into the rendered like/comment controls. */
   hydrate(snapshot: Partial<Pick<VideoActionState, "liked" | "likeCount" | "commentCount">>): void;
+  /** Release document listeners and the media overlay when a feed slide is removed. */
+  dispose?: () => void;
 };
 
 async function apiJson(path: string, init?: RequestInit) {
@@ -171,7 +173,15 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
   let userChangedComment = false;
   // Filled in once the like/comment controls are built; lets hydrate() re-render.
   let applyHydration: VideoActionsHandle["hydrate"] = () => {};
-  const noopHandle: VideoActionsHandle = { hydrate: snapshot => applyHydration(snapshot) };
+  let removeOutsideClick: (() => void) | undefined;
+  const noopHandle: VideoActionsHandle = {
+    hydrate: snapshot => applyHydration(snapshot),
+    dispose: () => {
+      removeOutsideClick?.();
+      overlay.remove();
+      shell.remove();
+    },
+  };
   const shell = document.createElement("div");
   shell.className = "video-actions-shell";
   shell.innerHTML = `
@@ -506,9 +516,11 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
     if (menu.hidden) openMenu();
     else closeMenu();
   });
-  document.addEventListener("click", event => {
+  const onOutsideClick = (event: MouseEvent) => {
     if (!menuWrap.contains(event.target as Node)) closeMenu();
-  });
+  };
+  document.addEventListener("click", onOutsideClick);
+  removeOutsideClick = () => document.removeEventListener("click", onOutsideClick);
   menu.addEventListener("keydown", event => {
     if (event.key === "Escape") {
       event.stopPropagation();

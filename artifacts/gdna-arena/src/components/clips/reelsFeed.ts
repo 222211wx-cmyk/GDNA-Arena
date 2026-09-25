@@ -227,6 +227,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     loadPlayback: () => void;
     activate: () => void;
     deactivate: () => void;
+    dispose: () => void;
     togglePlaybackByUser: () => void;
   };
 
@@ -250,7 +251,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     const mediaWrap = el("div", "reels-media-wrap");
     slide.append(mediaWrap);
 
-    // Poster shown until playback URL is loaded (poster-only until active).
+    // Poster stays visible until the active video actually produces playback.
     let poster: HTMLImageElement | null = null;
     if (clip.thumb) {
       poster = el("img", "reels-poster", { alt: "", loading: "lazy" }) as HTMLImageElement;
@@ -264,7 +265,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     const center = el("div", "reels-center", { "data-paused": "true" });
     const playBtn = el("button", "reels-center-btn reels-play", { type: "button", "aria-label": "Lecture" });
     // Play glyph (triangle).
-    playBtn.innerHTML = `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
+    playBtn.innerHTML = `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span class="reels-play-instruction">Appuyez pour lire le clip</span>`;
     const fsBtn = el("button", "reels-center-btn reels-fs-pill", { type: "button", "data-testid": "reels-fullscreen" });
     const fsIcon = el("span", "reels-fs-pill-icon");
     fsIcon.innerHTML = reelsIcons.fullscreen(false);
@@ -290,7 +291,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     let video: HTMLVideoElement | null = null;
     let playbackRequested = false;
     let resumeTime = 0;
-    let actionsMounted = false;
+    let actionsPending = false;
+    let actionsDisposed = false;
+    let frameGeneration = 0;
     let userPaused = false;
     let naturallyEnded = false;
     let endAdvanceStarted = false;
@@ -299,8 +302,26 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       center.setAttribute("data-paused", String(paused));
       playBtn.setAttribute("aria-label", paused ? "Lecture" : "Pause");
       playBtn.innerHTML = paused
-        ? `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`
+        ? `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span class="reels-play-instruction">Appuyez pour lire le clip</span>`
         : `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>`;
+    };
+
+    const showPoster = () => {
+      frameGeneration++;
+      if (poster) poster.style.display = "";
+    };
+
+    const showPlayingFrame = (v: HTMLVideoElement) => {
+      const generation = ++frameGeneration;
+      const reveal = () => {
+        if (generation === frameGeneration && v.isConnected && !v.paused && !destroyed && !actionsDisposed) {
+          if (poster) poster.style.display = "none";
+        }
+      };
+      // "loadeddata" only means a frame is decoded, not that playback started.
+      // Where supported, wait until the browser submits a frame to the compositor.
+      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(reveal);
+      else reveal();
     };
 
     const togglePlaybackByUser = () => {
@@ -335,6 +356,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           mediaWrap.prepend(video);
           video.addEventListener("loadedmetadata", () => { if (video) video.currentTime = resumeTime; }, { once: true });
         }
+        if (video) mountActions(video);
         return;
       }
       playbackRequested = true;
@@ -369,15 +391,15 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         mediaError?.remove(); mediaError = null;
         const portrait = v.videoHeight >= v.videoWidth;
         slide.setAttribute("data-orient", portrait ? "portrait" : "landscape");
-        if (poster) poster.style.display = "none";
       });
+      v.addEventListener("playing", () => showPlayingFrame(v));
       v.addEventListener("play", () => {
         // A manual click is a playback intent too; never allow a second player.
         slides.forEach(other => { if (other.id !== clip.id) other.deactivate(); });
         activeSlideId = clip.id;
         setPaused(false);
       });
-      v.addEventListener("pause", () => setPaused(true));
+      v.addEventListener("pause", () => { frameGeneration++; setPaused(true); });
       v.addEventListener("ended", () => {
         naturallyEnded = true;
         setPaused(true);
@@ -390,12 +412,12 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     }
 
     function mountActions(v: HTMLVideoElement) {
-      if (actionsMounted) return;
-      actionsMounted = true;
+      if (actionsPending || actionsHandle || actionsDisposed || destroyed || !v.isConnected || !slide.isConnected) return;
+      actionsPending = true;
       // Ownership comes only from the authenticated engagement contract. Await
       // identity too: an unresolved/missing identity must never expose Delete.
       void Promise.all([identityPromise, fetchEngagement(clip.id).catch(() => null)]).then(async ([resolved, eng]) => {
-        if (!v.isConnected || destroyed) return;
+        if (!v.isConnected || !slide.isConnected || destroyed || actionsDisposed) return;
         identity = resolved;
         if (eng) {
           clip.saved = eng.saved;
@@ -415,7 +437,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           saveCount: eng?.saveCount ?? clip.saveCount,
           shareCount: eng?.shareCount ?? clip.shareCount,
         };
-        actionsHandle = await mountVideoActions({
+        const handle = await mountVideoActions({
           host: actionsHost,
           media: v,
           titleElement: caption,
@@ -428,9 +450,19 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           initial,
           onDeleted: removeClip,
         });
+        if (!slide.isConnected || destroyed || actionsDisposed) {
+          handle.dispose?.();
+          actionsHost.replaceChildren();
+          return;
+        }
+        actionsHandle = handle;
         decorateOverlay(v);
         if (pendingEngagement) actionsHandle.hydrate(pendingEngagement);
-      }).catch(() => {});
+      }).catch(error => {
+        if (!actionsDisposed && !destroyed && slide.isConnected) {
+          actionsHost.textContent = error instanceof Error ? error.message : "Actions indisponibles";
+        }
+      }).finally(() => { actionsPending = false; });
     }
 
     // Inject author + Suivre + caption into the VideoActions .clip-meta block.
@@ -530,15 +562,20 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         }
       },
       deactivate() {
+        showPoster();
         if (video?.isConnected) {
           resumeTime = video.currentTime;
           video.pause();
           video.removeAttribute("src");
           video.load();
           video.remove();
-          if (poster) { poster.style.display = ""; mediaWrap.prepend(poster); }
         }
         setPaused(true);
+      },
+      dispose() {
+        actionsDisposed = true;
+        actionsHandle?.dispose?.();
+        actionsHost.replaceChildren();
       },
     } as SlideHandle;
   }
@@ -625,6 +662,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     const index = slides.findIndex(slide => slide.id === clipId);
     const removed = index >= 0 ? slides[index] : undefined;
     removed?.deactivate();
+    removed?.dispose();
     if (removed) {
       io?.unobserve(removed.element);
       removed.element.remove();
@@ -658,7 +696,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     operation = (async () => {
       if (reset) {
         feedController?.abort();
-        slides.forEach(s => { s.deactivate(); io?.unobserve(s.element); });
+        slides.forEach(s => { s.deactivate(); s.dispose(); io?.unobserve(s.element); });
         slides.length = 0;
         clipById.clear();
         nextBefore = null;
@@ -1275,7 +1313,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       searchController?.abort();
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVisibility);
-      slides.forEach(s => s.deactivate());
+      slides.forEach(s => { s.deactivate(); s.dispose(); });
       shell.remove();
     },
   };

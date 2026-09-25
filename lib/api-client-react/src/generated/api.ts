@@ -59,6 +59,9 @@ import type {
   DeclineCallParams,
   ErrorResponse,
   ExhaustedClipThumbnailsPage,
+  ExpoPushCallStatus,
+  ExpoPushInstallation,
+  ExpoPushRemoval,
   GdnaAnswer,
   GdnaEvolution,
   GdnaMemory,
@@ -117,6 +120,283 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getRegisterExpoPushInstallationUrl = () => {
+
+
+
+
+  return `/api/expo-push/installations`
+}
+
+/**
+ * @summary Bind a separately opted-in Expo token to this authenticated installation
+ */
+export const registerExpoPushInstallation = async (expoPushInstallation: ExpoPushInstallation, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getRegisterExpoPushInstallationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(expoPushInstallation)
+  }
+);}
+
+
+
+
+
+export const getRegisterExpoPushInstallationMutationKey = () => ['registerExpoPushInstallation'] as const;
+
+export const getRegisterExpoPushInstallationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerExpoPushInstallation>>, TError,RegisterExpoPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerExpoPushInstallation>>, TError,RegisterExpoPushInstallationMutationVariables, TContext> => {
+
+const mutationKey = getRegisterExpoPushInstallationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerExpoPushInstallation>>, RegisterExpoPushInstallationMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerExpoPushInstallation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterExpoPushInstallationMutationResult = NonNullable<Awaited<ReturnType<typeof registerExpoPushInstallation>>>
+    export type RegisterExpoPushInstallationMutationBody = BodyType<ExpoPushInstallation>
+    export type RegisterExpoPushInstallationMutationError = ErrorType<void>
+    export type RegisterExpoPushInstallationMutationVariables = {data: BodyType<ExpoPushInstallation>}
+
+    /**
+ * @summary Bind a separately opted-in Expo token to this authenticated installation
+ */
+export const useRegisterExpoPushInstallation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerExpoPushInstallation>>, TError,RegisterExpoPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof registerExpoPushInstallation>>,
+        TError,
+        RegisterExpoPushInstallationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterExpoPushInstallationMutationOptions(options), queryClient);
+    }
+
+export const getRemoveExpoPushInstallationUrl = () => {
+
+
+
+
+  return `/api/expo-push/installations`
+}
+
+/**
+ * @summary Remove this session's Expo installation
+ */
+export const removeExpoPushInstallation = async (expoPushRemoval: ExpoPushRemoval, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getRemoveExpoPushInstallationUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(expoPushRemoval)
+  }
+);}
+
+
+
+
+
+export const getRemoveExpoPushInstallationMutationKey = () => ['removeExpoPushInstallation'] as const;
+
+export const getRemoveExpoPushInstallationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeExpoPushInstallation>>, TError,RemoveExpoPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeExpoPushInstallation>>, TError,RemoveExpoPushInstallationMutationVariables, TContext> => {
+
+const mutationKey = getRemoveExpoPushInstallationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeExpoPushInstallation>>, RemoveExpoPushInstallationMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  removeExpoPushInstallation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveExpoPushInstallationMutationResult = NonNullable<Awaited<ReturnType<typeof removeExpoPushInstallation>>>
+    export type RemoveExpoPushInstallationMutationBody = BodyType<ExpoPushRemoval>
+    export type RemoveExpoPushInstallationMutationError = ErrorType<void>
+    export type RemoveExpoPushInstallationMutationVariables = {data: BodyType<ExpoPushRemoval>}
+
+    /**
+ * @summary Remove this session's Expo installation
+ */
+export const useRemoveExpoPushInstallation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeExpoPushInstallation>>, TError,RemoveExpoPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeExpoPushInstallation>>,
+        TError,
+        RemoveExpoPushInstallationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRemoveExpoPushInstallationMutationOptions(options), queryClient);
+    }
+
+export const getCheckExpoPushCallUrl = (id: string,) => {
+
+
+
+
+  return `/api/expo-push/calls/${id}`
+}
+
+/**
+ * @summary Verify that a call notification still refers to this user's live invitation
+ */
+export const checkExpoPushCall = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ExpoPushCallStatus> => {
+
+  return customFetch<ExpoPushCallStatus>(getCheckExpoPushCallUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCheckExpoPushCallQueryKey = (id: string,) => {
+    return [
+    `/api/expo-push/calls/${id}`
+    ] as const;
+    }
+
+
+export const getCheckExpoPushCallQueryOptions = <TData = Awaited<ReturnType<typeof checkExpoPushCall>>, TError = ErrorType<void>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkExpoPushCall>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCheckExpoPushCallQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof checkExpoPushCall>>> = ({ signal }) => checkExpoPushCall(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof checkExpoPushCall>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CheckExpoPushCallQueryResult = NonNullable<Awaited<ReturnType<typeof checkExpoPushCall>>>
+export type CheckExpoPushCallQueryError = ErrorType<void>
+
+
+export function useCheckExpoPushCall<TData = Awaited<ReturnType<typeof checkExpoPushCall>>, TError = ErrorType<void>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkExpoPushCall>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof checkExpoPushCall>>,
+          TError,
+          Awaited<ReturnType<typeof checkExpoPushCall>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCheckExpoPushCall<TData = Awaited<ReturnType<typeof checkExpoPushCall>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkExpoPushCall>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof checkExpoPushCall>>,
+          TError,
+          Awaited<ReturnType<typeof checkExpoPushCall>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCheckExpoPushCall<TData = Awaited<ReturnType<typeof checkExpoPushCall>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkExpoPushCall>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Verify that a call notification still refers to this user's live invitation
+ */
+
+export function useCheckExpoPushCall<TData = Awaited<ReturnType<typeof checkExpoPushCall>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkExpoPushCall>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCheckExpoPushCallQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getAskGdnaUrl = () => {
 

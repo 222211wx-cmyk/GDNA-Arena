@@ -120,7 +120,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-poster{
     position:absolute;inset:0;z-index:1;
     width:100%;height:100%;object-fit:contain;
-    background:transparent;
+    background:transparent;pointer-events:none;
   }
 
   /* Center play + fullscreen affordances. */
@@ -145,6 +145,14 @@ export function reelsShellCss(palette: Palette, space: string): string {
   }
   .reels-play:hover{background:var(--reels-scrim-strong)}
   .reels-play svg{width:34px;height:34px}
+  .reels-play-instruction{
+    position:absolute;top:calc(100% + ${space} * 3);left:50%;
+    transform:translateX(-50%);white-space:nowrap;
+    padding:calc(${space} * 2) calc(${space} * 4);
+    border-radius:9999px;background:var(--reels-scrim-strong);
+    color:var(--reels-on-media);font-size:.875rem;font-weight:700;
+    text-shadow:0 1px 3px var(--reels-shadow);
+  }
   .reels-center[data-paused="false"] .reels-play{opacity:.72;transform:scale(.78)}
   .reels-center[data-paused="false"] .reels-play:hover,
   .reels-center[data-paused="false"] .reels-play:focus-visible{opacity:1;transform:scale(.9)}

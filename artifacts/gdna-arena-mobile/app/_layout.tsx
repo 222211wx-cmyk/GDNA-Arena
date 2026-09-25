@@ -11,6 +11,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { OfflineBanner, OnlineProvider } from '@/contexts/OnlineContext';
 import { ClipPlaybackProvider } from '@/contexts/ClipPlaybackContext';
+import { listenForPushTaps, refreshPushIfAllowed } from '@/lib/native-push';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,11 +35,17 @@ function AuthGate() {
     }
   }, [user, isLoading, segments]);
 
+  useEffect(() => {
+    if (!isLoading && user) void refreshPushIfAllowed(user.id).catch(() => {});
+  }, [isLoading, user?.id]);
+
   return null;
 }
 
 function RootLayoutNav() {
   const colors = useColors();
+  const router = useRouter();
+  useEffect(() => listenForPushTaps(path => router.push(path as never)), [router]);
   return (
     <>
       <AuthGate />

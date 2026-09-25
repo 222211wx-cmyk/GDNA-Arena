@@ -9,6 +9,50 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Bind a separately opted-in Expo token to this authenticated installation
+ */
+export const registerExpoPushInstallationBodyInstallationIdMin = 16;
+export const registerExpoPushInstallationBodyInstallationIdMax = 128;
+
+export const registerExpoPushInstallationBodyTokenRegExp = new RegExp('^Expo(nent)?PushToken\\[[A-Za-z0-9_-]{10,256}\\]$');
+
+
+export const RegisterExpoPushInstallationBody = zod.object({
+  "installationId": zod.string().min(registerExpoPushInstallationBodyInstallationIdMin).max(registerExpoPushInstallationBodyInstallationIdMax),
+  "token": zod.string().regex(registerExpoPushInstallationBodyTokenRegExp)
+})
+
+export const RegisterExpoPushInstallationResponse = zod.unknown()
+
+
+/**
+ * @summary Remove this session's Expo installation
+ */
+export const removeExpoPushInstallationBodyInstallationIdMin = 16;
+export const removeExpoPushInstallationBodyInstallationIdMax = 128;
+
+
+
+export const RemoveExpoPushInstallationBody = zod.object({
+  "installationId": zod.string().min(removeExpoPushInstallationBodyInstallationIdMin).max(removeExpoPushInstallationBodyInstallationIdMax)
+})
+
+export const RemoveExpoPushInstallationResponse = zod.unknown()
+
+
+/**
+ * @summary Verify that a call notification still refers to this user's live invitation
+ */
+export const CheckExpoPushCallParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CheckExpoPushCallResponse = zod.object({
+  "active": zod.boolean()
+})
+
+
+/**
  * Authenticated, bounded GDNA assistance. Identity is taken only from the session. Memory is opt-in.
  */
 export const askGdnaBodyQueryMax = 4000;

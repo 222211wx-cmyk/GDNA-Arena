@@ -12,6 +12,7 @@ import {
   saveCachedAuthUser,
   type AuthUser,
 } from '@/lib/api';
+import { forgetPushOnLogout } from '@/lib/native-push';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     ++authGenerationRef.current;
+    const formerUserId = user?.id;
     setUser(null);
     beginSessionTransition();
     await queryClient.cancelQueries();
@@ -108,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Clear the local copy immediately after starting the server-side logout,
     // so this device cannot reuse it even if the network request fails.
     const serverLogout = apiPost('/auth/logout');
+    if (formerUserId) void forgetPushOnLogout(formerUserId).catch(() => {});
     await Promise.all([clearSessionCookie(), clearCachedAuthUser()]);
     await serverLogout;
   };

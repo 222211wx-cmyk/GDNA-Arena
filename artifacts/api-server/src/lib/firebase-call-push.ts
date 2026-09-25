@@ -11,6 +11,7 @@ import {
 } from "./call-state-db";
 import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
 import { sendBrowserCallTerminalPush, sendBrowserIncomingCallPush } from "./browser-push";
+import { sendExpoPush } from "./expo-push";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -317,6 +318,13 @@ export async function sendAuthoritativeIncomingCallPush(input: {
   expiresAt: Date;
   video: boolean;
 }): Promise<void> {
+  if (input.expiresAt.getTime() > Date.now()) {
+    void sendExpoPush(input.calleeId, `incoming-call:${input.callId}`, {
+      title: "مكالمة واردة", body: "افتح Amis للتحقق من المكالمة",
+      data: { type: "call", callId: input.callId, recipientId: String(input.calleeId) },
+      ttl: Math.max(1, Math.floor((input.expiresAt.getTime() - Date.now()) / 1000)),
+    }).catch(() => {});
+  }
   // Standards-based Web Push is independent from Firebase and is attempted
   // first. This function is called only after the authorized invitation commit.
   try {
@@ -360,6 +368,10 @@ export async function sendAuthoritativeIncomingCallPush(input: {
 export async function sendAuthoritativeGroupCallPush(input: {
   callId: string; roomId: number; callerName: string; recipientId: number; video: boolean;
 }): Promise<void> {
+  void sendExpoPush(input.recipientId, `incoming-group-call:${input.callId}`, {
+    title: "مكالمة جماعية واردة", body: "افتح Amis للتحقق من المكالمة",
+    data: { type: "group-call", callId: input.callId, roomId: String(input.roomId), recipientId: String(input.recipientId) }, ttl: INCOMING_PUSH_TTL_SECONDS,
+  }).catch(() => {});
   try {
     const services = await loadServices();
     await sendPush(services, input.recipientId, {
@@ -801,6 +813,11 @@ export async function sendNewMessagePush(
   userId: number,
   input: { roomId: number; messageId: number; fromName: string },
 ): Promise<void> {
+  void sendExpoPush(userId, `new-message:${input.messageId}`, {
+    title: "رسالة جديدة", body: "افتح Amis لقراءة رسالتك",
+    data: { type: "message", roomId: String(input.roomId), messageId: String(input.messageId), recipientId: String(userId) },
+    ttl: MESSAGE_PUSH_TTL_SECONDS,
+  }).catch(() => {});
   try {
     const services = await loadServices();
     await sendPush(

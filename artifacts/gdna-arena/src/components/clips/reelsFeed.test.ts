@@ -186,6 +186,114 @@ const feedClip = (id: number) => ({
   saved: false,
 });
 
+describe("Reels poster and actions lifecycle", () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  });
+
+  const feed = (engagement?: () => Promise<Response>) => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/api/auth/me")) return Response.json({}, { status: 401 });
+      if (url.includes("/api/clips/feed")) {
+        return Response.json({ clips: [{ ...feedClip(9), thumb: "/poster.webp" }], hasMore: false, nextBefore: null });
+      }
+      if (url.includes("/engagement") && engagement) return engagement();
+      return Response.json({ engagement: {
+        liked: false, likeCount: 0, commentCount: 0, saved: false, saveCount: 0, shareCount: 0,
+      } });
+    }));
+    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
+  };
+
+  it("keeps the clickable poster through loadeddata and a rejected autoplay until actual playback", async () => {
+    vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException("blocked", "NotAllowedError"));
+    feed();
+    await vi.waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+    const video = document.querySelector("video")!;
+    const poster = document.querySelector<HTMLElement>(".reels-poster")!;
+    expect(document.querySelector(".reels-play-instruction")?.textContent).toBe("Appuyez pour lire le clip");
+    video.dispatchEvent(new Event("loadeddata"));
+    expect(poster.style.display).not.toBe("none");
+    await vi.waitFor(() => expect(document.querySelector(".reels-play")?.getAttribute("aria-label")).toBe("Lecture"));
+    expect(document.querySelector(".reels-play-instruction")).not.toBeNull();
+    // The poster doesn't consume clicks directed at the media surface.
+    document.querySelector<HTMLElement>(".reels-media-wrap")!.click();
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
+    expect(poster.style.display).not.toBe("none");
+    Object.defineProperty(video, "paused", { configurable: true, value: false });
+    video.dispatchEvent(new Event("playing"));
+    expect(poster.style.display).toBe("none");
+    video.dispatchEvent(new Event("play"));
+    expect(document.querySelector(".reels-play-instruction")).toBeNull();
+    video.dispatchEvent(new Event("pause"));
+    expect(document.querySelector(".reels-play-instruction")).not.toBeNull();
+  });
+
+  it("reveals only a rendered frame and restores the poster on deactivation until resumed playback", async () => {
+    feed();
+    await vi.waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+    const video = document.querySelector("video")!;
+    const poster = document.querySelector<HTMLElement>(".reels-poster")!;
+    let paused = false;
+    Object.defineProperty(video, "paused", { configurable: true, get: () => paused });
+    const frames: Array<() => void> = [];
+    Object.defineProperty(video, "requestVideoFrameCallback", {
+      configurable: true, value: (callback: () => void) => { frames.push(callback); return frames.length; },
+    });
+    video.dispatchEvent(new Event("loadeddata"));
+    video.dispatchEvent(new Event("playing"));
+    expect(poster.style.display).not.toBe("none");
+    frames.shift()!();
+    expect(poster.style.display).toBe("none");
+    paused = true;
+    video.dispatchEvent(new Event("pause"));
+    expect(poster.style.display).toBe("none"); // the already rendered paused frame remains visible
+    controller.pause();
+    expect(poster.style.display).not.toBe("none");
+    expect(video.isConnected).toBe(false);
+    controller.resume();
+    expect(video.isConnected).toBe(true);
+    expect(poster.style.display).not.toBe("none");
+    paused = false;
+    video.dispatchEvent(new Event("playing"));
+    frames.shift()!();
+    expect(poster.style.display).toBe("none");
+  });
+
+  it("retries an actions mount skipped while disconnected, without duplicate controls", async () => {
+    let release!: (response: Response) => void;
+    const pending = new Promise<Response>(resolve => { release = resolve; });
+    feed(() => pending);
+    await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/engagement"))).toBe(true));
+    controller.pause();
+    release(Response.json({ engagement: {
+      liked: false, likeCount: 0, commentCount: 0, saved: false, saveCount: 0, shareCount: 0,
+    } }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.querySelector(".clip-rail")).toBeNull();
+    controller.resume();
+    await vi.waitFor(() => expect(document.querySelectorAll(".clip-rail")).toHaveLength(1));
+    controller.pause();
+    controller.resume();
+    expect(document.querySelectorAll(".clip-rail")).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("/engagement"))).toHaveLength(2);
+  });
+
+  it("does not resurrect actions after the feed is destroyed during engagement loading", async () => {
+    let release!: (response: Response) => void;
+    feed(() => new Promise<Response>(resolve => { release = resolve; }));
+    await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/engagement"))).toBe(true));
+    controller.destroy();
+    release(Response.json({ engagement: {
+      liked: false, likeCount: 0, commentCount: 0, saved: false, saveCount: 0, shareCount: 0,
+    } }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.querySelector(".clip-rail")).toBeNull();
+    expect(document.querySelector(".reels-shell")).toBeNull();
+  });
+});
+
 describe("Reels natural-end progression", () => {
   beforeEach(() => {
     Object.defineProperty(HTMLMediaElement.prototype, "play", {

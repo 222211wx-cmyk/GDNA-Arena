@@ -17,6 +17,51 @@ tags:
   - name: wallet
   - name: globalstar
 paths:
+  /expo-push/installations:
+    post:
+      operationId: registerExpoPushInstallation
+      tags: [call-push]
+      summary: Bind a separately opted-in Expo token to this authenticated installation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExpoPushInstallation" }
+      responses:
+        "200": { description: Registered }
+        "400": { description: Invalid Expo token or installation }
+        "401": { description: Authentication required }
+        "503": { description: Registration unavailable }
+    delete:
+      operationId: removeExpoPushInstallation
+      tags: [call-push]
+      summary: Remove this session's Expo installation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExpoPushRemoval" }
+      responses:
+        "200": { description: Removed }
+        "401": { description: Authentication required }
+  /expo-push/calls/{id}:
+    get:
+      operationId: checkExpoPushCall
+      tags: [call-push]
+      summary: Verify that a call notification still refers to this user's live invitation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Live invitation status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExpoPushCallStatus" }
+        "401": { description: Authentication required }
+        "503": { description: Call status unavailable }
   /gdna/ask:
     post:
       operationId: askGdna
@@ -1114,6 +1159,22 @@ paths:
 
 components:
   schemas:
+    ExpoPushInstallation:
+      type: object
+      required: [installationId, token]
+      properties:
+        installationId: { type: string, minLength: 16, maxLength: 128 }
+        token: { type: string, pattern: '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,256}\]$' }
+    ExpoPushRemoval:
+      type: object
+      required: [installationId]
+      properties:
+        installationId: { type: string, minLength: 16, maxLength: 128 }
+    ExpoPushCallStatus:
+      type: object
+      required: [active]
+      properties:
+        active: { type: boolean }
     GdnaQuestion:
       type: object
       required: [query, section]

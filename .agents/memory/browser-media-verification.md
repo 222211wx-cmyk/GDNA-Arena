@@ -5,6 +5,12 @@ description: Output verification, large-upload control-plane checks, and honest 
 
 Check the actual encoded output when changing media processing; upload success and a playable container are not sufficient evidence.
 
+A black player screenshot alone does not establish a broken stream; inspect the actual poster and a later decoded frame before attributing it to rendering.
+
+**Why:** Live Clips returned a fully black thumbnail while the same H.264/AAC video contained valid visible footage later. Browser autoplay restrictions can leave that black initial state waiting for a gesture.
+
+**How to apply:** Separate feed delivery, poster content, decoding and user-initiated playback. Do not claim a poster-timing fix repairs a black source thumbnail, or that a successful range request proves interactive playback.
+
 **Why:** Native recording can accept a video while omitting an audio track captured before playback starts. Browser audio routing can also change recorded timing. Generic MP4 support does not guarantee H.264/AAC: workspace Chromium produced VP9/Opus in an MP4 container.
 
 **How to apply:** Inspect output audio/video tracks, non-silent audio, dimensions, duration and native playback. Treat MIME type as a container label, not a codec compatibility guarantee. Preserve already-passing transport checks and use a short targeted media sample for encoder fixes rather than repeating long uploads.

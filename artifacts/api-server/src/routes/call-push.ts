@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import {
   CallPushError,
   createCallPushSession,
+  getAuthoritativeCallFirestore,
   isValidCallId,
   getCallPushStatus,
   listMissedCalls,
@@ -14,14 +15,55 @@ import {
 } from "../lib/firebase-call-push";
 import { declineCallForUser } from "../lib/signaling";
 import { registerFcmDevice, sendDerivedFcm } from "../server/fcm";
+import { registerExpoInstallation, removeExpoInstallation } from "../lib/expo-push";
 
-const router: IRouter = Router();
 const callPushLimiter = rateLimit({
   windowMs: 60_000,
   limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: req => req.session.userId ? `user:${req.session.userId}` : "unauthenticated",
+});
+const router: IRouter = Router();
+router.post("/expo-push/installations", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  try {
+    await registerExpoInstallation(userId, req.sessionID, req.body);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(error instanceof Error && error.message.startsWith("Invalid ") ? 400 : 503)
+      .json({ error: error instanceof Error && error.message.startsWith("Invalid ") ? error.message : "Expo push registration unavailable" });
+  }
+});
+
+router.delete("/expo-push/installations", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  try {
+    await removeExpoInstallation(userId, req.sessionID, req.body?.installationId);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(error instanceof Error && error.message.startsWith("Invalid ") ? 400 : 503)
+      .json({ error: "Expo push removal unavailable" });
+  }
+});
+
+router.get("/expo-push/calls/:id", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  if (!isValidCallId(req.params.id)) { res.status(400).json({ error: "Invalid call ID" }); return; }
+  try {
+    const state = await getAuthoritativeCallFirestore();
+    const record = await state.collection("callInvites").doc(req.params.id).get();
+    const call = record.data();
+    const expires = call?.expiresAt;
+    const expiresAt = expires instanceof Date ? expires.getTime() : 0;
+    res.setHeader("Cache-Control", "no-store, private");
+    res.json({ active: !!call && call.toId === userId && call.status === "ringing" && expiresAt > Date.now() });
+  } catch {
+    res.status(503).json({ error: "Call status unavailable" });
+  }
 });
 const fcmSendLimiter = rateLimit({
   windowMs: 60_000,
