@@ -11,6 +11,12 @@ The official Helixly platform must continue to include every existing component 
 
 **How to apply:** Focus implementation and verification on those first two sections before starting work on the remaining tabs, then proceed one tab at a time. The newer homepage entries (Clips, Messages, Arena, Social) supersede the older four-door presentation described below; do not restore the older entry layout based on this historical note.
 
+Extend the existing web/mobile implementation rather than rebuilding or replacing it when adding Android/iPhone background messaging and call support.
+
+**Why:** The owner explicitly chose continuing with what exists, without a rebuild, while discussing mobile background capabilities.
+
+**How to apply:** Audit and reuse current integrations first; preserve accounts, conversations and platform components. This choice does not itself confirm background calling works or authorize paid account purchases.
+
 ## Earlier module ownership guidance
 
 Arena Qaisypro keeps all existing features but presents four independent entry doors:
