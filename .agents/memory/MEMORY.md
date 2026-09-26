@@ -39,4 +39,4 @@
 - [Clip media probing](clip-media-probing.md) — seek-related loopback resets are normal; distinguish client disconnects from fatal storage errors.
 - [Approved orphan cleanup](approved-orphan-cleanup.md) — durable name tombstones fence late deletes; signed orphan approvals stay separate from ordinary deletion.
 - [Workflow restart serialization](workflow-restart-serialization.md) — restart artifact services serially; parallel restarts have left duplicate processes and misleading success responses.
-- [Native push boundaries](native-push-boundaries.md) — keep Expo, FCM and browser tokens separate; notification delivery is not proof of native locked-screen ringing.
+- [Native push boundaries](native-push-boundaries.md) — keep Expo, FCM and browser tokens separate; use Android FCM and iOS PushKit independently for calls; notification delivery is not proof of native locked-screen ringing.

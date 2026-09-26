@@ -5,6 +5,30 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type NativeCallPushInstallationProvider = typeof NativeCallPushInstallationProvider[keyof typeof NativeCallPushInstallationProvider];
+
+
+export const NativeCallPushInstallationProvider = {
+  fcm: 'fcm',
+  'apns-voip': 'apns-voip',
+} as const;
+
+export interface NativeCallPushInstallation {
+  /** @pattern ^[A-Za-z0-9_-]{16,128}$ */
+  installationId: string;
+  provider: NativeCallPushInstallationProvider;
+  /**
+     * @minLength 16
+     * @maxLength 4096
+     */
+  token: string;
+}
+
+export interface NativeCallPushRemoval {
+  /** @pattern ^[A-Za-z0-9_-]{16,128}$ */
+  installationId: string;
+}
+
 export interface ExpoPushInstallation {
   /**
      * @minLength 16

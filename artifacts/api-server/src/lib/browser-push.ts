@@ -378,6 +378,11 @@ export async function sendBrowserIncomingCallPush(input: IncomingCallPush): Prom
 
 /** Closes ringing cards on every callee installation after a durable terminal transition. */
 export async function sendBrowserCallTerminalPush(input: TerminalCallPush): Promise<void> {
+  // Shared terminal sink for all authoritative call paths; independent of Web Push availability.
+  void import("./native-call-push").then(({ sendNativeCallTerminalPush }) =>
+    sendNativeCallTerminalPush(input)).catch(() => {
+    console.warn("[NativeCallPush] Terminal wake-up unavailable");
+  });
   await sendBrowserCallPayload(
     input.calleeId,
     input.callId,

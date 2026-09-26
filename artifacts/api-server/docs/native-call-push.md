@@ -1,0 +1,79 @@
+# Native locked-screen call transport
+
+Native push is an optional wake-up transport for the existing PostgreSQL-owned
+invitation. It does not create a second call or accept endpoint. Agora WebSocket
+answer/resume and `POST /api/call/decline?id=...` remain authoritative.
+
+## Registration and authorization
+
+- `POST /api/call-push/native-installations`: `{ installationId, provider, token }`;
+  provider is `fcm` or `apns-voip`.
+- `DELETE /api/call-push/native-installations`: `{ installationId }`.
+- Both require the existing authenticated HTTP session. Identity comes only from
+  that session, and registration checks the canonical unexpired session row.
+- Each installation has one owner/session; multiple installations per user are
+  allowed. Re-registration transfers ownership. Removal is session-bound, so an
+  old session cannot delete a newer account's registration.
+- Delivery checks the canonical session store, removes stale registrations, and
+  rechecks ownership before dispatch. Logout/session expiry/account transition
+  therefore cannot authorize subsequent sends via a stale registration.
+- `GET /api/call-push/calls/:id` aliases the existing Expo active-check handler;
+  it returns `{ active }` with the same callee/ringing/expiry checks. The original
+  `/api/expo-push/calls/:id` remains supported.
+
+## Providers and credentials
+
+Android uses Firebase Admin and the existing `FIREBASE_SERVICE_ACCOUNT`, respecting
+`FCM_ENABLED=false`. Native FCM does not require browser VAPID or public web Firebase
+configuration. No new API key is needed.
+
+iOS requires these server secrets/configuration:
+
+- `APNS_VOIP_KEY_P8`: APNs signing key PEM (literal or escaped newlines).
+- `APNS_VOIP_KEY_ID`: Apple key identifier.
+- `APNS_VOIP_TEAM_ID`: Apple team identifier.
+- `APNS_VOIP_BUNDLE_ID`: actual provisioned app bundle identifier; the existing
+  mobile app is `com.gdna.arena.mobile`. Do not invent or switch bundle identities.
+- `APNS_VOIP_ENVIRONMENT`: exactly `sandbox` or `production`, matching the token
+  and provisioning environment.
+
+The server sends ES256 JWT-authenticated HTTP/2 pushes with topic
+`${APNS_VOIP_BUNDLE_ID}.voip`, push type `voip`, priority 10 and bounded expiration.
+Provider absence/failure produces explicit token-free diagnostics and does not
+fail call creation or the browser/Expo transports. No credentials were inspected,
+provisioned or tested against live providers during implementation.
+
+## Payload and ordering
+
+After authoritative commit, native incoming payload is
+`{ type: "call", callId, callUUID, recipientId, callerName, handle, expiresAt, hasVideo }`.
+Recipient/handle are server-derived string user IDs, caller name is sanitized and
+bounded, expiration is ISO and `hasVideo` is boolean (stringified in FCM data).
+`callUUID` uses SHA256(callId)'s first 32 hex digits, with version nibble 5 and
+RFC 4122 variant bits set. Clients must use this identical derivation.
+
+FCM is **data-only**, Android high priority, with TTL bounded by invitation expiry.
+The invitation is rechecked before ringing delivery. Terminal events use data-only
+FCM `type: "call-ended"` with the same call ID/UUID, recipient and terminal status.
+**No APNs VoIP cancellation/answered/ended pushes are sent.** iOS must dismiss using
+authoritative state, WebSocket events and local expiration.
+
+Durable `(installation_id, event_key)` claims prevent concurrent/repeated sends.
+Definite failures release the claim to allow later retries; a process death after
+claim can lose that wake-up (there is no new durable background retry worker).
+Provider acceptance is not proof of device presentation. Devices must reject stale
+payloads and verify current call state before answering. If native FCM and Expo
+share the same installation ID/session, Expo incoming-call delivery is suppressed
+for that installation; other Expo notifications/devices remain unchanged.
+
+## Schema and verification
+
+Migration `0024_native_call_push.sql` adds only the native installation and
+delivery tables and indexes. Drizzle schema exports and journal are included.
+Apply through normal Replit Publish schema ownership, **not production startup
+DDL or history replay**. No database migration was executed here.
+
+Focused unit tests cover expiration, UUID format/determinism, sanitization,
+provider payload headers/data-only priority, token validation, canonical session
+authorization, ownership transfer/removal, dedupe and absence of terminal VoIP.
+Physical locked-screen device testing with provisioned credentials remains required.

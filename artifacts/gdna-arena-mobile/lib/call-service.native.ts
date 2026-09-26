@@ -1,0 +1,353 @@
+import { Platform, AppState, NativeModules } from 'react-native';
+import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
+import {
+  checkNativeCallPushCall, registerNativeCallPushInstallation,
+  removeNativeCallPushInstallation, setBaseUrl,
+} from '@workspace/api-client-react';
+import { apiGet, apiPost, getApiBase, getHeaders, loadSessionCookie, type AuthUser } from './api';
+import { parseCallPush, RegistrationGeneration, type CallPush, type CallAction } from './call-actions';
+
+const enabledKey = (id: number) => `gdna.native.calls.enabled.${id}`;
+const ID_KEY = 'gdna.native.calls.installation';
+// Android channel sound is immutable after creation; do not reuse legacy "calls".
+const CALL_CHANNEL_ID = 'native-calls-ringtone-v1';
+const CALL_SOUND = 'gdna_call';
+const generation = new RegistrationGeneration();
+let setupError: string | null = null;
+let messaging: any, notifee: any, callkeep: any, voip: any;
+let voipToken: string | null = null;
+let enabledUser: number | null = null;
+let audioActive = false;
+const audioWaiters = new Set<() => void>();
+const invitations = new Map<string, CallPush>();
+const pending = new Map<string, CallAction>();
+const processed = new Set<string>();
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+type Controller = { call: { callId: string; phase: string } | null; answer: () => Promise<void>; reject: () => void; end: () => void };
+let binding: { id: number; controller: Controller; navigate: () => void } | null = null;
+let actionBusy = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let lastOwnedCall: string | null = null;
+type FullScreenIntentBridge = { canUse: () => Promise<boolean>; openSettings: () => Promise<void> };
+export class FullScreenIntentAccessError extends Error {
+  constructor(message: string) { super(message); this.name = 'FullScreenIntentAccessError'; }
+}
+export async function canUseFullScreenIntent(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  const bridge = NativeModules.GDNAFullScreenIntent as FullScreenIntentBridge | undefined;
+  if (!bridge?.canUse) throw new FullScreenIntentAccessError('Full-screen call access cannot be checked in this build. Install an updated native build.');
+  // The native bridge returns true on Android < 14, where this special access does not exist.
+  return (await bridge.canUse()) === true;
+}
+export async function openFullScreenIntentSettings(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const bridge = NativeModules.GDNAFullScreenIntent as FullScreenIntentBridge | undefined;
+  if (!bridge?.openSettings) throw new FullScreenIntentAccessError('Full-screen call settings are unavailable in this build.');
+  await bridge.openSettings();
+}
+const options = () => {
+  setBaseUrl(getApiBase().replace(/\/api$/, ''));
+  return { headers: getHeaders(), credentials: 'include' as const };
+};
+function diagnostic(error: unknown) {
+  // Never log payloads, registration tokens, cookies or native error objects.
+  setupError = error instanceof Error ? error.message : 'Native call setup failed.';
+}
+export const callSetupError = () => setupError;
+export function recordCallSetupError(error: unknown) { diagnostic(error); }
+async function installationId() {
+  let id = await SecureStore.getItemAsync(ID_KEY);
+  if (!id) { id = Crypto.randomUUID(); await SecureStore.setItemAsync(ID_KEY, id); }
+  return id;
+}
+export function resetCallAccount() {
+  generation.invalidate();
+  enabledUser = null;
+  binding = null;
+  lastOwnedCall = null;
+  audioActive = false;
+  pending.clear();
+  processed.clear();
+  for (const uuid of invitations.keys()) void dismiss(uuid).catch(diagnostic);
+  for (const timer of timers.values()) clearTimeout(timer);
+  timers.clear();
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+}
+async function registerToken(userId: number, token: string) {
+  const request = options();
+  await generation.run(async current => {
+    const account = await apiGet<AuthUser>('/auth/me');
+    if (!current() || account.id !== userId || enabledUser !== userId) return;
+    const id = await installationId();
+    if (!current()) return;
+    await registerNativeCallPushInstallation({
+      installationId: id, provider: Platform.OS === 'android' ? 'fcm' : 'apns-voip', token,
+    }, request);
+  });
+}
+export async function enableNativeCalls(userId: number) {
+  if (!messaging && !voip) throw new Error(setupError ?? 'Locked-screen calls need a native build with Firebase / PushKit configured.');
+  generation.invalidate();
+  const current = generation.capture();
+  enabledUser = userId;
+  try {
+  if (Platform.OS === 'android') {
+    const permission = await notifee.requestPermission();
+    if (!current()) throw new Error('Call registration was cancelled.');
+    if (permission.authorizationStatus < 1) throw new Error('Allow phone notifications in Settings to receive calls.');
+    if (!await canUseFullScreenIntent()) throw new FullScreenIntentAccessError('Allow full-screen call alerts in Android Settings, then try again. Until then, calls cannot open full-screen.');
+    if (!current()) throw new Error('Call registration was cancelled.');
+    const token = await messaging.getToken();
+    if (!current()) throw new Error('Call registration was cancelled.');
+    await registerToken(userId, token);
+  } else {
+    voip.registerVoipToken();
+    // PushKit registration is asynchronous; do not claim successful setup
+    // until a real token has been registered under this session.
+    for (let i = 0; !voipToken && i < 100 && enabledUser === userId; i++) await new Promise(r => setTimeout(r, 100));
+    if (!voipToken) throw new Error('Call push registration is unavailable. Check this build’s PushKit entitlement and network.');
+    if (!current()) throw new Error('Call registration was cancelled.');
+    await registerToken(userId, voipToken);
+  }
+  if (!current() || enabledUser !== userId) throw new Error('Account changed during call registration.');
+  await SecureStore.setItemAsync(enabledKey(userId), 'yes');
+  if (!current()) {
+    await SecureStore.deleteItemAsync(enabledKey(userId));
+    throw new Error('Call registration was cancelled.');
+  }
+  setupError = null;
+  } catch (error) {
+    if (current()) enabledUser = null;
+    throw error;
+  }
+}
+export async function disableNativeCalls(userId: number) {
+  const request = options();
+  resetCallAccount();
+  await SecureStore.deleteItemAsync(enabledKey(userId));
+  await generation.run(async () => {
+    const id = await SecureStore.getItemAsync(ID_KEY);
+    if (id) await removeNativeCallPushInstallation({ installationId: id }, request);
+  });
+}
+export async function refreshNativeCalls(userId: number) {
+  const current = generation.capture();
+  if (await SecureStore.getItemAsync(enabledKey(userId)) !== 'yes') return;
+  if (!current()) return;
+  if (!messaging && !voip) throw new Error(setupError ?? 'Native call support unavailable in this build.');
+  enabledUser = userId;
+  // No permission request on startup or token refresh.
+  if (Platform.OS === 'android') {
+    if ((await notifee.getNotificationSettings()).authorizationStatus < 1 || !await canUseFullScreenIntent()) {
+      throw new FullScreenIntentAccessError('Full-screen call alerts are not allowed in Android Settings. Re-enable phone alerts after granting access.');
+    }
+    if (!current()) return;
+    const token = await messaging.getToken();
+    if (current()) await registerToken(userId, token);
+  }
+  else if (voipToken) await registerToken(userId, voipToken);
+  else voip.registerVoipToken();
+}
+async function dismiss(uuid: string) {
+  uuid = uuid.toLowerCase();
+  const timer = timers.get(uuid);
+  if (timer) clearTimeout(timer);
+  timers.delete(uuid);
+  invitations.delete(uuid);
+  pending.delete(uuid);
+  if (Platform.OS === 'android' && notifee) await notifee.cancelNotification(uuid);
+  if (Platform.OS === 'ios' && callkeep) callkeep.endCall(uuid);
+}
+function remember(data: unknown) {
+  const payload = parseCallPush(data);
+  if (!payload) return null;
+  invitations.set(payload.callUUID, payload);
+  if (timers.has(payload.callUUID)) clearTimeout(timers.get(payload.callUUID));
+  timers.set(payload.callUUID, setTimeout(() => { void dismiss(payload.callUUID).catch(diagnostic); }, Math.max(0, Date.parse(payload.expiresAt) - Date.now())));
+  void drain().catch(diagnostic);
+  return payload;
+}
+async function receive(data: Record<string, unknown> | undefined) {
+  if (data?.type === 'call-ended' && typeof data.callUUID === 'string') { await dismiss(data.callUUID); return; }
+  const current = generation.capture();
+  const payload = parseCallPush(data);
+  if (!payload || Platform.OS !== 'android') return;
+  // Preferences are account-scoped and checked even in headless execution.
+  if (await SecureStore.getItemAsync(enabledKey(Number(payload.recipientId))) !== 'yes') return;
+  if (!current()) return;
+  const fullScreen = await canUseFullScreenIntent();
+  if (!current()) return;
+  remember(data);
+  await notifee.createChannel({ id: CALL_CHANNEL_ID, name: 'Incoming calls', importance: 4, sound: CALL_SOUND, vibration: true });
+  if (!current()) return;
+  await notifee.displayNotification({
+    id: payload.callUUID, title: payload.callerName, body: payload.hasVideo ? 'Incoming video call' : 'Incoming audio call',
+    data: { ...payload, hasVideo: String(payload.hasVideo) },
+    android: {
+      channelId: CALL_CHANNEL_ID, category: 'call', importance: 4, ongoing: true, autoCancel: false,
+      sound: CALL_SOUND, loopSound: true, timeoutAfter: Date.parse(payload.expiresAt) - Date.now(),
+      pressAction: { id: 'open', launchActivity: 'default' },
+       ...(fullScreen ? { fullScreenAction: { id: 'open', launchActivity: 'default' } } : {}),
+      actions: [
+        { title: 'Decline', pressAction: { id: 'decline' } },
+        { title: 'Accept', pressAction: { id: 'answer', launchActivity: 'default' } },
+      ],
+    },
+  });
+}
+async function verified(payload: CallPush, established = false) {
+  const current = generation.capture();
+  await loadSessionCookie();
+  const account = await apiGet<AuthUser>('/auth/me');
+  const authorized = String(account.id) === payload.recipientId &&
+    (established || Date.parse(payload.expiresAt) > Date.now()) &&
+    // Active media is owned by the authenticated WebSocket controller. The
+    // push status endpoint intentionally authorizes only ringing invitations.
+    (established || (await checkNativeCallPushCall(payload.callId, options())).active);
+  return current() && authorized ? account : null;
+}
+async function action(uuid: string, kind: CallAction, data?: unknown) {
+  if (typeof uuid !== 'string' || !/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(uuid)) return;
+  if (data) remember(data);
+  uuid = uuid.toLowerCase();
+  pending.set(uuid, kind); // UUID-only CallKeep events may precede PushKit replay.
+  if (!timers.has(uuid)) timers.set(uuid, setTimeout(() => { void dismiss(uuid).catch(diagnostic); }, 45_000));
+  await drain();
+}
+async function drain() {
+  if (actionBusy) return;
+  actionBusy = true;
+  try {
+    for (const [uuid, kind] of pending) {
+      const payload = invitations.get(uuid);
+      if (!payload) continue;
+      const key = `${uuid}:${kind}`;
+      if (processed.has(key)) { pending.delete(uuid); continue; }
+      const established = kind === 'end' && binding?.controller.call?.callId === payload.callId &&
+        binding.controller.call.phase !== 'incoming';
+       const current = generation.capture();
+      const account = await verified(payload, established);
+       if (!current()) continue;
+      if (!account) { await dismiss(uuid); continue; }
+      const owner = binding;
+      if (kind === 'end') {
+        if (owner?.id === account.id && owner.controller.call?.callId === payload.callId) {
+          if (owner.controller.call.phase === 'incoming') owner.controller.reject();
+          else owner.controller.end();
+        } else await apiPost(`/call/decline?id=${encodeURIComponent(payload.callId)}`, {});
+        processed.add(key);
+        await dismiss(uuid);
+      } else {
+        if (!owner || owner.id !== account.id || AppState.currentState !== 'active') continue;
+        owner.navigate();
+        // Only authoritative WebSocket replay can supply the secure invitation.
+        if (owner.controller.call?.callId !== payload.callId || owner.controller.call.phase !== 'incoming') continue;
+        pending.delete(uuid);
+        processed.add(key);
+        if (Platform.OS === 'android') await notifee.cancelNotification(uuid);
+        const timer = timers.get(uuid); if (timer) clearTimeout(timer);
+        timers.delete(uuid);
+        await owner.controller.answer();
+      }
+    }
+  } finally {
+    actionBusy = false;
+    if (pending.size && !retryTimer) retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void drain().catch(diagnostic);
+    }, 1000);
+  }
+}
+export function bindCallController(id: number, controller: Controller, navigate: () => void) {
+  const owner = { id, controller, navigate };
+  binding = owner;
+  for (const [uuid, payload] of invitations) {
+    if (lastOwnedCall === payload.callId && controller.call?.callId !== payload.callId) void dismiss(uuid).catch(diagnostic);
+    if (controller.call?.callId === payload.callId && controller.call.phase === 'active') callkeep?.setCurrentCallActive(uuid);
+  }
+  lastOwnedCall = controller.call?.callId ?? null;
+  void drain().catch(diagnostic);
+  return () => { if (binding === owner) binding = null; };
+}
+export function hasNativeCallAudio() { return Platform.OS === 'ios' && [...invitations.keys()].some(uuid => processed.has(`${uuid}:answer`)); }
+export async function prepareCallAnswer(callId: string) {
+  for (const [uuid, payload] of invitations) {
+    if (payload.callId !== callId) continue;
+    const alreadyAnswered = processed.has(`${uuid}:answer`);
+    processed.add(`${uuid}:answer`);
+    pending.delete(uuid);
+    const timer = timers.get(uuid); if (timer) clearTimeout(timer);
+    timers.delete(uuid);
+    if (Platform.OS === 'ios' && !alreadyAnswered) callkeep.answerIncomingCall(uuid);
+    if (Platform.OS === 'android') await notifee.cancelNotification(uuid);
+  }
+}
+export async function waitForCallAudio() {
+  if (!hasNativeCallAudio() || audioActive) return;
+  await new Promise<void>((resolve, reject) => {
+    const ready = () => { clearTimeout(timer); audioWaiters.delete(ready); resolve(); };
+    const timer = setTimeout(() => { audioWaiters.delete(ready); reject(new Error('The system call audio session did not activate.')); }, 15000);
+    audioWaiters.add(ready);
+  });
+}
+function iosEvent(name: string, data: any) {
+  if (name === 'RNCallKeepDidDisplayIncomingCall') {
+    if (data.error || data.errorCode) {
+      diagnostic(new Error('The system could not display this incoming call.'));
+      if (typeof data.callUUID === 'string') void dismiss(data.callUUID).catch(diagnostic);
+      return;
+    }
+    remember(data.payload);
+  }
+  else if (name === 'RNCallKeepPerformAnswerCallAction') void action(data.callUUID, 'answer').catch(diagnostic);
+  else if (name === 'RNCallKeepPerformEndCallAction') void action(data.callUUID, 'end').catch(diagnostic);
+  else if (name === 'RNCallKeepDidActivateAudioSession') {
+    audioActive = true; for (const ready of audioWaiters) ready();
+  }
+}
+// Native contract: report the payload's callUUID once, with the original payload
+// (including authoritative callId) in didDisplayIncomingCall.payload. PushKit's
+// notification and didLoadWithEvents replay may also supply that same payload.
+// JS must NEVER call displayIncomingCall: native reports before JS cold-starts.
+try {
+  if (Constants.executionEnvironment === 'storeClient') throw new Error('Locked-screen calls require an installed development or release build, not Expo Go.');
+  if (Platform.OS === 'android') {
+    messaging = require('@react-native-firebase/messaging').default();
+    notifee = require('@notifee/react-native').default;
+    messaging.setBackgroundMessageHandler(async (message: any) => { await receive(message.data); });
+    messaging.onMessage((message: any) => receive(message.data).catch(diagnostic));
+    messaging.onTokenRefresh((token: string) => { if (enabledUser) void registerToken(enabledUser, token).catch(diagnostic); });
+    const event = async ({ detail }: any) => {
+      const id = detail.pressAction?.id;
+      if (id === 'answer' || id === 'decline') await action(detail.notification.id, id === 'answer' ? 'answer' : 'end', detail.notification.data);
+    };
+    notifee.onBackgroundEvent(event);
+    notifee.onForegroundEvent((e: any) => { void event(e).catch(diagnostic); });
+    void notifee.getInitialNotification().then((initial: any) => initial && event({ detail: initial })).catch(diagnostic);
+  } else if (Platform.OS === 'ios') {
+    if (!NativeModules.RNCallKeep || !NativeModules.RNVoipPushNotificationManager) throw new Error('This build does not include native CallKit / PushKit support.');
+    callkeep = require('react-native-callkeep').default;
+    voip = require('react-native-voip-push-notification').default;
+    callkeep.addEventListener('didDisplayIncomingCall', (data: any) => iosEvent('RNCallKeepDidDisplayIncomingCall', data));
+    callkeep.addEventListener('answerCall', (data: any) => iosEvent('RNCallKeepPerformAnswerCallAction', data));
+    callkeep.addEventListener('endCall', (data: any) => iosEvent('RNCallKeepPerformEndCallAction', data));
+    callkeep.addEventListener('didActivateAudioSession', () => iosEvent('RNCallKeepDidActivateAudioSession', {}));
+    callkeep.addEventListener('didDeactivateAudioSession', () => { audioActive = false; });
+    callkeep.addEventListener('didLoadWithEvents', (events: any[]) => events.forEach(e => iosEvent(e.name, e.data)));
+    void callkeep.getInitialEvents().then((events: any[]) => {
+      events.forEach(e => iosEvent(e.name, e.data));
+      callkeep.clearInitialEvents();
+    }).catch(diagnostic);
+    const token = (value: string) => { voipToken = value; if (enabledUser) void registerToken(enabledUser, value).catch(diagnostic); };
+    voip.addEventListener('register', token);
+    voip.addEventListener('notification', remember);
+    voip.addEventListener('didLoadWithEvents', (events: any[]) => events.forEach(e => {
+      if (e.name === 'RNVoipPushRemoteNotificationsRegisteredEvent') token(e.data);
+      if (e.name === 'RNVoipPushRemoteNotificationReceivedEvent') remember(e.data);
+    }));
+  }
+  AppState.addEventListener('change', state => { if (state === 'active') void drain().catch(diagnostic); });
+} catch (error) { diagnostic(error); }

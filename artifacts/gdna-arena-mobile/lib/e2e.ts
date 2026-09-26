@@ -2,10 +2,10 @@ import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import { Video } from 'react-native-compressor';
-import { subtle as nativeSubtle } from 'react-native-quick-crypto';
 import { apiDelete, apiGet, apiPut, apiUpload, ApiError, getApiBase, getHeaders, type AuthUser } from './api';
 import { assertNetworkOnline } from '@/contexts/OnlineContext';
 import { assertEncryptedAttachmentSize, IMAGE_PLAINTEXT_LIMIT, VIDEO_CIPHERTEXT_LIMIT, AES_GCM_TAG_BYTES } from './attachment-policy';
+import { nativeSubtle } from './native-crypto';
 
 const PREFIX = 'e2e:v1:';
 const DEVICE_KEY = 'gdna.e2e.device.v1';

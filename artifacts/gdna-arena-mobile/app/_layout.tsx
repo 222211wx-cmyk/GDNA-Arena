@@ -11,6 +11,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { OfflineBanner, OnlineProvider } from '@/contexts/OnlineContext';
 import { ClipPlaybackProvider } from '@/contexts/ClipPlaybackContext';
+import { CallProvider } from '@/contexts/CallContext';
+import { recordCallSetupError } from '@/lib/call-service';
 import { listenForPushTaps, refreshPushIfAllowed } from '@/lib/native-push';
 
 SplashScreen.preventAutoHideAsync();
@@ -36,7 +38,7 @@ function AuthGate() {
   }, [user, isLoading, segments]);
 
   useEffect(() => {
-    if (!isLoading && user) void refreshPushIfAllowed(user.id).catch(() => {});
+    if (!isLoading && user) void refreshPushIfAllowed(user.id).catch(recordCallSetupError);
   }, [isLoading, user?.id]);
 
   return null;
@@ -84,7 +86,7 @@ export default function RootLayout() {
               <KeyboardProvider>
                 <AuthProvider>
                   <ClipPlaybackProvider>
-                    <RootLayoutNav />
+                    <CallProvider><RootLayoutNav /></CallProvider>
                   </ClipPlaybackProvider>
                 </AuthProvider>
               </KeyboardProvider>

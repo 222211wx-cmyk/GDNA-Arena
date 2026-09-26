@@ -86,6 +86,8 @@ import type {
   LoginInput,
   MissedCallsResponse,
   MissedCallsSeenInput,
+  NativeCallPushInstallation,
+  NativeCallPushRemoval,
   PlayResult,
   PresignClipUploadBody,
   RegistrationInput,
@@ -120,6 +122,283 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getCheckNativeCallPushCallUrl = (id: string,) => {
+
+
+
+
+  return `/api/call-push/calls/${id}`
+}
+
+/**
+ * @summary Verify that an invitation is still ringing for the authenticated recipient
+ */
+export const checkNativeCallPushCall = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<ExpoPushCallStatus> => {
+
+  return customFetch<ExpoPushCallStatus>(getCheckNativeCallPushCallUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCheckNativeCallPushCallQueryKey = (id: string,) => {
+    return [
+    `/api/call-push/calls/${id}`
+    ] as const;
+    }
+
+
+export const getCheckNativeCallPushCallQueryOptions = <TData = Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError = ErrorType<void>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCheckNativeCallPushCallQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof checkNativeCallPushCall>>> = ({ signal }) => checkNativeCallPushCall(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CheckNativeCallPushCallQueryResult = NonNullable<Awaited<ReturnType<typeof checkNativeCallPushCall>>>
+export type CheckNativeCallPushCallQueryError = ErrorType<void>
+
+
+export function useCheckNativeCallPushCall<TData = Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError = ErrorType<void>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof checkNativeCallPushCall>>,
+          TError,
+          Awaited<ReturnType<typeof checkNativeCallPushCall>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCheckNativeCallPushCall<TData = Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof checkNativeCallPushCall>>,
+          TError,
+          Awaited<ReturnType<typeof checkNativeCallPushCall>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCheckNativeCallPushCall<TData = Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Verify that an invitation is still ringing for the authenticated recipient
+ */
+
+export function useCheckNativeCallPushCall<TData = Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkNativeCallPushCall>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCheckNativeCallPushCallQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRegisterNativeCallPushInstallationUrl = () => {
+
+
+
+
+  return `/api/call-push/native-installations`
+}
+
+/**
+ * @summary Bind a native call token to the authenticated session and installation
+ */
+export const registerNativeCallPushInstallation = async (nativeCallPushInstallation: NativeCallPushInstallation, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getRegisterNativeCallPushInstallationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(nativeCallPushInstallation)
+  }
+);}
+
+
+
+
+
+export const getRegisterNativeCallPushInstallationMutationKey = () => ['registerNativeCallPushInstallation'] as const;
+
+export const getRegisterNativeCallPushInstallationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerNativeCallPushInstallation>>, TError,RegisterNativeCallPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerNativeCallPushInstallation>>, TError,RegisterNativeCallPushInstallationMutationVariables, TContext> => {
+
+const mutationKey = getRegisterNativeCallPushInstallationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerNativeCallPushInstallation>>, RegisterNativeCallPushInstallationMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerNativeCallPushInstallation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterNativeCallPushInstallationMutationResult = NonNullable<Awaited<ReturnType<typeof registerNativeCallPushInstallation>>>
+    export type RegisterNativeCallPushInstallationMutationBody = BodyType<NativeCallPushInstallation>
+    export type RegisterNativeCallPushInstallationMutationError = ErrorType<void>
+    export type RegisterNativeCallPushInstallationMutationVariables = {data: BodyType<NativeCallPushInstallation>}
+
+    /**
+ * @summary Bind a native call token to the authenticated session and installation
+ */
+export const useRegisterNativeCallPushInstallation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerNativeCallPushInstallation>>, TError,RegisterNativeCallPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof registerNativeCallPushInstallation>>,
+        TError,
+        RegisterNativeCallPushInstallationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterNativeCallPushInstallationMutationOptions(options), queryClient);
+    }
+
+export const getRemoveNativeCallPushInstallationUrl = () => {
+
+
+
+
+  return `/api/call-push/native-installations`
+}
+
+/**
+ * @summary Remove only this authenticated session's native installation
+ */
+export const removeNativeCallPushInstallation = async (nativeCallPushRemoval: NativeCallPushRemoval, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getRemoveNativeCallPushInstallationUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(nativeCallPushRemoval)
+  }
+);}
+
+
+
+
+
+export const getRemoveNativeCallPushInstallationMutationKey = () => ['removeNativeCallPushInstallation'] as const;
+
+export const getRemoveNativeCallPushInstallationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeNativeCallPushInstallation>>, TError,RemoveNativeCallPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeNativeCallPushInstallation>>, TError,RemoveNativeCallPushInstallationMutationVariables, TContext> => {
+
+const mutationKey = getRemoveNativeCallPushInstallationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeNativeCallPushInstallation>>, RemoveNativeCallPushInstallationMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  removeNativeCallPushInstallation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveNativeCallPushInstallationMutationResult = NonNullable<Awaited<ReturnType<typeof removeNativeCallPushInstallation>>>
+    export type RemoveNativeCallPushInstallationMutationBody = BodyType<NativeCallPushRemoval>
+    export type RemoveNativeCallPushInstallationMutationError = ErrorType<void>
+    export type RemoveNativeCallPushInstallationMutationVariables = {data: BodyType<NativeCallPushRemoval>}
+
+    /**
+ * @summary Remove only this authenticated session's native installation
+ */
+export const useRemoveNativeCallPushInstallation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeNativeCallPushInstallation>>, TError,RemoveNativeCallPushInstallationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeNativeCallPushInstallation>>,
+        TError,
+        RemoveNativeCallPushInstallationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRemoveNativeCallPushInstallationMutationOptions(options), queryClient);
+    }
 
 export const getRegisterExpoPushInstallationUrl = () => {
 

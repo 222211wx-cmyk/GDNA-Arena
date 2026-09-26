@@ -9,6 +9,49 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Verify that an invitation is still ringing for the authenticated recipient
+ */
+export const CheckNativeCallPushCallParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CheckNativeCallPushCallResponse = zod.object({
+  "active": zod.boolean()
+})
+
+
+/**
+ * @summary Bind a native call token to the authenticated session and installation
+ */
+export const registerNativeCallPushInstallationBodyInstallationIdRegExp = new RegExp('^[A-Za-z0-9_-]{16,128}$');
+export const registerNativeCallPushInstallationBodyTokenMin = 16;
+export const registerNativeCallPushInstallationBodyTokenMax = 4096;
+
+
+
+export const RegisterNativeCallPushInstallationBody = zod.object({
+  "installationId": zod.string().regex(registerNativeCallPushInstallationBodyInstallationIdRegExp),
+  "provider": zod.enum(['fcm', 'apns-voip']),
+  "token": zod.string().min(registerNativeCallPushInstallationBodyTokenMin).max(registerNativeCallPushInstallationBodyTokenMax)
+})
+
+export const RegisterNativeCallPushInstallationResponse = zod.unknown()
+
+
+/**
+ * @summary Remove only this authenticated session's native installation
+ */
+export const removeNativeCallPushInstallationBodyInstallationIdRegExp = new RegExp('^[A-Za-z0-9_-]{16,128}$');
+
+
+export const RemoveNativeCallPushInstallationBody = zod.object({
+  "installationId": zod.string().regex(removeNativeCallPushInstallationBodyInstallationIdRegExp)
+})
+
+export const RemoveNativeCallPushInstallationResponse = zod.unknown()
+
+
+/**
  * @summary Bind a separately opted-in Expo token to this authenticated installation
  */
 export const registerExpoPushInstallationBodyInstallationIdMin = 16;

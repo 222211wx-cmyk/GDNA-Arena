@@ -53,9 +53,14 @@ export async function sendExpoPush(userId: number, eventKey: string, notificatio
   );
   if (!hashes.length) return;
   const devices = await pool.query<{ id: string; token: string }>(
-    `SELECT id, token FROM expo_push_installations
-     WHERE user_id=$1 AND session_hash=ANY($2::text[]) LIMIT 500`,
-    [userId, hashes],
+    `SELECT e.id, e.token FROM expo_push_installations e
+     WHERE e.user_id=$1 AND e.session_hash=ANY($2::text[])
+       AND ($3::boolean=false OR NOT EXISTS (
+         SELECT 1 FROM native_call_push_installations n
+         WHERE n.installation_id=e.installation_id AND n.user_id=e.user_id
+           AND n.session_hash=e.session_hash AND n.provider='fcm'
+       )) LIMIT 500`,
+    [userId, hashes, notification.data.type === "call"],
   );
   for (const device of devices.rows) {
     await pool.query(

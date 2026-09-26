@@ -19,7 +19,7 @@ export function AgoraSurface({ style }: { uid: number; local?: boolean; style?: 
 export function useAgoraCalls(_user: AuthUser | null, _onIncoming: () => void) {
   const [error, setError] = useState<string | null>(null);
   const unavailable = useCallback(async () => {
-    const message = 'Agora calls are available in the native iOS and Android app.';
+    const message = 'Agora calls require an installed native iOS or Android build with call support; Expo Go and browser previews are unsupported.';
     setError(message);
     throw new Error(message);
   }, []);

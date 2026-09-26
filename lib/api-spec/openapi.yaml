@@ -17,6 +17,54 @@ tags:
   - name: wallet
   - name: globalstar
 paths:
+  /call-push/calls/{id}:
+    get:
+      operationId: checkNativeCallPushCall
+      tags: [call-push]
+      summary: Verify that an invitation is still ringing for the authenticated recipient
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Live invitation status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExpoPushCallStatus" }
+        "400": { description: Invalid call ID }
+        "401": { description: Authentication required }
+        "503": { description: Call status unavailable }
+  /call-push/native-installations:
+    post:
+      operationId: registerNativeCallPushInstallation
+      tags: [call-push]
+      summary: Bind a native call token to the authenticated session and installation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NativeCallPushInstallation" }
+      responses:
+        "200": { description: Registered }
+        "400": { description: Invalid registration }
+        "401": { description: Authentication required }
+        "503": { description: Registration unavailable }
+    delete:
+      operationId: removeNativeCallPushInstallation
+      tags: [call-push]
+      summary: Remove only this authenticated session's native installation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NativeCallPushRemoval" }
+      responses:
+        "200": { description: Removed }
+        "400": { description: Invalid installation }
+        "401": { description: Authentication required }
+        "503": { description: Removal unavailable }
   /expo-push/installations:
     post:
       operationId: registerExpoPushInstallation
@@ -1159,6 +1207,20 @@ paths:
 
 components:
   schemas:
+    NativeCallPushInstallation:
+      type: object
+      additionalProperties: false
+      required: [installationId, provider, token]
+      properties:
+        installationId: { type: string, pattern: "^[A-Za-z0-9_-]{16,128}$" }
+        provider: { type: string, enum: [fcm, apns-voip] }
+        token: { type: string, minLength: 16, maxLength: 4096 }
+    NativeCallPushRemoval:
+      type: object
+      additionalProperties: false
+      required: [installationId]
+      properties:
+        installationId: { type: string, pattern: "^[A-Za-z0-9_-]{16,128}$" }
     ExpoPushInstallation:
       type: object
       required: [installationId, token]

@@ -22,7 +22,7 @@ test("registration, session-only removal, duplicate claim and failure retry", as
   (pool as unknown as { query: typeof pool.query }).query = (async (sql: string, values: unknown[] = []) => {
     queries.push({ sql, values });
     if (sql.includes("SELECT sid")) return { rows: activeSession ? [{ sid: "active-session" }] : [], rowCount: activeSession ? 1 : 0 };
-    if (sql.includes("SELECT id, token")) return { rows: [{ id: "1", token: "ExpoPushToken[abcdefghijklmnop1234]" }], rowCount: 1 };
+    if (sql.includes("SELECT e.id, e.token")) return { rows: [{ id: "1", token: "ExpoPushToken[abcdefghijklmnop1234]" }], rowCount: 1 };
     if (sql.includes("INSERT INTO expo_push_deliveries")) return { rows: [], rowCount: claimCount++ === 1 ? 0 : 1 };
     return { rows: [], rowCount: 1 };
   }) as typeof pool.query;

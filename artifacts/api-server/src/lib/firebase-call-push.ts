@@ -12,6 +12,7 @@ import {
 import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
 import { sendBrowserCallTerminalPush, sendBrowserIncomingCallPush } from "./browser-push";
 import { sendExpoPush } from "./expo-push";
+import { sendNativeIncomingCallPush } from "./native-call-push";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -293,6 +294,18 @@ async function loadServices(): Promise<FirebaseServices> {
   return servicesPromise;
 }
 
+/** Native FCM requires only the existing server credential, not browser VAPID/client config. */
+export async function getNativeCallMessaging(): Promise<Messaging> {
+  if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") throw new CallPushError("FCM is disabled");
+  const account = readServiceAccount();
+  if (!account) {
+    console.warn("[NativeFCM] unavailable: no valid Firebase server credential");
+    throw new CallPushError("Native FCM credential unavailable");
+  }
+  const app = getApps()[0] ?? initializeApp({ credential: cert(account) });
+  return getMessaging(app);
+}
+
 /**
  * Legacy callers retain this getter name while call lifecycle state is backed
  * by Postgres. It must never initialize Firebase or make calls depend on FCM.
@@ -318,6 +331,9 @@ export async function sendAuthoritativeIncomingCallPush(input: {
   expiresAt: Date;
   video: boolean;
 }): Promise<void> {
+  void sendNativeIncomingCallPush(input).catch(() => {
+    console.warn("[NativeCallPush] Incoming call wake-up unavailable");
+  });
   if (input.expiresAt.getTime() > Date.now()) {
     void sendExpoPush(input.calleeId, `incoming-call:${input.callId}`, {
       title: "مكالمة واردة", body: "افتح Amis للتحقق من المكالمة",

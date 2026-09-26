@@ -11,6 +11,8 @@ import {
   setBaseUrl,
 } from '@workspace/api-client-react';
 import { createPushTapGuard, resolvePushTap } from '@/lib/push-tap';
+import { enableNativeCalls, disableNativeCalls, refreshNativeCalls, canUseFullScreenIntent, FullScreenIntentAccessError } from './call-service';
+import { RegistrationGeneration } from './call-actions';
 
 const ID_KEY = 'gdna.expo.push.installation';
 const enabledKey = (id: number) => `gdna.expo.push.enabled.${id}`;
@@ -46,10 +48,16 @@ async function installationId(): Promise<string> {
 export async function pushEnabled(userId: number): Promise<boolean> {
   if ((await SecureStore.getItemAsync(enabledKey(userId))) !== 'yes') return false;
   try { expoProjectId(); } catch { return false; }
-  return (await Notifications.getPermissionsAsync()).granted;
+  if (!(await Notifications.getPermissionsAsync()).granted) return false;
+  if (!await canUseFullScreenIntent()) {
+    throw new FullScreenIntentAccessError('Full-screen call alerts are off in Android Settings. Allow them, then re-enable phone alerts.');
+  }
+  return true;
 }
 
 export async function enablePush(userId: number): Promise<void> {
+  const current = registration.capture();
+  const request = apiOptions();
   const projectId = expoProjectId();
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('amis', {
@@ -65,23 +73,52 @@ export async function enablePush(userId: number): Promise<void> {
   if (!/^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,256}\]$/.test(token.data)) {
     throw new Error('Expo did not return a valid push token.');
   }
-  await registerExpoPushInstallation({ installationId: await installationId(), token: token.data }, apiOptions());
+  if (!current()) throw new Error('Notification registration was cancelled.');
+  try {
+    await enableNativeCalls(userId);
+    if (!current()) throw new Error('Notification registration was cancelled.');
+    await registration.run(async valid => {
+      if (!valid()) return;
+      await registerExpoPushInstallation({ installationId: await installationId(), token: token.data }, request);
+    });
+  } catch (error) {
+    if (current()) {
+      try { await disableNativeCalls(userId); }
+      catch { throw new Error('Notification setup failed and registration cleanup could not reach the server. Retry disabling phone alerts when online.'); }
+    }
+    throw error;
+  }
+  if (!current()) throw new Error('Notification registration was cancelled.');
   await SecureStore.setItemAsync(enabledKey(userId), 'yes');
+  if (!current()) await SecureStore.deleteItemAsync(enabledKey(userId));
 }
 
 export async function disablePush(userId: number): Promise<void> {
-  const id = await SecureStore.getItemAsync(ID_KEY);
-  if (id) await removeExpoPushInstallation({ installationId: id }, apiOptions());
+  registration.invalidate();
+  const request = apiOptions();
   await SecureStore.deleteItemAsync(enabledKey(userId));
+  await disableNativeCalls(userId);
+  await registration.run(async () => {
+    const id = await SecureStore.getItemAsync(ID_KEY);
+    if (id) await removeExpoPushInstallation({ installationId: id }, request);
+  });
 }
 
 export async function forgetPushOnLogout(userId: number): Promise<void> {
-  await SecureStore.deleteItemAsync(enabledKey(userId));
+  await disablePush(userId);
 }
 
 export async function refreshPushIfAllowed(userId: number): Promise<void> {
+  const current = registration.capture();
+  const request = apiOptions();
   if (!await pushEnabled(userId)) return;
-  await enablePush(userId);
+  if (!current()) return;
+  await refreshNativeCalls(userId);
+  const token = await Notifications.getExpoPushTokenAsync({ projectId: expoProjectId() });
+  if (!current()) return;
+  await registration.run(async valid => {
+    if (valid()) await registerExpoPushInstallation({ installationId: await installationId(), token: token.data }, request);
+  });
 }
 
 async function dismissStaleCallAlerts(): Promise<void> {
@@ -147,3 +184,5 @@ export function listenForPushTaps(navigate: (path: string) => void): () => void 
   void dismissStaleCallAlerts().catch(() => {});
   return () => { tapSubscription?.remove(); tapSubscription = null; appState.remove(); };
 }
+
+const registration = new RegistrationGeneration();

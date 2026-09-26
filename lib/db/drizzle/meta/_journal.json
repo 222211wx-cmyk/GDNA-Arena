@@ -169,6 +169,13 @@
       "when": 1789724667726,
       "tag": "0023_expo_push",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789724667727,
+      "tag": "0024_native_call_push",
+      "breakpoints": true
     }
   ]
 }

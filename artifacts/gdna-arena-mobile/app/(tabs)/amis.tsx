@@ -25,14 +25,16 @@ import { NightCallControls } from '@/components/NightCallControls';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOnline } from '@/contexts/OnlineContext';
 import { enablePush, disablePush, pushEnabled } from '@/lib/native-push';
+import { useCalls } from '@/contexts/CallContext';
+import { callSetupError, FullScreenIntentAccessError, openFullScreenIntentSettings } from '@/lib/call-service';
 
 const sections = ['Chats', 'Calls', 'Communities', 'Settings'] as const;
 type Section = typeof sections[number];
 type Room = { id:number; name?:string|null; type:string; unreadCount?:number; muted?:boolean; members?:{userId:number;username?:string;online?:boolean}[]; lastMessage?:{content?:string|null} };
 const pushCopy = {
-  ar: { label: 'تنبيهات الهاتف (الرسائل والمكالمات)', note: 'اختياري؛ فتح التنبيه لا يرد على المكالمة، ولا يدعم الرنين الأصلي. يتطلب التسليم معرّف مشروع Expo وبيانات APNs/FCM في التطبيق المثبّت.' },
-  en: { label: 'Phone alerts (messages and calls)', note: 'Optional; opening an alert never answers a call. Native ringing is not supported. Delivery requires an Expo project ID and APNs/FCM credentials in the installed build.' },
-  fr: { label: 'Alertes du téléphone (messages et appels)', note: 'Facultatif ; ouvrir une alerte ne répond pas à un appel. Sonnerie native non prise en charge. La livraison exige un projet Expo et des identifiants APNs/FCM.' },
+  ar: { label: 'تنبيهات الهاتف (الرسائل والمكالمات)', note: 'اختياري؛ فتح التنبيه لا يرد على المكالمة. يتطلب الرنين تطبيقًا مثبّتًا وبيانات APNs/FCM. قد يتطلب الرد فتح قفل الهاتف.' },
+  en: { label: 'Phone alerts (messages and calls)', note: 'Optional; opening an alert never answers a call. Native ringing requires an installed build and APNs/FCM configuration. Answering may require unlocking your phone.' },
+  fr: { label: 'Alertes du téléphone (messages et appels)', note: 'Facultatif ; ouvrir une alerte ne répond pas. La sonnerie native exige une application installée et APNs/FCM. Répondre peut exiger de déverrouiller le téléphone.' },
   es: { label: 'Alertas del teléfono (mensajes y llamadas)', note: 'Opcional; abrir una alerta no contesta llamadas. Sin timbre nativo. La entrega requiere un proyecto Expo y credenciales APNs/FCM.' },
   de: { label: 'Telefonbenachrichtigungen (Nachrichten und Anrufe)', note: 'Optional; das Öffnen nimmt keinen Anruf an. Kein natives Klingeln. Für die Zustellung sind eine Expo-Projekt-ID und APNs/FCM-Zugangsdaten erforderlich.' },
 } as const;
@@ -44,7 +46,8 @@ export default function AmisScreen() {
   const params = useLocalSearchParams<{ section?: string }>();
   const [section, setSection] = useState<Section>(params.section === 'Calls' ? 'Calls' : 'Chats');
   useEffect(() => { if (params.section === 'Calls') setSection('Calls'); }, [params.section]);
-  const calls = useAgoraCalls(user, () => setSection('Calls'));
+  const calls = useCalls();
+  useEffect(() => { if (calls.call) setSection('Calls'); }, [calls.call?.callId]);
   const sectionIndex = sections.indexOf(section);
   useEffect(() => {
     if (user) void ensureDeviceIdentity(user).catch(() => undefined);
@@ -142,16 +145,18 @@ function Settings() {
   const {user}=useAuth(); const client=useQueryClient(); const [currentId,setCurrentId]=useState<string|null>(null); const settings=useQuery({queryKey:['amis-settings',user?.id],enabled:!!user,queryFn:()=>apiGet<{notifications:boolean;readReceipts:boolean}>('/messages/settings')}); const devices=useQuery({queryKey:['amis-devices',user?.id],enabled:!!user,queryFn:getDevices});
   const [phonePush, setPhonePush] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  const [pushError, setPushError] = useState<string | null>(null);
-  useEffect(() => { let active = true; setPhonePush(false); if (user) void pushEnabled(user.id).then(value => { if (active) setPhonePush(value); }); return () => { active = false; }; }, [user?.id]);
+  const [pushError, setPushError] = useState<string | null>(() => callSetupError());
+  const [fullScreenDenied, setFullScreenDenied] = useState(false);
+  useEffect(() => { let active = true; setPhonePush(false); setFullScreenDenied(false); if (user) void pushEnabled(user.id).then(value => { if (active) { setPhonePush(value); setPushError(callSetupError()); } }).catch(error => { if (active) { setPushError(error instanceof Error ? error.message : 'Phone notification settings unavailable.'); setFullScreenDenied(error instanceof FullScreenIntentAccessError); } }); return () => { active = false; }; }, [user?.id]);
   const togglePush = async (value: boolean) => {
     if (!user) return;
-    setPushBusy(true); setPushError(null);
+    setPushBusy(true); setPushError(null); setFullScreenDenied(false);
     try {
       if (value) await enablePush(user.id); else await disablePush(user.id);
       setPhonePush(value);
     } catch (error) {
       setPushError(error instanceof Error ? error.message : 'Phone notifications could not be changed.');
+      setFullScreenDenied(error instanceof FullScreenIntentAccessError);
     } finally { setPushBusy(false); }
   };
   const { isOnline } = useOnline();
@@ -163,6 +168,6 @@ function Settings() {
   },onSuccess:(_,id)=>{client.invalidateQueries({queryKey:['amis-devices',user?.id]});if(id===currentId)setCurrentId(id);}});
   const reenroll=useMutation({mutationFn:async()=>{if(!user)throw new Error('Sign in required');return enrollDeviceIdentity(user);},onSuccess:identity=>{setCurrentId(identity.deviceId);client.invalidateQueries({queryKey:['amis-devices',user?.id]});}});
   const currentPresent=!!currentId&&!!devices.data?.devices.some(x=>x.deviceId===currentId);
-  return <FlatList data={devices.data?.devices??[]} contentContainerStyle={styles.list} keyExtractor={x=>x.deviceId} ListHeaderComponent={<><Card style={styles.card}><Typography variant="label">Privacy</Typography><View style={styles.row}><Typography style={styles.grow}>Notifications</Typography><Switch value={settings.data?.notifications??false} disabled={!isOnline} onValueChange={value=>save.mutate({notifications:value})}/></View><View style={styles.row}><Typography style={styles.grow}>{phoneText.label}</Typography><Switch testID="phone-push-toggle" value={phonePush} disabled={!isOnline||pushBusy} onValueChange={value=>void togglePush(value)}/></View><Typography variant="muted">{phoneText.note}</Typography>{pushError&&<Typography variant="muted">{pushError}</Typography>}<View style={styles.row}><Typography style={styles.grow}>Read receipts</Typography><Switch value={settings.data?.readReceipts??false} disabled={!isOnline} onValueChange={value=>save.mutate({readReceipts:value})}/></View></Card>{currentId&&!currentPresent&&<Card style={styles.card}><Typography variant="label">This device key was revoked</Typography><Typography variant="muted">Explicitly re-enroll this device before receiving encrypted messages or calls.</Typography><Button disabled={!isOnline} loading={reenroll.isPending} onPress={()=>reenroll.mutate()}>Re-enroll this device</Button></Card>}</>} renderItem={({item})=><Card style={styles.card}><Typography variant="label">Secure device {item.deviceId===currentId?'· This device':''}</Typography><Typography variant="muted" selectable>{item.deviceId} · {item.fingerprint}</Typography><Button size="sm" variant="destructive" disabled={!isOnline} accessibilityLabel={`Revoke device ${item.deviceId}`} onPress={()=>Alert.alert('Revoke device?','It will stop receiving new encrypted messages and calls.',[{text:'Cancel',style:'cancel'},{text:'Revoke',style:'destructive',onPress:()=>revoke.mutate(item.deviceId)}])}>Revoke</Button></Card>}/>;
+  return <FlatList data={devices.data?.devices??[]} contentContainerStyle={styles.list} keyExtractor={x=>x.deviceId} ListHeaderComponent={<><Card style={styles.card}><Typography variant="label">Privacy</Typography><View style={styles.row}><Typography style={styles.grow}>Notifications</Typography><Switch value={settings.data?.notifications??false} disabled={!isOnline} onValueChange={value=>save.mutate({notifications:value})}/></View><View style={styles.row}><Typography style={styles.grow}>{phoneText.label}</Typography><Switch testID="phone-push-toggle" value={phonePush} disabled={!isOnline||pushBusy} onValueChange={value=>void togglePush(value)}/></View><Typography variant="muted">{phoneText.note}</Typography>{pushError&&<Typography variant="muted">{pushError}</Typography>}{fullScreenDenied&&<><Button size="sm" testID="full-screen-call-settings" onPress={()=>void openFullScreenIntentSettings().catch(error=>setPushError(error instanceof Error?error.message:'Could not open call settings.'))}>Open full-screen call settings</Button><Button size="sm" variant="destructive" disabled={!isOnline||pushBusy} onPress={()=>void togglePush(false)}>Turn off phone alerts</Button></>}<View style={styles.row}><Typography style={styles.grow}>Read receipts</Typography><Switch value={settings.data?.readReceipts??false} disabled={!isOnline} onValueChange={value=>save.mutate({readReceipts:value})}/></View></Card>{currentId&&!currentPresent&&<Card style={styles.card}><Typography variant="label">This device key was revoked</Typography><Typography variant="muted">Explicitly re-enroll this device before receiving encrypted messages or calls.</Typography><Button disabled={!isOnline} loading={reenroll.isPending} onPress={()=>reenroll.mutate()}>Re-enroll this device</Button></Card>}</>} renderItem={({item})=><Card style={styles.card}><Typography variant="label">Secure device {item.deviceId===currentId?'· This device':''}</Typography><Typography variant="muted" selectable>{item.deviceId} · {item.fingerprint}</Typography><Button size="sm" variant="destructive" disabled={!isOnline} accessibilityLabel={`Revoke device ${item.deviceId}`} onPress={()=>Alert.alert('Revoke device?','It will stop receiving new encrypted messages and calls.',[{text:'Cancel',style:'cancel'},{text:'Revoke',style:'destructive',onPress:()=>revoke.mutate(item.deviceId)}])}>Revoke</Button></Card>}/>;
 }
 const styles=StyleSheet.create({root:{flex:1},title:{paddingHorizontal:16,paddingVertical:10,textAlign:'auto',writingDirection:'auto'},tabs:{borderBottomWidth:1},tab:{flex:1,alignItems:'center',padding:12,borderBottomWidth:2,borderBottomColor:'transparent'},content:{flex:1,padding:12},fill:{flex:1,gap:10},list:{gap:10,paddingVertical:10},card:{gap:8},row:{flexDirection:'row',alignItems:'center',gap:8},wrap:{flexDirection:'row',flexWrap:'wrap',gap:8},grow:{flex:1},newRow:{flexDirection:'row',gap:8},center:{flex:1,alignItems:'center',justifyContent:'center'},videoStage:{height:260,overflow:'hidden',borderRadius:12},localVideo:{position:'absolute',width:96,height:128,end:8,bottom:8,borderRadius:8}});

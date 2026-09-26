@@ -1,7 +1,13 @@
 {
   "expo": {
     "name": "Arena Qaisypro",
-    "slug": "gdna-arena-mobile",
+    "slug": "gdnaarena",
+    "owner": "qaisypro2024",
+    "extra": {
+      "eas": {
+        "projectId": "1b27129b-6f98-4704-8a45-efe06a2a2856"
+      }
+    },
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -22,10 +28,17 @@
       }
     },
     "android": {
+      "package": "gdna.arena.com",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
@@ -50,7 +63,15 @@
         }
       ],
       "expo-secure-store",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "calls",
+          "sounds": ["./assets/sounds/gdna_call.wav"]
+        }
+      ],
+      "./plugins/withAndroidFirebase",
+      "./plugins/withVoipPush",
       [
         "expo-image-picker",
         {

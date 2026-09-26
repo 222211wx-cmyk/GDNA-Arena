@@ -4,8 +4,9 @@ import { AppState, PermissionsAndroid, Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { dismissCallAlert } from './native-push.native';
-import { subtle as nativeSubtle } from 'react-native-quick-crypto';
+import { nativeSubtle } from './native-crypto';
 import {
+  AudioSessionOperationRestriction,
   ChannelProfileType,
   ConnectionStateType,
   createAgoraRtcEngine,
@@ -15,6 +16,7 @@ import {
   type IRtcEngineEventHandler,
   type LastmileProbeResult,
 } from 'react-native-agora';
+import { hasNativeCallAudio, waitForCallAudio, prepareCallAnswer } from './call-service';
 import { attachNightCamera, detachNightCamera } from './night-camera';
 import { ApiError, apiGet, apiPost, createAuthenticatedWebSocket, type AuthUser } from './api';
 import { assertNetworkOnline, useOnline } from '@/contexts/OnlineContext';
@@ -300,6 +302,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
 
   const join = useCallback(async (current: ActiveCall, secret: string, deviceId: string, generation: number) => {
     const stillCurrent = () => callGenerationRef.current === generation && callRef.current?.callId === current.callId;
+    await waitForCallAudio();
     if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
     const credentials = await fetchAgoraToken(current.callId, deviceId);
     if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
@@ -350,6 +353,10 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       };
       if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
       engine.initialize({ appId: credentials.appId, channelProfile: ChannelProfileType.ChannelProfileCommunication });
+      if (hasNativeCallAudio()) {
+        // CallKit owns activation and deactivation of the audio session.
+        engine.setAudioSessionOperationRestriction(AudioSessionOperationRestriction.AudioSessionOperationRestrictionDeactivateSession);
+      }
       engine.registerEventHandler(handler);
       const salt = new Uint8Array(await nativeSubtle.digest(
         'SHA-256',
@@ -627,6 +634,8 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     clearTimer();
     setError(null);
     try {
+      await prepareCallAnswer(current.callId);
+      if (!stillCurrent()) return;
       await permissions(current.video);
       if (!stillCurrent()) return;
       const identity = await ensureDeviceIdentity(user);

@@ -17,6 +17,7 @@ import { declineCallForUser } from "../lib/signaling";
 import { getAuthoritativeCall, heartbeatAuthoritativeCall, terminateAuthoritativeCall } from "../lib/call-signal-store";
 import { registerFcmDevice, sendDerivedFcm } from "../server/fcm";
 import { registerExpoInstallation, removeExpoInstallation } from "../lib/expo-push";
+import { registerNativeCallInstallation, removeNativeCallInstallation } from "../lib/native-call-push";
 
 const callPushLimiter = rateLimit({
   windowMs: 60_000,
@@ -26,6 +27,29 @@ const callPushLimiter = rateLimit({
   keyGenerator: req => req.session.userId ? `user:${req.session.userId}` : "unauthenticated",
 });
 const router: IRouter = Router();
+router.post("/call-push/native-installations", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  try {
+    await registerNativeCallInstallation(userId, req.sessionID, req.body);
+    res.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const status = message === "Not authenticated" ? 401 : message.startsWith("Invalid ") ? 400 : 503;
+    res.status(status).json({ error: status === 503 ? "Native call registration unavailable" : message });
+  }
+});
+router.delete("/call-push/native-installations", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  try {
+    await removeNativeCallInstallation(userId, req.sessionID, req.body?.installationId);
+    res.json({ ok: true });
+  } catch (error) {
+    const invalid = error instanceof Error && error.message.startsWith("Invalid ");
+    res.status(invalid ? 400 : 503).json({ error: invalid ? error.message : "Native call removal unavailable" });
+  }
+});
 router.post("/expo-push/installations", callPushLimiter, async (req, res): Promise<void> => {
   const userId = authenticatedUserId(req);
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
@@ -50,7 +74,7 @@ router.delete("/expo-push/installations", callPushLimiter, async (req, res): Pro
   }
 });
 
-router.get("/expo-push/calls/:id", callPushLimiter, async (req, res): Promise<void> => {
+router.get(["/expo-push/calls/:id", "/call-push/calls/:id"], callPushLimiter, async (req, res): Promise<void> => {
   const userId = authenticatedUserId(req);
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   if (!isValidCallId(req.params.id)) { res.status(400).json({ error: "Invalid call ID" }); return; }

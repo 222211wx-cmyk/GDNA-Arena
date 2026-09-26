@@ -69,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string) => {
+    if (user) await forgetPushOnLogout(user.id);
     const generation = ++authGenerationRef.current;
     setUser(null);
     // Keep the prior cookie for this request only. The server then rotates its
@@ -83,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (username: string, password: string, birthDate: string) => {
+    if (user) await forgetPushOnLogout(user.id);
     const generation = ++authGenerationRef.current;
     setUser(null);
     beginSessionTransition();
@@ -100,8 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    let pushCleanupError: unknown = null;
+    try { if (user) await forgetPushOnLogout(user.id); }
+    catch (error) { pushCleanupError = error; }
     ++authGenerationRef.current;
-    const formerUserId = user?.id;
     setUser(null);
     beginSessionTransition();
     await queryClient.cancelQueries();
@@ -110,9 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Clear the local copy immediately after starting the server-side logout,
     // so this device cannot reuse it even if the network request fails.
     const serverLogout = apiPost('/auth/logout');
-    if (formerUserId) void forgetPushOnLogout(formerUserId).catch(() => {});
     await Promise.all([clearSessionCookie(), clearCachedAuthUser()]);
     await serverLogout;
+    if (pushCleanupError) throw pushCleanupError;
   };
 
   const refreshUser = async () => {
