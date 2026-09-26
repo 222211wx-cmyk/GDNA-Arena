@@ -76,27 +76,3 @@ ROYAL_CREDIT_SANDBOX = "true"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-fe0a3e61-810d-4ac9-bd98-f324eacc3236"
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 8082
-externalPort = 3001
-
-[[ports]]
-localPort = 19130
-externalPort = 3000
-
-[[ports]]
-localPort = 22842
-externalPort = 80
-
-[[ports]]
-localPort = 23916
-externalPort = 3002
