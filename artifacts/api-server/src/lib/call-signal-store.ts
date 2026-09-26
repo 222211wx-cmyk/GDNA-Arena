@@ -67,6 +67,7 @@ const MAX_ICE_PER_SIDE = 32;
 const MAX_PREANSWER_DEVICES = 3;
 const MAX_PREANSWER_ICE = 16;
 const MAX_CALL_LIFETIME_MS = 4 * 60 * 60 * 1000;
+const HEARTBEAT_LEASE_MS = 120_000;
 
 function ref(db: CallStateDb, callId: string) {
   return db.collection("callInvites").doc(callId);
@@ -147,6 +148,16 @@ export async function createAuthoritativeCall(input: Omit<CallRecord, "status" |
         if (lock.exists && asDate(lock.data()?.expiresAt).getTime() > Date.now()) {
           throw new CallPushError("A participant is already in a call");
         }
+        // An old web client has no lease protocol: an elapsed historical lock
+        // alone is not proof that its answered media call has ended.
+        const oldId = lock.data()?.callId;
+        if (typeof oldId === "string" && isValidCallId(oldId)) {
+          const oldSnapshot = await transaction.get(ref(db, oldId));
+          const old = oldSnapshot.data() ? canonicalCallRecord(oldId, oldSnapshot.data()!) : null;
+          if (old?.status === "answered" && !old.endedAt &&
+            oldSnapshot.data()?.heartbeatEnabled !== true)
+            throw new CallPushError("A participant is already in a call");
+        }
       }
       const payload = {
         authoritative: true, participantIds: [input.caller.id, input.callee.id],
@@ -211,6 +222,8 @@ export async function answerAuthoritativeCall(
     if (record.transport.provider === "agora" && answer !== null) return;
     const answerer = { userId: calleeId, sessionTag: callSessionBinding(sessionId), deviceId };
     const activeUntil = new Date(Date.now() + MAX_CALL_LIFETIME_MS);
+    // Older web clients do not send heartbeats. Only opt-in leases may be
+    // reclaimed after two minutes; answered is not itself a terminal state.
     const answererKey = `${answerer.sessionTag}:${answerer.deviceId}`;
     const winningIce = record.preAnswerIce[answererKey] ?? [];
     const callerKey = `caller:${record.callerSessionTag}:${record.callerDeviceId}`;
@@ -380,6 +393,95 @@ export async function terminateAuthoritativeCall(
     );
   }
   return completed;
+}
+
+/** A selected participant renews an opt-in lease. Legacy calls retain their
+ * original lifetime and are never assumed dead merely because of their age. */
+export async function heartbeatAuthoritativeCall(
+  callId: string, userId: number, sessionId: string, deviceId: string, background = false,
+): Promise<boolean> {
+  if (!isValidCallId(callId)) return false;
+  const db = getCallStateDb();
+  let renewed = false;
+  await db.runTransaction(async transaction => {
+    renewed = false;
+    const snapshot = await transaction.get(ref(db, callId));
+    const record = snapshot.data() ? canonicalCallRecord(callId, snapshot.data()!) : null;
+    if (!record || record.status !== "answered" || record.endedAt ||
+      !sessionOwns(record, userId, sessionId, deviceId, true)) return;
+    const now = new Date();
+    const lease = new Date(now.getTime() + (background ? MAX_CALL_LIFETIME_MS : HEARTBEAT_LEASE_MS));
+    const locks = await Promise.all([transaction.get(lockRef(db, record.caller.id)), transaction.get(lockRef(db, record.callee.id))]);
+    if (locks.some(lock => lock.data()?.callId !== callId)) return;
+    transaction.update(ref(db, callId), { heartbeatEnabled: true, lastHeartbeatAt: now, leaseExpiresAt: lease });
+    for (const id of [record.caller.id, record.callee.id])
+      transaction.set(lockRef(db, id), { callId, expiresAt: lease, updatedAt: now });
+    renewed = true;
+  });
+  return renewed;
+}
+
+/** Reclaim only timed-out invitations and explicitly leased answered calls.
+ * Each decision is rechecked under the same PostgreSQL transaction as lock
+ * deletion, so cleanup cannot delete a subsequent call's lock. */
+export async function cleanupStaleAuthoritativeCalls(now = new Date()): Promise<number> {
+  const db = getCallStateDb();
+  // A previous server version may have committed a terminal call but left
+  // its lock. Reconcile it without touching a lock belonging to a new call.
+  const lockSnapshots = await db.collection("callLocks").get();
+  for (const lock of lockSnapshots.docs) {
+    const oldId = lock.data()?.callId;
+    if (typeof oldId !== "string" || !isValidCallId(oldId)) continue;
+    await db.runTransaction(async transaction => {
+      const latest = await transaction.get(lockRef(db, Number(lock.id)));
+      if (latest.data()?.callId !== oldId) return;
+      const call = await transaction.get(ref(db, oldId));
+      const data = call.data();
+      if ((data && (data.endedAt || data.status === "missed" || data.status === "declined")) ||
+        (!data && asDate(latest.data()?.updatedAt).getTime() + HEARTBEAT_LEASE_MS <= now.getTime()))
+        transaction.delete(lockRef(db, Number(lock.id)));
+    });
+  }
+  const snapshots = await db.collection("callInvites").get();
+  let cleaned = 0;
+  for (const snapshot of snapshots.docs) {
+    const data = snapshot.data();
+    if (!data || data.endedAt || !(
+      (data.status === "ringing" && asDate(data.expiresAt).getTime() <= now.getTime()) ||
+      (data.status === "answered" && data.heartbeatEnabled === true &&
+        asDate(data.leaseExpiresAt, new Date(asDate(data.lastHeartbeatAt).getTime() + HEARTBEAT_LEASE_MS)).getTime() <= now.getTime())
+    )) continue;
+    let completed: CallRecord | null = null;
+    await db.runTransaction(async transaction => {
+      completed = null;
+      const currentSnapshot = await transaction.get(ref(db, snapshot.id));
+      const raw = currentSnapshot.data();
+      const current = raw ? canonicalCallRecord(snapshot.id, raw) : null;
+      if (!current || current.endedAt || !(
+        (current.status === "ringing" && current.expiresAt.getTime() <= now.getTime()) ||
+        (current.status === "answered" && raw?.heartbeatEnabled === true &&
+          asDate(raw.leaseExpiresAt, new Date(asDate(raw.lastHeartbeatAt).getTime() + HEARTBEAT_LEASE_MS)).getTime() <= now.getTime())
+      )) return;
+      const locks = await Promise.all([transaction.get(lockRef(db, current.caller.id)), transaction.get(lockRef(db, current.callee.id))]);
+      const status = current.status === "ringing" ? "missed" : "answered";
+      if (status === "missed") {
+        const missed = db.collection("users").doc(String(current.callee.id)).collection("missedCalls").doc(snapshot.id);
+        const previous = await transaction.get(missed);
+        transaction.set(missed, {
+          fromId: current.caller.id, fromName: current.caller.name, fromAvatar: current.caller.avatar,
+          type: current.type, time: now, seen: previous.data()?.seen === true,
+          caller: current.caller, isSeen: previous.data()?.isSeen === true, status: "missed",
+        }, { merge: true });
+      }
+      transaction.update(ref(db, snapshot.id), { status, endedAt: now, expiredAt: now });
+      for (const [index, id] of [current.caller.id, current.callee.id].entries())
+        if (locks[index].data()?.callId === snapshot.id) transaction.delete(lockRef(db, id));
+      completed = { ...current, status, endedAt: now };
+    });
+    const finalized = completed as CallRecord | null;
+    if (finalized) { cleaned++; notifyTerminal(finalized, finalized.status === "missed" ? "missed" : "ended"); }
+  }
+  return cleaned;
 }
 
 export async function expireAuthoritativeCall(callId: string): Promise<CallRecord | null> {

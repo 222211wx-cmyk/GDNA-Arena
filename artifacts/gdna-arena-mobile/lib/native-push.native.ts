@@ -104,6 +104,17 @@ async function dismissStaleCallAlerts(): Promise<void> {
   }
 }
 
+/** Only dismiss the specific direct-call alert; never cancel unrelated notifications. */
+export async function dismissCallAlert(callId: string): Promise<void> {
+  const presented = await Notifications.getPresentedNotificationsAsync();
+  for (const item of presented) {
+    const data = item.request.content.data;
+    if (data.type === 'call' && data.callId === callId) {
+      await Notifications.dismissNotificationAsync(item.request.identifier);
+    }
+  }
+}
+
 export function listenForPushTaps(navigate: (path: string) => void): () => void {
   const handle = async (response: Notifications.NotificationResponse) => {
     const request = response.notification.request;

@@ -76,6 +76,17 @@ Set `app.json`'s literal `splash.backgroundColor` from
 
 ## Verify
 
+## Secure conversation media
+
+Compose attachment buttons with the shared native Button (outline/icon), status
+and accessible error text with Typography, and semantic `useColors()` values.
+Keep progress, retry and playback in the product screen, not in the design
+system. Conversation videos are compressed on-device then encrypted; they are
+not public Clips. The ciphertext including the AES-GCM tag must fit within
+25 MiB; images keep the 5 MiB plaintext limit. Media uploads stream to private
+Replit App Storage and can only be downloaded after a message links them to a
+room member. Do not introduce literal colors or new token values for this state.
+
 Import and render
 `@workspace/gdna-ds/components/native/button`, then run Expo
 typecheck and the development workflow. The import, native theme, and font hook

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { AppState, PermissionsAndroid, Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
+import { dismissCallAlert } from './native-push.native';
 import { subtle as nativeSubtle } from 'react-native-quick-crypto';
 import {
   ChannelProfileType,
@@ -13,6 +15,7 @@ import {
   type IRtcEngineEventHandler,
   type LastmileProbeResult,
 } from 'react-native-agora';
+import { attachNightCamera, detachNightCamera } from './night-camera';
 import { ApiError, apiGet, apiPost, createAuthenticatedWebSocket, type AuthUser } from './api';
 import { assertNetworkOnline, useOnline } from '@/contexts/OnlineContext';
 import {
@@ -64,6 +67,45 @@ const AGORA_TRANSPORT = { provider: 'agora', version: 1 } as const;
 
 const RING_MS = 30_000;
 const SIGNAL_WAIT_MS = 15_000;
+const END_QUEUE_KEY = 'gdna.pending-call-ends.v1';
+type PendingEnd = { callId: string; deviceId: string; userId: number };
+let endQueueOperation: Promise<void> = Promise.resolve();
+function queueOperation(work: () => Promise<void>): Promise<void> {
+  const next = endQueueOperation.then(work, work);
+  endQueueOperation = next.catch(() => {});
+  return next;
+}
+async function pendingEnds(): Promise<PendingEnd[]> {
+  const raw = await SecureStore.getItemAsync(END_QUEUE_KEY);
+  if (!raw) return [];
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error('Invalid pending call termination data.');
+  return parsed.filter((item): item is PendingEnd => !!item &&
+    typeof item.callId === 'string' && typeof item.deviceId === 'string' && Number.isSafeInteger(item.userId));
+}
+async function retryPendingEnds(userId: number): Promise<void> {
+  await queueOperation(async () => {
+    const entries = await pendingEnds();
+    const remaining: PendingEnd[] = [];
+    for (const item of entries) {
+      if (item.userId !== userId) { remaining.push(item); continue; }
+      try {
+        await apiPost('/call/end', { callId: item.callId, deviceId: item.deviceId });
+      } catch (cause) {
+        if (!(cause instanceof ApiError) || ![400, 403, 404].includes(cause.status)) remaining.push(item);
+      }
+    }
+    await SecureStore.setItemAsync(END_QUEUE_KEY, JSON.stringify(remaining));
+  });
+}
+async function requestCallEnd(item: PendingEnd): Promise<void> {
+  await queueOperation(async () => {
+    const entries = await pendingEnds();
+    if (!entries.some(entry => entry.callId === item.callId && entry.userId === item.userId))
+      await SecureStore.setItemAsync(END_QUEUE_KEY, JSON.stringify([...entries, item]));
+  });
+  await retryPendingEnds(item.userId);
+}
 type SignalWaiter = {
   resolve: () => void;
   reject: (error: Error) => void;
@@ -123,6 +165,8 @@ export async function fetchAgoraToken(channel: string, deviceId: string): Promis
 }
 
 export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
+  const authRef = useRef(user);
+  authRef.current = user;
   const { isOnline } = useOnline();
   const queryClient = useQueryClient();
   const [call, setCall] = useState<ActiveCall | null>(null);
@@ -141,6 +185,8 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   const incomingProviderRef = useRef<'agora' | 'webrtc'>('agora');
   const deviceIdRef = useRef<string | null>(null);
   const joiningCallRef = useRef<string | null>(null);
+  const callGenerationRef = useRef(0);
+  const answeredCallRef = useRef<string | null>(null);
   const callReadyWaitersRef = useRef(new Map<string, SignalWaiter>());
   const callResumeWaitersRef = useRef(new Map<string, SignalWaiter>());
   const providerWaitersRef = useRef(new Map<string, SignalWaiter>());
@@ -150,11 +196,25 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     if (wsRef.current?.readyState !== WebSocket.OPEN) throw new Error('Call signaling is reconnecting.');
     wsRef.current.send(JSON.stringify(value));
   }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      const active = callRef.current;
+      const deviceId = deviceIdRef.current;
+      if (active?.phase !== 'active' || !authRef.current || !deviceId) return;
+      const background = state !== 'active';
+      try { send({ type: 'call-heartbeat', callId: active.callId, background }); } catch {}
+      void apiPost('/call/heartbeat', { callId: active.callId, deviceId, background }).catch(() => {});
+    });
+    return () => subscription.remove();
+  }, [send, user?.id]);
   const clearTimer = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = null;
   };
-  const release = useCallback(() => {
+  const release = useCallback((callId?: string) => {
+    ++callGenerationRef.current;
+    const endingId = callId ?? callRef.current?.callId;
+    if (endingId) void dismissCallAlert(endingId).catch(() => {});
     clearTimer();
     const error = new Error('Call ended before secure media was ready.');
     for (const waiter of callReadyWaitersRef.current.values()) {
@@ -174,13 +234,15 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     callReadyWaitersRef.current.clear();
     callResumeWaitersRef.current.clear();
     joiningCallRef.current = null;
+    answeredCallRef.current = null;
     callRef.current = null;
     const engine = engineRef.current;
     engineRef.current = null;
+    detachNightCamera(endingId);
     if (engine) {
-      engine.stopPreview();
-      engine.leaveChannel();
-      engine.release();
+      try { engine.stopPreview(); } catch {}
+      try { engine.leaveChannel(); } catch {}
+      try { engine.release(); } catch {}
     }
     secretRef.current = null;
     incomingE2eRef.current = null;
@@ -222,25 +284,37 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
   const finish = useCallback((status: string, notify = false) => {
     const current = callRef.current;
     if (!current) return;
-    callRef.current = null;
     if (notify) {
-      try { send({ type: 'call-end', to: current.peer, callId: current.callId }); } catch { /* teardown locally */ }
+      if (user && deviceIdRef.current) {
+        void requestCallEnd({ callId: current.callId, userId: user.id, deviceId: deviceIdRef.current })
+          .catch(cause => setError(cause instanceof Error ? cause.message : 'Call termination could not be queued.'));
+      }
+      try { send({ type: current.incoming && current.phase === 'incoming' ? 'call-reject' : 'call-end', to: current.peer, callId: current.callId }); } catch {}
     }
+    void dismissCallAlert(current.callId).catch(() => {});
     void log(current, current.startedAt ? 'answered' : status === 'no-answer' ? 'missed' : 'ended');
-    release();
+    callRef.current = null;
+    release(current.callId);
     setCall(null);
-  }, [log, release, send]);
+  }, [log, release, send, user?.id]);
 
-  const join = useCallback(async (current: ActiveCall, secret: string, deviceId: string) => {
+  const join = useCallback(async (current: ActiveCall, secret: string, deviceId: string, generation: number) => {
+    const stillCurrent = () => callGenerationRef.current === generation && callRef.current?.callId === current.callId;
+    if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
     const credentials = await fetchAgoraToken(current.callId, deviceId);
+    if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
     const engine = createAgoraRtcEngine();
-    const handler: IRtcEngineEventHandler = {
-      onJoinChannelSuccess: () => setCall(value => value
+    engineRef.current = engine;
+    try {
+      if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
+      const handler: IRtcEngineEventHandler = {
+      onJoinChannelSuccess: () => { if (!stillCurrent()) return; setCall(value => value
         ? { ...value, phase: value.phase === 'active' ? 'active' : value.phase }
-        : value),
-      onUserJoined: (_connection, remoteUid) => setCall(value => value ? { ...value, remoteUid, phase: 'active', startedAt: value.startedAt ?? Date.now() } : value),
-      onUserOffline: () => finish('completed', true),
+        : value); },
+      onUserJoined: (_connection, remoteUid) => { if (stillCurrent()) setCall(value => value ? { ...value, remoteUid, phase: 'active', startedAt: value.startedAt ?? Date.now() } : value); },
+      onUserOffline: () => { if (stillCurrent()) finish('completed', true); },
       onConnectionStateChanged: (_connection, state) => {
+        if (!stillCurrent()) return;
         if (state === ConnectionStateType.ConnectionStateReconnecting) {
           setCall(value => value ? { ...value, phase: 'reconnecting' } : value);
         } else if (state === ConnectionStateType.ConnectionStateConnected) {
@@ -249,55 +323,72 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
             : value);
         } else if (state === ConnectionStateType.ConnectionStateFailed) {
           setError('The secure media connection failed.');
-          finish('failed');
+          finish('failed', true);
         }
       },
       onRequestToken: () => {
+        if (!stillCurrent()) return;
         void fetchAgoraToken(current.callId, deviceId)
-          .then(next => { engine.renewToken(next.token); })
+          .then(next => { if (stillCurrent()) engine.renewToken(next.token); })
           .catch(() => {
+            if (!stillCurrent()) return;
             setError('The secure media token could not be refreshed.');
-            finish('failed');
+            finish('failed', true);
           });
       },
       onTokenPrivilegeWillExpire: () => {
+        if (!stillCurrent()) return;
         void fetchAgoraToken(current.callId, deviceId)
-          .then(next => { engine.renewToken(next.token); })
+          .then(next => { if (stillCurrent()) engine.renewToken(next.token); })
           .catch(() => {
+            if (!stillCurrent()) return;
             setError('The secure media token could not be refreshed.');
-            finish('failed');
+            finish('failed', true);
           });
       },
-      onError: (_code, message) => setError(message || 'Agora media error.'),
-    };
-    engine.initialize({ appId: credentials.appId, channelProfile: ChannelProfileType.ChannelProfileCommunication });
-    engine.registerEventHandler(handler);
-    const salt = new Uint8Array(await nativeSubtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(`gdna-agora:${current.callId}`),
-    ));
-    const encrypted = engine.enableEncryption(true, {
-      encryptionMode: EncryptionMode.Aes256Gcm2,
-      encryptionKey: secret,
-      encryptionKdfSalt: Array.from(salt),
-    });
-    if (encrypted !== 0) {
-      engine.release();
-      throw new Error('Mandatory Agora AES-256-GCM2 encryption could not be enabled.');
+      onError: (_code, message) => { if (!stillCurrent()) return; setError(message || 'Agora media error.'); finish('failed', true); },
+      };
+      if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
+      engine.initialize({ appId: credentials.appId, channelProfile: ChannelProfileType.ChannelProfileCommunication });
+      engine.registerEventHandler(handler);
+      const salt = new Uint8Array(await nativeSubtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(`gdna-agora:${current.callId}`),
+      ));
+      if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
+      const encrypted = engine.enableEncryption(true, {
+        encryptionMode: EncryptionMode.Aes256Gcm2,
+        encryptionKey: secret,
+        encryptionKdfSalt: Array.from(salt),
+      });
+      if (encrypted !== 0) {
+        throw new Error('Mandatory Agora AES-256-GCM2 encryption could not be enabled.');
+      }
+      if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
+      engine.enableAudio();
+      if (current.video) {
+        engine.enableVideo();
+        attachNightCamera(engine, current.callId);
+        engine.startPreview();
+      }
+      if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
+      const joined = engine.joinChannel(credentials.token, current.callId, credentials.uid, {
+        publishMicrophoneTrack: true,
+        publishCameraTrack: current.video,
+        autoSubscribeAudio: true,
+        autoSubscribeVideo: current.video,
+      });
+      if (joined !== 0) throw new Error(`Agora could not join the call (${joined}).`);
+    } catch (cause) {
+      if (engineRef.current === engine) {
+        engineRef.current = null;
+        detachNightCamera(current.callId);
+        try { engine.stopPreview(); } catch {}
+        try { engine.leaveChannel(); } catch {}
+        try { engine.release(); } catch {}
+      }
+      throw cause;
     }
-    engine.enableAudio();
-    if (current.video) {
-      engine.enableVideo();
-      engine.startPreview();
-    }
-    engineRef.current = engine;
-    const joined = engine.joinChannel(credentials.token, current.callId, credentials.uid, {
-      publishMicrophoneTrack: true,
-      publishCameraTrack: current.video,
-      autoSubscribeAudio: true,
-      autoSubscribeVideo: current.video,
-    });
-    if (joined !== 0) throw new Error(`Agora could not join the call (${joined}).`);
   }, [finish]);
 
   const beginJoin = useCallback((current: ActiveCall, deviceId: string) => {
@@ -309,9 +400,10 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       return;
     }
     joiningCallRef.current = current.callId;
+    const generation = callGenerationRef.current;
     setCall(value => value ? { ...value, phase: 'connecting' } : value);
-    void join(current, secret, deviceId).catch(cause => {
-      if (callRef.current?.callId !== current.callId) return;
+    void join(current, secret, deviceId, generation).catch(cause => {
+      if (callGenerationRef.current !== generation || callRef.current?.callId !== current.callId) return;
       setError(cause instanceof Error ? cause.message : 'Could not join the call.');
       finish('failed', true);
     });
@@ -329,6 +421,9 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
           message.transport?.version !== 1 || !message.e2e ||
           (provider === 'agora' && message.offer !== null)) {
         try { send({ type: 'call-reject', to: message.from, callId: message.callId }); } catch {}
+        if (user && deviceIdRef.current)
+          void requestCallEnd({ callId: message.callId, userId: user.id, deviceId: deviceIdRef.current })
+            .catch(cause => setError(cause instanceof Error ? cause.message : 'Call rejection could not be queued.'));
         return;
       }
       // A provider change replays the same durable invitation. It is not a
@@ -339,7 +434,10 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
         return;
       }
       if (callRef.current) {
-        send({ type: 'call-reject', to: message.from, callId: message.callId });
+        try { send({ type: 'call-reject', to: message.from, callId: message.callId }); } catch {}
+        if (user && deviceIdRef.current)
+          void requestCallEnd({ callId: message.callId, userId: user.id, deviceId: deviceIdRef.current })
+            .catch(cause => setError(cause instanceof Error ? cause.message : 'Call rejection could not be queued.'));
         return;
       }
       incomingE2eRef.current = message.e2e;
@@ -349,9 +447,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       setCall(next);
       onIncoming();
       timerRef.current = setTimeout(() => {
-        try { send({ type: 'call-reject', to: message.from!, callId: message.callId! }); } catch {}
-        release();
-        setCall(null);
+        finish('no-answer', true);
       }, RING_MS);
       return;
     }
@@ -373,6 +469,8 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
         finish('failed', true);
         return;
       }
+      answeredCallRef.current = current.callId;
+      try { send({ type: 'call-heartbeat', callId: current.callId }); } catch {}
       setCall(value => value ? { ...value, phase: value.phase === 'active' ? value.phase : 'connecting' } : value);
     } else if (message.type === 'call-rejected') finish('rejected');
     else if (message.type === 'call-ended') finish(current.phase === 'active' ? 'completed' : 'ended');
@@ -382,14 +480,15 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       setError(message.reason === 'secure-device-keys-changed'
         ? 'Secure devices changed. Please call again.'
         : `${current.peer} is unavailable.`);
-      finish('unavailable');
+      finish('unavailable', true);
     }
-  }, [beginJoin, finish, onIncoming, release, send, settleSignal]);
+  }, [beginJoin, finish, onIncoming, send, settleSignal, user?.id]);
   const signalHandlerRef = useRef(handleSignal);
   useEffect(() => { signalHandlerRef.current = handleSignal; }, [handleSignal]);
 
   useEffect(() => {
     if (!user || !isOnline) return;
+    const userId = user.id;
     closedRef.current = false;
     const scheduleReconnect = (connect: () => void) => {
       if (closedRef.current || !isOnline) return;
@@ -404,7 +503,9 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       if (closedRef.current || !isOnline) return;
       let deviceId: string;
       try {
-        deviceId = (await ensureDeviceIdentity(user)).deviceId;
+        const account = authRef.current;
+        if (!account || account.id !== userId) return;
+        deviceId = (await ensureDeviceIdentity(account)).deviceId;
         deviceIdRef.current = deviceId;
       } catch {
         scheduleReconnect(connect);
@@ -420,22 +521,26 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       }
       wsRef.current = ws;
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'register', userId: user.id, username: user.username, deviceId }));
+        ws.send(JSON.stringify({ type: 'register', userId, username: authRef.current?.username, deviceId }));
         if (pingRef.current) clearInterval(pingRef.current);
         pingRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+          if (callRef.current && answeredCallRef.current === callRef.current.callId) {
+            try { send({ type: 'call-heartbeat', callId: callRef.current.callId }); } catch {}
+          }
         }, 25_000);
       };
       ws.onmessage = event => {
         try {
           const message = JSON.parse(String(event.data)) as Signal & { userId?: number };
-          if (message.type === 'registered' && message.userId !== user.id) {
+          if (message.type === 'registered' && message.userId !== userId) {
             ws.close(4002, 'Identity changed');
             return;
           }
           if (message.type === 'registered') {
             reconnectAttemptRef.current = 0;
-            void queryClient.invalidateQueries({ queryKey: ['amis-calls', user.id] });
+            void retryPendingEnds(userId).catch(cause => setError(cause instanceof Error ? cause.message : 'Call termination retry failed.'));
+            void queryClient.invalidateQueries({ queryKey: ['amis-calls', userId] });
           }
           void signalHandlerRef.current(message);
         } catch { /* ignore malformed frames */ }
@@ -462,47 +567,54 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       pingRef.current = null;
       wsRef.current?.close();
       deviceIdRef.current = null;
-      release();
+      if (callRef.current) finish('ended', true);
+      else release();
     };
-  }, [ensureDeviceIdentity, finish, isOnline, queryClient, release, user]);
+  }, [finish, isOnline, queryClient, release, send, user?.id]);
 
   const start = useCallback(async (peer: string, video: boolean) => {
     assertNetworkOnline();
     if (!user || callRef.current) return;
+    const generation = callGenerationRef.current;
+    const stillCurrent = () => callGenerationRef.current === generation && !callRef.current;
     setError(null);
     await permissions(video);
+    if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
     const identity = await ensureDeviceIdentity(user);
+    if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
     deviceIdRef.current = identity.deviceId;
     const callId = `call_${randomUrl(32)}`;
     const secret = randomUrl(32);
     const e2e = await makeOffer(peer, secret);
+    if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
     secretRef.current = secret;
     const next: ActiveCall = { callId, peer, video, incoming: false, phase: 'ringing' };
     callRef.current = next;
     setCall(next);
     const callReady = waitForSignal(callReadyWaitersRef, callId);
-    send({
-      type: 'call-offer',
-      to: peer,
-      offer: null,
-      callId,
-      from: user.username,
-      video,
-      deferredMedia: false,
-      transport: AGORA_TRANSPORT,
-      e2e,
-    });
-    timerRef.current = setTimeout(() => finish('no-answer', true), RING_MS);
+    void callReady.catch(() => {});
     try {
+      send({
+        type: 'call-offer',
+        to: peer,
+        offer: null,
+        callId,
+        from: user.username,
+        video,
+        deferredMedia: false,
+        transport: AGORA_TRANSPORT,
+        e2e,
+      });
+      timerRef.current = setTimeout(() => finish('no-answer', true), RING_MS);
       await callReady;
     } catch (cause) {
-      if (callRef.current?.callId === callId) {
+      if (callGenerationRef.current === generation && callRef.current?.callId === callId) {
         setError(cause instanceof Error ? cause.message : 'Secure call signaling timed out.');
         finish('failed', true);
       }
       throw cause;
     }
-    if (callRef.current?.callId !== callId) throw new Error('CALL_SETUP_CANCELLED');
+    if (callGenerationRef.current !== generation || callRef.current?.callId !== callId) throw new Error('CALL_SETUP_CANCELLED');
     beginJoin(next, identity.deviceId);
   }, [beginJoin, ensureDeviceIdentity, finish, send, user, waitForSignal]);
 
@@ -510,16 +622,21 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
     assertNetworkOnline();
     const current = callRef.current;
     if (!current || !user || !incomingE2eRef.current) return;
+    const generation = callGenerationRef.current;
+    const stillCurrent = () => callGenerationRef.current === generation && callRef.current?.callId === current.callId;
     clearTimer();
     setError(null);
     try {
       await permissions(current.video);
+      if (!stillCurrent()) return;
       const identity = await ensureDeviceIdentity(user);
+      if (!stillCurrent()) return;
       const deviceId = identity.deviceId;
       deviceIdRef.current = deviceId;
       const envelope = incomingE2eRef.current.devices[deviceId];
       if (!envelope) throw new Error('This call was not encrypted for this device.');
       const secret = await decryptCallSecret(user.id, envelope);
+      if (!stillCurrent()) return;
       secretRef.current = secret;
       // Native uses Agora. Negotiate that capability only after the person
       // presses Answer, without acquiring a token or joining before consent.
@@ -527,7 +644,7 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
         const switched = waitForSignal(providerWaitersRef, current.callId);
         send({ type: 'call-provider-switch', callId: current.callId, provider: 'agora' });
         await switched;
-        if (callRef.current?.callId !== current.callId) throw new Error('CALL_SETUP_CANCELLED');
+        if (!stillCurrent()) return;
       }
       const durableResume = waitForSignal(callResumeWaitersRef, current.callId);
       send({
@@ -548,22 +665,21 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       } finally {
         clearInterval(resumeTimer);
       }
-      if (callRef.current?.callId !== current.callId) throw new Error('CALL_SETUP_CANCELLED');
-      await join(current, secret, deviceId);
+      if (!stillCurrent()) return;
+      answeredCallRef.current = current.callId;
+      try { send({ type: 'call-heartbeat', callId: current.callId }); } catch {}
+      await join(current, secret, deviceId, generation);
     } catch (cause) {
-      try { send({ type: 'call-reject', to: current.peer, callId: current.callId }); } catch {}
-      release();
-      setCall(null);
+      if (!stillCurrent()) return;
+      finish('failed', true);
       setError(cause instanceof Error ? cause.message : 'Could not answer securely.');
     }
-  }, [ensureDeviceIdentity, join, release, send, user, waitForSignal]);
+  }, [ensureDeviceIdentity, finish, join, send, user, waitForSignal]);
   const reject = useCallback(() => {
     const current = callRef.current;
     if (!current) return;
-    try { send({ type: 'call-reject', to: current.peer, callId: current.callId }); } catch {}
-    release();
-    setCall(null);
-  }, [release, send]);
+    finish('rejected', true);
+  }, [finish]);
   const end = useCallback(() => finish('completed', true), [finish]);
 
   const testConnection = useCallback(async () => {

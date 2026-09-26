@@ -54,7 +54,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Arena Qaisypro to select an image to encrypt and send."
+          "photosPermission": "Allow Arena Qaisypro to select photos and videos to encrypt and send."
         }
       ],
       "expo-web-browser"

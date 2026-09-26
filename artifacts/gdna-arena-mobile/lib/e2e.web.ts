@@ -24,6 +24,8 @@ export interface EncryptedAttachment {
   size: number;
   kind: 'image' | 'video' | 'audio' | 'file';
 }
+export const MAX_ENCRYPTED_VIDEO_BYTES = 25 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export type SecurePayload =
   | { kind: 'text'; text: string }
   | { kind: 'attachment'; attachment: EncryptedAttachment };
@@ -86,7 +88,19 @@ export async function encryptAndUploadImage(
   _name: string,
   _mime: string,
   _size?: number,
+  _roomId?: number,
+  _onProgress?: (fraction: number) => void,
 ): Promise<{ fileUrl: string; metadata: EncryptedAttachment }> {
+  return nativeOnly();
+}
+export async function encryptAndUploadVideo(
+  _uri: string, _name: string, _roomId: number, _onProgress?: (fraction: number) => void,
+): Promise<{ fileUrl: string; metadata: EncryptedAttachment }> {
+  return nativeOnly();
+}
+export async function decryptVideoToLocalUri(
+  _fileUrl: string, _metadata: EncryptedAttachment,
+): Promise<string> {
   return nativeOnly();
 }
 export async function decryptAttachmentToDataUri(

@@ -8,7 +8,8 @@
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:clips": "sh -c 'trap \"rm -rf .clip-test-dist\" EXIT; tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .clip-test-dist lib/clip-logic.ts && node --test tests/clip-logic.test.mjs'"
+    "test:clips": "sh -c 'trap \"rm -rf .clip-test-dist\" EXIT; tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .clip-test-dist lib/clip-logic.ts && node --test tests/clip-logic.test.mjs'",
+    "test:chat-attachments": "sh -c 'trap \"rm -rf .attachment-test-dist\" EXIT; tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .attachment-test-dist lib/attachment-policy.ts && node --test tests/attachment-policy.test.mjs'"
   },
   "dependencies": {
     "@workspace/gdna-ds": "workspace:*",
@@ -19,6 +20,7 @@
     "expo-secure-store": "~15.0.8",
     "expo-video": "~3.0.16",
     "react-native-agora": "4.6.2",
+    "react-native-compressor": "2.0.3",
     "react-native-nitro-modules": "0.37.0",
     "react-native-quick-base64": "3.0.1",
     "react-native-quick-crypto": "1.1.7"

@@ -170,7 +170,9 @@ function chatUploadFor(intent: MessageUploadIntent) {
     // streaming. This outer cap is defense-in-depth for all attachment types.
     limits: { fileSize: MAX_ENCRYPTED_ATTACHMENT_BYTES },
     fileFilter: (_req, file, cb) => {
-      if (MIME_EXT[file.mimetype]) cb(null, true);
+      if ((intent.encryptedImage || intent.encryptedVideo) && file.mimetype !== "application/octet-stream") {
+        cb(new Error("Encrypted attachments must use application/octet-stream"));
+      } else if (MIME_EXT[file.mimetype]) cb(null, true);
       else cb(new Error("نوع الملف غير مسموح"));
     },
   });
@@ -208,7 +210,7 @@ router.post("/messages/upload", async (req, res): Promise<void> => {
     if (err) {
       const status = err.code === "LIMIT_FILE_SIZE"
         ? 413
-        : err.message?.includes("غير مسموح") ? 400 : 500;
+        : err.message?.includes("غير مسموح") || err.message?.includes("application/octet-stream") ? 400 : 500;
       if (status === 500) console.error("Chat attachment upload to object storage failed:", err);
       res.status(status).json({ error: status === 500 ? "فشل رفع الملف — حاول مرة أخرى" : (err.message ?? "Upload failed") });
       return;
@@ -216,6 +218,7 @@ router.post("/messages/upload", async (req, res): Promise<void> => {
     if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
     const mime = req.file.mimetype;
     const kind = intent.encryptedImage || mime.startsWith("image/") ? "image"
+      : intent.encryptedVideo ? "video"
       : mime.startsWith("video/") ? "video"
       : mime.startsWith("audio/") ? "audio" : "file";
     res.json({

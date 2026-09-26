@@ -14,6 +14,7 @@ import {
   parseFcmSendRequest,
 } from "../lib/firebase-call-push";
 import { declineCallForUser } from "../lib/signaling";
+import { getAuthoritativeCall, heartbeatAuthoritativeCall, terminateAuthoritativeCall } from "../lib/call-signal-store";
 import { registerFcmDevice, sendDerivedFcm } from "../server/fcm";
 import { registerExpoInstallation, removeExpoInstallation } from "../lib/expo-push";
 
@@ -285,6 +286,49 @@ router.post("/fcm/send", fcmSendLimiter, async (req, res): Promise<void> => {
   } catch (error) {
     res.status(errorStatus(error)).json({ error: errorMessage(error) });
   }
+});
+
+router.post("/call/end", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  if (!requestOriginAllowed(req)) { res.status(403).json({ error: "Request origin is not allowed" }); return; }
+  const callId = req.body?.callId;
+  const deviceId = req.body?.deviceId;
+  if (!isValidCallId(callId) || typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(deviceId)) {
+    res.status(400).json({ error: "Invalid call ID or device ID" }); return;
+  }
+  try {
+    const record = await getAuthoritativeCall(callId);
+    if (!record) { res.status(404).json({ error: "Call not found" }); return; }
+    // Caller ownership and selected callee ownership are checked transactionally.
+    // A ringing callee can decline from any authenticated device.
+    const terminal = record.status === "ringing" && record.callee.id === userId
+      ? await declineCallForUser(callId, userId)
+      : await terminateAuthoritativeCall(callId, userId, req.sessionID, deviceId, "ended");
+    if (record.caller.id !== userId && record.callee.id !== userId) {
+      res.status(403).json({ error: "Not a call participant" }); return;
+    }
+    if (terminal === null) {
+      const latest = await getAuthoritativeCall(callId);
+      if (!latest?.endedAt) { res.status(403).json({ error: "Call session does not own this call" }); return; }
+    }
+    res.json({ ok: true, callId, changed: terminal !== null && !("changed" in terminal) ? true : terminal && "changed" in terminal ? terminal.changed : false });
+  } catch (error) { res.status(errorStatus(error)).json({ error: errorMessage(error) }); }
+});
+
+router.post("/call/heartbeat", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  if (!requestOriginAllowed(req)) { res.status(403).json({ error: "Request origin is not allowed" }); return; }
+  const { callId, deviceId } = req.body ?? {};
+  if (!isValidCallId(callId) || typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(deviceId)) {
+    res.status(400).json({ error: "Invalid call ID or device ID" }); return;
+  }
+  try {
+    const renewed = await heartbeatAuthoritativeCall(callId, userId, req.sessionID, deviceId, req.body?.background === true);
+    if (!renewed) { res.status(403).json({ error: "Call session cannot renew this call" }); return; }
+    res.json({ ok: true });
+  } catch (error) { res.status(errorStatus(error)).json({ error: errorMessage(error) }); }
 });
 
 router.post("/call/decline", callPushLimiter, async (req, res): Promise<void> => {

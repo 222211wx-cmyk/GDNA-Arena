@@ -6,7 +6,7 @@ import { requireReadyCallMediaProvider } from "./turn-config";
 import {
   appendAuthoritativeSignal, answerAuthoritativeCall, createAuthoritativeCall,
   canControlDirectCallRecording, expireAuthoritativeCall, getAuthoritativeCall, isDurableCallParticipant, switchAuthoritativeCallProvider, terminateAuthoritativeCall,
-  canonicalCallRecord, type CallRecord, type CallTransport, type StoredDescription,
+  canonicalCallRecord, cleanupStaleAuthoritativeCalls, heartbeatAuthoritativeCall, type CallRecord, type CallTransport, type StoredDescription,
 } from "./call-signal-store";
 import { CallPushError, callSessionBinding, getCallStateDb } from "./call-state-db";
 import { canIssueGroupAgoraToken, getGroupCall } from "./group-call-store";
@@ -36,6 +36,7 @@ type SignalMsg =
   | { type: "call-resume"; callId: string }
   | { type: "call-cancel"; callId: string } | { type: "call-reject"; to: string; callId: string }
   | { type: "call-end"; to: string; callId: string }
+  | { type: "call-heartbeat"; callId: string; background?: boolean }
   | { type: "call-provider-switch"; callId: string; provider: "agora" }
   | { type: "call-recording-control"; callId: string; requestId: string; action: "request" | "accept" | "reject" | "stop" | "revoke" }
   | { type: "call-webrtc-offer"; callId: string; offer: StoredDescription; transport?: CallTransport }
@@ -306,6 +307,13 @@ export async function broadcastRoomEvent(roomId: number, event: object, recipien
 export async function broadcastMessageToRoom(roomId: number, message: object) { return broadcastRoomEvent(roomId, { type: "chat-message", message }); }
 
 export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {
+  // Startup and periodic reconciliation are bounded by the transaction's
+  // conditional lock ownership checks; legacy answered calls are excluded.
+  const cleanup = () => { void cleanupStaleAuthoritativeCalls().catch(() => {}); };
+  cleanup();
+  const cleanupInterval = setInterval(cleanup, 30_000);
+  cleanupInterval.unref();
+  httpServer.once("close", () => clearInterval(cleanupInterval));
   const wss = new WebSocketServer({ noServer: true });
   httpServer.on("upgrade", (req, socket, head) => {
     if ((req.url ?? "").split("?")[0] !== "/api/ws") return;
@@ -336,6 +344,12 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       }
       if (!self) { send(ws, { type: "error", message: "Not registered" }); return; }
       if (msg.type === "ping") { send(ws, { type: "pong" }); return; }
+      if (msg.type === "call-heartbeat") {
+        try { if (!await heartbeatAuthoritativeCall(msg.callId, self.userId, self.sessionId, self.deviceId, msg.background === true))
+          send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SESSION_DENIED" });
+        } catch { send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SIGNALING_UNAVAILABLE" }); }
+        return;
+      }
       if (msg.type === "call-offer") {
         try {
           const provider = requireReadyCallMediaProvider();

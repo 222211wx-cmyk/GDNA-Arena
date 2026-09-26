@@ -21,6 +21,7 @@ import {
   revokeDevice,
 } from '@/lib/e2e';
 import { AgoraSurface, useAgoraCalls } from '@/lib/agora-calls';
+import { NightCallControls } from '@/components/NightCallControls';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOnline } from '@/contexts/OnlineContext';
 import { enablePush, disablePush, pushEnabled } from '@/lib/native-push';
@@ -111,6 +112,7 @@ function Calls({ controller }: { controller: ReturnType<typeof useAgoraCalls> })
   return <View style={styles.fill}><Card style={styles.card}><Typography variant="label">Secure Agora calls</Typography><Typography variant="muted">Audio and video are protected with mandatory AES-256-GCM2 encryption.</Typography>
     {active ? <><Typography variant="label">{active.incoming&&active.phase==='incoming'?'Incoming from':'Call with'} {active.peer}</Typography><Typography variant="muted">{active.video?'Video':'Audio'} · {active.phase}</Typography>
       {active.video&&<View style={[styles.videoStage,{backgroundColor:colors.background}]}>{active.remoteUid!==undefined&&<AgoraSurface uid={active.remoteUid} style={StyleSheet.absoluteFill}/>}<AgoraSurface uid={0} local style={styles.localVideo}/></View>}
+      {active.video&&active.phase!=='incoming'&&<NightCallControls callId={active.callId}/>}
       {active.phase==='incoming'?<View style={styles.row}><Button style={styles.grow} disabled={!isOnline} onPress={controller.answer}>Answer</Button><Button style={styles.grow} variant="destructive" disabled={!isOnline} onPress={controller.reject}>Reject</Button></View>:<Button variant="destructive" disabled={!isOnline} onPress={controller.end}>End call</Button>}
     </>:<><Input value={username} onChangeText={setUsername} placeholder="Citizen username" /><View style={styles.row}><Typography variant="muted" style={styles.grow}>Video</Typography><Switch value={video} disabled={!isOnline} onValueChange={setVideo}/></View><Button disabled={!isOnline || !username.trim()} onPress={()=>controller.start(username.trim(),video).catch(error=>Alert.alert('Call unavailable',error instanceof Error?error.message:'Could not start call.'))}>{`Start ${video?'video':'audio'} call`}</Button></>}
     <Button variant="outline" disabled={!isOnline || !!active} onPress={()=>controller.testConnection()}>Test Agora connection</Button>

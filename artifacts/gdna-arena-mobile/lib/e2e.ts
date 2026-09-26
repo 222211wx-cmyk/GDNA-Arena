@@ -1,9 +1,11 @@
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
+import { Video } from 'react-native-compressor';
 import { subtle as nativeSubtle } from 'react-native-quick-crypto';
 import { apiDelete, apiGet, apiPut, apiUpload, ApiError, getApiBase, getHeaders, type AuthUser } from './api';
 import { assertNetworkOnline } from '@/contexts/OnlineContext';
+import { assertEncryptedAttachmentSize, IMAGE_PLAINTEXT_LIMIT, VIDEO_CIPHERTEXT_LIMIT, AES_GCM_TAG_BYTES } from './attachment-policy';
 
 const PREFIX = 'e2e:v1:';
 const DEVICE_KEY = 'gdna.e2e.device.v1';
@@ -24,6 +26,8 @@ export interface EncryptedAttachment {
   size: number;
   kind: 'image' | 'video' | 'audio' | 'file';
 }
+export const MAX_ENCRYPTED_VIDEO_BYTES = VIDEO_CIPHERTEXT_LIMIT;
+export const MAX_IMAGE_BYTES = IMAGE_PLAINTEXT_LIMIT;
 export type SecurePayload =
   | { kind: 'text'; text: string }
   | { kind: 'attachment'; attachment: EncryptedAttachment };
@@ -322,19 +326,58 @@ export async function encryptAndUploadImage(
   name: string,
   mime: string,
   size?: number,
+  roomId?: number,
+  onProgress?: (fraction: number) => void,
 ): Promise<{ fileUrl: string; metadata: EncryptedAttachment }> {
   if (!mime.startsWith('image/')) throw new Error('Only image attachments are supported.');
+  return encryptAndUploadAttachment(uri, name, mime, 'image', roomId, onProgress, size);
+}
+
+export async function encryptAndUploadVideo(
+  uri: string,
+  name: string,
+  roomId: number,
+  onProgress?: (fraction: number) => void,
+): Promise<{ fileUrl: string; metadata: EncryptedAttachment }> {
+  // Compression must happen on the device, before any plaintext leaves it.
+  onProgress?.(0);
+  const compressed = await Video.compress(uri, { compressionMethod: 'manual', maxSize: 720, bitrate: 1_000_000 },
+    (progress: number) => onProgress?.(Math.min(0.3, progress * 0.3)));
+  const compressedUri = /^[a-z][a-z\d+.-]*:\/\//iu.test(compressed) ? compressed : `file://${compressed}`;
+  try {
+    return await encryptAndUploadAttachment(compressedUri, name.replace(/\.[^.]+$/u, '') + '.mp4',
+      'video/mp4', 'video', roomId, fraction => onProgress?.(0.3 + fraction * 0.7));
+  } finally {
+    if (compressedUri !== uri) await FileSystem.deleteAsync(compressedUri, { idempotent: true }).catch(() => {});
+  }
+}
+
+async function encryptAndUploadAttachment(
+  uri: string, name: string, mime: string, kind: 'image' | 'video',
+  roomId?: number, onProgress?: (fraction: number) => void, size?: number,
+): Promise<{ fileUrl: string; metadata: EncryptedAttachment }> {
+  if (!Number.isSafeInteger(roomId) || !roomId || roomId <= 0) throw new Error('A conversation is required for encrypted uploads.');
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists || !info.size) throw new Error('Selected attachment is unavailable.');
+  const limit = kind === 'image' ? MAX_IMAGE_BYTES + AES_GCM_TAG_BYTES : MAX_ENCRYPTED_VIDEO_BYTES;
+  assertEncryptedAttachmentSize(kind, info.size);
   const source = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
   const plain = Uint8Array.from(atob(source), character => character.charCodeAt(0));
+  assertEncryptedAttachmentSize(kind, plain.byteLength);
   const aes = await subtle().generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
   const iv = Crypto.getRandomBytes(12);
   const ciphertext = await subtle().encrypt({ name: 'AES-GCM', iv: asBuffer(iv) }, aes, asBuffer(plain));
-  const encryptedUri = `${FileSystem.cacheDirectory}gdna-${Date.now()}.enc`;
+  if (ciphertext.byteLength > limit) throw new Error('Encrypted attachment exceeds the upload limit.');
+  onProgress?.(0.1);
+  const encryptedUri = `${FileSystem.cacheDirectory}gdna-${Crypto.randomUUID()}.enc`;
   await FileSystem.writeAsStringAsync(encryptedUri, bytesToBase64(new Uint8Array(ciphertext)), { encoding: FileSystem.EncodingType.Base64 });
   try {
     const form = new FormData();
     form.append('file', { uri: encryptedUri, name: `${name.replace(/[^A-Za-z0-9._-]/g, '_')}.enc`, type: 'application/octet-stream' } as never);
-    const uploaded = await apiUpload<{ url: string }>('/messages/upload', form);
+    const uploaded = await apiUpload<{ url: string }>(
+      `/messages/upload?roomId=${roomId}&kind=${kind}`, form,
+      fraction => onProgress?.(0.1 + 0.9 * fraction),
+    );
     return {
       fileUrl: uploaded.url,
       metadata: {
@@ -342,10 +385,45 @@ export async function encryptAndUploadImage(
         iv: bytesToBase64Url(iv),
         mime,
         name,
-        size: size ?? plain.byteLength,
-        kind: 'image',
+        size: kind === 'image' ? (size ?? plain.byteLength) : plain.byteLength,
+        kind,
       },
     };
+  } finally {
+    await FileSystem.deleteAsync(encryptedUri, { idempotent: true });
+  }
+}
+
+export async function decryptVideoToLocalUri(fileUrl: string, metadata: EncryptedAttachment): Promise<string> {
+  if (metadata.kind !== 'video' || metadata.mime !== 'video/mp4' || !validAttachment(metadata)) {
+    throw new Error('Invalid encrypted video metadata.');
+  }
+  assertNetworkOnline();
+  const url = fileUrl.startsWith('/api/') ? `${getApiBase().replace(/\/api$/u, '')}${fileUrl}` : fileUrl;
+  const basename = `${FileSystem.cacheDirectory}gdna-video-${Crypto.randomUUID()}`;
+  const encryptedUri = `${basename}.enc`;
+  const output = `${basename}.mp4`;
+  try {
+    const response = await FileSystem.downloadAsync(url, encryptedUri, { headers: getHeaders() });
+    if (response.status !== 200) throw new Error(`Encrypted video download failed: ${response.status}`);
+    const info = await FileSystem.getInfoAsync(encryptedUri);
+    if (!info.exists || !info.size || info.size > MAX_ENCRYPTED_VIDEO_BYTES) {
+      throw new Error('Encrypted video exceeds the 25 MB limit.');
+    }
+    const source = await FileSystem.readAsStringAsync(encryptedUri, { encoding: FileSystem.EncodingType.Base64 });
+    const cipher = Uint8Array.from(atob(source), character => character.charCodeAt(0));
+    let clear: ArrayBuffer;
+    try {
+      const aes = await subtle().importKey('raw', asBuffer(base64UrlToBytes(metadata.key)), 'AES-GCM', false, ['decrypt']);
+      clear = await subtle().decrypt({ name: 'AES-GCM', iv: asBuffer(base64UrlToBytes(metadata.iv)) }, aes, asBuffer(cipher));
+    } catch {
+      throw new Error('Unable to decrypt encrypted video: authentication failed.');
+    }
+    await FileSystem.writeAsStringAsync(output, bytesToBase64(new Uint8Array(clear)), { encoding: FileSystem.EncodingType.Base64 });
+    return output;
+  } catch (error) {
+    await FileSystem.deleteAsync(output, { idempotent: true }).catch(() => {});
+    throw error instanceof Error ? error : new Error('Unable to decrypt video.');
   } finally {
     await FileSystem.deleteAsync(encryptedUri, { idempotent: true });
   }

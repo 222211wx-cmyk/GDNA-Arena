@@ -6,6 +6,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { assertNetworkOnline } from '@/contexts/OnlineContext';
+import { uploadFraction } from './attachment-policy';
 
 const SESSION_KEY = 'gdna.session.cookie';
 const CACHED_USER_KEY = 'gdna.auth.user.v1';
@@ -265,10 +266,32 @@ export const apiPatch = <TResponse, TBody>(path: string, body: TBody) =>
 export const apiDelete = <TResponse = void>(path: string) =>
   apiRequest<TResponse>('DELETE', path);
 
-export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+export async function apiUpload<T>(path: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
   assertNetworkOnline();
   const headers = getHeaders();
   delete headers['Content-Type'];
+  if (onProgress) {
+    return new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${getApiBase()}${path}`);
+      xhr.withCredentials = true;
+      Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+      xhr.upload.onprogress = event => {
+        if (event.lengthComputable && event.total > 0) onProgress(uploadFraction(event.loaded, event.total));
+      };
+      xhr.onerror = () => reject(new Error('Encrypted attachment upload failed. Check your connection and retry.'));
+      xhr.onabort = () => reject(new Error('Encrypted attachment upload cancelled.'));
+      xhr.onload = () => {
+        let body: { error?: string } & T;
+        try { body = JSON.parse(xhr.responseText) as typeof body; }
+        catch { reject(new Error(`Upload returned an invalid response (${xhr.status}).`)); return; }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new ApiError(xhr.status, body.error ?? `Upload failed (${xhr.status}).`));
+        } else resolve(body);
+      };
+      xhr.send(form);
+    });
+  }
   const res = await fetch(`${getApiBase()}${path}`, {
     method: 'POST', headers, credentials: 'include', body: form,
   });
