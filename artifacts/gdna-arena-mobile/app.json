@@ -4,6 +4,7 @@
     "slug": "gdnaarena",
     "owner": "qaisypro2024",
     "extra": {
+      "iosVoipEnabled": false,
       "eas": {
         "projectId": "1b27129b-6f98-4704-8a45-efe06a2a2856"
       }

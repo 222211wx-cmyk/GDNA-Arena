@@ -14,6 +14,8 @@ const ID_KEY = 'gdna.native.calls.installation';
 // Android channel sound is immutable after creation; do not reuse legacy "calls".
 const CALL_CHANNEL_ID = 'native-calls-ringtone-v1';
 const CALL_SOUND = 'gdna_call';
+const iosVoipEnabled = Constants.expoConfig?.extra?.iosVoipEnabled === true;
+const IOS_VOIP_DISABLED = 'iOS VoIP calls are disabled in this build. PushKit registration and delivery are unavailable.';
 const generation = new RegistrationGeneration();
 let setupError: string | null = null;
 let messaging: any, notifee: any, callkeep: any, voip: any;
@@ -77,6 +79,7 @@ export function resetCallAccount() {
   retryTimer = null;
 }
 async function registerToken(userId: number, token: string) {
+  if (Platform.OS === 'ios' && !iosVoipEnabled) throw new Error(IOS_VOIP_DISABLED);
   const request = options();
   await generation.run(async current => {
     const account = await apiGet<AuthUser>('/auth/me');
@@ -89,6 +92,7 @@ async function registerToken(userId: number, token: string) {
   });
 }
 export async function enableNativeCalls(userId: number) {
+  if (Platform.OS === 'ios' && !iosVoipEnabled) throw new Error(IOS_VOIP_DISABLED);
   if (!messaging && !voip) throw new Error(setupError ?? 'Locked-screen calls need a native build with Firebase / PushKit configured.');
   generation.invalidate();
   const current = generation.capture();
@@ -137,6 +141,7 @@ export async function refreshNativeCalls(userId: number) {
   const current = generation.capture();
   if (await SecureStore.getItemAsync(enabledKey(userId)) !== 'yes') return;
   if (!current()) return;
+  if (Platform.OS === 'ios' && !iosVoipEnabled) throw new Error(IOS_VOIP_DISABLED);
   if (!messaging && !voip) throw new Error(setupError ?? 'Native call support unavailable in this build.');
   enabledUser = userId;
   // No permission request on startup or token refresh.
@@ -327,7 +332,7 @@ try {
     notifee.onBackgroundEvent(event);
     notifee.onForegroundEvent((e: any) => { void event(e).catch(diagnostic); });
     void notifee.getInitialNotification().then((initial: any) => initial && event({ detail: initial })).catch(diagnostic);
-  } else if (Platform.OS === 'ios') {
+  } else if (Platform.OS === 'ios' && iosVoipEnabled) {
     if (!NativeModules.RNCallKeep || !NativeModules.RNVoipPushNotificationManager) throw new Error('This build does not include native CallKit / PushKit support.');
     callkeep = require('react-native-callkeep').default;
     voip = require('react-native-voip-push-notification').default;

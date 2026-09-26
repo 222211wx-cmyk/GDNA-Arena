@@ -23,6 +23,18 @@ answer/resume and `POST /api/call/decline?id=...` remain authoritative.
 
 ## Providers and credentials
 
+**Current mode: iOS VoIP disabled.** `APNS_VOIP_ENABLED` defaults to off and
+must be exactly `true` to accept APNs VoIP installations or attempt delivery.
+Disabled registration returns an explicit unavailable error (not `ok: true`);
+existing APNs tokens are skipped before any delivery claim. Android FCM and
+browser/Expo push remain independent and need no Apple credentials. The mobile
+app separately has `expo.extra.iosVoipEnabled: false` in static `app.json`;
+its iOS native mods and registration are disabled. To restore VoIP later,
+Apple Developer provisioning and a signed iPhone build are prerequisites:
+set that static mobile flag to `true`, set `APNS_VOIP_ENABLED=true` on the
+server, configure the five APNs values below, rebuild, and verify real-device
+delivery. Neither flag alone demonstrates APNs provider acceptance or ringing.
+
 Android uses Firebase Admin and the existing `FIREBASE_SERVICE_ACCOUNT`, respecting
 `FCM_ENABLED=false`. Native FCM does not require browser VAPID or public web Firebase
 configuration. No new API key is needed.

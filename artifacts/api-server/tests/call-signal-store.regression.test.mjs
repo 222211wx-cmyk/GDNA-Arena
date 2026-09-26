@@ -293,6 +293,39 @@ test("an old terminal transaction cannot clear locks acquired by a replacement c
   );
 });
 
+test("a committed terminal invitation does not leave participants falsely busy when its lock remains", async () => {
+  const db = useSharedFirestore();
+  const oldCall = callInput();
+  await replicaA.createAuthoritativeCall(oldCall);
+  db.replaceDocument(`callInvites/${oldCall.callId}`, {
+    ...db.document(`callInvites/${oldCall.callId}`),
+    status: "missed",
+    endedAt: new Date(),
+  });
+  // The old locks have future expiries. The persisted terminal record, not
+  // those stale expiries, determines whether the participant is available.
+  const next = callInput();
+  await replicaB.createAuthoritativeCall(next);
+  assert.equal(db.document("callLocks/101")?.callId, next.callId);
+  assert.equal(db.document("callLocks/202")?.callId, next.callId);
+  await replicaA.terminateAuthoritativeCall(oldCall.callId, 101, "caller-session", "caller-device", "ended");
+  assert.equal(db.document("callLocks/101")?.callId, next.callId);
+});
+
+test("an active answered call remains busy even if its lock expiry elapsed", async () => {
+  const db = useSharedFirestore();
+  const oldCall = callInput();
+  await replicaA.createAuthoritativeCall(oldCall);
+  await replicaA.answerAuthoritativeCall(oldCall.callId, 202, "callee-session", "callee-device", { type: "answer", sdp: "answer" });
+  for (const id of [101, 202]) {
+    db.replaceDocument(`callLocks/${id}`, { ...db.document(`callLocks/${id}`), expiresAt: new Date(0) });
+  }
+  await assert.rejects(
+    () => replicaB.createAuthoritativeCall(callInput()),
+    (error) => error instanceof CallPushError && error.message === "A participant is already in a call",
+  );
+});
+
 test("deferred WebRTC calls accept null consent answers without losing the offer", async () => {
   useSharedFirestore();
   const input = callInput({ deferredMedia: true });

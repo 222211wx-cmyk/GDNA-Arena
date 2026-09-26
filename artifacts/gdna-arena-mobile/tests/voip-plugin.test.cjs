@@ -3,8 +3,8 @@ const { test } = require('node:test');
 const withVoipPush = require('../plugins/withVoipPush');
 
 // Execute the registered mod actions without generating native projects.
-async function runMod(platform, mod, results) {
-  const config = withVoipPush({ name: 'Plugin test', slug: 'plugin-test' });
+async function runMod(platform, mod, results, iosVoipEnabled = true) {
+  const config = withVoipPush({ name: 'Plugin test', slug: 'plugin-test', extra: { iosVoipEnabled } });
   const result = await config.mods[platform][mod]({
     ...config,
     modResults: results,
@@ -49,11 +49,25 @@ test('Android preserves permission attributes and adds no duplicates', async () 
 });
 
 test('handles absent mode and permission lists without adding entitlements', async () => {
-  const config = withVoipPush({ name: 'Plugin test', slug: 'plugin-test' });
+  const config = withVoipPush({ name: 'Plugin test', slug: 'plugin-test', extra: { iosVoipEnabled: true } });
   assert.equal(config.mods.ios.entitlements, undefined);
   assert.equal((await runMod('ios', 'infoPlist', {})).UIBackgroundModes.length, 3);
   assert.equal((await runMod('android', 'manifest', { manifest: { application: [{ $: {} }] } }))
     .manifest['uses-permission'].length, 6);
+});
+
+test('default app disables iOS mods without disabling Android call setup', async () => {
+  const app = require('../app.json').expo;
+  assert.equal(app.extra.iosVoipEnabled, false);
+  const config = withVoipPush({ ...app, mods: undefined });
+  assert.equal(config.mods.ios, undefined);
+  assert.equal(typeof config.mods.android.manifest, 'function');
+  assert.equal(typeof config.mods.android.dangerous, 'function');
+  assert.equal(withVoipPush({ name: 'No opt-in', slug: 'no-opt-in' }).mods.ios, undefined);
+  const enabled = withVoipPush({ name: 'Enabled', slug: 'enabled', extra: { iosVoipEnabled: true } });
+  assert.ok(enabled.mods.ios.appDelegate);
+  assert.ok(enabled.mods.ios.xcodeproj);
+  assert.ok(enabled.mods.ios.infoPlist);
 });
 
 const fs = require('node:fs');

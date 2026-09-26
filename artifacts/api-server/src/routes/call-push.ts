@@ -36,7 +36,8 @@ router.post("/call-push/native-installations", callPushLimiter, async (req, res)
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     const status = message === "Not authenticated" ? 401 : message.startsWith("Invalid ") ? 400 : 503;
-    res.status(status).json({ error: status === 503 ? "Native call registration unavailable" : message });
+    res.status(status).json({ error: status === 503 && message !== "iOS VoIP calls are disabled; APNs registration is unavailable"
+      ? "Native call registration unavailable" : message });
   }
 });
 router.delete("/call-push/native-installations", callPushLimiter, async (req, res): Promise<void> => {

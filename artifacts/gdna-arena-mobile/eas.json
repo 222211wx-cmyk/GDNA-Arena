@@ -5,6 +5,9 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_ORIGIN": "https://helixly.app"
+      },
       "android": {
         "buildType": "apk"
       }

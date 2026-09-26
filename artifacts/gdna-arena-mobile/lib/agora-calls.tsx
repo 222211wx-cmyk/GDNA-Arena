@@ -374,9 +374,13 @@ export function useAgoraCalls(user: AuthUser | null, onIncoming: () => void) {
       if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
       engine.enableAudio();
       if (current.video) {
-        engine.enableVideo();
+        // Register before enabling capture: Android can emit the first camera
+        // state synchronously, leaving night controls waiting forever otherwise.
         attachNightCamera(engine, current.callId);
-        engine.startPreview();
+        const videoEnabled = engine.enableVideo();
+        if (videoEnabled !== 0) throw new Error(`Agora could not enable video (${videoEnabled}).`);
+        const previewStarted = engine.startPreview();
+        if (previewStarted !== 0) throw new Error(`Agora could not start camera preview (${previewStarted}).`);
       }
       if (!stillCurrent()) throw new Error('CALL_SETUP_CANCELLED');
       const joined = engine.joinChannel(credentials.token, current.callId, credentials.uid, {

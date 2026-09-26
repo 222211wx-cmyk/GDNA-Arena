@@ -145,18 +145,23 @@ export async function createAuthoritativeCall(input: Omit<CallRecord, "status" |
       ]);
       if (existing.exists) throw new CallPushError("Call ID is already in use");
       for (const lock of [callerBusy, calleeBusy]) {
-        if (lock.exists && asDate(lock.data()?.expiresAt).getTime() > Date.now()) {
-          throw new CallPushError("A participant is already in a call");
-        }
-        // An old web client has no lease protocol: an elapsed historical lock
-        // alone is not proof that its answered media call has ended.
+        if (!lock.exists) continue;
+        // A committed terminal call is authoritative even if a leftover lock
+        // still has a future expiry (for example after a failed prior cleanup).
         const oldId = lock.data()?.callId;
         if (typeof oldId === "string" && isValidCallId(oldId)) {
           const oldSnapshot = await transaction.get(ref(db, oldId));
           const old = oldSnapshot.data() ? canonicalCallRecord(oldId, oldSnapshot.data()!) : null;
+          if (old?.endedAt || old?.status === "missed" || old?.status === "declined") continue;
+          if (asDate(lock.data()?.expiresAt).getTime() > Date.now())
+            throw new CallPushError("A participant is already in a call");
+          // An old web client has no lease protocol: an elapsed historical lock
+          // alone is not proof that its answered media call has ended.
           if (old?.status === "answered" && !old.endedAt &&
             oldSnapshot.data()?.heartbeatEnabled !== true)
             throw new CallPushError("A participant is already in a call");
+        } else if (asDate(lock.data()?.expiresAt).getTime() > Date.now()) {
+          throw new CallPushError("A participant is already in a call");
         }
       }
       const payload = {

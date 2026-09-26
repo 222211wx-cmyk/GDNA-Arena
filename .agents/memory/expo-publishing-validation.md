@@ -13,6 +13,12 @@ Standalone Expo production export can validate native bundle transforms without 
 
 Background media capabilities require an installed native build and physical-phone checks; Expo Go, browser screenshots, and Hermes exports are not evidence of locked-screen playback.
 
+Direct EAS builds need their own public API origin; do not assume the Replit publishing builder's environment reaches EAS.
+
+**Why:** A direct Android preview build resolved an empty EAS environment, bypassing the custom builder that normally supplies the API host.
+
+**How to apply:** Obtain the current published URL through deployment metadata and configure the EAS profile/environment explicitly before uploading. Never substitute a workspace development host in an installable release.
+
 **Why:** Background entitlements and Android media services are native build configuration, while operating systems govern interruptions and lock-screen behavior.
 
 **How to apply:** Report bundle, emulator, and physical-device results separately. Rebuild the native app after media plugin changes and verify lock, app switching, system controls, and interrupted/expired-source recovery on both platforms before promising phone behavior.

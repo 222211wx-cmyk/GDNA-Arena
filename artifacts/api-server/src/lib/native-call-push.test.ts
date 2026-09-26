@@ -4,7 +4,10 @@ import { pool } from "@workspace/db";
 import {
   nativeCallUUID, nativeIncomingPayload, nativeSessionHash, nativeFcmMessage, nativeApnsHeaders, validNativeToken,
 } from "./native-call-payload";
-import { registerNativeCallInstallation, removeNativeCallInstallation, sendNativeCallTerminalPush } from "./native-call-push";
+import {
+  registerNativeCallInstallation, removeNativeCallInstallation, sendNativeCallTerminalPush,
+  sendNativeIncomingCallPush, nativeApnsConfigurationProblem,
+} from "./native-call-push";
 
 test("native call payload is bounded, expires, sanitizes and has deterministic UUID", () => {
   const input = { callId: "call_1", callerId: 1, calleeId: 2, callerName: "\u202eAlice\n", video: true, expiresAt: new Date(2000) };
@@ -35,6 +38,8 @@ test("native call payload is bounded, expires, sanitizes and has deterministic U
 });
 
 test("canonical session binding, account transfer, dedupe, and no terminal VoIP", async () => {
+  const previous = process.env.APNS_VOIP_ENABLED;
+  process.env.APNS_VOIP_ENABLED = "true";
   const originalQuery = pool.query;
   const originalConnect = pool.connect;
   const queries: { sql: string; values: unknown[] }[] = [];
@@ -75,6 +80,49 @@ test("canonical session binding, account transfer, dedupe, and no terminal VoIP"
     await sendNativeCallTerminalPush({ callId: "call_1", calleeId: 2, status: "ended" });
     assert.equal(queries.some(q => q.sql.includes("SELECT id,provider")), false);
   } finally {
+    if (previous === undefined) delete process.env.APNS_VOIP_ENABLED;
+    else process.env.APNS_VOIP_ENABLED = previous;
+    pool.query = originalQuery;
+    pool.connect = originalConnect;
+  }
+});
+
+test("iOS VoIP is off by default: no registration even with a valid token and no provider acceptance claim", async () => {
+  const previous = process.env.APNS_VOIP_ENABLED;
+  const originalQuery = pool.query;
+  const originalConnect = pool.connect;
+  let queries = 0;
+  let fcmRegistered = false;
+  delete process.env.APNS_VOIP_ENABLED;
+  const query = async (sql: string) => {
+    queries++;
+    if (sql.includes("SELECT sid")) return { rows: [{ sid: "session" }], rowCount: 1 };
+    if (sql.includes("SELECT id,provider")) return {
+      rows: [{ id: "1", provider: "apns-voip", token: "a".repeat(64), session_hash: nativeSessionHash("session") }], rowCount: 1,
+    };
+    if (sql.includes("INSERT INTO native_call_push_deliveries")) throw new Error("disabled APNs delivery claimed");
+    if (sql.includes("INSERT INTO native_call_push_installations")) fcmRegistered = true;
+    return { rows: [], rowCount: 1 };
+  };
+  pool.query = query as unknown as typeof pool.query;
+  pool.connect = (async () => ({ query, release() {} })) as unknown as typeof pool.connect;
+  try {
+    assert.match(nativeApnsConfigurationProblem()!, /disabled/);
+    await assert.rejects(registerNativeCallInstallation(2, "session",
+      { installationId: "device_abcdefghijkl", provider: "apns-voip", token: "a".repeat(64) }), /disabled/);
+    assert.equal(queries, 0);
+    await registerNativeCallInstallation(2, "session",
+      { installationId: "device_abcdefghijkl", provider: "fcm", token: "firebase-native-token" });
+    assert.equal(fcmRegistered, true);
+    await sendNativeIncomingCallPush({
+      callId: "call_1", callerId: 1, calleeId: 2, callerName: "Caller",
+      video: false, expiresAt: new Date(Date.now() + 30_000),
+    });
+    await sendNativeCallTerminalPush({ callId: "call_1", calleeId: 2, status: "ended" });
+    assert.ok(queries > 0); // session cleanup remains operational, no APNs claim
+  } finally {
+    if (previous === undefined) delete process.env.APNS_VOIP_ENABLED;
+    else process.env.APNS_VOIP_ENABLED = previous;
     pool.query = originalQuery;
     pool.connect = originalConnect;
   }

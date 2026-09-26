@@ -5,6 +5,8 @@ description: Provider identity and acceptance criteria for native mobile notific
 
 Keep Expo push tokens distinct from direct FCM tokens and browser Web Push subscriptions; do not send one provider's token through another provider.
 
+User decision: iOS VoIP is deferred until Apple Developer provisioning is available. The iOS VoIP stub must explicitly report unavailable, never fake PushKit registration or delivery success. Keep the real implementation available for later explicit re-enable; Android build/FCM and web push must remain independent of APNs secrets.
+
 Use Firebase for Android call wake-up and direct APNs PushKit for iOS; do not initialize an unrelated iOS Firebase application merely to enable Android FCM. Keep permission requests citizen-initiated and the server authoritative for calls; native call UI does not authorize joining media. iOS PushKit calls must be reported to CallKit before the JS bridge is available, with native completion ownership.
 
 **Why:** The existing browser/direct-FCM infrastructure does not deliver to Expo tokens. Extending the mobile app must preserve existing notification channels rather than repurpose their credentials or storage.

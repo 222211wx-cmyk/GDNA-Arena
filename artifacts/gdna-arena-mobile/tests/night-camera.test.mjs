@@ -15,7 +15,9 @@ function setup(overrides = {}) {
     ...overrides,
   };
   const controller = new NightCameraController(engine, () => {});
-  return { controller, calls, capture: () => handler.onLocalVideoStateChanged(0, 1, 0), fail: () => handler.onLocalVideoStateChanged(0, 3, 8) };
+  return { controller, calls, capture: () => handler.onLocalVideoStateChanged(0, 1, 0),
+    screenCapture: () => handler.onLocalVideoStateChanged(2, 1, 0),
+    fail: () => handler.onLocalVideoStateChanged(0, 3, 8) };
 }
 
 test('waits for successful camera capture and rejects unsupported torch', () => {
@@ -26,6 +28,23 @@ test('waits for successful camera capture and rejects unsupported torch', () => 
   x.controller.setTorch(true);
   assert.match(x.controller.snapshot.error, /not supported/);
   assert.deepEqual(x.calls, []);
+  x.controller.dispose();
+});
+
+test('reports camera observation failure rather than silently claiming night video is ready', () => {
+  const x = setup({ registerEventHandler: () => false });
+  assert.match(x.controller.snapshot.error, /Could not observe Agora camera capture state/);
+  assert.equal(x.controller.snapshot.ready, false);
+  x.controller.dispose();
+});
+
+test('camera capture event activates night controls, including when emitted immediately after registration', () => {
+  const x = setup({ isCameraTorchSupported: () => true });
+  x.screenCapture(); // screen capture is not the primary camera
+  assert.equal(x.controller.snapshot.ready, false);
+  x.capture();
+  assert.equal(x.controller.snapshot.ready, true);
+  assert.equal(x.controller.snapshot.torchSupported, true);
   x.controller.dispose();
 });
 

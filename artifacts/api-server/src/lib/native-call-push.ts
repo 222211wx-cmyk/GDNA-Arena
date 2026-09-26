@@ -15,6 +15,9 @@ export async function registerNativeCallInstallation(userId: number, sid: string
   if (!validInstallation(body?.installationId) || !validNativeToken(body?.provider, body?.token)) {
     throw new Error("Invalid native call installation, provider or token");
   }
+  if (body.provider === "apns-voip" && process.env.APNS_VOIP_ENABLED !== "true") {
+    throw new Error("iOS VoIP calls are disabled; APNs registration is unavailable");
+  }
   const token = body.provider === "apns-voip" ? body.token.toLowerCase() : body.token;
   const client = await pool.connect();
   try {
@@ -51,6 +54,7 @@ export async function removeNativeCallInstallation(userId: number, sid: string, 
 }
 
 export function nativeApnsConfigurationProblem(): string | null {
+  if (process.env.APNS_VOIP_ENABLED !== "true") return "APNs VoIP disabled: set APNS_VOIP_ENABLED=true only after Apple provisioning";
   const required = ["APNS_VOIP_KEY_P8", "APNS_VOIP_KEY_ID", "APNS_VOIP_TEAM_ID", "APNS_VOIP_BUNDLE_ID", "APNS_VOIP_ENVIRONMENT"];
   const missing = required.filter(key => !process.env[key]?.trim());
   if (missing.length) return `APNs VoIP unavailable: missing ${missing.join(", ")}`;
@@ -123,6 +127,8 @@ async function deliver(userId: number, eventKey: string, payload: Record<string,
   for (const device of devices.rows) {
     // Apple allows VoIP pushes only for actual incoming calls, never cancellation.
     if (device.provider === "apns-voip" && payload.type !== "call") continue;
+    // Historical registrations cannot reactivate APNs while the feature is disabled.
+    if (device.provider === "apns-voip" && process.env.APNS_VOIP_ENABLED !== "true") continue;
     const ttl = payload.type === "call" ? Date.parse(String(payload.expiresAt)) - Date.now() : 30_000;
     if (ttl <= 0 || !(await activeHashes(userId)).includes(device.session_hash)) continue;
     // Re-read after any provider delay: a queued ring must not revive a terminal invitation.

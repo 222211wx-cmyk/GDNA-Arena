@@ -21,6 +21,8 @@ module.exports = function withVoipPush(config) {
       fs.readFileSync(path.join(__dirname, 'FullScreenIntentModule.kt'), 'utf8').replace('__PACKAGE__', packageName));
     return cfg;
   }]);
+  // Explicit static opt-in. Android Telecom/FCM mods remain independent.
+  if (config.extra?.iosVoipEnabled !== true) return withAndroidManifest(config, androidManifest);
   config = withAppDelegate(config, cfg => {
     if (cfg.modResults.language !== 'swift') throw new Error('GDNA VoIP requires Swift AppDelegate');
     cfg.modResults.contents = modifyAppDelegate(cfg.modResults.contents);
@@ -41,7 +43,10 @@ module.exports = function withVoipPush(config) {
     return cfg;
   });
 
-  return withAndroidManifest(config, cfg => {
+  return withAndroidManifest(config, androidManifest);
+};
+
+function androidManifest(cfg) {
     const manifest = cfg.modResults.manifest;
     const permissions = manifest['uses-permission'] || [];
     for (const name of [
@@ -88,5 +93,4 @@ module.exports = function withVoipPush(config) {
       'android:foregroundServiceType',
     ])].join(',');
     return cfg;
-  });
-};
+}

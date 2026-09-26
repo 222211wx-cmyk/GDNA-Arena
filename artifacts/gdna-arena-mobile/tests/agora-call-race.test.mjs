@@ -24,7 +24,9 @@ export const Platform = { OS: 'ios' };
 export const getRandomBytes = length => Uint8Array.from({ length }, (_, i) =>
   (i + ++globalThis.__agoraRace.random) % 256);
 export const subtle = { digest: () => globalThis.__agoraRace.digest() };
+export const nativeSubtle = subtle;
 export const ChannelProfileType = { ChannelProfileCommunication: 1 };
+export const AudioSessionOperationRestriction = { AudioSessionOperationRestrictionDeactivateSession: 1 };
 export const ConnectionStateType = { ConnectionStateReconnecting: 1, ConnectionStateConnected: 2, ConnectionStateFailed: 3 };
 export const EncryptionMode = { Aes256Gcm2: 1 };
 export const RtcSurfaceView = () => null;
@@ -44,7 +46,10 @@ export const decryptCallSecret = async () => 'secret';
 export const encryptCallSecret = async () => ({ wrappedSecret: 'wrapped', fingerprint: 'fingerprint' });
 export const ensureDeviceIdentity = async () => ({ deviceId: 'device' });
 export const dismissCallAlert = async () => {};
-export const attachNightCamera = (_engine, callId) => { globalThis.__agoraRace.attaches.push(callId); };
+export const hasNativeCallAudio = () => false;
+export const waitForCallAudio = async () => {};
+export const prepareCallAnswer = async () => {};
+export const attachNightCamera = (_engine, callId) => { globalThis.__agoraRace.attaches.push(callId); globalThis.__agoraRace.events.push('attach'); };
 export const detachNightCamera = () => {};
 export const getItemAsync = async () => null;
 export const setItemAsync = async () => {};
@@ -54,7 +59,7 @@ await build({
   entryPoints: [path.join(root, 'lib/agora-calls.tsx')],
   outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
   plugins: [{ name: 'race-dependencies', setup(plugin) {
-    plugin.onResolve({ filter: /^(react|@tanstack\/react-query|react-native|expo-crypto|expo-secure-store|react-native-quick-crypto|react-native-agora|\.\/api|@\/contexts\/OnlineContext|\.\/e2e|\.\/native-push.native|\.\/night-camera)$/ },
+    plugin.onResolve({ filter: /^(react|@tanstack\/react-query|react-native|expo-crypto|expo-secure-store|react-native-quick-crypto|react-native-agora|\.\/api|@\/contexts\/OnlineContext|\.\/e2e|\.\/native-push.native|\.\/native-crypto|\.\/night-camera|\.\/call-service)$/ },
       () => ({ path: mock, external: true }));
   } }],
 });
@@ -69,7 +74,7 @@ function deferred() {
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 async function setup() {
   const race = {
-    effects: [], state: [], random: 0, attaches: [], engines: [],
+    effects: [], state: [], random: 0, attaches: [], events: [], engines: [],
     token: deferred(), digestGate: deferred(),
     apiGet(path) {
       if (path.startsWith('/agora/token')) return this.token.promise;
@@ -80,8 +85,10 @@ async function setup() {
       const engine = {
         released: 0, joined: 0,
         initialize() {}, registerEventHandler(handler) { this.handler = handler; },
-        enableEncryption() { return 0; }, enableAudio() {}, enableVideo() {},
-        startPreview() {}, stopPreview() {}, leaveChannel() {},
+        enableEncryption() { return 0; }, enableAudio() {},
+        enableVideo() { race.events.push('video'); return race.videoResult ?? 0; },
+        startPreview() { race.events.push('preview'); return race.previewResult ?? 0; },
+        stopPreview() {}, leaveChannel() {},
         joinChannel() { this.joined++; return 0; },
         release() { this.released++; },
       };
@@ -137,4 +144,17 @@ test('ending during digest releases old engine and stale events cannot end the n
   assert.equal(race.ws.sent.filter(item => item.type === 'call-end').length, 1,
     'old callback must not terminate the new call');
   hook.end();
+});
+
+test('night camera listens before Android capture begins and failed preview cannot join', async () => {
+  const { race, dial } = await setup();
+  race.previewResult = -4;
+  await dial();
+  race.token.resolve({ appId: 'app', token: 'token', uid: 1 });
+  race.digestGate.resolve(new Uint8Array(32).buffer);
+  await tick();
+  assert.deepEqual(race.events, ['attach', 'video', 'preview']);
+  assert.equal(race.engines[0].joined, 0);
+  assert.equal(race.engines[0].released, 1);
+  assert.ok(race.ws.sent.some(item => item.type === 'call-end'));
 });

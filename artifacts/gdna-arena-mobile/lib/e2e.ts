@@ -4,7 +4,7 @@ import * as Crypto from 'expo-crypto';
 import { Video } from 'react-native-compressor';
 import { apiDelete, apiGet, apiPut, apiUpload, ApiError, getApiBase, getHeaders, type AuthUser } from './api';
 import { assertNetworkOnline } from '@/contexts/OnlineContext';
-import { assertEncryptedAttachmentSize, IMAGE_PLAINTEXT_LIMIT, VIDEO_CIPHERTEXT_LIMIT, AES_GCM_TAG_BYTES } from './attachment-policy';
+import { assertEncryptedAttachmentSize, compressAndSendVideo, IMAGE_PLAINTEXT_LIMIT, VIDEO_CIPHERTEXT_LIMIT, AES_GCM_TAG_BYTES } from './attachment-policy';
 import { nativeSubtle } from './native-crypto';
 
 const PREFIX = 'e2e:v1:';
@@ -339,17 +339,15 @@ export async function encryptAndUploadVideo(
   roomId: number,
   onProgress?: (fraction: number) => void,
 ): Promise<{ fileUrl: string; metadata: EncryptedAttachment }> {
-  // Compression must happen on the device, before any plaintext leaves it.
-  onProgress?.(0);
-  const compressed = await Video.compress(uri, { compressionMethod: 'manual', maxSize: 720, bitrate: 1_000_000 },
-    (progress: number) => onProgress?.(Math.min(0.3, progress * 0.3)));
-  const compressedUri = /^[a-z][a-z\d+.-]*:\/\//iu.test(compressed) ? compressed : `file://${compressed}`;
-  try {
-    return await encryptAndUploadAttachment(compressedUri, name.replace(/\.[^.]+$/u, '') + '.mp4',
-      'video/mp4', 'video', roomId, fraction => onProgress?.(0.3 + fraction * 0.7));
-  } finally {
-    if (compressedUri !== uri) await FileSystem.deleteAsync(compressedUri, { idempotent: true }).catch(() => {});
-  }
+  if (!Number.isSafeInteger(roomId) || roomId <= 0) throw new Error('A conversation is required for encrypted uploads.');
+  return compressAndSendVideo(uri, name, onProgress, {
+    compress: (source, progress) => Video.compress(
+      source, { compressionMethod: 'manual', maxSize: 720, bitrate: 1_000_000, stripAudio: false }, progress,
+    ),
+    encryptAndUpload: (source, mp4Name, progress) =>
+      encryptAndUploadAttachment(source, mp4Name, 'video/mp4', 'video', roomId, progress),
+    deleteFile: source => FileSystem.deleteAsync(source, { idempotent: true }),
+  });
 }
 
 async function encryptAndUploadAttachment(

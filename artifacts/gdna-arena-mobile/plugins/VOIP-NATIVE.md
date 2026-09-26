@@ -1,5 +1,16 @@
 # Native call delivery contract
 
+**Current build mode: iOS VoIP disabled.** `app.json` sets
+`expo.extra.iosVoipEnabled: false`; the plugin skips its iOS AppDelegate,
+Xcode bridge and VoIP background mode modifications. It still applies all
+Android manifest/full-screen bridge changes. The iOS JS enrollment path
+explicitly rejects requests and does not register tokens or claim delivery.
+This is not a simulated PushKit implementation. Once Apple Developer
+provisioning is available, change the static flag to `true`, provision the
+iOS bundle and configure the server gate described in the API documentation,
+then rebuild and verify on a physical iPhone. The remainder of this document
+describes the retained **enabled** implementation, not current behavior.
+
 This plugin targets the installed Expo SDK 54 Swift template, RNCallKeep 4.x and
 RNVoipPushNotification 3.x. It patches AppDelegate and its existing Xcode bridging
 header idempotently. C inline wrappers use the installed Objective-C public APIs

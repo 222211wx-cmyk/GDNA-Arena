@@ -55,7 +55,7 @@ test('generation drops queued old-account work, then serializes cleanup after in
   assert.equal(snapshot(), false);
   assert.deepEqual(order, ['start', 'finish', 'delete']);
 });
-function service(platform = 'android', { fullScreen = true, bridge = true } = {}) {
+function service(platform = 'android', { fullScreen = true, bridge = true, iosVoipEnabled = true } = {}) {
   const events = {}, logs = [], store = new Map([['gdna.native.calls.enabled.42', 'yes']]);
   let account = 42, active = true;
   let resolvePermission;
@@ -93,7 +93,7 @@ function service(platform = 'android', { fullScreen = true, bridge = true } = {}
         openSettings: async () => { logs.push(['openSettings']); },
       } } : {}),
     } },
-    'expo-constants': { default: { executionEnvironment: 'bare' } },
+    'expo-constants': { default: { executionEnvironment: 'bare', expoConfig: { extra: { iosVoipEnabled } } } },
     'expo-secure-store': {
       getItemAsync: k => readPreference(k),
       setItemAsync: async (k, v) => { store.set(k, v); },
@@ -202,6 +202,17 @@ test('startup does not register tokens or request permissions', async () => {
   assert.equal(s.logs.some(x => x[0] === 'register'), false);
   await s.svc.enableNativeCalls(42);
   assert.equal(s.logs.some(x => x[0] === 'register'), true);
+  await s.svc.disableNativeCalls(42);
+  assert.equal(s.store.has('gdna.native.calls.enabled.42'), false);
+});
+test('disabled iOS VoIP fails opt-in explicitly and never registers, re-enrolls or handles events', async () => {
+  const s = service('ios', { iosVoipEnabled: false });
+  assert.equal(s.events['voip:register'], undefined);
+  assert.equal(s.events['voip:notification'], undefined);
+  await assert.rejects(s.svc.enableNativeCalls(42), /iOS VoIP calls are disabled/);
+  await assert.rejects(s.svc.refreshNativeCalls(42), /iOS VoIP calls are disabled/);
+  assert.equal(s.logs.some(x => x[0] === 'register'), false);
+  assert.equal(s.store.get('gdna.native.calls.enabled.42'), 'yes'); // prior opt-in is not claimed as re-enrolled
   await s.svc.disableNativeCalls(42);
   assert.equal(s.store.has('gdna.native.calls.enabled.42'), false);
 });

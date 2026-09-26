@@ -2,13 +2,19 @@
 
 Status: implementation and local configuration checks only. No APK/IPA compiled,
 no live provider delivery verified, and no physical device cases passed yet.
+The current iOS VoIP mode is explicitly disabled pending Apple Developer
+provisioning; iPhone ringing is unavailable, not mocked. Android native
+builds do not require APNs secrets. Do not treat an Android result as iPhone
+verification or release approval for iOS.
 
 ## Before testing
 
 - Apply the additive native push schema through normal Publish, never startup SQL.
-- Configure server FCM service credentials and APNs VoIP credentials as described
-  in the API server's native-call-push documentation. The Firebase client JSON is
-  not a server credential.
+- Configure server FCM service credentials for Android. Only when Apple
+  provisioning becomes available, enable the static iOS VoIP mobile flag and
+  server APNs gate and configure APNs VoIP credentials as described in the API
+  server's native-call-push documentation. The Firebase client JSON is not a
+  server credential.
 - Build signed native applications. Confirm the Android package matches Firebase
   and the iOS bundle matches the Apple provisioning profile and APNs topic.
 - Resolve or explicitly evaluate Expo Doctor's library metadata warnings:
