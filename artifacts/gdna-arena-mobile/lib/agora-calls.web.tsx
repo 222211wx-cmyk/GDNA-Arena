@@ -16,16 +16,16 @@ export function AgoraSurface({ style }: { uid: number; local?: boolean; style?: 
   return <View style={style} />;
 }
 
-export function useAgoraCalls(_user: AuthUser | null, _onIncoming: () => void) {
+export function useAgoraCalls(_user: AuthUser | null, _onIncoming: () => void, initializationError?: string) {
   const [error, setError] = useState<string | null>(null);
   const unavailable = useCallback(async () => {
-    const message = 'Agora calls require an installed native iOS or Android build with call support; Expo Go and browser previews are unsupported.';
+    const message = initializationError ?? 'Agora calls require an installed native iOS or Android build with call support; Expo Go and browser previews are unsupported.';
     setError(message);
     throw new Error(message);
-  }, []);
+  }, [initializationError]);
   const testConnection = useCallback(async () => {
-    setError('Agora connection testing is available in the native iOS and Android app.');
-  }, []);
+    setError(initializationError ?? 'Agora connection testing is available in the native iOS and Android app.');
+  }, [initializationError]);
   return {
     call: null as ActiveCall | null,
     error,

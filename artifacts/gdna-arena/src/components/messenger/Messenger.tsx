@@ -15,6 +15,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { trackEvent } from "@/lib/analytics";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getMessagingSubscription } from "@workspace/api-client-react";
+import { exhaustedMessagingNotice, messagingSubscriptionCopy, parseMessagingEntitlement, remainingMessagingCopy, type MessagingEntitlement } from "../../lib/messaging-subscription-copy";
+import { Alert, AlertDescription } from "@workspace/gdna-ds/components/ui/alert";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
@@ -1218,6 +1222,25 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 }) {
   const { lang } = useLang();
   const st = { ...(SOCIAL_T[lang] ?? SOCIAL_T.en), ...getMessengerCopy(lang) };
+  const queryClient = useQueryClient();
+  const subscriptionKey = ["messaging-subscription", user?.id];
+  const subscription = useQuery({
+    queryKey: subscriptionKey,
+    enabled: !!user,
+    queryFn: async () => parseMessagingEntitlement(await getMessagingSubscription()),
+    refetchInterval: 10000,
+    staleTime: 0,
+  });
+  const subscriptionCopy = messagingSubscriptionCopy(lang);
+  const canSend = subscription.data?.canSendMessages === true && !subscription.isError;
+  const subscriptionStatus = subscription.isPending ? subscriptionCopy.checking
+    : subscription.isError ? subscriptionCopy.unavailable
+    : canSend ? subscription.data.hasActiveSubscription ? subscriptionCopy.active
+      : remainingMessagingCopy(lang, subscription.data.freeMessagesRemaining)
+    : subscription.data?.freeMessagesRemaining === 0 && !subscription.data.hasActiveSubscription
+      ? exhaustedMessagingNotice : subscriptionCopy.inactive;
+  const canSendNow = () => queryClient.getQueryState(subscriptionKey)?.status === "success" &&
+    queryClient.getQueryData<MessagingEntitlement>(subscriptionKey)?.canSendMessages === true;
   const dir = lang === "ar" ? "rtl" : "ltr";
   const call = useCallContext();
   const groupCall = useGroupCallContext();
@@ -1780,6 +1803,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   }
 
   async function sendMessage(override?: object, shouldSend: () => boolean = () => true): Promise<boolean> {
+    if (!canSendNow()) { setToast(subscriptionStatus); return false; }
     if (!activeRoom || (!text.trim() && !override) || sending) return false;
     if (!isOnline) { blockOffline(); return false; }
     setSending(true);
@@ -1823,11 +1847,18 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         if (r.status !== 409 || attempt === 1) break;
       }
       if (!r) throw new Error(st.send_failed);
+      if (r.status === 403) void subscription.refetch();
       if (r.ok) {
         const j = await r.json();
         trackEvent("message_send_success", {
           message_type: secureAttachment ? "attachment" : "text",
         });
+        queryClient.setQueryData<MessagingEntitlement>(subscriptionKey, previous => {
+          if (!previous || previous.hasActiveSubscription) return previous;
+          const remaining = Math.max(0, previous.freeMessagesRemaining - 1);
+          return { ...previous, freeMessagesRemaining: remaining, canSendMessages: remaining > 0 };
+        });
+        void subscription.refetch();
         const decryptedMessage = user
           ? await decryptMessageForUser(j.message as DmMessage, user.id, st)
           : j.message as DmMessage;
@@ -1964,6 +1995,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     onXhr: (xhr: XMLHttpRequest) => void,
     uploadQuery: string,
   ) {
+    if (!canSendNow()) return Promise.resolve({ ok: false, status: 403, json: { error: subscriptionStatus }, aborted: false });
     if (!isOnline) return Promise.resolve({ ok: false, status: 0, json: {}, aborted: false });
     return new Promise<{ ok: boolean; status: number; json: any; aborted: boolean }>((resolve) => {
       const fd = new FormData();
@@ -1975,6 +2007,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       xhr.withCredentials = true;
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
       xhr.onload = () => {
+        if (xhr.status === 403) void subscription.refetch();
         activeUploadsRef.current.delete(xhr);
         let json: any = {};
         try {
@@ -2001,6 +2034,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     fallbackName = st.attachment,
     onProgress: (pct: number) => void = () => {},
   ): Promise<"sent" | "failed" | "cancelled"> {
+    if (!canSendNow()) { setToast(subscriptionStatus); return "failed"; }
     if (!activeRoom) return "failed";
     if (!isOnline) { blockOffline(); return "failed"; }
     const sizeError = attachmentSizeError(file);
@@ -2053,6 +2087,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 
   // Stage one or more files into the pre-send preview strip.
   function stageFiles(files: File[], autoSendImages = false) {
+    if (!canSend) { setToast(subscriptionStatus); return; }
     if (!isOnline) { blockOffline(); return; }
     if (!files.length || !activeRoom) return;
     const staged: PendingFile[] = [];
@@ -2186,6 +2221,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 
   // Upload every staged file sequentially with per-file progress, then clear.
   async function confirmPending(automaticOnly = false) {
+    if (!canSend) { setToast(subscriptionStatus); return; }
     if (uploadingRef.current) return;
     if (!isOnline) { blockOffline(); return; }
     uploadingRef.current = true;
@@ -2196,6 +2232,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         ? p.autoSend && p.status === "staged"
         : p.status !== "uploading");
       for (const item of queue) {
+        if (!canSendNow()) break;
         // Skip files the user removed while earlier ones were uploading.
         if (!pendingRef.current.some(p => p.id === item.id)) continue;
         updatePending(prev => prev.map(p => p.id === item.id ? { ...p, status: "uploading", progress: 0 } : p));
@@ -2272,6 +2309,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   }
 
   async function startVoiceNote() {
+    if (!canSend) { setToast(subscriptionStatus); return; }
     if (!isOnline) { blockOffline(); return; }
     setShowAttachTray(false);
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -2391,6 +2429,9 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     </div>
   ) : (
     <div style={{ padding: "8px 10px", paddingBottom: "calc(8px + env(safe-area-inset-bottom))", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.063)}`, flexShrink: 0 }}>
+      <Alert role="status" className="mb-2 border-border bg-muted/40 text-muted-foreground">
+        <AlertDescription className="text-xs">{subscriptionStatus}</AlertDescription>
+      </Alert>
       {peerTyping && <p role="status" className="mb-1 text-xs text-muted-foreground">Typing…</p>}
       {activeRoom?.type === "direct" && <MessengerAssistant key={activeRoom.id}
         messages={messages.filter(message => message.roomId === activeRoom.id)} userId={user.id}
@@ -2459,7 +2500,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
               className="rounded-md px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent">
               {st.cancel}
             </button>
-            <button type="button" onClick={() => void sendMultipleLinks()} disabled={!linkDraft.trim() || sending || !isOnline}
+            <button type="button" onClick={() => void sendMultipleLinks()} disabled={!canSend || !linkDraft.trim() || sending || !isOnline}
               className="rounded-md bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50">
               {st.send}
             </button>
@@ -2514,7 +2555,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                   title={label}
                   aria-label={label}
                    data-testid={`share-option-${["gallery", "camera", "contact", "location", "files", "links", "other-apps", "voice", "emoji", "paste"][idx]}`}
-                   disabled={uploading || !isOnline}
+                   disabled={!canSend || uploading || !isOnline}
                   style={{
                     width: 44,
                     height: 44,
@@ -2543,7 +2584,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             onClick={() => { setShowAttachTray(v => !v); setShowEmoji(false); }}
             aria-label={st.share_options ?? "Share options"}
             data-testid="button-share-options"
-            disabled={recording || !isOnline}
+            disabled={!canSend || recording || !isOnline}
             style={{
               position: "absolute",
               insetInlineStart: 8,
@@ -2576,7 +2617,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             onFocus={() => { setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 250); setShowAttachTray(false); }}
             placeholder={st.type_message}
             dir="auto"
-            disabled={recording || !isOnline}
+            disabled={!canSend || recording || !isOnline}
             style={{
               width: "100%",
               background: "#1c1c1c",
@@ -2614,7 +2655,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
               if (pending.length > 0) confirmPending();
               else sendMessage();
             }}
-            disabled={(!text.trim() && pending.length === 0) || sending || !isOnline}
+            disabled={!canSend || (!text.trim() && pending.length === 0) || sending || !isOnline}
             title={st.send}
             style={{ width: 46, height: 46, borderRadius: "50%", background: (text.trim() || pending.length > 0) ? GOLD : "#1c1c1c", border: "none", color: (text.trim() || pending.length > 0) ? "#000" : "#555", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Send size={20} style={dir === "rtl" ? { transform: "scaleX(-1)" } : undefined} />
@@ -3008,7 +3049,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                 ? `${st.uploading ?? "Uploading…"} (${pending.findIndex(p => p.status === "uploading") + 1}/${pending.length})`
                 : `${pending.length} file${pending.length !== 1 ? "s" : ""} ready`}
             </div>
-            <button onClick={() => void confirmPending()} disabled={!isOnline || uploading || pending.every(p => p.status === "uploading")} title={st.send}
+            <button onClick={() => void confirmPending()} disabled={!canSend || !isOnline || uploading || pending.every(p => p.status === "uploading")} title={st.send}
               style={{ width: 42, height: 42, borderRadius: "50%", background: uploading ? "#1c1c1c" : GOLD, border: "none", color: uploading ? "#555" : "#000", cursor: uploading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Send size={18} />
             </button>

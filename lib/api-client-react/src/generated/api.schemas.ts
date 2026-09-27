@@ -588,7 +588,31 @@ export interface AuthUser {
   wins: number;
   canClaimDaily: boolean;
   isAdmin?: boolean;
+  hasActiveSubscription?: boolean;
   isAdult: boolean | null;
+}
+
+export interface MessagingSubscription {
+  hasActiveSubscription: boolean;
+}
+
+export interface MessagingSubscriptionStatus {
+  /** True only for an administrator's manual activation. */
+  hasActiveSubscription: boolean;
+  /** True while manually activated or before ten lifetime authored messages. */
+  canSendMessages: boolean;
+  /**
+     * Remaining lifetime free sends; active sends still decrement this allowance.
+     * @minimum 0
+     * @maximum 10
+     */
+  freeMessagesRemaining: number;
+}
+
+export interface CitizenMessagingSubscription {
+  id: number;
+  username: string;
+  hasActiveSubscription: boolean;
 }
 
 export interface LeaderboardPlayer {

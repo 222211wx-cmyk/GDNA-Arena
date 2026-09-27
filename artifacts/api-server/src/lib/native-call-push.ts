@@ -5,6 +5,7 @@ import { validInstallation } from "./expo-push";
 import { logger } from "./logger";
 import { getNativeCallMessaging } from "./firebase-call-push";
 import { getCallStateDb } from "./call-state-db";
+import { isApnsVoipMock } from "./apns-voip-mode";
 import {
   nativeSessionHash, validNativeToken, nativeIncomingPayload, nativeFcmMessage,
   nativeApnsHeaders, nativeCallUUID, type NativeIncomingCall, type NativeProvider,
@@ -54,6 +55,7 @@ export async function removeNativeCallInstallation(userId: number, sid: string, 
 }
 
 export function nativeApnsConfigurationProblem(): string | null {
+  if (isApnsVoipMock()) return "APNs VoIP mock mode: no real delivery";
   if (process.env.APNS_VOIP_ENABLED !== "true") return "APNs VoIP disabled: set APNS_VOIP_ENABLED=true only after Apple provisioning";
   const required = ["APNS_VOIP_KEY_P8", "APNS_VOIP_KEY_ID", "APNS_VOIP_TEAM_ID", "APNS_VOIP_BUNDLE_ID", "APNS_VOIP_ENVIRONMENT"];
   const missing = required.filter(key => !process.env[key]?.trim());
@@ -125,6 +127,12 @@ async function deliver(userId: number, eventKey: string, payload: Record<string,
     "SELECT id,provider,token,session_hash FROM native_call_push_installations WHERE user_id=$1 AND session_hash=ANY($2::text[]) LIMIT 500",
     [userId, hashes]);
   for (const device of devices.rows) {
+    // Do not inspect Apple credentials, contact APNs, or record a successful
+    // delivery in mock mode. FCM remains completely independent.
+    if (device.provider === "apns-voip" && isApnsVoipMock()) {
+      logger.debug({ provider: "apns-voip", mode: "mock" }, "APNs mock: delivery skipped");
+      continue;
+    }
     // Apple allows VoIP pushes only for actual incoming calls, never cancellation.
     if (device.provider === "apns-voip" && payload.type !== "call") continue;
     // Historical registrations cannot reactivate APNs while the feature is disabled.

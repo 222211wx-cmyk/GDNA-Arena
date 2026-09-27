@@ -15,5 +15,6 @@ export interface AuthUser {
   wins: number;
   canClaimDaily: boolean;
   isAdmin?: boolean;
+  hasActiveSubscription?: boolean;
   isAdult: boolean | null;
 }

@@ -16,6 +16,8 @@ export const usersTable = pgTable("users", {
   lastDailyReward: timestamp("last_daily_reward", { withTimezone: true }),
   lastDmXpAt: timestamp("last_dm_xp_at", { withTimezone: true }), // DM XP cooldown cursor
   isAdmin: boolean("is_admin").notNull().default(false),
+  hasActiveSubscription: boolean("has_active_subscription").notNull().default(false),
+  freeMessagesUsed: integer("free_messages_used").notNull().default(0),
   honorCount: integer("honor_count").notNull().default(0),
   isMuted: boolean("is_muted").notNull().default(false),
   honorTitle: text("honor_title").notNull().default("Citizen"),
@@ -37,3 +39,13 @@ export const insertUserSchema = createInsertSchema(usersTable).omit({
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
+
+// Append-only administrator decisions; no billing provider or automatic grants.
+export const messagingSubscriptionAudit = pgTable("messaging_subscription_audit", {
+  id: serial("id").primaryKey(),
+  actorId: integer("actor_id").notNull(),
+  citizenId: integer("citizen_id").notNull(),
+  previousActive: boolean("previous_active").notNull(),
+  active: boolean("active").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -8,6 +8,42 @@
 import * as zod from 'zod';
 
 
+export const getMessagingSubscriptionResponseFreeMessagesRemainingMin = 0;
+export const getMessagingSubscriptionResponseFreeMessagesRemainingMax = 10;
+
+
+
+export const GetMessagingSubscriptionResponse = zod.object({
+  "hasActiveSubscription": zod.boolean().describe('True only for an administrator\'s manual activation.'),
+  "canSendMessages": zod.boolean().describe('True while manually activated or before ten lifetime authored messages.'),
+  "freeMessagesRemaining": zod.number().int().min(getMessagingSubscriptionResponseFreeMessagesRemainingMin).max(getMessagingSubscriptionResponseFreeMessagesRemainingMax).describe('Remaining lifetime free sends; active sends still decrement this allowance.')
+})
+
+
+export const ListMessagingSubscriptionsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "username": zod.string(),
+  "hasActiveSubscription": zod.boolean()
+})
+export const ListMessagingSubscriptionsResponse = zod.array(ListMessagingSubscriptionsResponseItem)
+
+
+
+
+
+export const UpdateMessagingSubscriptionParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const UpdateMessagingSubscriptionBody = zod.object({
+  "hasActiveSubscription": zod.boolean()
+})
+
+export const UpdateMessagingSubscriptionResponse = zod.object({
+  "hasActiveSubscription": zod.boolean()
+})
+
+
 /**
  * @summary Verify that an invitation is still ringing for the authenticated recipient
  */
@@ -874,6 +910,8 @@ export const RegisterBody = zod.object({
   "birthDate": zod.string().regex(registerBodyBirthDateRegExp)
 })
 
+export const registerResponseHasActiveSubscriptionDefault = false;
+
 export const RegisterResponse = zod.object({
   "id": zod.number().int(),
   "username": zod.string(),
@@ -883,6 +921,7 @@ export const RegisterResponse = zod.object({
   "wins": zod.number().int(),
   "canClaimDaily": zod.boolean(),
   "isAdmin": zod.boolean().optional(),
+  "hasActiveSubscription": zod.boolean().default(registerResponseHasActiveSubscriptionDefault),
   "isAdult": zod.boolean().nullable()
 })
 
@@ -896,6 +935,8 @@ export const LoginBody = zod.object({
   "rememberMe": zod.boolean().optional()
 })
 
+export const loginResponseHasActiveSubscriptionDefault = false;
+
 export const LoginResponse = zod.object({
   "id": zod.number().int(),
   "username": zod.string(),
@@ -905,6 +946,7 @@ export const LoginResponse = zod.object({
   "wins": zod.number().int(),
   "canClaimDaily": zod.boolean(),
   "isAdmin": zod.boolean().optional(),
+  "hasActiveSubscription": zod.boolean().default(loginResponseHasActiveSubscriptionDefault),
   "isAdult": zod.boolean().nullable()
 })
 
@@ -920,6 +962,8 @@ export const LogoutResponse = zod.object({
 /**
  * @summary Get current user
  */
+export const getMeResponseHasActiveSubscriptionDefault = false;
+
 export const GetMeResponse = zod.object({
   "id": zod.number().int(),
   "username": zod.string(),
@@ -929,6 +973,7 @@ export const GetMeResponse = zod.object({
   "wins": zod.number().int(),
   "canClaimDaily": zod.boolean(),
   "isAdmin": zod.boolean().optional(),
+  "hasActiveSubscription": zod.boolean().default(getMeResponseHasActiveSubscriptionDefault),
   "isAdult": zod.boolean().nullable()
 })
 

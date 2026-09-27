@@ -40,6 +40,18 @@ type Visible = Stored & { payload?: SecurePayload; error?: string };
 type Response = { room: { name?: string | null }; messages: Stored[] };
 type SendVariables = { payload: SecurePayload; fileUrl?: string; content?: string; clientMessageId?: string };
 type SendResponse = { message: Stored };
+type MessagingEntitlement = { hasActiveSubscription: boolean; canSendMessages: boolean; freeMessagesRemaining: number };
+const exhaustedNotice = "Contactez l'AMIS pour activer";
+function parseEntitlement(value: unknown): MessagingEntitlement {
+  if (!value || typeof value !== 'object' ||
+      typeof (value as MessagingEntitlement).hasActiveSubscription !== 'boolean' ||
+      typeof (value as MessagingEntitlement).canSendMessages !== 'boolean' ||
+      !Number.isSafeInteger((value as MessagingEntitlement).freeMessagesRemaining) ||
+      (value as MessagingEntitlement).freeMessagesRemaining < 0) {
+    throw new Error('Invalid messaging entitlement response');
+  }
+  return value as MessagingEntitlement;
+}
 const copy = {
   ar: { video: 'إرسال فيديو مشفّر', image: 'إرسال صورة مشفّرة', compress: 'تحضير الملف وتشفيره…', upload: 'رفع الملف المشفّر', failed: 'فشل الإرسال الآمن', retry: 'إعادة المحاولة', decrypt: 'تعذّر فك تشفير الفيديو', loading: 'فك تشفير الفيديو…', permission: 'اسمح بالوصول إلى الصور والفيديو لإرسال ملف مشفّر.' },
   en: { video: 'Send encrypted video', image: 'Send encrypted image', compress: 'Preparing and encrypting media…', upload: 'Uploading encrypted file', failed: 'Secure send failed', retry: 'Retry', decrypt: 'Unable to decrypt video', loading: 'Decrypting video…', permission: 'Allow photo and video access to send encrypted media.' },
@@ -105,8 +117,22 @@ export default function Conversation() {
   const router = useRouter();
   const inset = useSafeAreaInsets();
   const { user } = useAuth();
-  const { isOnline } = useOnline();
   const queryClient = useQueryClient();
+  const subscriptionKey = ['messaging-subscription', user?.id];
+  const subscription = useQuery({
+    queryKey: subscriptionKey,
+    enabled: !!user,
+    queryFn: async () => parseEntitlement(await apiGet<unknown>('/messages/subscription')),
+    refetchInterval: 10000,
+    staleTime: 0,
+  });
+  const canSend = subscription.data?.canSendMessages === true && !subscription.isError;
+  const canSendNow = () => queryClient.getQueryState(subscriptionKey)?.status === 'success' &&
+    queryClient.getQueryData<MessagingEntitlement>(subscriptionKey)?.canSendMessages === true;
+  const subscriptionNotice = I18nManager.isRTL
+    ? 'اشتراك المراسلة غير نشط. تواصل مع الإدارة لتفعيل الإرسال. القراءة والمكالمات متاحة.'
+    : 'Messaging subscription inactive. Contact an administrator to enable sending. Reading and calls remain available.';
+  const { isOnline } = useOnline();
   const [text, setText] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -239,6 +265,7 @@ export default function Conversation() {
 
   const send = useMutation({
     mutationFn: (variables: SendVariables) => {
+      if (!canSendNow()) throw new Error(subscriptionNotice);
       const post = (content: string) => apiRequest<SendResponse, { content: string; fileUrl?: string; clientMessageId?: string }>(
         'POST', `/messages/rooms/${id}/send`,
         { content, ...(variables.fileUrl ? { fileUrl: variables.fileUrl } : {}),
@@ -251,6 +278,12 @@ export default function Conversation() {
       }, id);
     },
     onSuccess: (result, variables) => {
+      queryClient.setQueryData<MessagingEntitlement>(subscriptionKey, previous => {
+        if (!previous || previous.hasActiveSubscription) return previous;
+        const remaining = Math.max(0, previous.freeMessagesRemaining - 1);
+        return { ...previous, freeMessagesRemaining: remaining, canSendMessages: remaining > 0 };
+      });
+      void subscription.refetch();
       setRetrySend(null);
       setUploadError(null);
       if (variables.payload.kind === 'text') {
@@ -263,6 +296,7 @@ export default function Conversation() {
       if (user) void queryClient.invalidateQueries({ queryKey: ['amis-rooms', user.id] });
     },
     onError: (error, variables) => {
+      void subscription.refetch();
       if (variables.payload.kind === 'attachment') {
         setRetrySend(variables);
         setUploadError(error instanceof Error ? error.message : t.failed);
@@ -272,10 +306,10 @@ export default function Conversation() {
 
   const sendText = () => {
     const value = text.trim();
-    if (value && !send.isPending) send.mutate({ payload: { kind: 'text', text: value } });
+    if (canSend && value && !send.isPending) send.mutate({ payload: { kind: 'text', text: value } });
   };
   const pickMedia = async (kind: 'image' | 'video') => {
-    if (send.isPending || uploadProgress !== null) return;
+    if (!canSendNow() || send.isPending || uploadProgress !== null) return;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
@@ -292,8 +326,13 @@ export default function Conversation() {
       const upload = async () => {
         setUploadError(null);
         setRetrySend(null);
-        setUploadProgress(0);
         try {
+          const current = await subscription.refetch();
+          if (current.isError || !current.data?.canSendMessages) throw new Error(
+            current.data?.freeMessagesRemaining === 0 && !current.data.hasActiveSubscription
+              ? exhaustedNotice : subscriptionNotice,
+          );
+          setUploadProgress(0);
           const mime = asset.mimeType ?? 'image/jpeg';
           const name = asset.fileName ?? `${kind}-${Date.now()}.${kind === 'video' ? 'mp4' : mime.split('/')[1] ?? 'jpg'}`;
           const update = (value: number) => setUploadProgress(value);
@@ -360,28 +399,37 @@ export default function Conversation() {
           );
         }}
       />
+      <View style={styles.status}>
+        <Typography variant="muted">{subscription.isPending ? 'Checking messaging subscription…'
+          : subscription.isError ? 'Unable to verify messaging subscription. Sending is unavailable; reading and calls remain available.'
+          : !canSend ? subscription.data?.freeMessagesRemaining === 0 && !subscription.data.hasActiveSubscription
+            ? exhaustedNotice : subscriptionNotice
+          : subscription.data?.hasActiveSubscription ? 'Messaging subscription active.'
+          : `${subscription.data?.freeMessagesRemaining} free messages remaining`}</Typography>
+        {subscription.isError && <Button variant="outline" onPress={() => void subscription.refetch()}>Retry</Button>}
+      </View>
       {(uploadProgress !== null || uploadError) && <View style={styles.status}>
         <Typography variant="muted">{uploadError ?? `${uploadProgress! < 0.3 ? t.compress : t.upload} ${Math.round(uploadProgress! * 100)}%`}</Typography>
         {uploadError && (retrySend || retryUpload) && <Button variant="outline" onPress={() => {
           if (retrySend) send.mutate(retrySend);
           else if (retryUpload) void retryUpload();
-        }} disabled={send.isPending}>{t.retry}</Button>}
+        }} disabled={!canSend || send.isPending}>{t.retry}</Button>}
       </View>}
       <View style={[styles.composer, {
         borderColor: colors.border,
         paddingBottom: Math.max(inset.bottom, 8),
         flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
       }]}>
-        <Button size="icon" variant="outline" disabled={!isOnline || send.isPending || uploadProgress !== null} accessibilityLabel={t.image} onPress={() => void pickMedia('image')}>
+        <Button size="icon" variant="outline" disabled={!canSend || !isOnline || send.isPending || uploadProgress !== null} accessibilityLabel={t.image} onPress={() => void pickMedia('image')}>
           <Ionicons name="image-outline" color={colors.foreground} size={20} />
         </Button>
-        <Button size="icon" variant="outline" disabled={!isOnline || send.isPending || uploadProgress !== null} accessibilityLabel={t.video} onPress={() => void pickMedia('video')}>
+        <Button size="icon" variant="outline" disabled={!canSend || !isOnline || send.isPending || uploadProgress !== null} accessibilityLabel={t.video} onPress={() => void pickMedia('video')}>
           <Ionicons name="videocam-outline" color={colors.foreground} size={20} />
         </Button>
         <Input value={text} onChangeText={setText} multiline placeholder="Encrypted message"
           textAlign={I18nManager.isRTL ? 'right' : 'left'}
           style={[styles.input, { writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr' }]} />
-        <Button size="icon" disabled={!isOnline || !text.trim() || send.isPending} loading={send.isPending} onPress={sendText}>
+        <Button size="icon" disabled={!canSend || !isOnline || !text.trim() || send.isPending} loading={send.isPending} onPress={sendText}>
           <Ionicons name="send" color={colors.primaryForeground} size={18} />
         </Button>
       </View>

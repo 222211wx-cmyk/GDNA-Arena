@@ -41,6 +41,7 @@ import type {
   CitizenListListings200,
   CitizenListListingsParams,
   CitizenMap200,
+  CitizenMessagingSubscription,
   CitizenMetadata200,
   CitizenSocialAssistantInput,
   CitizenSocialListing,
@@ -84,6 +85,8 @@ import type {
   HealthStatus,
   LeaderboardResponse,
   LoginInput,
+  MessagingSubscription,
+  MessagingSubscriptionStatus,
   MissedCallsResponse,
   MissedCallsSeenInput,
   NativeCallPushInstallation,
@@ -122,6 +125,279 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetMessagingSubscriptionUrl = () => {
+
+
+
+
+  return `/api/messages/subscription`
+}
+
+export const getMessagingSubscription = async ( options?: Parameters<typeof customFetch>[1]): Promise<MessagingSubscriptionStatus> => {
+
+  return customFetch<MessagingSubscriptionStatus>(getGetMessagingSubscriptionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMessagingSubscriptionQueryKey = () => {
+    return [
+    `/api/messages/subscription`
+    ] as const;
+    }
+
+
+export const getGetMessagingSubscriptionQueryOptions = <TData = Awaited<ReturnType<typeof getMessagingSubscription>>, TError = ErrorType<void>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMessagingSubscription>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMessagingSubscriptionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMessagingSubscription>>> = ({ signal }) => getMessagingSubscription({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMessagingSubscription>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMessagingSubscriptionQueryResult = NonNullable<Awaited<ReturnType<typeof getMessagingSubscription>>>
+export type GetMessagingSubscriptionQueryError = ErrorType<void>
+
+
+export function useGetMessagingSubscription<TData = Awaited<ReturnType<typeof getMessagingSubscription>>, TError = ErrorType<void>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMessagingSubscription>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMessagingSubscription>>,
+          TError,
+          Awaited<ReturnType<typeof getMessagingSubscription>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMessagingSubscription<TData = Awaited<ReturnType<typeof getMessagingSubscription>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMessagingSubscription>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMessagingSubscription>>,
+          TError,
+          Awaited<ReturnType<typeof getMessagingSubscription>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMessagingSubscription<TData = Awaited<ReturnType<typeof getMessagingSubscription>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMessagingSubscription>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetMessagingSubscription<TData = Awaited<ReturnType<typeof getMessagingSubscription>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMessagingSubscription>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetMessagingSubscriptionQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListMessagingSubscriptionsUrl = () => {
+
+
+
+
+  return `/api/admin/messaging-subscriptions`
+}
+
+export const listMessagingSubscriptions = async ( options?: Parameters<typeof customFetch>[1]): Promise<CitizenMessagingSubscription[]> => {
+
+  return customFetch<CitizenMessagingSubscription[]>(getListMessagingSubscriptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMessagingSubscriptionsQueryKey = () => {
+    return [
+    `/api/admin/messaging-subscriptions`
+    ] as const;
+    }
+
+
+export const getListMessagingSubscriptionsQueryOptions = <TData = Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError = ErrorType<void>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMessagingSubscriptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMessagingSubscriptions>>> = ({ signal }) => listMessagingSubscriptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListMessagingSubscriptionsQueryResult = NonNullable<Awaited<ReturnType<typeof listMessagingSubscriptions>>>
+export type ListMessagingSubscriptionsQueryError = ErrorType<void>
+
+
+export function useListMessagingSubscriptions<TData = Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError = ErrorType<void>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMessagingSubscriptions>>,
+          TError,
+          Awaited<ReturnType<typeof listMessagingSubscriptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMessagingSubscriptions<TData = Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMessagingSubscriptions>>,
+          TError,
+          Awaited<ReturnType<typeof listMessagingSubscriptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMessagingSubscriptions<TData = Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListMessagingSubscriptions<TData = Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMessagingSubscriptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListMessagingSubscriptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateMessagingSubscriptionUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/messaging-subscriptions/${id}`
+}
+
+export const updateMessagingSubscription = async (id: number,
+    messagingSubscription: MessagingSubscription, options?: Parameters<typeof customFetch>[1]): Promise<MessagingSubscription> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MessagingSubscription>(getUpdateMessagingSubscriptionUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(messagingSubscription)
+  }
+);}
+
+
+
+
+
+export const getUpdateMessagingSubscriptionMutationKey = () => ['updateMessagingSubscription'] as const;
+
+export const getUpdateMessagingSubscriptionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMessagingSubscription>>, TError,UpdateMessagingSubscriptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMessagingSubscription>>, TError,UpdateMessagingSubscriptionMutationVariables, TContext> => {
+
+const mutationKey = getUpdateMessagingSubscriptionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMessagingSubscription>>, UpdateMessagingSubscriptionMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateMessagingSubscription(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMessagingSubscriptionMutationResult = NonNullable<Awaited<ReturnType<typeof updateMessagingSubscription>>>
+    export type UpdateMessagingSubscriptionMutationBody = BodyType<MessagingSubscription>
+    export type UpdateMessagingSubscriptionMutationError = ErrorType<void>
+    export type UpdateMessagingSubscriptionMutationVariables = {id: number;data: BodyType<MessagingSubscription>}
+
+    export const useUpdateMessagingSubscription = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMessagingSubscription>>, TError,UpdateMessagingSubscriptionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateMessagingSubscription>>,
+        TError,
+        UpdateMessagingSubscriptionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateMessagingSubscriptionMutationOptions(options), queryClient);
+    }
 
 export const getCheckNativeCallPushCallUrl = (id: string,) => {
 

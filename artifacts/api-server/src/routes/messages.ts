@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { CLIENT_MESSAGE_ID, messageRequestHash, messageReplay, saveMessageReceipt } from "../lib/message-idempotency";
 import { expectedSenderGuard } from "../lib/message-sender-guard";
+import { requireMessagingSubscription } from "../middleware/require-messaging-subscription";
+import { MESSAGING_ACTIVATION_MESSAGE, reserveMessageSend } from "../lib/messaging-quota";
 import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
@@ -190,7 +192,7 @@ function uploadAllowed(userId: number): boolean {
 }
 
 // POST /messages/upload — upload one attachment, returns its URL + kind
-router.post("/messages/upload", async (req, res): Promise<void> => {
+router.post("/messages/upload", requireMessagingSubscription, async (req, res): Promise<void> => {
   const uploaderId = req.session?.userId;
   if (!uploaderId) { res.status(401).json({ error: "Login required" }); return; }
   let intent: MessageUploadIntent;
@@ -788,7 +790,7 @@ router.post("/messages/rooms", async (req, res): Promise<void> => {
 });
 
 // ── POST /messages/arena-withdraw — send a fixed prize request to Arena admin ─
-router.post("/messages/arena-withdraw", async (req, res): Promise<void> => {
+router.post("/messages/arena-withdraw", requireMessagingSubscription, async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Login required" }); return; }
 
@@ -861,6 +863,10 @@ router.post("/messages/arena-withdraw", async (req, res): Promise<void> => {
       );
     }
 
+    if (!await reserveMessageSend(client, userId)) {
+      await client.query("ROLLBACK");
+      res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
+    }
     const insertedMessage = await client.query(
       `INSERT INTO dm_messages (room_id, user_id, username, content, type)
        VALUES ($1, $2, $3, $4, 'text')
@@ -1199,6 +1205,10 @@ router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): P
         res.status(409).json({ error: "Secure device keys changed; refresh and retry" });
         return;
       }
+      if (!await reserveMessageSend(client, userId)) {
+        await client.query("ROLLBACK");
+        res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
+      }
       const inserted = await client.query(
         `INSERT INTO dm_messages
            (room_id, user_id, username, content, audio_url, video_url, file_url, type, reply_to_id, expires_at)
@@ -1223,12 +1233,33 @@ router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): P
       client.release();
     }
   } else {
-    [msg] = await db.insert(dmMessages).values({
-      roomId, userId, username: me.username,
-      content: content?.trim() ?? null,
-      audioUrl: audioUrl ?? null, videoUrl: videoUrl ?? null,
-      fileUrl: fileUrl ?? null, type, replyToId: replyToId ?? null, expiresAt,
-    }).returning();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      if (!await reserveMessageSend(client, userId)) {
+        await client.query("ROLLBACK");
+        res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
+      }
+      const inserted = await client.query(
+        `INSERT INTO dm_messages
+           (room_id, user_id, username, content, audio_url, video_url, file_url, type, reply_to_id, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING id, room_id AS "roomId", user_id AS "userId", username,
+                   content, audio_url AS "audioUrl", video_url AS "videoUrl",
+                   file_url AS "fileUrl", type, is_read AS "isRead",
+                   reply_to_id AS "replyToId", expires_at AS "expiresAt",
+                   created_at AS "createdAt"`,
+        [roomId, userId, me.username, content?.trim() ?? null, audioUrl ?? null,
+          videoUrl ?? null, fileUrl ?? null, type, replyToId ?? null, expiresAt],
+      );
+      msg = inserted.rows[0];
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   // XP reward: atomic conditional UPDATE — only awards when:

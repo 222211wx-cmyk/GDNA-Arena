@@ -11,13 +11,18 @@ Verify the native mobile production build before declaring a shared release read
 
 Standalone Expo production export can validate native bundle transforms without starting another HTTP Metro server.
 
+Validate the release API origin from EAS build-profile variables, not the local
+preview workflow or Replit publishing environment.
+
+**Why:** A signed EAS APK compiled successfully without the public API origin;
+the native API client then rejected all server requests. Preview and website
+publishing injected that origin separately, masking the mobile release failure.
+
+**How to apply:** Obtain the current published URL through deployment metadata,
+configure the public origin for EAS, and exercise API URL resolution with
+`__DEV__=false` before building. Compilation and signing are not connectivity tests.
+
 Background media capabilities require an installed native build and physical-phone checks; Expo Go, browser screenshots, and Hermes exports are not evidence of locked-screen playback.
-
-Direct EAS builds need their own public API origin; do not assume the Replit publishing builder's environment reaches EAS.
-
-**Why:** A direct Android preview build resolved an empty EAS environment, bypassing the custom builder that normally supplies the API host.
-
-**How to apply:** Obtain the current published URL through deployment metadata and configure the EAS profile/environment explicitly before uploading. Never substitute a workspace development host in an installable release.
 
 **Why:** Background entitlements and Android media services are native build configuration, while operating systems govern interruptions and lock-screen behavior.
 

@@ -46,7 +46,7 @@ class FullScreenIntentModule(context: ReactApplicationContext) : ReactContextBas
 
 class FullScreenIntentPackage : ReactPackage {
   override fun createNativeModules(context: ReactApplicationContext): List<NativeModule> =
-    listOf(FullScreenIntentModule(context))
+    listOf(FullScreenIntentModule(context), CallTelecomModule(context))
 
   override fun createViewManagers(context: ReactApplicationContext): List<ViewManager<*, *>> =
     emptyList()

@@ -15,6 +15,7 @@ import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { COMMUNITY_T } from "@/i18n/community-pages";
+import { MessagingSubscriptions } from "@/components/MessagingSubscriptions";
 
 type Panel = {
   id: string;
@@ -137,6 +138,7 @@ export default function AmisPage() {
         </div>
       </motion.div>
 
+      <MessagingSubscriptions />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {PANELS.map((panel, i) => (
           <motion.div

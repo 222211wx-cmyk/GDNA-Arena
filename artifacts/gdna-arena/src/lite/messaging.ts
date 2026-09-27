@@ -9,6 +9,7 @@
 import { apiPath, safeRead, postJson, ApiError } from "./api";
 import { OfflineQueue, drainQueue, type QueuedMessage, type DrainResult } from "./offline-queue";
 import type { SessionUser } from "./session";
+import { exhaustedMessagingNotice, parseMessagingEntitlement, type MessagingEntitlement } from "../lib/messaging-subscription-copy";
 
 type E2EE = typeof import("../lib/amis-e2ee");
 let e2eePromise: Promise<E2EE> | null = null;
@@ -99,6 +100,12 @@ export class RecipientNotSetUpError extends Error {
   }
 }
 
+/** Live entitlement only: never read an offline snapshot of administrator grants. */
+export async function fetchMessagingSubscription(): Promise<MessagingEntitlement> {
+  const result = await safeRead<unknown>("/api/messages/subscription");
+  return parseMessagingEntitlement(result.data);
+}
+
 /**
  * Compose + send (or queue) a text message. Always encrypts first. If offline, the
  * ciphertext is queued for background sync. Refuses to queue when a recipient has no
@@ -110,6 +117,9 @@ export async function sendText(
   text: string,
   opts: { online: boolean } = { online: navigator.onLine },
 ): Promise<{ status: "sent" | "queued"; clientMessageId: string }> {
+  if (!(await fetchMessagingSubscription()).canSendMessages) {
+    throw new ApiError(403, exhaustedMessagingNotice);
+  }
   const e2ee = await loadE2EE();
   await e2ee.ensureDeviceIdentity(user.id);
 
@@ -148,6 +158,12 @@ export async function sendText(
     queue.close();
     return { status: "sent", clientMessageId };
   } catch (err) {
+    // Permanent server denials must never be disguised as successful offline queuing.
+    if (err instanceof ApiError && err.status >= 400 && err.status < 500 &&
+        ![408, 409, 429].includes(err.status)) {
+      queue.close();
+      throw err;
+    }
     // Key-change 409: do not silently re-encrypt — queue as needs-review.
     if (err instanceof ApiError && err.status === 409) {
       const record = await queue.enqueue({

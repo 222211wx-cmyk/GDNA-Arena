@@ -1,4 +1,4 @@
-import { Platform, AppState, NativeModules } from 'react-native';
+import { Platform, AppState, NativeModules, DeviceEventEmitter } from 'react-native';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
@@ -32,6 +32,14 @@ let binding: { id: number; controller: Controller; navigate: () => void } | null
 let actionBusy = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let lastOwnedCall: string | null = null;
+
+type AndroidTelecom = {
+  register(): Promise<void>;
+  create(id: string, uuid: string, label: string, incoming: boolean, lifetime: number): Promise<void>;
+  startAudio(id: string): Promise<void>;
+  end(id: string): Promise<void>;
+  drain(): Promise<{ callId: string; kind: string }[]>;
+};
 type FullScreenIntentBridge = { canUse: () => Promise<boolean>; openSettings: () => Promise<void> };
 export class FullScreenIntentAccessError extends Error {
   constructor(message: string) { super(message); this.name = 'FullScreenIntentAccessError'; }
@@ -70,6 +78,10 @@ export function resetCallAccount() {
   binding = null;
   lastOwnedCall = null;
   audioActive = false;
+  if (Platform.OS === 'android' && NativeModules.GDNACallTelecom) {
+    void androidTelecom().end('').catch(diagnostic);
+    androidCalls.clear();
+  }
   pending.clear();
   processed.clear();
   for (const uuid of invitations.keys()) void dismiss(uuid).catch(diagnostic);
@@ -99,6 +111,7 @@ export async function enableNativeCalls(userId: number) {
   enabledUser = userId;
   try {
   if (Platform.OS === 'android') {
+    await androidTelecom().register();
     const permission = await notifee.requestPermission();
     if (!current()) throw new Error('Call registration was cancelled.');
     if (permission.authorizationStatus < 1) throw new Error('Allow phone notifications in Settings to receive calls.');
@@ -161,9 +174,11 @@ async function dismiss(uuid: string) {
   const timer = timers.get(uuid);
   if (timer) clearTimeout(timer);
   timers.delete(uuid);
+  const payload = invitations.get(uuid);
   invitations.delete(uuid);
   pending.delete(uuid);
   if (Platform.OS === 'android' && notifee) await notifee.cancelNotification(uuid);
+  if (Platform.OS === 'android' && payload) await endAndroidCall(payload.callId);
   if (Platform.OS === 'ios' && callkeep) callkeep.endCall(uuid);
 }
 function remember(data: unknown) {
@@ -176,16 +191,34 @@ function remember(data: unknown) {
   return payload;
 }
 async function receive(data: Record<string, unknown> | undefined) {
-  if (data?.type === 'call-ended' && typeof data.callUUID === 'string') { await dismiss(data.callUUID); return; }
+  if (data?.type === 'call-ended' && typeof data.callUUID === 'string') {
+    const payload = invitations.get(data.callUUID.toLowerCase());
+    // Confirm identity even for termination pushes; the authenticated server status
+    // remains authoritative for a stale/out-of-order invitation.
+    if (payload) {
+      await loadSessionCookie();
+      const account = await apiGet<AuthUser>('/auth/me');
+      if (String(account.id) !== payload.recipientId) return;
+      if (binding?.controller.call?.callId === payload.callId) binding.controller.end();
+    }
+    await dismiss(data.callUUID); return;
+  }
   const current = generation.capture();
   const payload = parseCallPush(data);
   if (!payload || Platform.OS !== 'android') return;
   // Preferences are account-scoped and checked even in headless execution.
   if (await SecureStore.getItemAsync(enabledKey(Number(payload.recipientId))) !== 'yes') return;
   if (!current()) return;
+  if (!await verified(payload) || !current()) return;
   const fullScreen = await canUseFullScreenIntent();
+  if (!fullScreen) throw new FullScreenIntentAccessError('Full-screen call access is disabled. Enable it in Android Settings.');
   if (!current()) return;
+  if (androidCalls.has(payload.callId)) return; // Do not re-ring an accepted duplicate.
+  await androidTelecom().create(payload.callId, payload.callUUID, payload.callerName, true, Date.parse(payload.expiresAt) - Date.now());
+  androidCalls.set(payload.callId, payload.callUUID);
+  if (!current()) { await endAndroidCall(payload.callId); return; }
   remember(data);
+  try {
   await notifee.createChannel({ id: CALL_CHANNEL_ID, name: 'Incoming calls', importance: 4, sound: CALL_SOUND, vibration: true });
   if (!current()) return;
   await notifee.displayNotification({
@@ -195,13 +228,18 @@ async function receive(data: Record<string, unknown> | undefined) {
       channelId: CALL_CHANNEL_ID, category: 'call', importance: 4, ongoing: true, autoCancel: false,
       sound: CALL_SOUND, loopSound: true, timeoutAfter: Date.parse(payload.expiresAt) - Date.now(),
       pressAction: { id: 'open', launchActivity: 'default' },
-       ...(fullScreen ? { fullScreenAction: { id: 'open', launchActivity: 'default' } } : {}),
+       ...(fullScreen ? { fullScreenAction: { id: 'open', launchActivity: `${Constants.expoConfig?.android?.package}.GDNACallActivity` } } : {}),
       actions: [
         { title: 'Decline', pressAction: { id: 'decline' } },
         { title: 'Accept', pressAction: { id: 'answer', launchActivity: 'default' } },
       ],
     },
   });
+  if (!current()) await dismiss(payload.callUUID);
+  } catch (error) {
+    await dismiss(payload.callUUID);
+    throw error;
+  }
 }
 async function verified(payload: CallPush, established = false) {
   const current = generation.capture();
@@ -275,6 +313,7 @@ export function bindCallController(id: number, controller: Controller, navigate:
   }
   lastOwnedCall = controller.call?.callId ?? null;
   void drain().catch(diagnostic);
+  if (Platform.OS === 'android') void drainAndroidActions().catch(diagnostic);
   return () => { if (binding === owner) binding = null; };
 }
 export function hasNativeCallAudio() { return Platform.OS === 'ios' && [...invitations.keys()].some(uuid => processed.has(`${uuid}:answer`)); }
@@ -322,7 +361,10 @@ try {
   if (Platform.OS === 'android') {
     messaging = require('@react-native-firebase/messaging').default();
     notifee = require('@notifee/react-native').default;
-    messaging.setBackgroundMessageHandler(async (message: any) => { await receive(message.data); });
+    DeviceEventEmitter.addListener('GDNACallAction', () => { void drainAndroidActions().catch(diagnostic); });
+    messaging.setBackgroundMessageHandler(async (message: any) => {
+      try { await receive(message.data); } catch (error) { diagnostic(error); throw error; }
+    });
     messaging.onMessage((message: any) => receive(message.data).catch(diagnostic));
     messaging.onTokenRefresh((token: string) => { if (enabledUser) void registerToken(enabledUser, token).catch(diagnostic); });
     const event = async ({ detail }: any) => {
@@ -354,5 +396,66 @@ try {
       if (e.name === 'RNVoipPushRemoteNotificationReceivedEvent') remember(e.data);
     }));
   }
-  AppState.addEventListener('change', state => { if (state === 'active') void drain().catch(diagnostic); });
+  AppState.addEventListener('change', state => {
+    if (state === 'active') {
+      void drain().catch(diagnostic);
+      if (Platform.OS === 'android') void drainAndroidActions().catch(diagnostic);
+    }
+  });
 } catch (error) { diagnostic(error); }
+
+const androidCalls = new Map<string, string>();
+
+export async function prepareAndroidCall(callId: string, peer: string, incoming: boolean) {
+  if (Platform.OS !== 'android') return;
+  const current = generation.capture();
+  let uuid = androidCalls.get(callId);
+  if (!uuid) {
+    uuid = [...invitations.values()].find(p => p.callId === callId)?.callUUID ?? Crypto.randomUUID();
+    androidCalls.set(callId, uuid);
+  }
+  try {
+    await androidTelecom().create(callId, uuid, peer, incoming, 60000);
+    if (!current()) { await endAndroidCall(callId); throw new Error('Call account changed.'); }
+  } catch (error) { androidCalls.delete(callId); throw error; }
+}
+
+async function drainAndroidActions() {
+  if (Platform.OS !== 'android' || nativeDrainBusy) return;
+  nativeDrainBusy = true;
+  try {
+    for (const event of await androidTelecom().drain()) {
+      const owner = binding;
+      const payload = [...invitations.values()].find(p => p.callId === event.callId);
+      if (event.kind === 'answer' && payload) await action(payload.callUUID, 'answer');
+      else if (event.kind === 'answer' && owner?.controller.call?.callId === event.callId) {
+        if (AppState.currentState === 'active' && owner.controller.call.phase === 'incoming') await owner.controller.answer();
+      } else {
+        if (event.kind === 'interrupted' || event.kind === 'unavailable')
+          diagnostic(new Error('Android interrupted the call or could not allocate Telecom audio.'));
+        if (owner?.controller.call?.callId === event.callId) owner.controller.end();
+        if (payload) await action(payload.callUUID, 'end');
+      }
+    }
+  } finally { nativeDrainBusy = false; }
+}
+
+export async function startAndroidCallAudio(callId: string) {
+  if (Platform.OS !== 'android') return;
+  if (AppState.currentState !== 'active') throw new Error('Open the call screen to enable microphone audio.');
+  await androidTelecom().startAudio(callId);
+}
+
+export async function endAndroidCall(callId: string) {
+  if (Platform.OS !== 'android') return;
+  androidCalls.delete(callId);
+  await androidTelecom().end(callId);
+}
+
+let nativeDrainBusy = false;
+
+function androidTelecom(): AndroidTelecom {
+  const bridge = NativeModules.GDNACallTelecom as AndroidTelecom | undefined;
+  if (!bridge) throw new Error('Android Telecom is unavailable. Install an updated native build.');
+  return bridge;
+}

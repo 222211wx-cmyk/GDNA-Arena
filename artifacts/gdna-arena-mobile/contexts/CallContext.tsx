@@ -11,12 +11,16 @@ type Calls = ReturnType<typeof useAgoraCalls>;
 const CallContext = createContext<Calls | null>(null);
 // Do not load native Agora / crypto modules in Expo Go or a browser.
 let nativeHook: typeof useAgoraCalls | null = null;
+let initializationError: string | undefined;
 if (Platform.OS !== 'web' && Constants.executionEnvironment !== 'storeClient') {
   try {
     require('react-native-agora');
     nativeHook = require('@/lib/agora-calls').useAgoraCalls;
   }
-  catch { nativeHook = null; }
+  catch {
+    nativeHook = null;
+    initializationError = 'The native call engine could not load in this installed build. An updated APK is required; this is not an internet or account error.';
+  }
 }
 function NativeOwner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -28,7 +32,7 @@ function NativeOwner({ children }: { children: ReactNode }) {
 }
 function UnavailableOwner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const calls = useUnavailableCalls(user, () => {});
+  const calls = useUnavailableCalls(user, () => {}, initializationError);
   return <CallContext.Provider value={calls as Calls}>{children}</CallContext.Provider>;
 }
 export function CallProvider({ children }: { children: ReactNode }) {

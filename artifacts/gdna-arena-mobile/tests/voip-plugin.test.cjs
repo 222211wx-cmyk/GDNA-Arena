@@ -4,7 +4,7 @@ const withVoipPush = require('../plugins/withVoipPush');
 
 // Execute the registered mod actions without generating native projects.
 async function runMod(platform, mod, results, iosVoipEnabled = true) {
-  const config = withVoipPush({ name: 'Plugin test', slug: 'plugin-test', extra: { iosVoipEnabled } });
+  const config = withVoipPush({ name: 'Plugin test', slug: 'plugin-test', extra: { iosVoipEnabled }, android: { package: 'com.gdna.test' } });
   const result = await config.mods[platform][mod]({
     ...config,
     modResults: results,
@@ -26,6 +26,24 @@ test('iOS merges modes idempotently and preserves unrelated configuration', asyn
   assert.equal(once.CFBundleAllowMixedLocalizations, true);
 });
 
+test('Android leaves Firebase notification defaults to the library idempotently', async () => {
+  const name = 'com.google.firebase.messaging.default_notification_channel_id';
+  const initial = { manifest: { application: [{ $: {}, 'meta-data': [
+    { $: { 'android:name': name, 'android:value': 'custom-calls', 'tools:replace': 'android:resource' } },
+    { $: { 'android:name': 'unrelated', 'android:value': 'keep' } },
+    { $: { 'android:name': 'com.google.firebase.messaging.default_notification_color', 'android:resource': '@color/notification_icon_color' } },
+  ] }] } };
+  const once = await runMod('android', 'manifest', structuredClone(initial));
+  const twice = await runMod('android', 'manifest', structuredClone(once));
+  assert.deepEqual(twice, once);
+  const entries = once.manifest.application[0]['meta-data'];
+  assert.deepEqual(entries, [initial.manifest.application[0]['meta-data'][1]]);
+  const empty = await runMod('android', 'manifest', { manifest: { application: [{ $: {} }] } });
+  assert.deepEqual(empty.manifest.application[0]['meta-data'], []);
+  assert.equal(empty.manifest.application[0].$['tools:replace'],
+    'android:allowBackup,android:supportsRtl,android:label,android:theme,android:name,android:icon');
+});
+
 test('Android preserves permission attributes and adds no duplicates', async () => {
   const existing = {
     $: { 'android:name': 'android.permission.RECORD_AUDIO', 'android:maxSdkVersion': '35' },
@@ -35,14 +53,14 @@ test('Android preserves permission attributes and adds no duplicates', async () 
   const twice = await runMod('android', 'manifest', structuredClone(once));
   assert.deepEqual(twice, once);
   assert.deepEqual(once.manifest['uses-permission'][0], existing);
-  assert.deepEqual(once.manifest.application[0].$, initial.manifest.application[0].$);
-  assert.equal(once.manifest.application[0].service.length, 3);
+  assert.ok(once.manifest.application[0].$['tools:replace'].includes('android:name'));
+  assert.equal(once.manifest.application[0].service.length, 4);
   const services = once.manifest.application[0].service;
   assert.equal(services.find(s => s.$['android:name'] === 'app.notifee.core.ForegroundService')
     .$['android:foregroundServiceType'], 'phoneCall');
-  assert.equal(services.find(s => s.$['android:name'] === 'io.wazo.callkeep.VoiceConnectionService')
+  assert.equal(services.find(s => s.$['android:name'] === 'com.gdna.test.GDNACallConnectionService')
     .$['android:permission'], 'android.permission.BIND_TELECOM_CONNECTION_SERVICE');
-  assert.equal(once.manifest['uses-permission'].length, 6);
+  assert.equal(once.manifest['uses-permission'].length, 8);
   assert.equal(once.manifest['uses-permission'].filter(
     permission => permission.$['android:name'] === 'android.permission.USE_FULL_SCREEN_INTENT',
   ).length, 1);
@@ -53,7 +71,7 @@ test('handles absent mode and permission lists without adding entitlements', asy
   assert.equal(config.mods.ios.entitlements, undefined);
   assert.equal((await runMod('ios', 'infoPlist', {})).UIBackgroundModes.length, 3);
   assert.equal((await runMod('android', 'manifest', { manifest: { application: [{ $: {} }] } }))
-    .manifest['uses-permission'].length, 6);
+    .manifest['uses-permission'].length, 8);
 });
 
 test('default app disables iOS mods without disabling Android call setup', async () => {
@@ -75,6 +93,33 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { modifyAppDelegate, modifyBridgingHeader, updateProjectBridge } = require('../plugins/voip-native');
+
+test('Android generates dedicated Telecom implementation idempotently without entitlements', async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'gdna-telecom-'));
+  try {
+    const folder = path.join(temp, 'app/src/main/java/com/gdna/test');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'MainApplication.kt'), '// add(MyReactNativePackage())');
+    const config = withVoipPush({ name: 'Plugin test', slug: 'plugin-test', android: { package: 'com.gdna.test' } });
+    const invoke = () => config.mods.android.dangerous({
+      ...config, modResults: {}, modRequest: { platformProjectRoot: temp, platform: 'android', modName: 'dangerous' },
+    });
+    await invoke();
+    const read = () => ['MainApplication.kt', 'FullScreenIntentModule.kt', 'CallTelecomModule.kt']
+      .map(name => fs.readFileSync(path.join(folder, name), 'utf8'));
+    const first = read();
+    await invoke();
+    assert.deepEqual(read(), first);
+    assert.match(first[2], /CAPABILITY_SELF_MANAGED/);
+    assert.match(first[2], /FOREGROUND_SERVICE_TYPE_MICROPHONE/);
+    assert.match(first[2], /LifecycleState.RESUMED/);
+    assert.match(first[2], /reactApplicationContext\.currentActivity != null/);
+    assert.doesNotMatch(first[2], /check\(currentActivity/);
+    assert.match(first[2], /checkSelfPermission\(Manifest.permission.RECORD_AUDIO\)/);
+    assert.match(first[2], /onShowIncomingCallUi/);
+    assert.doesNotMatch(first[2], /specialUse|__PACKAGE__/);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
 
 test('installed Expo SDK 54 Swift template is patched idempotently before bridge startup', async () => {
   // Read the actual installed template, not a hand-written approximation.

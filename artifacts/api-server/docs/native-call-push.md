@@ -39,7 +39,13 @@ Android uses Firebase Admin and the existing `FIREBASE_SERVICE_ACCOUNT`, respect
 `FCM_ENABLED=false`. Native FCM does not require browser VAPID or public web Firebase
 configuration. No new API key is needed.
 
-iOS requires these server secrets/configuration:
+iOS APNs is in **mock mode by default**, as requested while no Apple Developer
+account is available. Mock mode skips Apple credential checks and network sends,
+and never records a successful provider delivery. It does not simulate real
+locked-screen ringing. Do not request Apple credentials for Android builds.
+
+Only an explicit future opt-in with `APNS_VOIP_MODE=live` enables the real
+transport, which requires these server secrets/configuration:
 
 - `APNS_VOIP_KEY_P8`: APNs signing key PEM (literal or escaped newlines).
 - `APNS_VOIP_KEY_ID`: Apple key identifier.

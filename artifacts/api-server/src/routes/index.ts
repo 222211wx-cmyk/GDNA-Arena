@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import messagingSubscriptionsRouter from "./messaging-subscriptions";
 import searchRouter from "./search";
 import authRouter from "./auth";
 import leaderboardRouter from "./leaderboard";
@@ -109,6 +110,7 @@ router.use(socialHubRouter);
 router.use(shopRouter);
 router.use(smartRouter);
 router.use(searchRouter);
+router.use(messagingSubscriptionsRouter);
 router.use(citizenProfilesRouter);
 
 export default router;

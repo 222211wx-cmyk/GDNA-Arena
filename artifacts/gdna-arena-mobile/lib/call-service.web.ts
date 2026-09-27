@@ -11,3 +11,6 @@ export function bindCallController(_id: number, _controller: unknown, _navigate:
 export async function waitForCallAudio() {}
 export function hasNativeCallAudio() { return false; }
 export async function prepareCallAnswer(_callId: string) {}
+export async function prepareAndroidCall(_callId: string, _peer: string, _incoming: boolean) {}
+export async function startAndroidCallAudio(_callId: string) {}
+export async function endAndroidCall(_callId: string) {}

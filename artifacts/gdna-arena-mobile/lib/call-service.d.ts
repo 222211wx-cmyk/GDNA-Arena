@@ -14,3 +14,6 @@ export declare function bindCallController(id: number, controller: {
 export declare function waitForCallAudio(): Promise<void>;
 export declare function hasNativeCallAudio(): boolean;
 export declare function prepareCallAnswer(callId: string): Promise<void>;
+export declare function prepareAndroidCall(callId: string, peer: string, incoming: boolean): Promise<void>;
+export declare function startAndroidCallAudio(callId: string): Promise<void>;
+export declare function endAndroidCall(callId: string): Promise<void>;

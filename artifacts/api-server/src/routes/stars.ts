@@ -1,3 +1,4 @@
+import { requireMessagingSubscription } from "../middleware/require-messaging-subscription";
 // ══════════════════════════════════════════════════════════════════════════════
 //  GDNA STARS HALL — World stars as honorary citizens, hosted through the
 //  empire's internal intelligence. Citizens can invite a limited number of
@@ -133,7 +134,7 @@ router.get("/stars", async (req, res): Promise<void> => {
 });
 
 // ── POST /stars/invite — host a star (opens a DM room, star greets via AI) ───
-router.post("/stars/invite", async (req, res): Promise<void> => {
+router.post("/stars/invite", requireMessagingSubscription, async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
   if (!pool) { res.status(503).json({ error: "Database unavailable" }); return; }

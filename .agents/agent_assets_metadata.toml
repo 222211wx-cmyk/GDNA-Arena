@@ -114,3 +114,31 @@ mtime_ms = 1789784151926
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/ccc2efcb-2fd1-4c56-a163-7369ff004b63/0b3b31de-f1cb-4405-b2a6-f88ee1ed8acf"
 storage_version_token = "1789784421305945"
 content_type = "image/png"
+
+[[outputs]]
+id = "g6snbnyaPE9qk9L7rReAp"
+uri = "file://.agents/outputs/android-manifest-merger-report.html"
+type = "html"
+title = "Manifeste Android et logs complets de compilation"
+description = "Manifeste régénéré intégral, tous les diagnostics de fusion, les 30 lignes avant FAILURE et le journal Gradle complet du build en échec identifié."
+logical_id = "1f8258e0-8a4e-4b6d-8a59-cdd89c5c11cc"
+content_hash = "sha256:407d063aae3bdf65987daaec0b983d46b17e0926a73fdce7b0772f37eef6d10a"
+size = 2056822
+mtime_ms = 1790469956766
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/1f8258e0-8a4e-4b6d-8a59-cdd89c5c11cc/b012e442-8a5a-4e5c-abd5-b9cd69a18b61"
+storage_version_token = "1790469981793117"
+content_type = "text/html"
+
+[[outputs]]
+id = "mjxOJ2YmuNnzDbGQu0dHO"
+uri = "file://artifacts/gdna-arena-mobile/docs/messaging-telecom-audit.md"
+type = "text"
+title = "Rapport d’audit — Messagerie et appels Android"
+description = "Constats sourcés, corrections effectuées, limites Android 14 et checklist physique. Statut de livraison : bloqué, démarrage sur appareil non certifié."
+logical_id = "3321eb65-329e-4723-afb2-fc2bc756d6f8"
+content_hash = "sha256:71b7c8b78877c33649393ebd9af261161fef1565cd56c468a7ee47e55572ca91"
+size = 9822
+mtime_ms = 1790511132427
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/3321eb65-329e-4723-afb2-fc2bc756d6f8/f823e22c-d148-41ca-96f1-fca36333a9a1"
+storage_version_token = "1790511184703374"
+content_type = "text/markdown"

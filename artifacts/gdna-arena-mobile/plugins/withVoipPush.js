@@ -1,9 +1,14 @@
-const { withInfoPlist, withAndroidManifest, withAppDelegate, withXcodeProject, withDangerousMod } = require('expo/config-plugins');
+const { withInfoPlist, withAndroidManifest, withAppDelegate, withXcodeProject, withDangerousMod, withGradleProperties } = require('expo/config-plugins');
 const fs = require('node:fs');
 const path = require('node:path');
 const { modifyAppDelegate, updateProjectBridge } = require('./voip-native');
 
 module.exports = function withVoipPush(config) {
+  config = withGradleProperties(config, cfg => {
+    cfg.modResults = cfg.modResults.filter(item => item.key !== 'android.nonTransitiveRClass');
+    cfg.modResults.push({ type: 'property', key: 'android.nonTransitiveRClass', value: 'true' });
+    return cfg;
+  });
   config = withDangerousMod(config, ['android', async cfg => {
     const packageName = cfg.android?.package;
     if (!packageName || !/^[a-zA-Z_]\w*(\.[a-zA-Z_]\w*)+$/.test(packageName)) {
@@ -19,6 +24,8 @@ module.exports = function withVoipPush(config) {
     }
     fs.writeFileSync(path.join(folder, 'FullScreenIntentModule.kt'),
       fs.readFileSync(path.join(__dirname, 'FullScreenIntentModule.kt'), 'utf8').replace('__PACKAGE__', packageName));
+    fs.writeFileSync(path.join(folder, 'CallTelecomModule.kt'),
+      fs.readFileSync(path.join(__dirname, 'CallTelecomModule.kt'), 'utf8').replace('__PACKAGE__', packageName));
     return cfg;
   }]);
   // Explicit static opt-in. Android Telecom/FCM mods remain independent.
@@ -52,6 +59,8 @@ function androidManifest(cfg) {
     for (const name of [
       'android.permission.MANAGE_OWN_CALLS',
       'android.permission.RECORD_AUDIO',
+      'android.permission.MODIFY_AUDIO_SETTINGS',
+      'android.permission.BLUETOOTH_CONNECT',
       'android.permission.FOREGROUND_SERVICE',
       'android.permission.FOREGROUND_SERVICE_PHONE_CALL',
       'android.permission.FOREGROUND_SERVICE_MICROPHONE',
@@ -65,17 +74,38 @@ function androidManifest(cfg) {
     const application = manifest.application?.[0];
     if (!application) throw new Error('GDNA VoIP requires an Android application manifest entry');
     manifest.$ = { ...manifest.$, 'xmlns:tools': 'http://schemas.android.com/tools' };
+    // Let Firebase own its default notification metadata. Native incoming calls
+    // continue using their explicit versioned Notifee channel at runtime.
+    application['meta-data'] = (application['meta-data'] || []).filter(item =>
+      !['com.google.firebase.messaging.default_notification_channel_id',
+        'com.google.firebase.messaging.default_notification_color'].includes(item.$?.['android:name']));
+    application.$ ||= {};
+    application.$['tools:replace'] = [...new Set([
+      ...(application.$['tools:replace'] || '').split(',').map(value => value.trim()).filter(Boolean),
+      'android:allowBackup', 'android:supportsRtl', 'android:label',
+      'android:theme', 'android:name', 'android:icon',
+    ])].join(',');
     const services = application.service || (application.service = []);
+    const activities = application.activity || (application.activity = []);
+    const activityName = `${cfg.android.package}.GDNACallActivity`;
+    if (!activities.some(item => item.$?.['android:name'] === activityName)) activities.push({
+      $: { 'android:name': activityName, 'android:exported': 'false',
+        'android:showWhenLocked': 'true', 'android:turnScreenOn': 'true',
+        'android:excludeFromRecents': 'true' },
+    });
     const upsert = (name, attributes) => {
       let service = services.find(item => item.$?.['android:name'] === name);
       if (!service) services.push(service = { $: { 'android:name': name } });
       service.$ = { ...service.$, ...attributes };
       return service;
     };
-    const connection = upsert('io.wazo.callkeep.VoiceConnectionService', {
+    const connection = upsert(`${cfg.android.package}.GDNACallConnectionService`, {
       'android:permission': 'android.permission.BIND_TELECOM_CONNECTION_SERVICE',
       'android:exported': 'true',
       'android:foregroundServiceType': 'phoneCall|microphone',
+    });
+    upsert(`${cfg.android.package}.GDNACallAudioService`, {
+      'android:exported': 'false', 'android:foregroundServiceType': 'phoneCall|microphone',
     });
     connection['intent-filter'] ||= [];
     if (!connection['intent-filter'].some(filter => filter.action?.some(

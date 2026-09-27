@@ -33,3 +33,16 @@ full-screen intent status needed for Android 14+ enrollment checks.
 **How to apply:** Keep native capability checks explicit and fail closed when the
 installed binary lacks the needed bridge; never equate notification permission
 with full-screen access.
+
+The owner explicitly requires no further Firebase or APNs secret prompts and
+APNs mock-only operation while Apple Developer provisioning is unavailable.
+
+**Why:** Repeated credential prompts blocked Android work despite the owner's
+report that Firebase credentials were already stored. Absence from an agent
+process is not evidence of absence from every deployment or Secrets scope.
+
+**How to apply:** Use existing runtime credentials without exposing values;
+report injection and provider results separately. Never gate an Android EAS
+build on server push credentials or Apple provisioning. Keep mocked APNs
+outcomes distinct from real delivery, and do not re-enable live Apple transport
+without an explicit request.

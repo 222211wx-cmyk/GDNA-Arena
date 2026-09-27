@@ -17,6 +17,58 @@ tags:
   - name: wallet
   - name: globalstar
 paths:
+  /messages/subscription:
+    get:
+      operationId: getMessagingSubscription
+      tags: [messages]
+      responses:
+        "200":
+          description: Current authenticated citizen entitlement
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessagingSubscriptionStatus" }
+        "401":
+          description: Authentication required
+  /admin/messaging-subscriptions:
+    get:
+      operationId: listMessagingSubscriptions
+      tags: [messages]
+      responses:
+        "200":
+          description: Administrator-only citizen list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CitizenMessagingSubscription" }
+        "403":
+          description: Administrator access required
+  /admin/messaging-subscriptions/{id}:
+    patch:
+      operationId: updateMessagingSubscription
+      tags: [messages]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MessagingSubscription" }
+      responses:
+        "200":
+          description: Administrator activated or revoked messaging
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessagingSubscription" }
+        "400":
+          description: Invalid citizen or boolean
+        "403":
+          description: Administrator access required
+        "404":
+          description: Citizen not found
   /call-push/calls/{id}:
     get:
       operationId: checkNativeCallPushCall
@@ -1695,10 +1747,44 @@ components:
           type: boolean
         isAdmin:
           type: boolean
+        hasActiveSubscription:
+          type: boolean
+          default: false
         isAdult:
           type: boolean
           nullable: true
       required: [id, username, balance, xp, gamesPlayed, wins, canClaimDaily, isAdult]
+
+    MessagingSubscription:
+      type: object
+      additionalProperties: false
+      required: [hasActiveSubscription]
+      properties:
+        hasActiveSubscription:
+          type: boolean
+    MessagingSubscriptionStatus:
+      type: object
+      additionalProperties: false
+      required: [hasActiveSubscription, canSendMessages, freeMessagesRemaining]
+      properties:
+        hasActiveSubscription:
+          type: boolean
+          description: True only for an administrator's manual activation.
+        canSendMessages:
+          type: boolean
+          description: True while manually activated or before ten lifetime authored messages.
+        freeMessagesRemaining:
+          type: integer
+          minimum: 0
+          maximum: 10
+          description: Remaining lifetime free sends; active sends still decrement this allowance.
+    CitizenMessagingSubscription:
+      type: object
+      required: [id, username, hasActiveSubscription]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        hasActiveSubscription: { type: boolean }
 
     LeaderboardPlayer:
       type: object

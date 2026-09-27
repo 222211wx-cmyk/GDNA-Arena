@@ -12,6 +12,7 @@ import {
   fetchRooms,
   fetchMessages,
   sendText,
+  fetchMessagingSubscription,
   pendingCount,
   RecipientNotSetUpError,
   type LiteRoom,
@@ -20,6 +21,7 @@ import {
 import { EDITION_LANGS, RTL_LANGS, stringsFor, type LiteLang, type Strings } from "./i18n";
 import { href, type Route } from "./router";
 import { reportMeasurement } from "../lib/operator-telemetry";
+import { exhaustedMessagingNotice, messagingSubscriptionCopy, remainingMessagingCopy } from "../lib/messaging-subscription-copy";
 
 interface Ctx {
   s: Strings;
@@ -384,11 +386,44 @@ function conversationView(ctx: Ctx, user: SessionUser, roomId: number): HTMLElem
   const status = el("div", {});
   const ta = el("textarea", { class: "l-input", placeholder: ctx.s.compose, rows: 2 }) as HTMLTextAreaElement;
   const btn = el("button", { class: "l-btn l-btn-primary", text: ctx.s.send }) as HTMLButtonElement;
+  const copy = messagingSubscriptionCopy(ctx.lang);
+  const entitlementStatus = el("div", { class: "l-banner l-small", role: "status", text: copy.checking });
+  let canSend = false;
+  let sending = false;
+  btn.disabled = true;
+  ta.disabled = true;
+  async function refreshEntitlement(): Promise<void> {
+    canSend = false;
+    btn.disabled = true;
+    ta.disabled = true;
+    try {
+      const entitlement = await fetchMessagingSubscription();
+      canSend = entitlement.canSendMessages;
+      entitlementStatus.textContent = canSend
+        ? entitlement.hasActiveSubscription ? copy.active : remainingMessagingCopy(ctx.lang, entitlement.freeMessagesRemaining)
+        : entitlement.freeMessagesRemaining === 0 && !entitlement.hasActiveSubscription ? exhaustedMessagingNotice : copy.inactive;
+    } catch {
+      canSend = false;
+      entitlementStatus.textContent = copy.unavailable;
+    }
+    btn.disabled = !canSend || sending;
+    ta.disabled = !canSend;
+  }
+  // No cached grants; stop the polling chain when the conversation is unmounted.
+  async function pollEntitlement(): Promise<void> {
+    await refreshEntitlement();
+    if (root.isConnected) window.setTimeout(() => {
+      if (root.isConnected) void pollEntitlement();
+    }, 10000);
+  }
+  window.setTimeout(() => { if (root.isConnected) void pollEntitlement(); }, 0);
 
   async function submit(): Promise<void> {
     const text = ta.value.trim();
-    if (!text) return;
+    if (!canSend || sending || !text) return;
+    sending = true;
     btn.disabled = true;
+    ta.disabled = true;
     mount(status);
     try {
       const online = navigator.onLine;
@@ -408,7 +443,8 @@ function conversationView(ctx: Ctx, user: SessionUser, roomId: number): HTMLElem
         mount(status, el("div", { class: "l-banner l-banner-err", text: err instanceof Error ? err.message : ctx.s.section_error }));
       }
     } finally {
-      btn.disabled = false;
+      sending = false;
+      await refreshEntitlement();
     }
   }
   btn.addEventListener("click", () => void submit());
@@ -416,6 +452,7 @@ function conversationView(ctx: Ctx, user: SessionUser, roomId: number): HTMLElem
   root.appendChild(
     el("div", { class: "l-card l-stack" }, [
       el("div", { class: "l-h2", text: ctx.s.compose }),
+      entitlementStatus,
       ta,
       status,
       el("div", { class: "l-row" }, [btn]),

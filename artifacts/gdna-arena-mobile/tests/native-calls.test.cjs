@@ -22,6 +22,10 @@ function load(file, dependencies = {}) {
   return module.exports;
 }
 const logic = load('lib/call-actions.ts');
+test('native gesture handling initializes before call handlers and router', () => {
+  const entry = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
+  assert.match(entry, /^\s*(?:\/\/[^\n]*\n\s*)*import 'react-native-gesture-handler';/);
+});
 const payload = () => ({
   type: 'call', callId: 'call_real', callUUID: '7c91eb50-eeb1-5a70-ae24-0afbdad16945',
   recipientId: '42', callerName: 'Citizen', handle: '7',
@@ -55,7 +59,7 @@ test('generation drops queued old-account work, then serializes cleanup after in
   assert.equal(snapshot(), false);
   assert.deepEqual(order, ['start', 'finish', 'delete']);
 });
-function service(platform = 'android', { fullScreen = true, bridge = true, iosVoipEnabled = true } = {}) {
+function service(platform = 'android', { fullScreen = true, bridge = true, iosVoipEnabled = true, telecomFailure = false } = {}) {
   const events = {}, logs = [], store = new Map([['gdna.native.calls.enabled.42', 'yes']]);
   let account = 42, active = true;
   let resolvePermission;
@@ -86,14 +90,21 @@ function service(platform = 'android', { fullScreen = true, bridge = true, iosVo
     registerVoipToken() {},
   };
   const svc = load('lib/call-service.native.ts', {
-    'react-native': { Platform: { OS: platform }, AppState: { currentState: 'active', addEventListener() {} }, NativeModules: {
+    'react-native': { DeviceEventEmitter: { addListener: (name, cb) => { events[name] = cb; } }, Platform: { OS: platform }, AppState: { currentState: 'active', addEventListener() {} }, NativeModules: {
       RNCallKeep: {}, RNVoipPushNotificationManager: {},
+      GDNACallTelecom: {
+        register: async () => logs.push(['phoneAccount']),
+        create: async (...args) => { if (telecomFailure) throw new Error('Telecom rejected the call'); logs.push(['telecom', ...args]); },
+        end: async id => logs.push(['telecomEnd', id]),
+        startAudio: async id => logs.push(['audio', id]),
+        drain: async () => [],
+      },
       ...(bridge ? { GDNAFullScreenIntent: {
         canUse: async () => { logs.push(['checkFullScreen']); return fullScreen; },
         openSettings: async () => { logs.push(['openSettings']); },
       } } : {}),
     } },
-    'expo-constants': { default: { executionEnvironment: 'bare', expoConfig: { extra: { iosVoipEnabled } } } },
+    'expo-constants': { default: { executionEnvironment: 'bare', expoConfig: { extra: { iosVoipEnabled }, android: { package: 'com.gdna.test' } } } },
     'expo-secure-store': {
       getItemAsync: k => readPreference(k),
       setItemAsync: async (k, v) => { store.set(k, v); },
@@ -131,9 +142,8 @@ test('Android denied full-screen access fails enrollment before token registrati
   assert.equal(await s.svc.canUseFullScreenIntent(), false);
   await s.svc.openFullScreenIntentSettings();
   assert.equal(s.logs.filter(x => x[0] === 'openSettings').length, 1);
-  await s.events.push({ data: payload() });
-  const notification = s.logs.find(x => x[0] === 'display')[1];
-  assert.equal(notification.android.fullScreenAction, undefined);
+  await assert.rejects(s.events.push({ data: payload() }), { name: 'FullScreenIntentAccessError' });
+  assert.equal(s.logs.some(x => x[0] === 'display'), false);
 });
 test('missing native access bridge fails closed instead of reporting full-screen support', async () => {
   const s = service('android', { bridge: false });
@@ -144,7 +154,7 @@ test('account reset during permission prompt cancels enrollment before registrat
   const s = service();
   s.deferPermission();
   const enrollment = s.svc.enableNativeCalls(42);
-  await Promise.resolve();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
   s.svc.resetCallAccount();
   s.grantPermission();
   await assert.rejects(enrollment, /cancelled/);
@@ -166,7 +176,9 @@ test('background delivery has real full-screen and explicit accept; no automatic
   assert.equal(notification.android.channelId, 'native-calls-ringtone-v1');
   assert.equal(notification.android.sound, 'gdna_call');
   assert.equal(notification.android.loopSound, true);
-  assert.equal(notification.android.fullScreenAction.launchActivity, 'default');
+  assert.equal(notification.android.fullScreenAction.launchActivity, 'com.gdna.test.GDNACallActivity');
+  assert.equal(s.logs.filter(x => x[0] === 'telecom').length, 1);
+  assert.equal(s.logs.some(x => x[0] === 'audio'), false);
   assert.equal(notification.android.actions[1].pressAction.launchActivity, 'default');
   let answered = 0;
   s.svc.bindCallController(42, { call: { callId: 'call_real', phase: 'incoming' }, answer: async () => { answered++; } }, () => {});
@@ -181,7 +193,8 @@ test('wrong recipient and inactive call cannot answer or decline', async () => {
     const s = service();
     if (mismatch === 'recipient') s.account(9); else s.active(false);
     await s.events.push({ data: payload() });
-    const notification = s.logs.find(x => x[0] === 'display')[1];
+    assert.equal(s.logs.some(x => x[0] === 'display' || x[0] === 'telecom'), false);
+    const notification = { id: payload().callUUID, data: payload() };
     await s.events.backgroundAction({ detail: { notification, pressAction: { id: 'decline' } } });
     assert.equal(s.logs.some(x => x[0] === 'decline'), false);
     assert.equal(s.logs.some(x => x[0] === 'dismiss'), true);
@@ -252,4 +265,27 @@ test('native end after answer reaches existing WebSocket controller, not ringing
   for (let i = 0; i < 20; i++) await Promise.resolve();
   assert.equal(ended, 1);
   assert.equal(s.logs.some(x => x[0] === 'decline'), false);
+});
+test('Telecom allocation failure never reports notification-only ringing success', async () => {
+  const s = service('android', { telecomFailure: true });
+  await assert.rejects(s.events.push({ data: payload() }), /Telecom rejected/);
+  assert.match(s.svc.callSetupError(), /Telecom rejected/);
+  assert.equal(s.logs.some(x => x[0] === 'display' || x[0] === 'audio'), false);
+});
+test('duplicate Android delivery does not allocate another call or re-ring', async () => {
+  const s = service();
+  await s.events.push({ data: payload() });
+  await s.events.push({ data: payload() });
+  assert.equal(s.logs.filter(x => x[0] === 'telecom').length, 1);
+  assert.equal(s.logs.filter(x => x[0] === 'display').length, 1);
+});
+test('Android audio lifecycle stays separate from iOS CallKit activation semantics', async () => {
+  const s = service();
+  await s.svc.prepareAndroidCall('opaque-call-id', 'Citizen', false);
+  assert.equal(s.svc.hasNativeCallAudio(), false);
+  assert.equal(s.logs.some(x => x[0] === 'audio'), false);
+  await s.svc.startAndroidCallAudio('opaque-call-id');
+  await s.svc.endAndroidCall('opaque-call-id');
+  assert.ok(s.logs.some(x => x[0] === 'audio' && x[1] === 'opaque-call-id'));
+  assert.ok(s.logs.some(x => x[0] === 'telecomEnd' && x[1] === 'opaque-call-id'));
 });

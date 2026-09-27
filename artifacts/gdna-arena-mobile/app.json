@@ -67,7 +67,6 @@
       [
         "expo-notifications",
         {
-          "defaultChannel": "calls",
           "sounds": ["./assets/sounds/gdna_call.wav"]
         }
       ],
