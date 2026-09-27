@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { trackEvent } from "@/lib/analytics";
 import { useLang, type Lang } from "@/contexts/LangContext";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 
@@ -33,6 +34,7 @@ export function PlatformLauncher() {
           {MODULES.map(m => (
             <li key={m.id}>
               <Link href={m.route} data-testid={`link-module-${m.id}`}
+                onClick={() => trackEvent("homepage_module_click", { module: m.id })}
                 className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <Card className="h-full transition-colors hover:bg-muted">
                   <CardContent className="flex flex-col items-center gap-3 p-6">

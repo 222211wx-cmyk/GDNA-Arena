@@ -14,6 +14,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { trackEvent } from "@/lib/analytics";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   MessageSquare, Users, Phone, X, Mic, History, PhoneMissed, Square,
@@ -1824,6 +1825,9 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       if (!r) throw new Error(st.send_failed);
       if (r.ok) {
         const j = await r.json();
+        trackEvent("message_send_success", {
+          message_type: secureAttachment ? "attachment" : "text",
+        });
         const decryptedMessage = user
           ? await decryptMessageForUser(j.message as DmMessage, user.id, st)
           : j.message as DmMessage;

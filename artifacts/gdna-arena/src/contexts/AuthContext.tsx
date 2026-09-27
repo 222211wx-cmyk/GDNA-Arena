@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { apiPath } from "@/lib/network";
+import { trackEvent } from "@/lib/analytics";
 import { PUSH_LOGOUT_EVENT } from "@/lib/call-firebase";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { useLang, type Lang } from "@/contexts/LangContext";
@@ -107,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Login failed");
     if (generation === authGenerationRef.current) {
+      trackEvent("auth_login_success", { method: "password" });
       setUser(data);
       setAuthUnavailable(false);
       setInitialVerified(true);
@@ -127,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) throw new Error(data.error ?? "Registration failed");
     // Simple flow: registered = logged in immediately
     if (generation === authGenerationRef.current) {
+      trackEvent("auth_register_success", { method: "password" });
       setUser(data);
       setAuthUnavailable(false);
       setInitialVerified(true);

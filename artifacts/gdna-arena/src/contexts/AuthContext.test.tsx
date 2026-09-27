@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { type ReactNode, useEffect } from "react";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -19,8 +19,27 @@ function mount(children: ReactNode = <Reader />) {
 beforeEach(() => {
   vi.restoreAllMocks();
 });
+afterEach(() => {
+  delete window.umami;
+});
 
 describe("authoritative web session", () => {
+  it.each(["login", "register"] as const)("tracks successful %s without credentials or profile data", async (action) => {
+    const track = vi.fn();
+    window.umami = { track };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(Response.json(citizen))
+      .mockResolvedValueOnce(Response.json(citizen)));
+    mount();
+    await screen.findByTestId("identity");
+    expect(track).not.toHaveBeenCalled();
+    await act(async () => {
+      if (action === "login") await state.login("Citizen Name", "secret");
+      else await state.register("Citizen Name", "secret", "2000-01-01");
+    });
+    expect(track).toHaveBeenCalledExactlyOnceWith(`auth_${action}_success`, { method: "password" });
+  });
+
   it("waits for /me before rendering any account-dependent section", async () => {
     let finish!: (value: Response) => void;
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
@@ -50,6 +69,8 @@ describe("authoritative web session", () => {
   });
 
   it("never strips internal username whitespace and does not clear identity on failed login", async () => {
+    const track = vi.fn();
+    window.umami = { track };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json(citizen))
       .mockResolvedValueOnce(Response.json({ error: "Incorrect credentials" }, { status: 401 }));
@@ -61,6 +82,7 @@ describe("authoritative web session", () => {
     });
     expect(state.user?.id).toBe(citizen.id);
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).username).toBe("Citizen Name");
+    expect(track).not.toHaveBeenCalled();
   });
 
   it("does not unmount active sections during routine session refresh", async () => {

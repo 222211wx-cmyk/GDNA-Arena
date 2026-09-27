@@ -1,5 +1,6 @@
 import { enqueueFile, readQueue, saveQueue, removeQueue, storeProcessingJob, storePreparedFile, lockName, type QueueRecord } from "./uploadQueue";
 import { prepareClip } from "./prepareClip";
+import { trackEvent } from "@/lib/analytics";
 const R2_API = `${import.meta.env.BASE_URL}api/upload/presign`;
 const CLIPS_CREATE_API = `${import.meta.env.BASE_URL}api/upload/complete`;
 export const UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024;
@@ -435,6 +436,7 @@ export async function uploadForeground(
     await storeProcessingJob({ id: saved.requestId, requestId: saved.requestId, sessionId: saved.sessionId,
       owner, name: file.name, size: file.size, metadata, completed: [], uploaded: file.size, status: "processing", serverOwned: true });
     resumableSessions.delete(key);
+    trackEvent("clip_upload_success", { outcome: "processing" });
     return null;
   }
   if (body?.ok === false || !body?.clip || typeof body.clip !== "object") {
@@ -446,6 +448,7 @@ export async function uploadForeground(
   }
   resumableSessions.delete(key);
   onProgress(100, file.size, 0, "uploading");
+  trackEvent("clip_upload_success", { outcome: "published" });
   return {
     ...body.clip,
     code,

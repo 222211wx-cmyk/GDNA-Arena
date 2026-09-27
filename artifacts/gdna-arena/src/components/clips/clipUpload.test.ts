@@ -5,7 +5,10 @@ import {
   UPLOAD_CHUNK_BYTES,
 } from "./clipUpload";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete window.umami;
+});
 
 function mockR2(receipt = {
   ok: true,
@@ -59,6 +62,8 @@ function mockR2(receipt = {
 
 describe("direct R2 multipart clip upload", () => {
   it("uses 5 MiB parts, sends no media through the API, and finalizes with name/code", async () => {
+    const track = vi.fn();
+    window.umami = { track };
     const file = new File([new Uint8Array(17)], "camera.mp4", { type: "video/mp4", lastModified: 123 });
     Object.defineProperty(file, "size", { value: UPLOAD_CHUNK_BYTES + 17 });
     const progress: number[] = [];
@@ -97,6 +102,7 @@ describe("direct R2 multipart clip upload", () => {
     expect(puts).toHaveLength(2);
     expect(puts.every(([, init]) => init?.method === "PUT")).toBe(true);
     expect(published.code).toBe("HELX-123456");
+    expect(track).toHaveBeenCalledExactlyOnceWith("clip_upload_success", { outcome: "published" });
     expect(progress.some(value => value > 0 && value < 99)).toBe(true);
     expect(progress.at(-1)).toBe(100);
   });
