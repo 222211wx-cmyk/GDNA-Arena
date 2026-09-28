@@ -67,11 +67,19 @@ catalog:
 
 autoInstallPeers: false
 
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - msw
-  - unrs-resolver
+# Compatible with local pnpm 10.26+ and the EAS pnpm 11 builder.
+# Keep unreviewed dependency scripts blocked.
+strictDepBuilds: true
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  msw: true
+  unrs-resolver: true
+  bcrypt@6.0.0: true
+  # Firebase is configured explicitly by the app, not by install-time defaults.
+  '@firebase/util@1.13.0 || 1.15.3': false
+  # Only emits a version-scheme advisory; no runtime artifacts are generated.
+  protobufjs@7.6.6: false
 
 overrides:
   # replit uses linux-x64 only, we can exclude all other platforms

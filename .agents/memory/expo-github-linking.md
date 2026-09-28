@@ -14,3 +14,9 @@ Source synchronization must include files referenced by workspace manifests and 
 **Why:** The first genuine GitHub-sourced build fetched the private repository successfully but could not install dependencies because a referenced pnpm patch existed locally and not remotely.
 
 **How to apply:** Check that every referenced patch exists in the remote commit before building. Distinguish source-fetch success from dependency installation and native compilation; a failed later phase does not mean the GitHub authorization failed.
+
+EAS builder upgrades can invalidate pnpm dependency-script approval settings even when the frozen lockfile is unchanged.
+
+**Why:** The moving Android `latest` image used pnpm 11, which removed `onlyBuiltDependencies`; scripts previously approved in pnpm 10 became unreviewed and installation failed. `allowBuilds` works with both pnpm 10.26+ and pnpm 11.
+
+**How to apply:** Check the actual builder pnpm version and test a clean frozen install with it. Preserve strict rejection of unreviewed scripts and minimum release age; do not disable security checks to make a build pass. Distinguish necessary native installers from optional install-time configuration or advisory scripts.

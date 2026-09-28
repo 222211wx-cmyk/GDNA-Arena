@@ -56,3 +56,35 @@ The local EAS JSON configuration and `git diff --check` passed. No app UI or
 runtime behavior was changed. A queued build is not a successful APK, store
 submission, or physical-device call verification; check the live build page
 for its eventual outcome.
+
+## pnpm 11 dependency-script policy correction
+
+The second GitHub build subsequently failed at dependency installation:
+`ERR_PNPM_IGNORED_BUILDS`. Its Android `latest` image ran pnpm **11.9.0**,
+which removed `onlyBuiltDependencies`. The lockfile itself passed the
+builder's supply-chain checks.
+
+[PR 4](https://github.com/222211wx-cmyk/gdna-arena-mobile/pull/4) migrated
+the policy to `allowBuilds` and was merged into remote `main` as
+`a27e9e10d13afbb924cf83fd4a2934c5afbf6692`.
+
+- Preserves the four previous approvals and adds bcrypt 6.0.0's native installer.
+- Explicitly denies Firebase util's optional install-time default configuration
+  and protobufjs's version-advisory script.
+- Keeps strict dependency-script review, minimum release age, frozen lockfile,
+  SDK 54 and Telecom source unchanged.
+- All remote workspace manifests, the lockfile and referenced font patch
+  matched the local inputs used for validation.
+- A clean isolated install with pnpm 11.9.0 passed across all 11 workspaces.
+  Native bcrypt hash/compare, esbuild transform and 31 call/plugin tests passed.
+
+A new GitHub-source Android preview build was launched from that exact merge
+commit with `autoSubmit: false`:
+[333c8198-d0b9-4eb3-a98c-44f635b9e361](https://expo.dev/accounts/qaisypro2024/projects/gdnaarena/builds/333c8198-d0b9-4eb3-a98c-44f635b9e361).
+Terminal result: **FINISHED**, confirmed through the Expo build API on
+2026-09-28. The build reports SDK **54.0.0** and the exact merge commit above.
+
+[Download the Android APK](https://expo.dev/artifacts/eas/_HmEUmeDR_7gm0RjtVblBUC-Yv663aOpdYgmAQVdpR0.apk).
+
+This is a successful GitHub-sourced native compilation, not a store submission
+or a physical-device verification of locked-screen calls.
