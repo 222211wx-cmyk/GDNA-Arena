@@ -10,6 +10,7 @@
         "EXPO_PUBLIC_DOMAIN": "helixly.app"
       },
       "android": {
+        "image": "latest",
         "buildType": "apk"
       }
     }
