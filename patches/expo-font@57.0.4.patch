@@ -1,0 +1,12 @@
+diff --git a/build/ExpoFontLoader.web.js b/build/ExpoFontLoader.web.js
+--- a/build/ExpoFontLoader.web.js
++++ b/build/ExpoFontLoader.web.js
+@@ -130,1 +130,1 @@
+-        }).load(resource.testString ?? null, 12000);
++        }).load(resource.testString ?? null, 30000);
+diff --git a/src/ExpoFontLoader.web.ts b/src/ExpoFontLoader.web.ts
+--- a/src/ExpoFontLoader.web.ts
++++ b/src/ExpoFontLoader.web.ts
+@@ -169,1 +169,1 @@
+-    }).load(resource.testString ?? null, 12000);
++    }).load(resource.testString ?? null, 30000);

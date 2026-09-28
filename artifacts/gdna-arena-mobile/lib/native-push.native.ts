@@ -126,6 +126,7 @@ async function dismissStaleCallAlerts(): Promise<void> {
   const presented = await Notifications.getPresentedNotificationsAsync();
   for (const item of presented) {
     const data = item.request.content.data;
+    if (!data) continue;
     if ((data.type !== 'call' && data.type !== 'group-call') || data.recipientId !== String(account.id)) continue;
     let active = false;
     try {
@@ -146,7 +147,7 @@ export async function dismissCallAlert(callId: string): Promise<void> {
   const presented = await Notifications.getPresentedNotificationsAsync();
   for (const item of presented) {
     const data = item.request.content.data;
-    if (data.type === 'call' && data.callId === callId) {
+    if (data?.type === 'call' && data.callId === callId) {
       await Notifications.dismissNotificationAsync(item.request.identifier);
     }
   }
@@ -156,6 +157,7 @@ export function listenForPushTaps(navigate: (path: string) => void): () => void 
   const handle = async (response: Notifications.NotificationResponse) => {
     const request = response.notification.request;
     const data = request.content.data;
+    if (!data) return;
     try {
       const route = await guardedTap(request.identifier, async () => {
         const account = await apiGet<AuthUser>('/auth/me');

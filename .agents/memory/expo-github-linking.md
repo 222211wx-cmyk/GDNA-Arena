@@ -20,3 +20,9 @@ EAS builder upgrades can invalidate pnpm dependency-script approval settings eve
 **Why:** The moving Android `latest` image used pnpm 11, which removed `onlyBuiltDependencies`; scripts previously approved in pnpm 10 became unreviewed and installation failed. `allowBuilds` works with both pnpm 10.26+ and pnpm 11.
 
 **How to apply:** Check the actual builder pnpm version and test a clean frozen install with it. Preserve strict rejection of unreviewed scripts and minimum release age; do not disable security checks to make a build pass. Distinguish necessary native installers from optional install-time configuration or advisory scripts.
+
+Repository write access does not establish permission to update GitHub Actions workflows.
+
+**Why:** The connected OAuth credential could create SDK migration blobs and a source-only tree, but rejected the same tree with a workflow update. The reauthorization scope inventory offered `repo`, not `workflow`.
+
+**How to apply:** Diagnose workflow writes separately from source writes. Do not bypass missing workflow permissions through alternate Git endpoints, or push a partial SDK migration that leaves an incompatible build workflow on main. Request an authorized workflow update before publishing the coherent migration.

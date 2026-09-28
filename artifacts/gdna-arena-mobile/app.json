@@ -14,12 +14,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "gdna-arena-mobile",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#faf8f2"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.gdna.arena.mobile",
@@ -57,6 +51,15 @@
         }
       ],
       "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#faf8f2",
+          "enableFullScreenImage_legacy": true
+        }
+      ],
       [
         "expo-video",
         {

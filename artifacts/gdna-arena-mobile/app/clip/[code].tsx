@@ -89,7 +89,7 @@ export default function ClipPlayerScreen() {
               style={[styles.video, { backgroundColor: colors.card }]}
               nativeControls
               contentFit="contain"
-              allowsFullscreen
+              fullscreenOptions={{ enable: true }}
               testID="clip-video"
             />
           ) : (

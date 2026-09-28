@@ -1,0 +1,39 @@
+name: Build APK
+on:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: artifacts/gdna-arena-mobile
+    env:
+      EXPO_PUBLIC_API_ORIGIN: https://helixly.app
+      EXPO_PUBLIC_DOMAIN: helixly.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm exec expo prebuild --platform android --clean --non-interactive --no-install
+      - run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+      - run: cd android && chmod +x gradlew && ./gradlew assembleRelease --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gdna-arena-apk
+          path: artifacts/gdna-arena-mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
