@@ -49,10 +49,10 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {__DEV__ ? (
+      {(
         <Pressable
           onPress={() => setIsModalVisible(true)}
-          accessibilityLabel="View error details"
+          accessibilityLabel="عرض تفاصيل الخطأ"
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.topButton,
@@ -65,15 +65,15 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
         >
           <Feather name="alert-circle" size={20} color={colors.foreground} />
         </Pressable>
-      ) : null}
+      )}
 
       <View style={styles.content}>
         <Text style={[styles.title, { color: colors.foreground }]}>
-          Something went wrong
+          تعذّر فتح التطبيق
         </Text>
 
         <Text style={[styles.message, { color: colors.mutedForeground }]}>
-          Please reload the app to continue.
+          اضغط على علامة التنبيه بالأعلى لعرض تفاصيل الخطأ. لا يتم إرسالها تلقائياً.
         </Text>
 
         <Pressable
@@ -90,12 +90,12 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           <Text
             style={[styles.buttonText, { color: colors.primaryForeground }]}
           >
-            Try Again
+            إعادة المحاولة
           </Text>
         </Pressable>
       </View>
 
-      {__DEV__ ? (
+      {(
         <Modal
           visible={isModalVisible}
           animationType="slide"
@@ -116,7 +116,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 ]}
               >
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                  Error Details
+                  تفاصيل الخطأ
                 </Text>
                 <Pressable
                   onPress={() => setIsModalVisible(false)}
@@ -162,7 +162,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             </View>
           </View>
         </Modal>
-      ) : null}
+      )}
     </View>
   );
 }

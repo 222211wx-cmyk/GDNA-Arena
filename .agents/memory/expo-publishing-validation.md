@@ -5,6 +5,12 @@ description: Validate native production bundles when diagnosing a shared web/mob
 
 Verify the native mobile production build before declaring a shared release ready; web/API builds and TypeScript checks alone are insufficient.
 
+Distinguish installation refusal, an indefinite splash, and the app's "Try Again" error boundary before choosing a fix. Retain an opt-in, local-only way to inspect release runtime errors.
+
+**Why:** A successfully built APK installed on another phone but displayed the app's generic error boundary. Its developer-only details hid the actual exception, so network/font timeout changes could not establish or resolve the cause.
+
+**How to apply:** Obtain the exception before another speculative fix. Do not infer successful startup from EAS completion or assume all reports of "does not open" describe the same failure. Never upload diagnostics automatically.
+
 **Why:** A release targeting the website also built the registered mobile artifact, where a broken dependency link failed native Babel transformation despite successful web/API compilation.
 
 **How to apply:** Inspect the actual Metro error response, not just its generic HTTP status or the entry filename. Check the installed Expo compatibility list before changing router versions. Native bundle, manifest, and asset generation provide the relevant release check.
