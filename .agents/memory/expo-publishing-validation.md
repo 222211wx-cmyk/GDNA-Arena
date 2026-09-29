@@ -11,6 +11,12 @@ Verify the native mobile production build before declaring a shared release read
 
 Standalone Expo production export can validate native bundle transforms without starting another HTTP Metro server.
 
+Declare Babel presets referenced by app configuration as direct app dependencies; local bundle success does not prove clean EAS resolution.
+
+**Why:** An SDK upgrade exported locally but EAS could not resolve the Expo Babel preset under pnpm's isolated dependency layout. The generic Gradle Node failure hid the missing module.
+
+**How to apply:** Read the first Metro transformer error in full EAS logs. Match the preset to the installed Expo version and update the lockfile; do not replace native libraries or downgrade Gradle to fix a missing JS module.
+
 Validate the release API origin from EAS build-profile variables, not the local
 preview workflow or Replit publishing environment.
 
