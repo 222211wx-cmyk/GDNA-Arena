@@ -1,0 +1,366 @@
+Skip to content
+222211wx-cmyk
+gdna-arena-mobile
+Repository navigation
+Code
+Issues
+Pull requests
+Agents
+Actions
+Projects
+Security and quality
+Insights
+.github/workflows/build.yml
+Merge pull request #9 from 222211wx-cmyk/222211wx-cmyk-patch-3 #19
+All jobs
+Run details
+Workflow file for this run
+.github/workflows/build.yml at 250ad9f
+concurrency: Skip to content
+
+
+Private previews are not supported for mobile apps in Expo Go, simulators, or the Replit mobile app.
+ Check failure on line 4 in .github/workflows/build.yml
+
+
+GitHub Actions
+/ .github/workflows/build.yml
+Invalid workflow file
+
+You have an error in your yaml syntax on line 4
+Preview on your phone
+Test on a mobile device to experience touch gestures and native features.
+1
+Download Expo Go
+A free app that lets you run your project instantly.
+2
+Scan the QR code
+Use your camera to scan the code and launch Expo Go.
+Sign in to Expo Go to preview
+Enter code shown in Expo Go after scanning here.
+8-character code
+Shake your device to open Expo Go's menu, then tap Reload to see your changes.
+شوف انت عارف لابغوسيديغ وعارف لاباز تحليل Skip to content 222211wx-cmyk gdna-arena-mobile Repository navigation Code Issues Pull requests Agents Actions Projects Security and quality Insights Build APK Update build workflow for APK generation #17 All jobs Run details Annotations 1 error, 2 warnings, and 1 notice build failed 1 minute ago in 1m 25s Search logs 1s 3s 1s 8s 0s 35s 33s Run npx expo prebuild --platform android --clean --non-interactive --no-install npm warn exec The following package was not found and will be installed: expo@57.0.25 npm warn deprecated uuid@7.0.3: uuid@10 and below is no longer supported. For ESM codebases, update to uuid@latest. For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028). --non-interactive is not supported, use $CI=1 instead ConfigError: Cannot determine the project's Expo SDK version because the module expo is not installed. Install it with npm install expo and try again. Error: Process completed with exit code 1. 0s 0s 0s 1s 0s 0s 0s 0s
+
+4 minutes ago
+إيه، دابا هاد الـlog وضّح المشكل: البناء وقف قبل ما يوصل لـGradle.
+
+الأمر npx expo prebuild ما لقا حتى تثبيت ديال Expo فالمجلد اللي خدام فيه، وحاول يحمّلو مؤقتاً. فالمشروع ديالك، تطبيق Expo موجود هنا:
+
+artifacts/gdna-arena-mobile
+يعني خاصنا نثبّتو dependencies من جذر المستودع، ومن بعد نشغّلو Expo من مجلد التطبيق وبـpnpm exec. وزيد نحيدو --non-interactive ونعوّضوه بـCI: 'true'.
+
+عوّض محتوى .github/workflows/build.yml كامل بهاد النسخة:
+
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=4096
+      EXPO_PUBLIC_API_ORIGIN: https://helixly.app
+      EXPO_PUBLIC_DOMAIN: helixly.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --prod=false
+      - name: Verify installed Expo
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          node --print "require.resolve('expo/package.json')"
+          pnpm exec expo --version
+      - name: Generate Android project
+        working-directory: artifacts/gdna-arena-mobile
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+      - name: Configure Android SDK
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_PATH" || ! -d "$SDK_PATH" ]]; then
+            echo "::error::Android SDK not found"
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "$SDK_PATH" > android/local.properties
+      - name: Build APK
+        working-directory: artifacts/gdna-arena-mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --version
+          ./gradlew assembleRelease --no-daemon --stacktrace --info --console=plain
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdna-arena-apk
+          path: artifacts/gdna-arena-mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+ما تحتاجش تزيد npm install expo ولا تبدّل app.json بسبب هاد الخطأ؛ Expo راه معلن عليه فـpackage.json ديال التطبيق. المشكل الظاهر هنا هو الوصول ليه أثناء البناء.
+
+هاد التصحيح كيعالج الخطأ اللي صيفطتي، ولكن نجاح الـAPK كامل خاصّو يتأكد من التشغيل الجاي. ما طبّقتش هاد النسخة على GitHub من جهتي.
+
+اعطيني نسخة كوبي كولي
+
+1 minute ago
+نسخ هاد الكود كامل ولصقو بلاصة المحتوى القديم ديال .github/workflows/build.yml، ومن بعد دير Commit changes على main.
+
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=4096
+      EXPO_PUBLIC_API_ORIGIN: https://helixly.app
+      EXPO_PUBLIC_DOMAIN: helixly.app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --prod=false
+      - name: Verify installed Expo
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          node --print "require.resolve('expo/package.json')"
+          pnpm exec expo --version
+      - name: Generate Android project
+        working-directory: artifacts/gdna-arena-mobile
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+      - name: Configure Android SDK
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_PATH" || ! -d "$SDK_PATH" ]]; then
+            echo "::error::Android SDK not found"
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "$SDK_PATH" > android/local.properties
+      - name: Build APK
+        working-directory: artifacts/gdna-arena-mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --version
+          ./gradlew assembleRelease --no-daemon --stacktrace --info --console=plain
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdna-arena-apk
+          path: artifacts/gdna-arena-mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+إلا نجح البناء، غتلقى التحميل فـ Actions → Build APK → Artifacts → gdna-arena-apk.
+
+Connection lost. Reload to reconnect.
+
+
+Skip to content
+
+
+Private previews are not supported for mobile apps in Expo Go, simulators, or the Replit mobile app.
+Preview on your phone
+Test on a mobile device to experience touch gestures and native features.
+1
+Download Expo Go
+A free app that lets you run your project instantly.
+2
+Scan the QR code
+Use your camera to scan the code and launch Expo Go.
+Sign in to Expo Go to preview
+Enter code shown in Expo Go after scanning here.
+8-character code
+Shake your device to open Expo Go's menu, then tap Reload to see your changes.
+شوف انت عارف لابغوسيديغ وعارف لاباز تحليل Skip to content 222211wx-cmyk gdna-arena-mobile Repository navigation Code Issues Pull requests Agents Actions Projects Security and quality Insights Build APK Update build workflow for APK generation #17 All jobs Run details Annotations 1 error, 2 warnings, and 1 notice build failed 1 minute ago in 1m 25s Search logs 1s 3s 1s 8s 0s 35s 33s Run npx expo prebuild --platform android --clean --non-interactive --no-install npm warn exec The following package was not found and will be installed: expo@57.0.25 npm warn deprecated uuid@7.0.3: uuid@10 and below is no longer supported. For ESM codebases, update to uuid@latest. For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028). --non-interactive is not supported, use $CI=1 instead ConfigError: Cannot determine the project's Expo SDK version because the module expo is not installed. Install it with npm install expo and try again. Error: Process completed with exit code 1. 0s 0s 0s 1s 0s 0s 0s 0s
+
+4 minutes ago
+إيه، دابا هاد الـlog وضّح المشكل: البناء وقف قبل ما يوصل لـGradle.
+
+الأمر npx expo prebuild ما لقا حتى تثبيت ديال Expo فالمجلد اللي خدام فيه، وحاول يحمّلو مؤقتاً. فالمشروع ديالك، تطبيق Expo موجود هنا:
+
+artifacts/gdna-arena-mobile
+يعني خاصنا نثبّتو dependencies من جذر المستودع، ومن بعد نشغّلو Expo من مجلد التطبيق وبـpnpm exec. وزيد نحيدو --non-interactive ونعوّضوه بـCI: 'true'.
+
+عوّض محتوى .github/workflows/build.yml كامل بهاد النسخة:
+
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=4096
+      EXPO_PUBLIC_API_ORIGIN: https://helixly.app
+      EXPO_PUBLIC_DOMAIN: helixly.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --prod=false
+      - name: Verify installed Expo
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          node --print "require.resolve('expo/package.json')"
+          pnpm exec expo --version
+      - name: Generate Android project
+        working-directory: artifacts/gdna-arena-mobile
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+      - name: Configure Android SDK
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_PATH" || ! -d "$SDK_PATH" ]]; then
+            echo "::error::Android SDK not found"
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "$SDK_PATH" > android/local.properties
+      - name: Build APK
+        working-directory: artifacts/gdna-arena-mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --version
+          ./gradlew assembleRelease --no-daemon --stacktrace --info --console=plain
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdna-arena-apk
+          path: artifacts/gdna-arena-mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+ما تحتاجش تزيد npm install expo ولا تبدّل app.json بسبب هاد الخطأ؛ Expo راه معلن عليه فـpackage.json ديال التطبيق. المشكل الظاهر هنا هو الوصول ليه أثناء البناء.
+
+هاد التصحيح كيعالج الخطأ اللي صيفطتي، ولكن نجاح الـAPK كامل خاصّو يتأكد من التشغيل الجاي. ما طبّقتش هاد النسخة على GitHub من جهتي.
+
+اعطيني نسخة كوبي كولي
+
+1 minute ago
+نسخ هاد الكود كامل ولصقو بلاصة المحتوى القديم ديال .github/workflows/build.yml، ومن بعد دير Commit changes على main.
+
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=4096
+      EXPO_PUBLIC_API_ORIGIN: https://helixly.app
+      EXPO_PUBLIC_DOMAIN: helixly.app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --prod=false
+      - name: Verify installed Expo
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          node --print "require.resolve('expo/package.json')"
+          pnpm exec expo --version
+      - name: Generate Android project
+        working-directory: artifacts/gdna-arena-mobile
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+      - name: Configure Android SDK
+        working-directory: artifacts/gdna-arena-mobile
+        run: |
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$SDK_PATH" || ! -d "$SDK_PATH" ]]; then
+            echo "::error::Android SDK not found"
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "$SDK_PATH" > android/local.properties
+      - name: Build APK
+        working-directory: artifacts/gdna-arena-mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --version
+          ./gradlew assembleRelease --no-daemon --stacktrace --info --console=plain
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdna-arena-apk
+          path: artifacts/gdna-arena-mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+إلا نجح البناء، غتلقى التحميل فـ Actions → Build APK → Artifacts → gdna-arena-apk.
+
+Connection lost. Reload to reconnect.
+
+
