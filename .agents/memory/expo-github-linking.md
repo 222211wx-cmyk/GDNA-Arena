@@ -25,4 +25,4 @@ Repository write access does not establish permission to update GitHub Actions w
 
 **Why:** The connected OAuth credential could create SDK migration blobs and a source-only tree, but rejected the same tree with a workflow update. The reauthorization scope inventory offered `repo`, not `workflow`.
 
-**How to apply:** Diagnose workflow writes separately from source writes. Do not bypass missing workflow permissions through alternate Git endpoints, or push a partial SDK migration that leaves an incompatible build workflow on main. Request an authorized workflow update before publishing the coherent migration.
+**How to apply:** Diagnose workflow writes separately from source writes. Do not bypass missing workflow permissions through alternate Git endpoints. Prefer an authorized workflow update before pushing an SDK migration. If the user explicitly directs a source-only push after being told the remaining workflow blockers, preserve the workflow, push without force, and report the actual build result rather than implying CI is repaired.
