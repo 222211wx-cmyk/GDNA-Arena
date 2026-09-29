@@ -142,3 +142,17 @@ mtime_ms = 1790511132427
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/3321eb65-329e-4723-afb2-fc2bc756d6f8/f823e22c-d148-41ca-96f1-fca36333a9a1"
 storage_version_token = "1790511184703374"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "uFfDWU42yLqWQp0kXAS_2"
+uri = "file://research/digital-fold/results.html"
+type = "html"
+title = "الطي الرقمي — تقرير القياس الأول"
+description = "مقارنة قابلة للمراجعة: الأصل 427.5 MB، الضغط العادي 212.3 MB، النموذج 210.3 MB، مع استرجاع مطابق للأصل."
+logical_id = "07af7de9-d718-4b45-94cf-db4c612cf114"
+content_hash = "sha256:ca007225049b2d74f8ce07a390c3dd391012d9123741f82209882b0bba167edf"
+size = 3954
+mtime_ms = 1790722677882
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/07af7de9-d718-4b45-94cf-db4c612cf114/0c54cfcb-a49a-4fc6-b898-a3298baece01"
+storage_version_token = "1790722700374717"
+content_type = "text/html"

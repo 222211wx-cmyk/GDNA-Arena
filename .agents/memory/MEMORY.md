@@ -42,3 +42,4 @@
 - [Approved orphan cleanup](approved-orphan-cleanup.md) — durable name tombstones fence late deletes; signed orphan approvals stay separate from ordinary deletion.
 - [Workflow restart serialization](workflow-restart-serialization.md) — restart artifact services serially; parallel restarts have left duplicate processes and misleading success responses.
 - [Native push boundaries](native-push-boundaries.md) — keep Expo, FCM and browser tokens separate; use Android FCM and iOS PushKit independently for calls; notification delivery is not proof of native locked-screen ringing.
+- [Digital folding research](digital-fold-research.md) — reversible storage experiments stay separate from app fixes; count metadata and compare against ordinary compression.
