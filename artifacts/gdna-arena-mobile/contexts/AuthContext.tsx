@@ -17,6 +17,8 @@ import { forgetPushOnLogout } from '@/lib/native-push';
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  startupError: string | null;
+  retryStartup: () => void;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string, birthDate: string) => Promise<void>;
   submitBirthDate: (birthDate: string) => Promise<void>;
@@ -31,42 +33,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [startupError, setStartupError] = useState<string | null>(null);
+  const [startupAttempt, setStartupAttempt] = useState(0);
   const authGenerationRef = useRef(0);
 
   useEffect(() => {
     const generation = ++authGenerationRef.current;
     let cancelled = false;
-    (async () => {
-      const [, cachedUser] = await Promise.all([
-        loadSessionCookie(),
-        loadCachedAuthUser(),
-      ]);
+    let cachedUser: AuthUser | null = null;
+    let sessionResolved = false;
+    let timedOut = false;
+    setIsLoading(true);
+    setStartupError(null);
+    const timer = setTimeout(() => {
+      timedOut = true;
       if (cancelled || generation !== authGenerationRef.current) return;
-      // Native cached identity is encrypted and read-only while offline. It
-      // keeps a valid citizen session usable during a cold airplane-mode launch.
-      if (cachedUser) setUser(cachedUser);
-      let fresh: AuthUser | null = null;
-      let verifiedUnauthenticated = false;
+      console.warn('Auth startup timed out while loading storage or verifying the session');
+      if (!cachedUser && !sessionResolved) setStartupError('تعذّر الاتصال بالخادم أو قراءة الجلسة المحفوظة. تحقّق من اتصالك وحاول مجدداً.');
+      setIsLoading(false);
+    }, 12000);
+    const bootstrap = async () => {
       try {
-        fresh = await apiGet<AuthUser>('/auth/me');
+        const [, restoredUser] = await Promise.all([loadSessionCookie(), loadCachedAuthUser()]);
+        if (cancelled || timedOut || generation !== authGenerationRef.current) return;
+        cachedUser = restoredUser;
+        // Cached identity remains usable offline; never erase it on a network failure.
+        if (cachedUser) setUser(cachedUser);
+        let fresh: AuthUser | null = null;
+        let verifiedUnauthenticated = false;
+        try {
+          fresh = await apiGet<AuthUser>('/auth/me');
+        } catch (error) {
+          verifiedUnauthenticated = error instanceof ApiError && (error.status === 401 || error.status === 403);
+          if (!verifiedUnauthenticated) throw error;
+        }
+        if (cancelled || timedOut || generation !== authGenerationRef.current) return;
+        if (fresh) {
+          sessionResolved = true;
+          setUser(fresh);
+          await saveCachedAuthUser(fresh);
+        } else if (verifiedUnauthenticated) {
+          sessionResolved = true;
+          setUser(null);
+          await Promise.all([clearSessionCookie(), clearCachedAuthUser()]);
+        }
       } catch (error) {
-        verifiedUnauthenticated = error instanceof ApiError && (error.status === 401 || error.status === 403);
+        console.warn('Auth startup failed:', error);
+        if (!cancelled && !timedOut && generation === authGenerationRef.current && !cachedUser && !sessionResolved) {
+          setStartupError(error instanceof Error ? `تعذّر بدء التطبيق. حاول مجدداً. التفاصيل: ${error.message}` : 'تعذّر قراءة الجلسة المحفوظة. حاول مجدداً.');
+        }
+      } finally {
+        if (!cancelled && !timedOut && generation === authGenerationRef.current) {
+          clearTimeout(timer);
+          setIsLoading(false);
+        }
       }
-      if (cancelled || generation !== authGenerationRef.current) return;
-      if (fresh) {
-        setUser(fresh);
-        await saveCachedAuthUser(fresh);
-      } else if (verifiedUnauthenticated) {
-        setUser(null);
-        await Promise.all([clearSessionCookie(), clearCachedAuthUser()]);
-      }
-      if (!cancelled && generation === authGenerationRef.current) setIsLoading(false);
-    })();
+    };
+    void bootstrap();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       authGenerationRef.current += 1;
     };
-  }, []);
+  }, [startupAttempt]);
+
+  const retryStartup = () => setStartupAttempt(attempt => attempt + 1);
 
   const login = async (username: string, password: string) => {
     if (user) await forgetPushOnLogout(user.id);
@@ -136,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, submitBirthDate, logout, refreshUser, updateBalance }}>
+    <AuthContext.Provider value={{ user, isLoading, startupError, retryStartup, login, register, submitBirthDate, logout, refreshUser, updateBalance }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -6,6 +7,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useDesignSystemFonts } from '@workspace/gdna-ds/hooks/use-fonts';
 import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
+import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
+import { Button } from '@workspace/gdna-ds/components/native/button';
+import { Typography } from '@workspace/gdna-ds/components/native/typography';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -22,12 +26,12 @@ const queryClient = new QueryClient({
 });
 
 function AuthGate() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, startupError } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || startupError) return;
     const inAuth = segments[0] === '(auth)';
     const inPublicClip = ['clip', 'clips'].includes(segments[0] as string);
     if (!user && !inAuth && !inPublicClip) {
@@ -35,7 +39,7 @@ function AuthGate() {
     } else if (user && inAuth) {
       router.replace('/(tabs)');
     }
-  }, [user, isLoading, segments]);
+  }, [user, isLoading, startupError, segments]);
 
   useEffect(() => {
     if (!isLoading && user) void refreshPushIfAllowed(user.id).catch(recordCallSetupError);
@@ -46,6 +50,7 @@ function AuthGate() {
 
 function RootLayoutNav() {
   const colors = useColors();
+  const { startupError, retryStartup } = useAuth();
   const router = useRouter();
   useEffect(() => listenForPushTaps(path => router.push(path as never)), [router]);
   return (
@@ -60,6 +65,13 @@ function RootLayoutNav() {
         <Stack.Screen name="clips" options={{ headerShown: false }} />
         <Stack.Screen name="clip/[code]" options={{ headerShown: false }} />
       </Stack>
+      {startupError ? (
+        <View style={[styles.startupFailure, { backgroundColor: colors.background }]}>
+          <Typography variant="title">تعذّر تشغيل أرينا</Typography>
+          <Typography accessibilityRole="alert">{startupError}</Typography>
+          <Button onPress={retryStartup}>إعادة المحاولة</Button>
+        </View>
+      ) : null}
     </>
   );
 }
@@ -67,14 +79,25 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const { fontsLoaded, fontError } = useDesignSystemFonts();
   const colors = useColors();
+  const [fontWaitExpired, setFontWaitExpired] = useState(false);
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
+    if (fontsLoaded || fontError) return;
+    const timer = setTimeout(() => {
+      console.warn('Font loading exceeded 8 seconds; continuing with system font fallback');
+      setFontWaitExpired(true);
+    }, 8000);
+    return () => clearTimeout(timer);
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
+  useEffect(() => {
+    if (fontsLoaded || fontError || fontWaitExpired) {
+      if (fontError) console.warn('Font loading failed; using system font fallback', fontError);
+      void SplashScreen.hideAsync().catch(error => console.warn('Could not hide splash screen', error));
+    }
+  }, [fontsLoaded, fontError, fontWaitExpired]);
+
+  if (!fontsLoaded && !fontError && !fontWaitExpired) return null;
 
   return (
     <SafeAreaProvider>
@@ -97,3 +120,13 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  startupFailure: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: nativeTheme.spacing * 4,
+    padding: nativeTheme.spacing * 6,
+  },
+});

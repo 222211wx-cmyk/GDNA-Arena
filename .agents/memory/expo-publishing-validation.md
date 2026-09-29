@@ -17,6 +17,12 @@ Declare Babel presets referenced by app configuration as direct app dependencies
 
 **How to apply:** Read the first Metro transformer error in full EAS logs. Match the preset to the installed Expo version and update the lockfile; do not replace native libraries or downgrade Gradle to fix a missing JS module.
 
+Do not bypass dependency release-age safeguards just to satisfy Expo's newest patch recommendations.
+
+**Why:** Expo compatibility metadata can recommend patches published the same day while the workspace's supply-chain policy still rejects them. That mismatch is not evidence of the installed APK's startup failure.
+
+**How to apply:** Distinguish an unavailable fresh patch from a proven runtime incompatibility. Keep compatible installed versions and report the pending recommendation instead of weakening package safeguards or removing native features.
+
 Validate the release API origin from EAS build-profile variables, not the local
 preview workflow or Replit publishing environment.
 
