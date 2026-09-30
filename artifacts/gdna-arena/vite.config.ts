@@ -39,6 +39,24 @@ function liteShell(): Plugin {
   };
 }
 
+function messagesDotRoute(): Plugin {
+  return {
+    name: "gdna-messages-dot-route",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const url = new URL(req.url || "/", "http://localhost");
+        const base = basePath.replace(/\/$/, "");
+        // Vite's history fallback skips dotted URLs; explicitly serve the SPA
+        // shell for this entry while leaving asset requests untouched.
+        if (url.pathname === `${base}/messages.call` || url.pathname === `${base}/messages.call/`) {
+          req.url = `${base}/index.html${url.search}`;
+        }
+        next();
+      });
+    },
+  };
+}
+
 function pwaServiceWorker() {
   const liteSyncSource = buildSync({
     entryPoints: [path.resolve(import.meta.dirname, "src/lib/lite-sync-worker.ts")],
@@ -107,7 +125,7 @@ ${pushWorkerSource}`);
       // Section install start URLs must resolve even on static hosts without an
       // SPA rewrite rule. They retain index.html's early per-route metadata.
       const appHtml = readFileSync(path.join(output, "index.html"), "utf8");
-      for (const route of ["clips", "clip", "messages", "messagerie"]) {
+      for (const route of ["clips", "clip", "messages.call", "message-calle", "messages", "messagerie", "message calle"]) {
         mkdirSync(path.join(output, route), { recursive: true });
         writeFileSync(path.join(output, route, "index.html"), appHtml);
       }
@@ -193,6 +211,7 @@ export default defineConfig({
     tailwindcss(),
     runtimeErrorOverlay(),
     liteShell(),
+    messagesDotRoute(),
     pwaServiceWorker(),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined

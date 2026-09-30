@@ -1,3 +1,5 @@
+import { isMessagesEntryPath, messagesReturnPath } from "./messages-entry";
+
 /** Dependency-free: safe to import before either application entry. */
 type Connection = EventTarget & { effectiveType?: string; saveData?: boolean; downlink?: number };
 export type NetworkState = {
@@ -24,9 +26,10 @@ export function getAutoLiteReferral(search: string): string | null {
   return AUTO_LITE_REFS.has(normalized) ? normalized : null;
 }
 /** Explicit full messenger links must never lose rooms/tools to an automatic redirect. */
-export function shouldAutoRedirectToLite(route: string, forced: boolean, referral: string | null): boolean {
+export function shouldAutoRedirectToLite(route: string, forced: boolean, referral: string | null, search = ""): boolean {
   const path = route.replace(/\/+$/, "") || "/";
-  if (path === "/messagerie" || path === "/messages" || path.startsWith("/messages/")) return false;
+  if (isMessagesEntryPath(path) || path.startsWith("/messages/")) return false;
+  if ((path === "/login" || path === "/register") && messagesReturnPath(search)) return false;
   if (path === "/clip" || path === "/clips" || /^\/clip\/HELX-\d{6}$/.test(path)) return false;
   return forced || referral !== null;
 }

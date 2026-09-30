@@ -4,7 +4,7 @@
   const base = new URL(document.currentScript.src).pathname.replace(/section-pwa\.js$/, "");
   const names = {
     clips: { manifest: "manifest-clips.json", icon: "clips-apple-180.png", title: "ARENA Clips" },
-    messages: { manifest: "manifest-messages.json", icon: "messages-apple-180.png", title: "ARENA Messages" },
+    messages: { manifest: "manifest-messages.json", icon: "messages-apple-180.png", title: "Hm Messages" },
     default: { manifest: "manifest.json", icon: "lite-icon-192.png", title: "ARENA" },
   };
   const current = () => {
@@ -12,7 +12,10 @@
     if (!pathname.startsWith(base)) return "default";
     const route = (pathname.slice(base.length - 1) || "/").replace(/\/+$/, "") || "/";
     if (route === "/clips" || route === "/clip" || /^\/clip\/HELX-\d{6}$/.test(route)) return "clips";
-    if (route === "/messages" || route === "/messagerie" || route.startsWith("/messages/")) return "messages";
+    if (route === "/messages.call" || route === "/message-calle" || route === "/messages" || route === "/messagerie" ||
+        route === "/message%20calle" || route === "/message calle" || route.startsWith("/messages/")) return "messages";
+    if ((route === "/login" || route === "/register") &&
+        /^\/(?:messages\.call|message-calle|messages|messagerie|message(?:%20| )calle)(?:[?#]|$)/.test(new URLSearchParams(location.search).get("next") || "")) return "messages";
     return "default";
   };
   const manifest = document.createElement("link");
@@ -55,7 +58,7 @@
       // The installable document must be the intended section. In particular,
       // never prompt with the root Lite or the other section's manifest.
       if (current() !== target) {
-        location.assign(base + target);
+        location.assign(base + (target === "messages" ? "messages.call" : target));
         return "navigating";
       }
       if (window.matchMedia?.("(display-mode: standalone)").matches ||

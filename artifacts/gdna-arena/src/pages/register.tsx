@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation, useSearch, Link, Redirect } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
@@ -9,12 +9,15 @@ import { Lock, User, AlertCircle, CalendarDays } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { coreCopy } from "@/i18n/core-auth-copy";
+import { messagesAuthUrl, messagesReturnPath } from "@/lib/messages-entry";
 
 export default function Register() {
   const [, setLocation] = useLocation();
-  const { register } = useAuth();
+  const search = useSearch();
+  const { register, user } = useAuth();
   const { lang } = useLang();
   const copy = coreCopy(lang);
+  const destination = messagesReturnPath(search);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [birthDate, setBirthDate] = useState("");
@@ -27,13 +30,15 @@ export default function Register() {
     setIsLoading(true);
     try {
       await register(username, password, birthDate);
-      setLocation("/social");
+      setLocation(destination ?? "/social");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : copy.registrationFailed);
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (destination && user) return <Redirect to={destination} replace />;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 relative overflow-hidden">
@@ -138,7 +143,7 @@ export default function Register() {
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 {copy.already}{" "}
-                <Link href="/login" className="text-primary hover:underline font-semibold">
+                <Link href={destination ? messagesAuthUrl("/login", destination) : "/login"} className="text-primary hover:underline font-semibold">
                   {copy.loginHere}
                 </Link>
               </p>

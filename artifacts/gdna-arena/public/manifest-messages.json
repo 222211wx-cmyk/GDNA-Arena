@@ -1,9 +1,9 @@
 {
   "id": "./messages",
-  "name": "ARENA Messages",
+  "name": "Hm Messages",
   "short_name": "Hm Messages",
-  "description": "ARENA Messages",
-  "start_url": "./messages",
+  "description": "Your conversations, groups and calls on Helixly.",
+  "start_url": "./messages.call",
   "scope": "./",
   "display": "standalone",
   "background_color": "#000000",

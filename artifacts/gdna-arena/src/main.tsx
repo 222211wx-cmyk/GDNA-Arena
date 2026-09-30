@@ -51,7 +51,7 @@ if (route === "/lite" || route.startsWith("/lite/") || isPartnerLiteRoute) {
     const root = document.getElementById("root");
     if (root) root.textContent = "Unable to open Lite. Please reconnect and reload.";
   });
-} else if (shouldAutoRedirectToLite(route, getNetworkState().forceLiteMode, autoLiteReferral)) {
+} else if (shouldAutoRedirectToLite(route, getNetworkState().forceLiteMode, autoLiteReferral, location.search)) {
   const query = new URLSearchParams();
   query.set("from", safeLocalReturnPath(route, location.search));
   if (autoLiteReferral !== null) query.set("ref", autoLiteReferral);

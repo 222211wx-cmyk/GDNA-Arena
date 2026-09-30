@@ -17,6 +17,12 @@ The official Helixly platform must continue to include every existing component 
 
 **How to apply:** Focus implementation and verification on those first two sections before starting work on the remaining tabs, then proceed one tab at a time. The newer homepage entries (Clips, Messages, Arena, Social) supersede the older four-door presentation described below; do not restore the older entry layout based on this historical note.
 
+Complete and expose each section independently only as it becomes ready, while keeping that same section and all its ideas/content in the parent platform. Its direct entrance must share ongoing updates rather than become a separately maintained copy.
+
+**Why:** The owner explicitly reaffirmed incremental separation for simpler citizen access, not deletion from Arena or a competing replacement product.
+
+**How to apply:** Reuse the same accounts, conversations and feature implementation; isolate navigation and entry flows rather than duplicate services. The sponsored telecom idea remains out of implementation until separately approved again after discussion.
+
 Extend the existing web/mobile implementation rather than rebuilding or replacing it when adding Android/iPhone background messaging and call support.
 
 **Why:** The owner explicitly chose continuing with what exists, without a rebuild, while discussing mobile background capabilities.

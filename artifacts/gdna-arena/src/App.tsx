@@ -1,8 +1,9 @@
-import { Switch, Route, Redirect, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter, useLocation, useSearch } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@workspace/gdna-ds/components/ui/toaster";
 import { TooltipProvider } from "@workspace/gdna-ds/components/ui/tooltip";
 import { useEffect } from "react";
+import { isMessagesEntryPath, MESSAGES_ENTRY_PATH, messagesReturnPath } from "@/lib/messages-entry";
 
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
@@ -15,6 +16,7 @@ import CookieBanner from "@/components/legal/CookieBanner";
 import AgeGate from "@/components/legal/AgeGate";
 import GeoBlock from "@/components/legal/GeoBlock";
 import { Navbar } from "@/components/layout/navbar";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
@@ -98,8 +100,40 @@ function RealtimeQuerySync() {
 
 function ArenaDocumentTitle() {
   const [location] = useLocation();
+  const search = useSearch();
 
   useEffect(() => {
+    const messenger = isMessagesEntryPath(location) ||
+      ((location === "/login" || location === "/register") && messagesReturnPath(search) !== null);
+    const title = "Hm Messages — Helixly";
+    const description = "Hm Messages — your conversations, groups and calls on Helixly.";
+    const metadata = [
+      ['meta[name="description"]', "content", description],
+      ['meta[name="application-name"]', "content", "Hm Messages"],
+      ['meta[property="og:title"]', "content", title],
+      ['meta[property="og:description"]', "content", description],
+      ['meta[name="twitter:title"]', "content", title],
+      ['meta[name="twitter:description"]', "content", description],
+      ['link[rel="canonical"]', "href", "https://helixly.app/messages.call"],
+      ['meta[property="og:url"]', "content", "https://helixly.app/messages.call"],
+    ] as const;
+    if (messenger) {
+      const previousTitle = document.title;
+      const previous = metadata.map(([selector, attribute, value]) => {
+        const element = document.querySelector(selector);
+        const old = element?.getAttribute(attribute);
+        element?.setAttribute(attribute, value);
+        return [element, attribute, old] as const;
+      });
+      document.title = title;
+      return () => {
+        if (document.title === title) document.title = previousTitle;
+        previous.forEach(([element, attribute, old]) => {
+          if (old == null) element?.removeAttribute(attribute);
+          else element?.setAttribute(attribute, old);
+        });
+      };
+    }
     // Keep any meaningful title supplied by a page, while ensuring every
     // browser tab carries the public ARENA brand.
     const ensureArenaTitle = () => {
@@ -118,7 +152,7 @@ function ArenaDocumentTitle() {
       characterData: true,
     });
     return () => observer.disconnect();
-  }, [location]);
+  }, [location, search]);
 
   return null;
 }
@@ -130,7 +164,7 @@ function PageWrapper() {
       <ErrorBoundary key={location}>
         <Switch>
           <Route path="/" component={Home} />
-          <Route path="/login" component={Login} />
+          <Route path="/login"><Login /></Route>
           <Route path="/register" component={Register} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/hub" component={Hub} />
@@ -176,9 +210,22 @@ function PageWrapper() {
           <Route path="/learn" component={LearnPage} />
           <Route path="/stories" component={StoriesPage} />
           <Route path="/events" component={EventsPage} />
-          <Route path="/messages" component={MessagesPage} />
+          <Route path={MESSAGES_ENTRY_PATH} component={MessagesPage} />
+          <Route path={`${MESSAGES_ENTRY_PATH}/`} component={MessagesPage} />
+          <Route path="/message-calle">
+            <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />
+          </Route>
+          <Route path="/messages">
+            <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />
+          </Route>
           <Route path="/messagerie">
-            <Redirect to={`/messages${window.location.search}${window.location.hash}`} />
+            <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />
+          </Route>
+          <Route path="/message%20calle">
+            <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />
+          </Route>
+          <Route path="/message calle">
+            <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />
           </Route>
           <Route path="/missed-calls" component={MissedCallsPage} />
           <Route path="/celebrations" component={CelebrationsPage} />
@@ -206,13 +253,23 @@ function PageWrapper() {
 }
 function Router() {
   const [location] = useLocation();
+  const search = useSearch();
   const isChoiceEntry = location === "/login";
+  const isMessagesEntry = isMessagesEntryPath(location) ||
+    ((location === "/login" || location === "/register") && messagesReturnPath(search) !== null);
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
       <ArenaDocumentTitle />
-      {!isChoiceEntry && <Navbar />}
+      {!isChoiceEntry && !isMessagesEntry && <Navbar />}
+      {isMessagesEntry && (
+        <header className="border-b border-border bg-background">
+          <div className="mx-auto flex max-w-6xl justify-end px-3 py-2">
+            <LanguageSwitcher />
+          </div>
+        </header>
+      )}
       <PageWrapper />
-      {!isChoiceEntry && <Footer />}
+      {!isChoiceEntry && !isMessagesEntry && <Footer />}
       <CookieBanner />
       <AgeGate />
       <GeoBlock />

@@ -1,11 +1,8 @@
 import { Link, useLocation } from "wouter";
 import { ACTIVE_ICONS } from "@/config/icons";
-import { useLang, LANGS, type Lang } from "@/contexts/LangContext";
+import { useLang } from "@/contexts/LangContext";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup,
-  DropdownMenuRadioItem, DropdownMenuTrigger,
-} from "@workspace/gdna-ds/components/ui/dropdown-menu";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { cn } from "@workspace/gdna-ds/lib/utils";
 import { useState } from "react";
 import { installText, requestSectionInstall, type InstallSection } from "@/lib/section-install";
@@ -13,7 +10,7 @@ import { installText, requestSectionInstall, type InstallSection } from "@/lib/s
 /** The owner's single, flat navigation. Existing sections retain their routes. */
 export function Navbar() {
   const [location] = useLocation();
-  const { lang, setLang } = useLang();
+  const { lang } = useLang();
   const items = Object.values(ACTIVE_ICONS).filter(item => item.active);
   const [installHelp, setInstallHelp] = useState<string | null>(null);
 
@@ -46,23 +43,7 @@ export function Navbar() {
             {installText(lang, section === "clips" ? "clipsButton" : "messagesButton")}
           </Button>
         ))}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="shrink-0"
-              aria-label={lang === "ar" ? "اللغة" : "Language"}>
-              {lang === "ar" ? "SA" : lang.toUpperCase()}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuRadioGroup value={lang} onValueChange={value => setLang(value as Lang)}>
-              {LANGS.map(language => (
-                <DropdownMenuRadioItem key={language.code} value={language.code}>
-                  {language.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <LanguageSwitcher />
       </nav>
       {installHelp && (
         <div role="status" className="mx-auto flex max-w-7xl items-center gap-2 px-3 pb-2 text-sm">

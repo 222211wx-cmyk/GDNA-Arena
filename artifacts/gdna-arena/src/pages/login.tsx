@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation, useSearch, Link, Redirect } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { coreCopy } from "@/i18n/core-auth-copy";
+import { MESSAGES_ENTRY_PATH, messagesAuthUrl, messagesReturnPath } from "@/lib/messages-entry";
 
 const BRAND_STATEMENT =
   "منصة إمبراطورية حديثة - سمارت ودكاء اصطناعي حيوي مستقل ذات نظام داخلي سمارت لتطوير الذات والتنبؤات المستقبلية";
@@ -38,7 +39,7 @@ const DOORS: Door[] = [
   },
   {
     id: "messageri",
-    path: "/messages",
+    path: MESSAGES_ENTRY_PATH,
     title: "MESSAGERI",
     subtitle: "المراسلات",
     desc: "Public chat, groups, and messaging legends and non-private citizens.",
@@ -62,14 +63,17 @@ const DOORS: Door[] = [
   },
 ];
 
-export default function Login() {
+export default function Login({ messagesEntry = false, returnTo }: { messagesEntry?: boolean; returnTo?: string }) {
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const { login, user } = useAuth();
   const { lang } = useLang();
   const copy = coreCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
 
-  const [mode, setMode] = useState<"choice" | "auth">("choice");
+  const destination = returnTo ?? messagesReturnPath(search);
+  const messengerLogin = messagesEntry || destination !== null;
+  const [mode, setMode] = useState<"choice" | "auth">(messengerLogin ? "auth" : "choice");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -82,7 +86,8 @@ export default function Login() {
     setIsLoading(true);
     try {
        await login(username.trim(), password, rememberMe);
-      setMode("choice");
+      if (destination) setLocation(destination);
+      else setMode("choice");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : copy.authFailed);
     } finally {
@@ -98,6 +103,9 @@ export default function Login() {
     }
     setLocation(door.path);
   };
+
+  // A restored cookie needs no second login; keep the room/call intent intact.
+  if (messengerLogin && user && destination) return <Redirect to={destination} replace />;
 
   return (
     <div
@@ -115,17 +123,17 @@ export default function Login() {
         {/* ── Brand header ── */}
         <div className="text-center space-y-3">
           <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-[0.15em] imperial-gold">
-            ARENA QAISYPRO
+            {messengerLogin ? "Hm Messages" : "ARENA QAISYPRO"}
           </h1>
-          <p
+          {!messengerLogin && <p
             className="mx-auto max-w-2xl text-sm sm:text-base leading-relaxed text-muted-foreground"
             data-testid="text-brand-statement"
           >
             {BRAND_STATEMENT}
-          </p>
+          </p>}
         </div>
 
-        {mode === "auth" ? (
+        {messengerLogin || mode === "auth" ? (
           /* ── Auth form ── */
           <motion.div
             key="auth"
@@ -136,7 +144,7 @@ export default function Login() {
           >
             <Card className="bg-card/50 backdrop-blur-sm border-primary/20 shadow-[0_0_50px_rgba(0,212,255,0.1)]">
               <CardContent className="pt-6">
-                <button
+                {!messengerLogin && <button
                   type="button"
                   onClick={() => { setMode("choice"); setError(""); }}
                   className="mb-4 inline-flex items-center gap-1 text-xs uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
@@ -144,7 +152,7 @@ export default function Login() {
                 >
                   <ArrowLeft className="w-3 h-3" />
                   {copy.back}
-                </button>
+                </button>}
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {error && (
                     <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
@@ -212,7 +220,7 @@ export default function Login() {
                   </Button>
                   <p className="text-center text-sm text-muted-foreground">
                     {copy.noAccount}{" "}
-                    <Link href="/register" className="text-primary hover:underline font-semibold">
+                    <Link href={destination ? messagesAuthUrl("/register", destination) : "/register"} className="text-primary hover:underline font-semibold">
                       {copy.registerHere}
                     </Link>
                   </p>
