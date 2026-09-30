@@ -5,6 +5,12 @@ description: Product-level ownership rules for Arena Qaisypro entry and primary 
 
 ## Current umbrella and delivery policy
 
+When the owner refers to the already-separated WhatsApp-like calls/messages site, they mean the existing Helixly web messenger, not a request to create a new Android product.
+
+**Why:** The owner corrected a mobile-versus-web interpretation and emphasized keeping citizens out of confusing Arena navigation.
+
+**How to apply:** Continue the existing web messenger and preserve accounts and conversations; do not restart product/platform selection or repackage Android unless explicitly requested.
+
 The official Helixly platform must continue to include every existing component and service. Separate tab links and identities are entry points within that platform, not permission to remove features or split away the main platform.
 
 **Why:** The owner explicitly confirmed that division into tabs must preserve the complete official platform, with Clips (Hc) and Messages (Hm) validated first.
