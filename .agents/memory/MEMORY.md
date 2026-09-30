@@ -34,6 +34,7 @@
 - [Royal Reserve policy](royal-reserve-policy.md) — messaging calls are free, without credit or reserve consent; preserve legacy finance records and require internet.
 - [Messaging entitlements](messaging-entitlement-policy.md) — message sending requires manual admin activation; reading and free calling remain independent.
 - [Drizzle peer alignment](drizzle-peer-alignment.md) — Firebase Admin can split Drizzle type identities through optional OpenTelemetry peers; align consumers, not query casts.
+- [pnpm script policy](pnpm-script-policy.md) — pnpm 10.26.1 denied-script selectors use literal matching; split combined versions without weakening strict checks.
 - [Optional AI policy](optional-ai-policy.md) — keep core availability independent of AI credentials and credits; no automatic paid-provider replacement.
 - [Operator evidence policy](operator-evidence-policy.md) — referrals are not pack verification; distinguish measured traffic, modeled savings and uptime before making operator claims.
 - [API generator compatibility](api-generator-compatibility.md) — generator defaults can misidentify workspace Zod and React Query versions; keep targets explicit.

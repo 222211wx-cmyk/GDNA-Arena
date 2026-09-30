@@ -8,7 +8,8 @@ patchedDependencies:
   expo-font@57.0.4: patches/expo-font@57.0.4.patch
 
 allowBuilds:
-  '@firebase/util@1.13.0 || 1.15.3': false
+  '@firebase/util@1.13.0': false
+  '@firebase/util@1.15.3': false
   '@swc/core': true
   bcrypt@6.0.0: true
   esbuild: true
