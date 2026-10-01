@@ -91,15 +91,19 @@ def baseline_decode(source, target, codec):
     exclusive(target, output)
 
 
-def run(root, report, repeats):
+def run(root, report, repeats, extra_corpus=(), require_zstd=False):
     if repeats < 1:
         raise ValueError("repeats must be positive")
+    zstd = shutil.which("zstd")
+    if require_zstd and not zstd:
+        raise RuntimeError("This comparison requires zstd on PATH; no codec substitution.")
+    if root.resolve() == report.resolve() or root.resolve() in report.resolve().parents:
+        raise ValueError("Report must be outside the corpus directory")
     # A fresh directory is mandatory; previous corpus, archives and reconstructions survive.
     root.mkdir(parents=True, exist_ok=False)
     originals = root / "originals"
     originals.mkdir()
     codecs = ["Fold", "DEFLATE", "LZMA"]
-    zstd = shutil.which("zstd")
     if zstd:
         codecs.append("Zstandard")
     metadata = {
@@ -108,6 +112,7 @@ def run(root, report, repeats):
         "zlib": zlib.ZLIB_RUNTIME_VERSION,
         "zstandard": subprocess.check_output(["zstd", "--version"], text=True).strip()
         if zstd else "Unavailable: zstd executable not found; not measured.",
+        "zstandard_executable": zstd,
         "repeats": repeats, "chunk_bytes": CHUNK,
         "parameters": {"Fold": "1 MiB chunks, raw/zlib9/shuffle8-zlib9; baseline disabled",
                        "DEFLATE": "zlib wrapper, level 9",
@@ -118,22 +123,34 @@ def run(root, report, repeats):
         "provenance": "All inputs generated locally by benchmark.py; no downloads, personal data or app files.",
         "corpus": [], "rows": [],
     }
-    for name, category, data, description in corpus():
+    samples = [(name, category, data, description, {})
+               for name, category, data, description in corpus()]
+    samples.extend(extra_corpus)
+    metadata["public_media"] = bool(extra_corpus)
+    if extra_corpus:
+        metadata["provenance"] = (
+            "Original synthetic corpus plus pinned, licensed public media and "
+            "non-aligned repetition controls. Source/licensing details per item. "
+            "No application or APK inputs; benchmark itself is offline."
+        )
+    for name, category, data, description, details in samples:
         source = originals / name
         exclusive(source, data)
         item = {"name": name, "category": category, "bytes": len(data),
-                "sha256": sha(data), "provenance": description}
+                "sha256": sha(data), "provenance": description, **details}
         metadata["corpus"].append(item)
         for codec in codecs:
             folder = root / name / codec
             folder.mkdir(parents=True)
-            encode_times, decode_times, sizes = [], [], []
+            encode_times, decode_times, sizes, archives, restored_hashes = [], [], [], [], []
+            choices = None
             for trial in range(repeats):
                 archive = folder / f"{trial}.archive"
                 restored = folder / f"{trial}.restored"
                 start = time.perf_counter()
                 if codec == "Fold":
-                    pack(source, archive, measure_baseline=False)
+                    result = pack(source, archive, measure_baseline=False)
+                    choices = result["choices"]
                 else:
                     baseline_encode(source, archive, codec)
                 encode_times.append(time.perf_counter() - start)
@@ -145,7 +162,13 @@ def run(root, report, repeats):
                 decode_times.append(time.perf_counter() - start)
                 if restored.read_bytes() != data:
                     raise ValueError(f"Reconstruction mismatch: {name}/{codec}/{trial}")
+                expected_references = details.get("control", {}).get("expected_fold_references")
+                if (codec == "Fold" and expected_references is not None
+                        and choices.get("reference", 0) != expected_references):
+                    raise ValueError(f"Unexpected control deduplication: {name}")
                 sizes.append(archive.stat().st_size)
+                archives.append(sha(archive.read_bytes()))
+                restored_hashes.append(sha(restored.read_bytes()))
             if len(set(sizes)) != 1:
                 raise ValueError("Archive size changed across repetitions")
             metadata["rows"].append({
@@ -155,6 +178,9 @@ def run(root, report, repeats):
                 "decode_seconds": statistics.median(decode_times),
                 "encode_samples": encode_times, "decode_samples": decode_times,
                 "exact_match": True, "restored_sha256": sha(data),
+                "archive_sha256_samples": archives,
+                "restored_sha256_samples": restored_hashes,
+                "fold_chunk_choices": choices,
             })
         if source.read_bytes() != data:
             raise ValueError(f"Original changed: {name}")
@@ -168,6 +194,9 @@ def run(root, report, repeats):
 
 def render(m):
     esc = html.escape
+    public = m.get("public_media", False)
+    title = ("الطي الرقمي: عينات عامة مرخّصة وضوابط غير محاذية"
+             if public else "الطي الرقمي: قياس على مجموعة اصطناعية مضبوطة")
     rows = []
     comparisons = []
     for item in m["corpus"]:
@@ -183,17 +212,45 @@ def render(m):
                         f"<td>{r['ratio']:.3f}:1</td>"
                         f"<td>{r['encode_seconds'] * 1000:.3f}</td>"
                         f"<td>{r['decode_seconds'] * 1000:.3f}</td><td>مطابق</td></tr>")
-    provenance = "".join(f"<li><code>{esc(c['name'])}</code> ({esc(c['category'])}): "
-                         f"{esc(c['provenance'])}<br>SHA-256: <code>{c['sha256']}</code></li>"
-                         for c in m["corpus"])
+    provenance = ""
+    for c in m["corpus"]:
+        license_info = ""
+        if "license" in c:
+            license_info = (
+                f"<br>المصدر: <a href=\"{esc(c['source_page'], quote=True)}\">{esc(c['title'])}</a>"
+                f"؛ المؤلف: {esc(c['creator'])}؛ "
+                f"<a href=\"{esc(c['license_url'], quote=True)}\">{esc(c['license'])}</a>"
+                f"<br>{esc(c['changes'])}"
+            )
+        provenance += (f"<li><code>{esc(c['name'])}</code> ({esc(c['category'])}): "
+                       f"{esc(c['provenance'])}{license_info}"
+                       f"<br>SHA-256: <code>{c['sha256']}</code></li>")
+    limits = (
+        "العينات العامة: صورة JPEG واحدة، وتسجيل Vorbis واحد، وفيديو VP9/Opus واحد. "
+        "هذه ليست عينة ممثلة لكل الصور أو الصوت أو الفيديو. لا نستنتج منها فائدة لـAPK. "
+        "الإزاحة الثابتة قد تبقي قطعاً داخلية متطابقة؛ الفواصل المختلفة وطول الدور غير المحاذي "
+        "يكشفان حساسية حدود القطع. قارن كل حالة على حدة دون تعميم المتوسط."
+        if public else
+        "العينتان الإعلاميتان PNG فقط: لا تعمم النتيجة على JPEG أو الصوت أو الفيديو أو APK."
+    )
+    source_note = (
+        "الوسائط العامة محفوظة كما نُزّلت دون قص أو تحويل. المصادر والتراخيص والبصمات "
+        "مثبتة في public-samples/manifest.json؛ التنزيل خارج قياس الزمن. بقية الملفات مولدة محلياً."
+        if public else "كل البيانات مولدة محلياً بشيفرة benchmark.py، دون تنزيلات أو ملفات شخصية."
+    )
+    command = (
+        "python research/digital-fold/public_benchmark.py /tmp/digital-fold-public-v1 /tmp/digital-fold-public.html --repeats 3"
+        if public else
+        "python research/digital-fold/fold.py benchmark /tmp/digital-fold-corpus-v1 /tmp/digital-fold-results.html --repeats 3"
+    )
     return f"""<!doctype html>
 <html lang="ar" dir="rtl"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>قياس الطي الرقمي على مجموعة مضبوطة</title>
+<title>{title}</title>
 <style>body{{font-family:system-ui;max-width:1200px;margin:32px auto;padding:20px;line-height:1.8}}
 table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #bbb;padding:8px;text-align:right}}
 code,pre{{direction:ltr;unicode-bidi:embed;overflow-wrap:anywhere}}.scroll{{overflow:auto}}</style>
-<h1>الطي الرقمي: قياس على مجموعة اصطناعية مضبوطة</h1>
+<h1>{title}</h1>
 <p>هذه مقارنة لتقنيات معروفة، وليست اختراعاً مثبتاً أو وعداً بضغط شامل 10:1.
 النتائج تخص هذه العينات فقط. الملفات الأصلية محفوظة؛ لم نغيّر التطبيق أو بناء الهاتف أو نشغّل اختبارات التطبيق.</p>
 <h2>المنهج والبيئة</h2>
@@ -220,7 +277,7 @@ DEFLATE: مستوى 9 بغلاف zlib؛ LZMA: حاوية XZ وإعداد 6؛ Zst
 <h2>التحسينات والتراجعات</h2><ul>{''.join(comparisons)}</ul>
 <p>التكرار المطابق والمحاذي لحدود القطع يمنح الطي حالة ملائمة عمداً؛ لا يمثل ملفات عشوائية عامة.
 الضوضاء والوسائط المضغوطة تقيّدان الفائدة، وقد تزيد كلفة البيانات الوصفية الحجم.
-العينتان الإعلاميتان PNG فقط: لا تعمم النتيجة على JPEG أو الصوت أو الفيديو أو APK.
+{limits}
 لا نحذف الحالات الأسوأ، ولا نستنتج تفوقاً عاماً من مجموع أحجام عينات اختيرت اصطناعياً.</p>
 <h2>متطلبات الاسترجاع والحدود</h2>
 <p>الطي يحتاج fold.py وPython 3.8+ مع zipfile وzlib وhashlib.
@@ -228,11 +285,11 @@ DEFLATE يحتاج مفككاً يقبل غلاف zlib؛ LZMA يحتاج دعم 
 جميع مراجع الطي داخل الأرشيف. المفكك التجريبي مخصص لأرشيفات محلية موثوقة، وليس محصناً لمدخلات عدائية.
 يلزم مكان للأرشيف والملف المسترجع؛ حجم النقل لا يساوي حجم التثبيت أو RAM.
 ملف .fold لا يُثبّت كـAPK؛ يجب استرجاع APK الأصلي أولاً. هذه التجربة لا تصلح أخطاء تشغيل التطبيقات.</p>
-<h2>مصادر المجموعة</h2><p>كل البيانات مولدة محلياً بشيفرة benchmark.py، دون تنزيلات أو ملفات شخصية.
+<h2>مصادر المجموعة</h2><p>{source_note}
 SHAKE-256 ثابت الوسم، وليس مولداً عشوائياً يتغير بين التشغيلات.
 قد تتغير بايتات PNG عند تغيير إصدار zlib؛ البصمات هنا توثّق المجموعة المقاسة.</p><ul>{provenance}</ul>
 <h2>إعادة الإنتاج</h2>
-<pre dir="ltr">python research/digital-fold/fold.py benchmark /tmp/digital-fold-corpus-v1 /tmp/digital-fold-results.html --repeats 3</pre>
+<pre dir="ltr">{command}</pre>
 <p>اختر مسار مجموعة غير موجود: يرفض البرنامج الكتابة فوق مجموعة سابقة.
 يحتوي originals على الأصول وmeasurements.json على البيئة والبصمات وجميع عينات الزمن،
 وتحفظ الأرشيفات والنسخ المسترجعة لكل محاولة. يمكن تحديث نسخة التقرير الرئيسية بعد القياس.

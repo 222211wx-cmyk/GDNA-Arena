@@ -156,3 +156,17 @@ mtime_ms = 1790723812811
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/07af7de9-d718-4b45-94cf-db4c612cf114/0d346500-7d3c-43cf-ac89-d6f286dee56a"
 storage_version_token = "1790723856921637"
 content_type = "text/html"
+
+[[outputs]]
+id = "MXUEE6_dM91r7gI92AUzq"
+uri = "file://research/digital-fold/public-results.html"
+type = "html"
+title = "نتائج الطي على وسائط عامة وضوابط غير محاذية"
+description = "مقارنة 13 ملفاً بأربع طرق، تشمل الحجم الكامل وزمن الضغط والاستعادة، مع المصادر والتراخيص والبصمات؛ 156 استعادة مطابقة للأصل."
+logical_id = "f1d39587-3e0e-4ed3-8108-957d4f5b1c05"
+content_hash = "sha256:cfde800ff669a619dd868bf60809b3788255da7e7553caeb8a94ba42937899df"
+size = 22214
+mtime_ms = 1790867526035
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/f1d39587-3e0e-4ed3-8108-957d4f5b1c05/f4c0dbe9-0160-4d2a-aa81-c4f9afd87597"
+storage_version_token = "1790867660894356"
+content_type = "text/html"

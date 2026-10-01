@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "retrieved_utc_date": "2026-10-01",
+  "selection": "One small original of each requested media type, chosen for explicit reusable licensing and manageable size before measurement. Not representative of any media population.",
+  "samples": [
+    {
+      "name": "flower.jpg",
+      "category": "public JPEG",
+      "title": "JPEG example flower.jpg",
+      "creator": "David Crawshaw (photo 2002, composition 2004); optimized by Gnash (2017); Commons upload by Maximaximax",
+      "source_page": "https://commons.wikimedia.org/wiki/File:JPEG_example_flower.jpg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:JPEG_example_flower.jpg&oldid=1198903688",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/JPEG_example_flower.jpg",
+      "license": "CC BY-SA 3.0 (selected from dual licensing)",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "license_evidence": "File page explicitly offers CC BY-SA 3.0 via GFDL migration; embedded JPEG comment credits David Crawshaw.",
+      "changes": "None by this research: original downloaded bytes, no resizing, trimming, stripping metadata or transcoding. Reversible compression only; attribution and license retained.",
+      "provenance": "Public Wikimedia Commons JPEG; 500 x 477 pixels; already optimized photographic composition, not a camera-original corpus.",
+      "bytes": 36287,
+      "sha256": "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+      "probe": {"codec": "mjpeg", "width": 500, "height": 477}
+    },
+    {
+      "name": "bansuri.ogg",
+      "category": "public audio",
+      "title": "Sample2.ogg",
+      "creator": "Prithoo (embedded metadata: Prithwin)",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Sample2.ogg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Sample2.ogg&oldid=913104758",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/1/1f/Sample2.ogg",
+      "license": "Public domain, released by copyright holder (PD-self)",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Sample2.ogg#Licensing",
+      "license_evidence": "I, the copyright holder of this work, release this work into the public domain. This applies worldwide. Where not legally possible, permission for any purpose without conditions unless required by law.",
+      "changes": "None by this research: complete original downloaded bytes, not transcoded or trimmed. Local filename changed only.",
+      "provenance": "Public Wikimedia Commons bansuri music recording, current 2012 upload; Ogg Vorbis mono, 22050 Hz, 53.879592 seconds.",
+      "bytes": 368828,
+      "sha256": "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+      "probe": {"codec": "vorbis", "sample_rate": 22050, "channels": 1, "duration_seconds": 53.879592}
+    },
+    {
+      "name": "example.webm",
+      "category": "public video",
+      "title": "Exemple.webm",
+      "creator": "Jauvert Laura (original video); Edouard-lopez (video editing)",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Exemple.webm",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Exemple.webm&oldid=1197375449",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Exemple.webm",
+      "license": "CC BY 3.0",
+      "license_url": "https://creativecommons.org/licenses/by/3.0/",
+      "license_evidence": "File description and Licensing section explicitly license this file under Creative Commons Attribution 3.0 Unported.",
+      "changes": "None by this research: complete original Commons clip, no new editing, resizing, trimming, metadata stripping or transcoding. Local filename changed only.",
+      "provenance": "Public Wikimedia Commons French sign-language example clip (2018); WebM VP9 1280 x 720 with stereo Opus, 3.527 seconds.",
+      "bytes": 229792,
+      "sha256": "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+      "probe": {"video_codec": "vp9", "audio_codec": "opus", "width": 1280, "height": 720, "sample_rate": 48000, "channels": 2, "duration_seconds": 3.527}
+    }
+  ]
+}
