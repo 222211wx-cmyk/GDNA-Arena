@@ -170,3 +170,17 @@ mtime_ms = 1790867526035
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/f1d39587-3e0e-4ed3-8108-957d4f5b1c05/f4c0dbe9-0160-4d2a-aa81-c4f9afd87597"
 storage_version_token = "1790867660894356"
 content_type = "text/html"
+
+[[outputs]]
+id = "g3LhgViuUcXk1V9DTbHcL"
+uri = "file://reports/communications-review-2026-10-01.html"
+type = "html"
+title = "التقرير العام: المكالمات والمراسلات واسترجاع الحساب"
+description = "مراجعة من 13 قسماً مبنية على سجلات الإنتاج وقاعدة البيانات والكود، مع الأعطال المثبتة وخطة تسليم لمطوّر آخر. قابل للفتح والطباعة."
+logical_id = "988179c6-42e5-4d2a-b916-b45912ff116e"
+content_hash = "sha256:eb13d4c52356497e6bc6b436743151f50cf1aae0ac5a5fb394dc9813b59241a9"
+size = 22395
+mtime_ms = 1790889116102
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/988179c6-42e5-4d2a-b916-b45912ff116e/3cee0c74-a059-4526-a3d4-240fd33a1bb4"
+storage_version_token = "1790889148038729"
+content_type = "text/html"
