@@ -30,14 +30,14 @@ def unshuffle(data):
     return bytes(result)
 
 
-def pack(source, target):
+def pack(source, target, measure_baseline=True):
     started = time.monotonic()
     digest = hashlib.sha256()
     seen = {}
     sequence = []
     entries = []
     choices = collections.Counter()
-    baseline = zlib.compressobj(9)
+    baseline = zlib.compressobj(9) if measure_baseline else None
     baseline_bytes = 0
     source_bytes = 0
     # Exclusive creation: never overwrite an existing file.
@@ -45,7 +45,8 @@ def pack(source, target):
         while data := reader.read(CHUNK):
             digest.update(data)
             source_bytes += len(data)
-            baseline_bytes += len(baseline.compress(data))
+            if baseline is not None:
+                baseline_bytes += len(baseline.compress(data))
             key = hashlib.sha256(data).hexdigest()
             if key in seen:
                 sequence.append(seen[key])
@@ -63,7 +64,8 @@ def pack(source, target):
             entries.append({"codec": codec, "length": len(data), "sha256": key})
             choices[codec] += 1
             archive.writestr(f"chunks/{index}", payload)
-        baseline_bytes += len(baseline.flush())
+        if baseline is not None:
+            baseline_bytes += len(baseline.flush())
         manifest = {
             "format": "digital-fold-research-1",
             "bytes": source_bytes,
@@ -75,7 +77,7 @@ def pack(source, target):
     return {
         "source_bytes": source_bytes,
         "archive_bytes": os.path.getsize(target),
-        "baseline_stream_deflate_bytes": baseline_bytes,
+        "baseline_stream_deflate_bytes": baseline_bytes if measure_baseline else None,
         "source_sha256": digest.hexdigest(),
         "choices": dict(choices),
         "seconds": round(time.monotonic() - started, 2),
@@ -125,9 +127,14 @@ def unpack(source, target):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["pack", "unpack"])
+    parser.add_argument("action", choices=["pack", "unpack", "benchmark"])
     parser.add_argument("source")
     parser.add_argument("target")
+    parser.add_argument("--repeats", type=int, default=3)
     args = parser.parse_args()
-    operation = pack if args.action == "pack" else unpack
-    print(json.dumps(operation(args.source, args.target), indent=2))
+    if args.action == "benchmark":
+        from benchmark import run
+        print(json.dumps(run(Path(args.source), Path(args.target), args.repeats), indent=2))
+    else:
+        operation = pack if args.action == "pack" else unpack
+        print(json.dumps(operation(args.source, args.target), indent=2))

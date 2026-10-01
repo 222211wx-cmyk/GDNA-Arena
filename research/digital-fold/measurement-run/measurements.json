@@ -1,0 +1,511 @@
+{
+  "generated_utc": "2026-09-29T23:16:43.296422+00:00",
+  "python": "3.12.11",
+  "platform": "Linux-6.18.54-x86_64-with-glibc2.40",
+  "zlib": "1.3.1",
+  "zstandard": "Unavailable: zstd executable not found; not measured.",
+  "repeats": 3,
+  "chunk_bytes": 1048576,
+  "parameters": {
+    "Fold": "1 MiB chunks, raw/zlib9/shuffle8-zlib9; baseline disabled",
+    "DEFLATE": "zlib wrapper, level 9",
+    "LZMA": "XZ container, preset 6",
+    "Zstandard": "CLI level 3, default frame, if installed"
+  },
+  "timing": "Median file-to-file wall time; no fsync; warm cache; validation outside timing. All individual samples retained. No warmup. Fixed codec order.",
+  "provenance": "All inputs generated locally by benchmark.py; no downloads, personal data or app files.",
+  "corpus": [
+    {
+      "name": "text.txt",
+      "category": "text",
+      "bytes": 1011703,
+      "sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+      "provenance": "Original synthetic UTF-8 English/Arabic records, 9000 numbered rows."
+    },
+    {
+      "name": "structured.bin",
+      "category": "binary",
+      "bytes": 1048576,
+      "sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+      "provenance": "131072 sequential unsigned little-endian 64-bit integers."
+    },
+    {
+      "name": "noise.bin",
+      "category": "binary",
+      "bytes": 1048576,
+      "sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+      "provenance": "SHAKE-256(label=digital-fold-noise-v1), 1 MiB; incompressible control."
+    },
+    {
+      "name": "repeated.bin",
+      "category": "repeated",
+      "bytes": 4194304,
+      "sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+      "provenance": "Four aligned copies of SHAKE-256(label=digital-fold-repeat-v1), each 1 MiB."
+    },
+    {
+      "name": "short-repeat.bin",
+      "category": "repeated",
+      "bytes": 1048576,
+      "sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+      "provenance": "Eight-byte literal ABCD0123 repeated 131072 times; ordinary compression control."
+    },
+    {
+      "name": "noise.png",
+      "category": "compressed media",
+      "bytes": 787252,
+      "sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+      "provenance": "Synthetic 512x512 RGB noise PNG, filter 0, zlib level 9, SHAKE-256 label digital-fold-png-v1."
+    },
+    {
+      "name": "gradient.png",
+      "category": "compressed media",
+      "bytes": 376770,
+      "sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+      "provenance": "Synthetic 512x512 RGB gradient PNG, filter 0, zlib level 9."
+    }
+  ],
+  "rows": [
+    {
+      "file": "text.txt",
+      "codec": "Fold",
+      "source_bytes": 1011703,
+      "archive_bytes": 26089,
+      "ratio": 38.77891065199893,
+      "encode_seconds": 0.02718310500000598,
+      "decode_seconds": 0.0045878599999866765,
+      "encode_samples": [
+        0.03079834399997594,
+        0.02718310500000598,
+        0.02706837799999562
+      ],
+      "decode_samples": [
+        0.016072748999988562,
+        0.002992815999988352,
+        0.0045878599999866765
+      ],
+      "exact_match": true,
+      "restored_sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7"
+    },
+    {
+      "file": "text.txt",
+      "codec": "DEFLATE",
+      "source_bytes": 1011703,
+      "archive_bytes": 31249,
+      "ratio": 32.37553201702455,
+      "encode_seconds": 0.01182697300001223,
+      "decode_seconds": 0.0012787720000062563,
+      "encode_samples": [
+        0.01182697300001223,
+        0.01122963299999924,
+        0.012451755999990155
+      ],
+      "decode_samples": [
+        0.0011310739999998987,
+        0.0019268220000014935,
+        0.0012787720000062563
+      ],
+      "exact_match": true,
+      "restored_sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7"
+    },
+    {
+      "file": "text.txt",
+      "codec": "LZMA",
+      "source_bytes": 1011703,
+      "archive_bytes": 8704,
+      "ratio": 116.23426011029412,
+      "encode_seconds": 0.12235835600000655,
+      "decode_seconds": 0.0012600389999875006,
+      "encode_samples": [
+        0.12822073399999567,
+        0.12235835600000655,
+        0.11527123499999448
+      ],
+      "decode_samples": [
+        0.0019799019999879874,
+        0.0012600389999875006,
+        0.0012026199999866094
+      ],
+      "exact_match": true,
+      "restored_sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7"
+    },
+    {
+      "file": "structured.bin",
+      "codec": "Fold",
+      "source_bytes": 1048576,
+      "archive_bytes": 3290,
+      "ratio": 318.7161094224924,
+      "encode_seconds": 0.9227817340000115,
+      "decode_seconds": 0.0033471890000100757,
+      "encode_samples": [
+        0.9352527089999967,
+        0.9227817340000115,
+        0.9186779599999966
+      ],
+      "decode_samples": [
+        0.0032215310000083264,
+        0.0033471890000100757,
+        0.003407901999992191
+      ],
+      "exact_match": true,
+      "restored_sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33"
+    },
+    {
+      "file": "structured.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 1048576,
+      "archive_bytes": 197695,
+      "ratio": 5.304008700270619,
+      "encode_seconds": 0.9172447800000043,
+      "decode_seconds": 0.0027866309999922123,
+      "encode_samples": [
+        0.9172447800000043,
+        0.9187217900000064,
+        0.9102003350000132
+      ],
+      "decode_samples": [
+        0.0026502780000043913,
+        0.0027866309999922123,
+        0.0032797270000060053
+      ],
+      "exact_match": true,
+      "restored_sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33"
+    },
+    {
+      "file": "structured.bin",
+      "codec": "LZMA",
+      "source_bytes": 1048576,
+      "archive_bytes": 34332,
+      "ratio": 30.542234649889316,
+      "encode_seconds": 0.18194608700000003,
+      "decode_seconds": 0.007653857999997626,
+      "encode_samples": [
+        0.1902655300000049,
+        0.18065943700000275,
+        0.18194608700000003
+      ],
+      "decode_samples": [
+        0.007547485000003462,
+        0.007653857999997626,
+        0.007683814000017719
+      ],
+      "exact_match": true,
+      "restored_sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33"
+    },
+    {
+      "file": "noise.bin",
+      "codec": "Fold",
+      "source_bytes": 1048576,
+      "archive_bytes": 1049056,
+      "ratio": 0.9995424457798249,
+      "encode_seconds": 0.04360008100002233,
+      "decode_seconds": 0.002475671999974338,
+      "encode_samples": [
+        0.04359647199999017,
+        0.04360008100002233,
+        0.04523276099999407
+      ],
+      "decode_samples": [
+        0.002475671999974338,
+        0.002772045999989814,
+        0.0023631100000045535
+      ],
+      "exact_match": true,
+      "restored_sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b"
+    },
+    {
+      "file": "noise.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 1048576,
+      "archive_bytes": 1048902,
+      "ratio": 0.9996891988002692,
+      "encode_seconds": 0.024915171999992936,
+      "decode_seconds": 0.0014515640000070107,
+      "encode_samples": [
+        0.024915171999992936,
+        0.022939991000015425,
+        0.02509660900000199
+      ],
+      "decode_samples": [
+        0.0027536340000153814,
+        0.0011457640000003266,
+        0.0014515640000070107
+      ],
+      "exact_match": true,
+      "restored_sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b"
+    },
+    {
+      "file": "noise.bin",
+      "codec": "LZMA",
+      "source_bytes": 1048576,
+      "archive_bytes": 1048688,
+      "ratio": 0.9998931998840456,
+      "encode_seconds": 0.14678541800000744,
+      "decode_seconds": 0.0012304780000249593,
+      "encode_samples": [
+        0.17741964699999357,
+        0.14678541800000744,
+        0.13002891899998303
+      ],
+      "decode_samples": [
+        0.0016985050000073443,
+        0.0012304780000249593,
+        0.0010109950000014578
+      ],
+      "exact_match": true,
+      "restored_sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b"
+    },
+    {
+      "file": "repeated.bin",
+      "codec": "Fold",
+      "source_bytes": 4194304,
+      "archive_bytes": 1049062,
+      "ratio": 3.998146916006871,
+      "encode_seconds": 0.04670012500000098,
+      "decode_seconds": 0.009306298000012703,
+      "encode_samples": [
+        0.04697337100000709,
+        0.04581288099998915,
+        0.04670012500000098
+      ],
+      "decode_samples": [
+        0.00908417100001202,
+        0.009306298000012703,
+        0.009785214000004316
+      ],
+      "exact_match": true,
+      "restored_sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c"
+    },
+    {
+      "file": "repeated.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 4194304,
+      "archive_bytes": 4195590,
+      "ratio": 0.9996934876858797,
+      "encode_seconds": 0.08392565600001944,
+      "decode_seconds": 0.004954929999996693,
+      "encode_samples": [
+        0.08392565600001944,
+        0.08397348500000135,
+        0.08313580899999806
+      ],
+      "decode_samples": [
+        0.005412753000001658,
+        0.004760913000012579,
+        0.004954929999996693
+      ],
+      "exact_match": true,
+      "restored_sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c"
+    },
+    {
+      "file": "repeated.bin",
+      "codec": "LZMA",
+      "source_bytes": 4194304,
+      "archive_bytes": 1049464,
+      "ratio": 3.9966154151071405,
+      "encode_seconds": 0.2578831390000005,
+      "decode_seconds": 0.0062330639999856885,
+      "encode_samples": [
+        0.27720183299999235,
+        0.2578831390000005,
+        0.25093491100000165
+      ],
+      "decode_samples": [
+        0.007072292000003699,
+        0.0061520250000057786,
+        0.0062330639999856885
+      ],
+      "exact_match": true,
+      "restored_sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c"
+    },
+    {
+      "file": "short-repeat.bin",
+      "codec": "Fold",
+      "source_bytes": 1048576,
+      "archive_bytes": 1545,
+      "ratio": 678.6899676375405,
+      "encode_seconds": 0.008092086999994308,
+      "decode_seconds": 0.003246432999986837,
+      "encode_samples": [
+        0.008092086999994308,
+        0.008012930999996115,
+        0.008102852000007488
+      ],
+      "decode_samples": [
+        0.003246432999986837,
+        0.003199976999979981,
+        0.0038022730000193405
+      ],
+      "exact_match": true,
+      "restored_sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f"
+    },
+    {
+      "file": "short-repeat.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 1048576,
+      "archive_bytes": 1557,
+      "ratio": 673.4592164418754,
+      "encode_seconds": 0.003226417999997011,
+      "decode_seconds": 0.001302782999999863,
+      "encode_samples": [
+        0.0031059660000209988,
+        0.003226417999997011,
+        0.004741436000017529
+      ],
+      "decode_samples": [
+        0.0012958629999957338,
+        0.001302782999999863,
+        0.001438444000001482
+      ],
+      "exact_match": true,
+      "restored_sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f"
+    },
+    {
+      "file": "short-repeat.bin",
+      "codec": "LZMA",
+      "source_bytes": 1048576,
+      "archive_bytes": 292,
+      "ratio": 3591.013698630137,
+      "encode_seconds": 0.012505494000009776,
+      "decode_seconds": 0.001220962000019199,
+      "encode_samples": [
+        0.015865803999986383,
+        0.012505494000009776,
+        0.012254845000001069
+      ],
+      "decode_samples": [
+        0.001635972000002539,
+        0.0011102640000046904,
+        0.001220962000019199
+      ],
+      "exact_match": true,
+      "restored_sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f"
+    },
+    {
+      "file": "noise.png",
+      "codec": "Fold",
+      "source_bytes": 787252,
+      "archive_bytes": 787730,
+      "ratio": 0.9993931930991583,
+      "encode_seconds": 0.03182074200000784,
+      "decode_seconds": 0.001972017000014148,
+      "encode_samples": [
+        0.03231724899998767,
+        0.03163932500001465,
+        0.03182074200000784
+      ],
+      "decode_samples": [
+        0.0019617840000023534,
+        0.0021402409999780048,
+        0.001972017000014148
+      ],
+      "exact_match": true,
+      "restored_sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8"
+    },
+    {
+      "file": "noise.png",
+      "codec": "DEFLATE",
+      "source_bytes": 787252,
+      "archive_bytes": 787503,
+      "ratio": 0.9996812710554753,
+      "encode_seconds": 0.01612414100000592,
+      "decode_seconds": 0.0010616369999922881,
+      "encode_samples": [
+        0.016669659999990927,
+        0.015864082999996754,
+        0.01612414100000592
+      ],
+      "decode_samples": [
+        0.0009995019999848864,
+        0.001104784999995445,
+        0.0010616369999922881
+      ],
+      "exact_match": true,
+      "restored_sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8"
+    },
+    {
+      "file": "noise.png",
+      "codec": "LZMA",
+      "source_bytes": 787252,
+      "archive_bytes": 787348,
+      "ratio": 0.9998780717039988,
+      "encode_seconds": 0.0952140499999814,
+      "decode_seconds": 0.000898901999988766,
+      "encode_samples": [
+        0.1055303469999842,
+        0.0952140499999814,
+        0.09468397999998501
+      ],
+      "decode_samples": [
+        0.0008541290000039226,
+        0.0009185850000221762,
+        0.000898901999988766
+      ],
+      "exact_match": true,
+      "restored_sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8"
+    },
+    {
+      "file": "gradient.png",
+      "codec": "Fold",
+      "source_bytes": 376770,
+      "archive_bytes": 375089,
+      "ratio": 1.0044816030328803,
+      "encode_seconds": 0.01860956199999464,
+      "decode_seconds": 0.0028840949999846544,
+      "encode_samples": [
+        0.018657282000020814,
+        0.0180339570000001,
+        0.01860956199999464
+      ],
+      "decode_samples": [
+        0.0029455060000032063,
+        0.0028319640000233903,
+        0.0028840949999846544
+      ],
+      "exact_match": true,
+      "restored_sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6"
+    },
+    {
+      "file": "gradient.png",
+      "codec": "DEFLATE",
+      "source_bytes": 376770,
+      "archive_bytes": 374607,
+      "ratio": 1.0057740512056634,
+      "encode_seconds": 0.008489604999994071,
+      "decode_seconds": 0.0019509349999964343,
+      "encode_samples": [
+        0.008489604999994071,
+        0.008084501000013233,
+        0.008601317999989533
+      ],
+      "decode_samples": [
+        0.0019509349999964343,
+        0.0021430040000041117,
+        0.0019001649999950132
+      ],
+      "exact_match": true,
+      "restored_sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6"
+    },
+    {
+      "file": "gradient.png",
+      "codec": "LZMA",
+      "source_bytes": 376770,
+      "archive_bytes": 364888,
+      "ratio": 1.032563416719651,
+      "encode_seconds": 0.044933317000015904,
+      "decode_seconds": 0.010474649999991925,
+      "encode_samples": [
+        0.04642880000000105,
+        0.044933317000015904,
+        0.04477154500000324
+      ],
+      "decode_samples": [
+        0.010474649999991925,
+        0.01049606099999778,
+        0.010452943000018422
+      ],
+      "exact_match": true,
+      "restored_sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6"
+    }
+  ]
+}

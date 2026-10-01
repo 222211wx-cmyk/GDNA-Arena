@@ -1,35 +1,52 @@
 <!doctype html>
-<html lang="ar" dir="rtl">
-<meta charset="utf-8">
+<html lang="ar" dir="rtl"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>الطي الرقمي — نتيجة تجربة أولية</title>
-<style>
-body{font-family:system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 22px;line-height:1.9;color:#202124;background:#fff}
-h1,h2{line-height:1.4}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:12px;text-align:right}code{direction:ltr;unicode-bidi:embed}
-</style>
-<h1>الطي الرقمي: نتيجة تجربة أولية</h1>
-<p>التاريخ: 29 سبتمبر 2026. الهدف: استكشاف تغيير تنظيم البيانات لتقليل مساحة تخزينها، مع استرجاع الأصل كاملاً دون حذف ميزات التطبيق.</p>
-<h2>النتيجة المقاسة</h2>
-<table>
-<tr><th>الحالة</th><th>الحجم بالبايت</th><th>ميغابايت عشرية</th></tr>
-<tr><td>APK الأصلي</td><td>427,504,925</td><td>427.50</td></tr>
-<tr><td>خط أساس: DEFLATE متصل، مستوى 9</td><td>212,255,624</td><td>212.26</td></tr>
-<tr><td>الأرشيف التجريبي، مع جميع البيانات الوصفية</td><td>210,309,678</td><td>210.31</td></tr>
-</table>
-<p>التخفيض مقارنة بالأصل: نحو 50.8%، أي نسبة ضغط 2.03 إلى 1، وليس 10 إلى 1. التحسن عن خط الأساس: نحو 1.95 MB أو 0.92%. يستثني حجم الطريقتين برنامج فك الضغط وبيئة تشغيله.</p>
-<h2>ماذا نفذ النموذج؟</h2>
-<p>تقسيم الملف إلى قطع بحجم 1 MiB، مع دعم مراجع للقطع المتطابقة. لكل قطعة جديدة يختار الأصغر بين: الأصل، DEFLATE، أو إعادة توزيع البايتات على ثمانية مسارات ثم DEFLATE. الترتيب قابل للعكس، وجميع المراجع والبيانات الوصفية داخل الأرشيف.</p>
-<p>اختير الضغط المعتاد لـ371 قطعة، وإعادة الترتيب مع الضغط لـ36 قطعة، والتخزين الخام لقطعة واحدة. لم تظهر قطع متطابقة تستفيد من إزالة التكرار في هذه العينة. زمن الترميز في بيئة التجربة: نحو 107.5 ثانية؛ ليس قياساً لأداء الهاتف.</p>
-<h2>سلامة البيانات</h2>
-<p>أعيد استخراج الملف وفحصت أحجام القطع وبصماتها وبصمة الملف الكامل، ثم أجريت مقارنة مباشرة بايتاً ببايت: الملف المسترجع مطابق للأصل. لم يعدل ملف APK الأصلي أو التطبيق أو إعدادات البناء.</p>
-<h2>الحدود</h2>
-<ul>
-<li>هذه تركيبة تجريبية لتقنيات معروفة، وليست ادعاءً باختراع خوارزمية جديدة مثبتة.</li>
-<li>التجربة على ملف واحد، ولا تثبت تفوقاً عاماً أو توافقاً مع كل الأنظمة.</li>
-<li>الأرشيف التجريبي لا يثبت على Android مباشرة؛ يجب استرجاع APK الأصلي أولاً.</li>
-<li>لا يعني تقليل النقل تقليل مساحة التثبيت أو ذاكرة التشغيل، وقد يتطلب الفك مساحة مؤقتة إضافية.</li>
-<li>هذه التجربة لا تصلح خطأ تشغيل التطبيق «Try Again».</li>
-<li>لا توجد بيانات محذوفة أو قاموس خارجي مخفي أو رفع تلقائي للبيانات.</li>
-</ul>
-<p>المصدر القابل لإعادة التشغيل: <code>research/digital-fold/fold.py</code>، باستخدام Python 3.8+ ومكتبته القياسية. أداة بحثية لأرشيفاتها المحلية، وليست قارئاً محصناً لملفات غير موثوقة.</p>
+<title>قياس الطي الرقمي على مجموعة مضبوطة</title>
+<style>body{font-family:system-ui;max-width:1200px;margin:32px auto;padding:20px;line-height:1.8}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:8px;text-align:right}
+code,pre{direction:ltr;unicode-bidi:embed;overflow-wrap:anywhere}.scroll{overflow:auto}</style>
+<h1>الطي الرقمي: قياس على مجموعة اصطناعية مضبوطة</h1>
+<p>هذه مقارنة لتقنيات معروفة، وليست اختراعاً مثبتاً أو وعداً بضغط شامل 10:1.
+النتائج تخص هذه العينات فقط. الملفات الأصلية محفوظة؛ لم نغيّر التطبيق أو بناء الهاتف أو نشغّل اختبارات التطبيق.</p>
+<h2>المنهج والبيئة</h2>
+<p>وقت القياس UTC: <code>2026-09-29T23:16:43.296422+00:00</code>.
+Python 3.12.11؛ zlib 1.3.1. <code>Linux-6.18.54-x86_64-with-glibc2.40</code></p>
+<p>Zstandard: <span dir="ltr">Unavailable: zstd executable not found; not measured.</span></p>
+<p>لكل ملف وطريقة 3 محاولات؛ الزمن بالميلي ثانية هو الوسيط، ويشمل القراءة والكتابة
+دون fsync. ذاكرة الملفات المؤقتة دافئة، دون جولة إحماء منفصلة، وبترتيب طرق ثابت.
+التحقق المباشر بايتاً ببايت خارج الزمن. فحوص الطي الداخلية جزء من زمنه.
+القياس ليس معياراً لأداء الهاتف، وقد تتذبذب الأزمنة في البيئة المشتركة.
+الطرق المرجعية تحمل الملف في الذاكرة؛ الطي يعالج قطعاً. لم نقس ذروة الذاكرة.
+عند توفر Zstandard يشمل زمنه إطلاق العملية.</p>
+<p>الطي: قطع 1 MiB مع إزالة التكرار واختيار الخام أو zlib-9 أو shuffle8 ثم zlib-9.
+أوقفنا حساب خط الأساس الإضافي داخل الطي أثناء قياسه.
+DEFLATE: مستوى 9 بغلاف zlib؛ LZMA: حاوية XZ وإعداد 6؛ Zstandard عند توفره: مستوى 3.
+هذه إعدادات محددة وليست مقارنة بمستويات متساوية أو بحثاً عن أفضل إعداد لكل طريقة.</p>
+<h2>الحجم الكامل والزمن والتطابق</h2>
+<p>الأحجام تشمل الحاويات والقواميس والمراجع والبصمات والبيانات الوصفية اللازمة للفك.
+لا قاموس خارجي. لا تشمل شيفرة المفكك أو بيئة تشغيله أو ملف التقرير
+أو أسماء ملفات نظام التشغيل وكتل القرص. النسبة = الأصل ÷ الأرشيف؛ أقل من 1 تعني زيادة الحجم.</p>
+<div class="scroll"><table><thead><tr><th>الملف</th><th>الطريقة</th><th>الأصل / بايت</th>
+<th>الأرشيف الكامل / بايت</th><th>النسبة</th><th>الترميز / ms</th><th>الفك / ms</th>
+<th>الاسترجاع لكل المحاولات</th></tr></thead><tbody><tr><td>text.txt</td><td>Fold</td><td>1,011,703</td><td>26,089</td><td>38.779:1</td><td>27.183</td><td>4.588</td><td>مطابق</td></tr><tr><td>text.txt</td><td>DEFLATE</td><td>1,011,703</td><td>31,249</td><td>32.376:1</td><td>11.827</td><td>1.279</td><td>مطابق</td></tr><tr><td>text.txt</td><td>LZMA</td><td>1,011,703</td><td>8,704</td><td>116.234:1</td><td>122.358</td><td>1.260</td><td>مطابق</td></tr><tr><td>structured.bin</td><td>Fold</td><td>1,048,576</td><td>3,290</td><td>318.716:1</td><td>922.782</td><td>3.347</td><td>مطابق</td></tr><tr><td>structured.bin</td><td>DEFLATE</td><td>1,048,576</td><td>197,695</td><td>5.304:1</td><td>917.245</td><td>2.787</td><td>مطابق</td></tr><tr><td>structured.bin</td><td>LZMA</td><td>1,048,576</td><td>34,332</td><td>30.542:1</td><td>181.946</td><td>7.654</td><td>مطابق</td></tr><tr><td>noise.bin</td><td>Fold</td><td>1,048,576</td><td>1,049,056</td><td>1.000:1</td><td>43.600</td><td>2.476</td><td>مطابق</td></tr><tr><td>noise.bin</td><td>DEFLATE</td><td>1,048,576</td><td>1,048,902</td><td>1.000:1</td><td>24.915</td><td>1.452</td><td>مطابق</td></tr><tr><td>noise.bin</td><td>LZMA</td><td>1,048,576</td><td>1,048,688</td><td>1.000:1</td><td>146.785</td><td>1.230</td><td>مطابق</td></tr><tr><td>repeated.bin</td><td>Fold</td><td>4,194,304</td><td>1,049,062</td><td>3.998:1</td><td>46.700</td><td>9.306</td><td>مطابق</td></tr><tr><td>repeated.bin</td><td>DEFLATE</td><td>4,194,304</td><td>4,195,590</td><td>1.000:1</td><td>83.926</td><td>4.955</td><td>مطابق</td></tr><tr><td>repeated.bin</td><td>LZMA</td><td>4,194,304</td><td>1,049,464</td><td>3.997:1</td><td>257.883</td><td>6.233</td><td>مطابق</td></tr><tr><td>short-repeat.bin</td><td>Fold</td><td>1,048,576</td><td>1,545</td><td>678.690:1</td><td>8.092</td><td>3.246</td><td>مطابق</td></tr><tr><td>short-repeat.bin</td><td>DEFLATE</td><td>1,048,576</td><td>1,557</td><td>673.459:1</td><td>3.226</td><td>1.303</td><td>مطابق</td></tr><tr><td>short-repeat.bin</td><td>LZMA</td><td>1,048,576</td><td>292</td><td>3591.014:1</td><td>12.505</td><td>1.221</td><td>مطابق</td></tr><tr><td>noise.png</td><td>Fold</td><td>787,252</td><td>787,730</td><td>0.999:1</td><td>31.821</td><td>1.972</td><td>مطابق</td></tr><tr><td>noise.png</td><td>DEFLATE</td><td>787,252</td><td>787,503</td><td>1.000:1</td><td>16.124</td><td>1.062</td><td>مطابق</td></tr><tr><td>noise.png</td><td>LZMA</td><td>787,252</td><td>787,348</td><td>1.000:1</td><td>95.214</td><td>0.899</td><td>مطابق</td></tr><tr><td>gradient.png</td><td>Fold</td><td>376,770</td><td>375,089</td><td>1.004:1</td><td>18.610</td><td>2.884</td><td>مطابق</td></tr><tr><td>gradient.png</td><td>DEFLATE</td><td>376,770</td><td>374,607</td><td>1.006:1</td><td>8.490</td><td>1.951</td><td>مطابق</td></tr><tr><td>gradient.png</td><td>LZMA</td><td>376,770</td><td>364,888</td><td>1.033:1</td><td>44.933</td><td>10.475</td><td>مطابق</td></tr></tbody></table></div>
+<h2>التحسينات والتراجعات</h2><ul><li><code>text.txt</code> مقابل DEFLATE: حجم الطي أصغر بـ 16.51%.</li><li><code>text.txt</code> مقابل LZMA: حجم الطي أكبر بـ 199.74%.</li><li><code>structured.bin</code> مقابل DEFLATE: حجم الطي أصغر بـ 98.34%.</li><li><code>structured.bin</code> مقابل LZMA: حجم الطي أصغر بـ 90.42%.</li><li><code>noise.bin</code> مقابل DEFLATE: حجم الطي أكبر بـ 0.01%.</li><li><code>noise.bin</code> مقابل LZMA: حجم الطي أكبر بـ 0.04%.</li><li><code>repeated.bin</code> مقابل DEFLATE: حجم الطي أصغر بـ 75.00%.</li><li><code>repeated.bin</code> مقابل LZMA: حجم الطي أصغر بـ 0.04%.</li><li><code>short-repeat.bin</code> مقابل DEFLATE: حجم الطي أصغر بـ 0.77%.</li><li><code>short-repeat.bin</code> مقابل LZMA: حجم الطي أكبر بـ 429.11%.</li><li><code>noise.png</code> مقابل DEFLATE: حجم الطي أكبر بـ 0.03%.</li><li><code>noise.png</code> مقابل LZMA: حجم الطي أكبر بـ 0.05%.</li><li><code>gradient.png</code> مقابل DEFLATE: حجم الطي أكبر بـ 0.13%.</li><li><code>gradient.png</code> مقابل LZMA: حجم الطي أكبر بـ 2.80%.</li></ul>
+<p>التكرار المطابق والمحاذي لحدود القطع يمنح الطي حالة ملائمة عمداً؛ لا يمثل ملفات عشوائية عامة.
+الضوضاء والوسائط المضغوطة تقيّدان الفائدة، وقد تزيد كلفة البيانات الوصفية الحجم.
+العينتان الإعلاميتان PNG فقط: لا تعمم النتيجة على JPEG أو الصوت أو الفيديو أو APK.
+لا نحذف الحالات الأسوأ، ولا نستنتج تفوقاً عاماً من مجموع أحجام عينات اختيرت اصطناعياً.</p>
+<h2>متطلبات الاسترجاع والحدود</h2>
+<p>الطي يحتاج fold.py وPython 3.8+ مع zipfile وzlib وhashlib.
+DEFLATE يحتاج مفككاً يقبل غلاف zlib؛ LZMA يحتاج دعم XZ؛ Zstandard يحتاج مفكك Zstandard.
+جميع مراجع الطي داخل الأرشيف. المفكك التجريبي مخصص لأرشيفات محلية موثوقة، وليس محصناً لمدخلات عدائية.
+يلزم مكان للأرشيف والملف المسترجع؛ حجم النقل لا يساوي حجم التثبيت أو RAM.
+ملف .fold لا يُثبّت كـAPK؛ يجب استرجاع APK الأصلي أولاً. هذه التجربة لا تصلح أخطاء تشغيل التطبيقات.</p>
+<h2>مصادر المجموعة</h2><p>كل البيانات مولدة محلياً بشيفرة benchmark.py، دون تنزيلات أو ملفات شخصية.
+SHAKE-256 ثابت الوسم، وليس مولداً عشوائياً يتغير بين التشغيلات.
+قد تتغير بايتات PNG عند تغيير إصدار zlib؛ البصمات هنا توثّق المجموعة المقاسة.</p><ul><li><code>text.txt</code> (text): Original synthetic UTF-8 English/Arabic records, 9000 numbered rows.<br>SHA-256: <code>cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7</code></li><li><code>structured.bin</code> (binary): 131072 sequential unsigned little-endian 64-bit integers.<br>SHA-256: <code>82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33</code></li><li><code>noise.bin</code> (binary): SHAKE-256(label=digital-fold-noise-v1), 1 MiB; incompressible control.<br>SHA-256: <code>63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b</code></li><li><code>repeated.bin</code> (repeated): Four aligned copies of SHAKE-256(label=digital-fold-repeat-v1), each 1 MiB.<br>SHA-256: <code>fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c</code></li><li><code>short-repeat.bin</code> (repeated): Eight-byte literal ABCD0123 repeated 131072 times; ordinary compression control.<br>SHA-256: <code>eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f</code></li><li><code>noise.png</code> (compressed media): Synthetic 512x512 RGB noise PNG, filter 0, zlib level 9, SHAKE-256 label digital-fold-png-v1.<br>SHA-256: <code>927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8</code></li><li><code>gradient.png</code> (compressed media): Synthetic 512x512 RGB gradient PNG, filter 0, zlib level 9.<br>SHA-256: <code>2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6</code></li></ul>
+<h2>إعادة الإنتاج</h2>
+<pre dir="ltr">python research/digital-fold/fold.py benchmark /tmp/digital-fold-corpus-v1 /tmp/digital-fold-results.html --repeats 3</pre>
+<p>اختر مسار مجموعة غير موجود: يرفض البرنامج الكتابة فوق مجموعة سابقة.
+يحتوي originals على الأصول وmeasurements.json على البيئة والبصمات وجميع عينات الزمن،
+وتحفظ الأرشيفات والنسخ المسترجعة لكل محاولة. يمكن تحديث نسخة التقرير الرئيسية بعد القياس.
+النتيجة السابقة لملف APK محفوظة في previous-apk-results.html كمرجع تاريخي، ولم نعد قياسها أو نخلطها بهذه المجموعة.</p>
 </html>
