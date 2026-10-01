@@ -55,7 +55,7 @@ export default function RecoverAccount() {
   useRecoveryLanguage();
   const { lang } = useLang();
   const copy = recoveryCopy(lang);
-  const { refreshUser } = useAuth();
+  const { refreshUser, recoverAccess, recoveryAccessPending, authError, loading } = useAuth();
   const search = useSearch();
   const next = recoveryReturnPath(search);
   const signIn = next?.startsWith("/lite") ? "/lite/login" : `/login${next ? `?${new URLSearchParams({ next })}` : ""}`;
@@ -80,16 +80,20 @@ export default function RecoverAccount() {
         <CardDescription>{copy.intro}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {success ? <p role="status" className="rounded-md border border-primary/30 bg-primary/10 p-3 text-sm" data-testid="status-password-reset-success">{copy.resetSuccess}</p> :
+        {success || recoveryAccessPending ? <>
+          <p role="status" className="rounded-md border border-primary/30 bg-primary/10 p-3 text-sm" data-testid="status-recovery-access-success">{copy.accessSuccess}</p>
+          {authError && <p role="alert" className="text-sm text-destructive">{copy.accessRefreshFailed}</p>}
+          <Button variant="outline" disabled={loading} onClick={() => void refreshUser()} data-testid="button-recovery-session-retry">{copy.retrySession}</Button>
+        </> :
           error ? <>
             <p role="alert" className="text-sm text-destructive" data-testid="status-recovery-config-error">{error}</p>
             <Button variant="outline" onClick={() => setAttempt(value => value + 1)} data-testid="button-recovery-config-retry">{copy.retry}</Button>
           </> : !config ? <p role="status" data-testid="status-recovery-config-loading">{copy.loading}</p> :
             !config.configured || !config.firebaseConfig ? <p role="alert" className="text-sm text-destructive" data-testid="status-recovery-config-unavailable">{copy.unavailable}</p> :
-              <PhoneRecoveryFlow action="reset" config={config.firebaseConfig} lang={lang} onSuccess={() => {
+              <PhoneRecoveryFlow action="access" config={config.firebaseConfig} lang={lang} onAccess={idToken => recoverAccess(idToken, next ?? "/social")} onSuccess={() => {
                 setSuccess(true);
-                // Reset revokes existing cookies; refresh the authoritative
-                // cookie identity without creating a new login.
+                // Only check the committed cookie now. Never reuse the SMS
+                // proof or return to a new-SMS form if this check is offline.
                 void refreshUser();
               }} />}
         <Link href={recoveryRoute("/recover-with-code", next, lang)} className="block text-sm text-primary hover:underline" data-testid="link-recover-account-with-code">{offlineRecoveryCopy(lang).link}</Link>

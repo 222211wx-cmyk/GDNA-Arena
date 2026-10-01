@@ -2,6 +2,8 @@
 // under BASE and sends credentials so the session cookie scopes engagement,
 // saves, shares, follows, and notifications to the signed-in citizen.
 
+import { fetchSharedClipSession } from "../../lib/account-session-events";
+
 const BASE = import.meta.env.BASE_URL;
 
 export type FeedAuthor = { id: number; username: string; avatarUrl: string | null };
@@ -127,15 +129,14 @@ export async function resolveIdentity(timeoutMs = 8_000): Promise<Identity> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${BASE}api/auth/me`, {
-      credentials: "include", cache: "no-store", signal: controller.signal,
-    });
+    const response = await fetchSharedClipSession();
+    if (controller.signal.aborted) return { status: "unknown" };
     if (response.status === 401) return { status: "anonymous" };
     if (!response.ok) return { status: "unknown" };
     const me = (await response.json().catch(() => null)) as
       | { id?: unknown; username?: unknown; avatarUrl?: unknown; avatar_url?: unknown; avatar?: unknown }
       | null;
-    if (me && Number.isSafeInteger(me.id)) {
+    if (me && Number.isSafeInteger(me.id) && (me.id as number) > 0 && typeof me.username === "string") {
       const avatar = (me.avatarUrl ?? me.avatar_url ?? me.avatar) as unknown;
       return {
         status: "authenticated",

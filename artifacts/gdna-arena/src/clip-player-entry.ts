@@ -1,5 +1,6 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
+import { announceAccountChange, fetchSharedClipSession, subscribeAccountChanges, subscribeSessionWake } from "./lib/account-session-events";
 import { mountVideoActions, type VideoActionState } from "./components/clips/VideoActions";
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
 import { reelsIcons } from "./components/clips/reelsIcons";
@@ -127,13 +128,12 @@ async function resolveIdentity(): Promise<Identity> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), IDENTITY_TIMEOUT_MS);
   try {
-    const response = await fetch(`${BASE}api/auth/me`, {
-      credentials: "include", cache: "no-store", signal: controller.signal,
-    });
+    const response = await fetchSharedClipSession();
+    if (controller.signal.aborted) return { status: "unknown" };
     if (response.status === 401) return { status: "anonymous" };
     if (!response.ok) return { status: "unknown" };
     const me = await response.json().catch(() => null);
-    if (me && Number.isSafeInteger(me.id)) return { status: "authenticated", accountId: me.id };
+    if (me && Number.isSafeInteger(me.id) && me.id > 0 && typeof me.username === "string") return { status: "authenticated", accountId: me.id };
     return { status: "unknown" };
   } catch {
     return { status: "unknown" };
@@ -142,13 +142,52 @@ async function resolveIdentity(): Promise<Identity> {
   }
 }
 
+let stopPlayerSession: (() => void) | undefined;
+
 export function renderClipPlayer(code: string) {
+  stopPlayerSession?.();
   const root = document.getElementById("root");
   if (!root) throw new Error("Clip root is missing");
   addStyles();
   // Start identity resolution immediately, but the video may render before it
   // settles; we await it right before mounting actions to avoid a save race.
   const identityPromise = resolveIdentity();
+  let reloading = false;
+  let verifiedAccount: number | null | undefined;
+  let refreshFlight: Promise<void> | null = null;
+  const reloadAccount = () => {
+    if (reloading) return;
+    reloading = true;
+    loadController?.abort();
+    calls.setAccount(null);
+    root.querySelectorAll<HTMLMediaElement>("video,audio").forEach(media => media.pause());
+    actions.replaceChildren();
+    window.location.reload();
+  };
+  const acceptIdentity = (identity: Identity) => {
+    if (identity.status === "unknown" || reloading) return;
+    const id = identity.status === "authenticated" ? identity.accountId : null;
+    if (verifiedAccount !== undefined && verifiedAccount !== id) {
+      announceAccountChange(id);
+      reloadAccount();
+    } else verifiedAccount = id;
+  };
+  void identityPromise.then(acceptIdentity);
+  const stopAccount = subscribeAccountChanges(reloadAccount);
+  const stopWake = subscribeSessionWake(() => {
+    if (refreshFlight || reloading) return;
+    refreshFlight = resolveIdentity().then(acceptIdentity).finally(() => { refreshFlight = null; });
+  });
+  const onPageHide = (event: PageTransitionEvent) => { if (!event.persisted) stopPlayerSession?.(); };
+  window.addEventListener("pagehide", onPageHide);
+  stopPlayerSession = () => {
+    reloading = true;
+    loadController?.abort();
+    calls.dispose();
+    stopAccount();
+    stopWake();
+    window.removeEventListener("pagehide", onPageHide);
+  };
   root.innerHTML = `
     <div class="direct-clip-shell" data-clip-fullscreen-shell data-testid="clip-player-shell">
       <header class="direct-topbar">
@@ -180,6 +219,7 @@ export function renderClipPlayer(code: string) {
     </div>`;
   const calls = createLightweightCallBoundary(root);
   void identityPromise.then(identity => {
+    if (reloading) return;
     if (identity.status === "authenticated") calls.setAccount(identity.accountId);
     else if (identity.status === "anonymous") calls.setAccount(null);
   });
@@ -233,6 +273,7 @@ export function renderClipPlayer(code: string) {
           // scoped correctly (or disabled when identity is unknown).
            const identity = await identityPromise;
            const engagement = await fetchEngagement(clip.id).catch(() => null);
+           if (reloading || controller.signal.aborted || loadController !== controller) return;
           await mountVideoActions({
             host: actions,
             media,

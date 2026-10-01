@@ -778,6 +778,27 @@ paths:
         "403": { $ref: "#/components/responses/RecoveryError" }
         "429": { $ref: "#/components/responses/RecoveryError" }
         "503": { $ref: "#/components/responses/RecoveryError" }
+  /auth/recovery/access:
+    post:
+      operationId: accessRecoveryAccount
+      tags: [auth]
+      summary: Restore access to an existing account using its bound SMS-verified phone
+      description: Requires a fresh (at most five minutes old), globally single-use Firebase phone auth event matching an existing phone and project binding. Refreshed tokens cannot replay that event. Atomically revokes existing sessions and push bindings and advances the credential epoch, then issues a new epoch-fenced 365-day session cookie after commit. No username or new password is required; the password, recovery codes, E2EE registrations and historical messages remain unchanged. Never creates an account or returns account identifiers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryAccessCredentials" }
+      responses:
+        "200":
+          description: Access restored; authenticated session cookie issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryResetSuccess" }
+        "400": { $ref: "#/components/responses/RecoveryError" }
+        "403": { $ref: "#/components/responses/RecoveryError" }
+        "429": { $ref: "#/components/responses/RecoveryError" }
+        "503": { $ref: "#/components/responses/RecoveryError" }
   /auth/recovery/reset:
     post:
       operationId: resetRecoveryPassword
@@ -1494,6 +1515,12 @@ components:
       properties:
         idToken: { type: string, minLength: 20, maxLength: 8192 }
         currentPassword: { type: string, minLength: 1, maxLength: 1024 }
+    RecoveryAccessCredentials:
+      type: object
+      additionalProperties: false
+      required: [idToken]
+      properties:
+        idToken: { type: string, minLength: 20, maxLength: 8192 }
     RecoveryPasswordCredentials:
       type: object
       additionalProperties: false

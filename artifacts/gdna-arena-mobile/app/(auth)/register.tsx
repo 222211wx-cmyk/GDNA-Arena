@@ -3,12 +3,14 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Platform, ActivityIndicator, KeyboardAvoidingView, ScrollView,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { Typography } from '@workspace/gdna-ds/components/native/typography';
+import { recoveryCopy } from '@/lib/recovery-copy';
 
 function isValidBirthDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -21,7 +23,7 @@ function isValidBirthDate(value: string): boolean {
 export default function RegisterScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { register } = useAuth();
+  const { register, user, isLoading, startupError } = useAuth();
 
   const [username, setUsername] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -51,6 +53,15 @@ export default function RegisterScreen() {
   const s = styles(colors);
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
+  if (isLoading || startupError) {
+    return (
+      <View style={s.root}>
+        {startupError ? <Typography accessibilityRole="alert">{startupError}</Typography> : <ActivityIndicator color={colors.primary} />}
+      </View>
+    );
+  }
+  if (user) return <Redirect href="/(tabs)" />;
+
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={[s.scroll, { paddingTop: topPad + 40, paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
@@ -64,6 +75,9 @@ export default function RegisterScreen() {
 
         <View style={s.card}>
           <Text style={s.title}>Create Account</Text>
+          <Typography variant="muted" style={s.accountNote} testID="notice-single-account">
+            {recoveryCopy().singleAccountNotice}
+          </Typography>
 
           {error ? (
             <View style={s.errorBox}>
@@ -163,6 +177,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 24,
   },
   title: { fontSize: 20, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 20 },
+  accountNote: { marginBottom: 20 },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: colors.muted, borderRadius: 8, padding: 10,

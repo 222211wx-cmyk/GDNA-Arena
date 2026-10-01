@@ -136,6 +136,12 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
           </p>}
         </div>
 
+        <div role="note" data-testid="notice-single-account" className="mx-auto max-w-2xl rounded-md border border-primary/30 bg-primary/10 p-3 text-xs leading-relaxed text-muted-foreground space-y-2">
+          <p>{copy.singleAccount}</p>
+          <p>{copy.sessionNotice}</p>
+          <p>{copy.accessNotice}</p>
+        </div>
+
         {messengerLogin || mode === "auth" ? (
           /* ── Auth form ── */
           <motion.div

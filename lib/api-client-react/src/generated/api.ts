@@ -98,6 +98,7 @@ import type {
   OfflineRecoveryStatus,
   PlayResult,
   PresignClipUploadBody,
+  RecoveryAccessCredentials,
   RecoveryConfig,
   RecoveryErrorResponse,
   RecoveryPasswordCredentials,
@@ -4287,6 +4288,95 @@ export const useRemoveRecoveryPhone = <TError = ErrorType<RecoveryErrorResponse>
         TContext
       > => {
       return useMutation(getRemoveRecoveryPhoneMutationOptions(options), queryClient);
+    }
+
+export const getAccessRecoveryAccountUrl = () => {
+
+
+
+
+  return `/api/auth/recovery/access`
+}
+
+/**
+ * Requires a fresh (at most five minutes old), globally single-use Firebase phone auth event matching an existing phone and project binding. Refreshed tokens cannot replay that event. Atomically revokes existing sessions and push bindings and advances the credential epoch, then issues a new epoch-fenced 365-day session cookie after commit. No username or new password is required; the password, recovery codes, E2EE registrations and historical messages remain unchanged. Never creates an account or returns account identifiers.
+ * @summary Restore access to an existing account using its bound SMS-verified phone
+ */
+export const accessRecoveryAccount = async (recoveryAccessCredentials: RecoveryAccessCredentials, options?: Parameters<typeof customFetch>[1]): Promise<RecoveryResetSuccess> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<RecoveryResetSuccess>(getAccessRecoveryAccountUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recoveryAccessCredentials)
+  }
+);}
+
+
+
+
+
+export const getAccessRecoveryAccountMutationKey = () => ['accessRecoveryAccount'] as const;
+
+export const getAccessRecoveryAccountMutationOptions = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof accessRecoveryAccount>>, TError,AccessRecoveryAccountMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof accessRecoveryAccount>>, TError,AccessRecoveryAccountMutationVariables, TContext> => {
+
+const mutationKey = getAccessRecoveryAccountMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof accessRecoveryAccount>>, AccessRecoveryAccountMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  accessRecoveryAccount(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AccessRecoveryAccountMutationResult = NonNullable<Awaited<ReturnType<typeof accessRecoveryAccount>>>
+    export type AccessRecoveryAccountMutationBody = BodyType<RecoveryAccessCredentials>
+    export type AccessRecoveryAccountMutationError = ErrorType<RecoveryErrorResponse>
+    export type AccessRecoveryAccountMutationVariables = {data: BodyType<RecoveryAccessCredentials>}
+
+    /**
+ * @summary Restore access to an existing account using its bound SMS-verified phone
+ */
+export const useAccessRecoveryAccount = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof accessRecoveryAccount>>, TError,AccessRecoveryAccountMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof accessRecoveryAccount>>,
+        TError,
+        AccessRecoveryAccountMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAccessRecoveryAccountMutationOptions(options), queryClient);
     }
 
 export const getResetRecoveryPasswordUrl = () => {

@@ -3,7 +3,7 @@ export function recoveryReturnPath(search: string): string | null {
   const next = new URLSearchParams(search).get("next");
   if (!next || /[\\\u0000-\u001f]/.test(next) || next.startsWith("//")) return null;
   // Restrict destinations to known account/messaging surfaces, never external URLs.
-  return /^\/(?:lite(?:\/(?:login|settings|in|africa|brasil))?|dashboard|messages|messages\.call|message-calle|messagerie)(?:[?#]|$)/.test(next) ? next : null;
+  return /^\/(?:lite(?:\/(?:login|settings|in|africa|brasil))?|social|dashboard|messages|messages\.call|message-calle|messagerie)(?:[?#]|$)/.test(next) ? next : null;
 }
 
 export function recoveryRoute(route: "/recover-account" | "/recovery-phone" | "/recovery-code" | "/recover-with-code", next: string | null = null, lang?: string): string {

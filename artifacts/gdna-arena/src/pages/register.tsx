@@ -39,7 +39,7 @@ export default function Register() {
     }
   };
 
-  if (destination && user) return <Redirect to={destination} replace />;
+  if (user) return <Redirect to={destination ?? "/social"} replace />;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 relative overflow-hidden">
@@ -59,6 +59,11 @@ export default function Register() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <div dir={lang === "ar" ? "rtl" : "ltr"} role="note" data-testid="notice-single-account" className="mb-5 rounded-md border border-primary/30 bg-primary/10 p-3 text-xs leading-relaxed text-muted-foreground space-y-2">
+              <p>{copy.singleAccount}</p>
+              <p>{copy.sessionNotice}</p>
+              <p>{copy.accessNotice}</p>
+            </div>
             <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">

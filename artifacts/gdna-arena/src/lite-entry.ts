@@ -15,6 +15,7 @@ import { parseRoute, href, editionOf, type Route } from "./lite/router";
 import { EDITION_LANGS, RTL_LANGS, stringsFor, type LiteLang, type Strings } from "./lite/i18n";
 import { refreshSession, subscribeSession, getUser, getSessionStatus, getSessionError, type SessionStatus } from "./lite/session";
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
+import { subscribeSessionWake } from "./lib/account-session-events";
 import { syncQueue } from "./lite/messaging";
 import {
   homePage,
@@ -385,6 +386,7 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
   };
 
   void refreshSession().then(() => void drain("session"));
+  const stopSessionWake = subscribeSessionWake(() => void refreshSession());
 
   const onOnline = () => {
     uiDrainPasses = 0; // reconnect resets the UI retry budget
@@ -404,6 +406,7 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
     window.removeEventListener("online", onOnline);
     navigator.serviceWorker?.removeEventListener?.("message", onSwMessage);
     unsubSession();
+    stopSessionWake();
     calls.dispose();
     net.dispose();
     mount(host);

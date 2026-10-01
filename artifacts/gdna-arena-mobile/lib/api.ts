@@ -51,47 +51,81 @@ export class ApiError extends Error {
   }
 }
 
+let cachedAuthGeneration = 0;
+let cachedAuthStorageQueue: Promise<void> = Promise.resolve();
+
+export function getCachedAuthGeneration(): number {
+  return cachedAuthGeneration;
+}
+
+function serializeCachedAuthStorage<T>(operation: () => Promise<T>): Promise<T> {
+  const result = cachedAuthStorageQueue.then(operation, operation);
+  cachedAuthStorageQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
 export async function loadCachedAuthUser(): Promise<AuthUser | null> {
-  if (Platform.OS === 'web') {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
-    return null;
-  }
-  const stored = await SecureStore.getItemAsync(CACHED_USER_KEY);
-  if (!stored) return null;
-  try {
-    const parsed = JSON.parse(stored) as Partial<AuthUser>;
-    if (
-      typeof parsed.id !== 'number' ||
-      typeof parsed.username !== 'string' ||
-      typeof parsed.balance !== 'number' ||
-      typeof parsed.xp !== 'number'
-    ) {
+  const expectedGeneration = cachedAuthGeneration;
+  return serializeCachedAuthStorage(async () => {
+    if (expectedGeneration !== cachedAuthGeneration) return null;
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+      return null;
+    }
+    const stored = await SecureStore.getItemAsync(CACHED_USER_KEY);
+    if (expectedGeneration !== cachedAuthGeneration) return null;
+    if (!stored) return null;
+    try {
+      const parsed = JSON.parse(stored) as Partial<AuthUser>;
+      if (
+        typeof parsed.id !== 'number' ||
+        typeof parsed.username !== 'string' ||
+        typeof parsed.balance !== 'number' ||
+        typeof parsed.xp !== 'number'
+      ) {
+        await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+        return null;
+      }
+      return parsed as AuthUser;
+    } catch {
       await SecureStore.deleteItemAsync(CACHED_USER_KEY);
       return null;
     }
-    return parsed as AuthUser;
-  } catch {
-    await SecureStore.deleteItemAsync(CACHED_USER_KEY);
-    return null;
-  }
+  });
 }
 
-export async function saveCachedAuthUser(user: AuthUser): Promise<void> {
-  if (Platform.OS === 'web') {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
-    return;
-  }
-  await SecureStore.setItemAsync(CACHED_USER_KEY, JSON.stringify(user), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+export async function saveCachedAuthUser(
+  user: AuthUser,
+  expectedGeneration = cachedAuthGeneration,
+): Promise<void> {
+  if (expectedGeneration !== cachedAuthGeneration) return;
+  return serializeCachedAuthStorage(async () => {
+    if (expectedGeneration !== cachedAuthGeneration) return;
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+      return;
+    }
+    await SecureStore.setItemAsync(CACHED_USER_KEY, JSON.stringify(user), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+    // An auth transition during the native write must not restore old identity.
+    // New-owner writes run after this cleanup in the same queue.
+    if (expectedGeneration !== cachedAuthGeneration) {
+      await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+    }
   });
 }
 
 export async function clearCachedAuthUser(): Promise<void> {
-  if (Platform.OS === 'web') {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
-    return;
-  }
-  await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+  const expectedGeneration = ++cachedAuthGeneration;
+  return serializeCachedAuthStorage(async () => {
+    if (expectedGeneration !== cachedAuthGeneration) return;
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+      return;
+    }
+    await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+  });
 }
 
 let sessionCookie: string | null = null;
@@ -165,6 +199,7 @@ export async function clearSessionCookie(): Promise<void> {
   // Increment synchronously so already-running requests are stale before the
   // asynchronous storage deletion yields.
   sessionGeneration += 1;
+  cachedAuthGeneration += 1;
   sessionCookie = null;
   await serializeSessionStorage(() => sessionStorage.delete());
 }
@@ -174,6 +209,7 @@ export function beginSessionTransition(): void {
   // Login/register must still send it once so the server can rotate and revoke
   // the prior HTTP session (and its authenticated WebSockets).
   sessionGeneration += 1;
+  cachedAuthGeneration += 1;
 }
 
 export function getHeaders(extra?: Record<string, string>): Record<string, string> {
@@ -223,17 +259,9 @@ export async function apiRequest<TResponse, TBody = never>(
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  assertNetworkOnline();
-  const res = await fetch(`${getApiBase()}${path}`, {
-    method: 'GET',
-    headers: getHeaders(),
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string };
-    throw new ApiError(res.status, body.error ?? res.statusText);
-  }
-  return res.json();
+  // /me also renews rolling sessions. Persist its cookie through the same
+  // generation guard as mutations, never through an unguarded native write.
+  return apiRequest<T>('GET', path);
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {

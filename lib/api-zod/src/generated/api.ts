@@ -1027,6 +1027,24 @@ export const RemoveRecoveryPhoneResponse = zod.object({
 
 
 /**
+ * Requires a fresh (at most five minutes old), globally single-use Firebase phone auth event matching an existing phone and project binding. Refreshed tokens cannot replay that event. Atomically revokes existing sessions and push bindings and advances the credential epoch, then issues a new epoch-fenced 365-day session cookie after commit. No username or new password is required; the password, recovery codes, E2EE registrations and historical messages remain unchanged. Never creates an account or returns account identifiers.
+ * @summary Restore access to an existing account using its bound SMS-verified phone
+ */
+export const accessRecoveryAccountBodyIdTokenMin = 20;
+export const accessRecoveryAccountBodyIdTokenMax = 8192;
+
+
+
+export const AccessRecoveryAccountBody = zod.object({
+  "idToken": zod.string().min(accessRecoveryAccountBodyIdTokenMin).max(accessRecoveryAccountBodyIdTokenMax)
+})
+
+export const AccessRecoveryAccountResponse = zod.object({
+  "success": zod.literal(true)
+})
+
+
+/**
  * Uses a fresh single-use Firebase phone auth event, never a supplied username or Firebase UID as the local account ID. Revokes all app sessions and push bindings. Does not log in.
  * @summary Reset the local password from an already bound SMS-verified phone
  */

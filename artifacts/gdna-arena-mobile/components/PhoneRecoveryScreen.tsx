@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  bindRecoveryPhone, getRecoveryConfig, removeRecoveryPhone, resetRecoveryPassword, setBaseUrl, useGetRecoveryPhone,
+  bindRecoveryPhone, getRecoveryConfig, removeRecoveryPhone, setBaseUrl, useGetRecoveryPhone,
 } from '@workspace/api-client-react';
 import { Button } from '@workspace/gdna-ds/components/native/button';
 import { Card } from '@workspace/gdna-ds/components/native/card';
@@ -21,8 +21,9 @@ import {
   createPhoneRecoverySession, phoneRecoveryPlatform, type PhoneRecoverySession,
 } from '@/lib/phone-recovery';
 import {
-  phoneRecoveryErrorMessage, recoveryPasswordValid, recoveryWebsiteUrl,
+  phoneRecoveryErrorMessage, recoveryWebsiteUrl,
 } from '@/lib/phone-recovery-links';
+import { phoneRecoveryCopy } from '@/lib/recovery-copy';
 
 type Action = 'bind' | 'remove';
 type Props = { mode: 'reset' | 'settings' };
@@ -32,17 +33,17 @@ export function PhoneRecoveryScreen({ mode }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, accessWithPhone, retryPhoneAccess } = useAuth();
+  const copy = phoneRecoveryCopy();
   const platform = phoneRecoveryPlatform();
   const isNative = platform === 'android';
   const isSettings = mode === 'settings';
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [code, setCode] = useState('');
   const [consent, setConsent] = useState(false);
   const [action, setAction] = useState<Action>('bind');
-  const [step, setStep] = useState<'phone' | 'code' | 'success'>('phone');
+  const [step, setStep] = useState<'phone' | 'code' | 'pending' | 'success'>('phone');
   const [automaticallyVerified, setAutomaticallyVerified] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -81,7 +82,6 @@ export function PhoneRecoveryScreen({ mode }: Props) {
   useEffect(() => {
     setPhone('');
     setPassword('');
-    setConfirmPassword('');
     setCode('');
     setConsent(false);
     setStep('phone');
@@ -109,15 +109,12 @@ export function PhoneRecoveryScreen({ mode }: Props) {
   };
 
   const validate = (): string | null => {
-    if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) return 'Enter the full phone number with + and country calling code (8–15 digits).';
+    if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) return copy.invalidPhone;
     if (isSettings) {
       if (!password) return 'Enter your current account password.';
       if (!status.data) return 'Load your current recovery-number status before continuing.';
-    } else {
-      if (!recoveryPasswordValid(password)) return 'Your new password must have at least 6 characters and at most 72 UTF-8 bytes.';
-      if (password !== confirmPassword) return 'The new passwords do not match.';
     }
-    if (!consent) return 'Confirm that you agree to SMS phone verification before requesting a code.';
+    if (!consent) return copy.consentRequired;
     return null;
   };
 
@@ -168,7 +165,7 @@ export function PhoneRecoveryScreen({ mode }: Props) {
 
   const submit = async () => {
     if (operationBusy.current) return;
-    if (!automaticallyVerified && !/^\d{6}$/.test(code)) { setError('Enter the 6-digit SMS code.'); return; }
+    if (!automaticallyVerified && !/^\d{6}$/.test(code)) { setError(copy.invalidCode); return; }
     const challenge = session.current;
     if (!challenge) { setError('Request a new SMS code before continuing.'); setStep('phone'); return; }
     operationBusy.current = true;
@@ -176,6 +173,7 @@ export function PhoneRecoveryScreen({ mode }: Props) {
     setError('');
     const requestGeneration = generation.current;
     const isCurrent = () => requestGeneration === generation.current;
+    let accessOutcome: 'verified' | 'pending' | null = null;
     try {
       const completed = await challenge.submit(code, async idToken => {
         if (!isCurrent()) throw new Error('Phone recovery was cancelled.');
@@ -190,16 +188,16 @@ export function PhoneRecoveryScreen({ mode }: Props) {
             ? removeRecoveryPhone(body, recoveryRequestOptions())
             : bindRecoveryPhone(body, recoveryRequestOptions());
         }
-        return resetRecoveryPassword({ idToken, newPassword: password }, recoveryRequestOptions());
+        accessOutcome = await accessWithPhone(idToken);
+        return accessOutcome;
       });
       if (!isCurrent()) return;
       session.current = null;
       setPassword('');
-      setConfirmPassword('');
       setCode('');
       setPhone('');
-      setStep('success');
-      if (isSettings && 'hasVerifiedPhone' in completed) {
+      setStep(accessOutcome === 'pending' ? 'pending' : 'success');
+      if (isSettings && typeof completed === 'object' && 'hasVerifiedPhone' in completed) {
         queryClient.setQueryData(phoneQueryKey, completed);
         await queryClient.invalidateQueries({ queryKey: phoneQueryKey });
       }
@@ -208,10 +206,29 @@ export function PhoneRecoveryScreen({ mode }: Props) {
       session.current = null;
       setCode('');
       setAutomaticallyVerified(false);
-      setStep('phone');
-      setError(`${phoneRecoveryErrorMessage(failure)} Request a fresh SMS verification before retrying.`);
+      // Cleanup may fail after the exchange succeeded. The proof is still
+      // consumed: retry only /me, never the exchange or Firebase credential.
+      setStep(accessOutcome === 'pending' ? 'pending' : accessOutcome === 'verified' ? 'success' : 'phone');
+      setError(`${phoneRecoveryErrorMessage(failure)}${accessOutcome ? '' : ` ${copy.fresh}`}`);
     } finally {
       if (isCurrent()) { operationBusy.current = false; setBusy(false); }
+    }
+  };
+
+  const retrySavedSession = async () => {
+    if (operationBusy.current) return;
+    operationBusy.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const outcome = await retryPhoneAccess();
+      setStep(outcome === 'verified' ? 'success' : 'pending');
+    } catch (failure) {
+      setStep('phone');
+      setError(`${phoneRecoveryErrorMessage(failure)} ${copy.fresh}`);
+    } finally {
+      operationBusy.current = false;
+      setBusy(false);
     }
   };
 
@@ -223,7 +240,6 @@ export function PhoneRecoveryScreen({ mode }: Props) {
       setAction(nextAction);
       setPhone('');
       setPassword('');
-      setConfirmPassword('');
       setConsent(false);
       setStep('phone');
     } catch {
@@ -255,16 +271,16 @@ export function PhoneRecoveryScreen({ mode }: Props) {
           disabled={busy} onPress={() => router.canGoBack() ? router.back() : router.replace(isSettings ? '/(tabs)/profile' : '/(auth)/login')}>
           <Ionicons name="arrow-back" size={22} color={colors.foreground} />
         </Button>
-        <Typography variant="title" style={styles.heading}>{isSettings ? 'Recovery number' : 'Forgot password'}</Typography>
+        <Typography variant="title" style={styles.heading}>{isSettings ? 'Recovery number' : copy.title}</Typography>
       </View>
 
       <Card style={styles.card}>
         <Ionicons name="shield-checkmark-outline" size={32} color={colors.primary} />
-        <Typography variant="title">{isSettings ? 'Protect your account' : 'Recover your account'}</Typography>
+        <Typography variant="title">{isSettings ? 'Protect your account' : copy.title}</Typography>
         <Typography variant="muted">
           {isSettings
-            ? 'An optional verified phone number lets you reset your password if you lose access. Your password and fresh phone verification are required to change or remove it.'
-            : 'Use the phone number you previously verified in your account settings. Accounts without a verified recovery number cannot be reset by SMS.'}
+            ? 'An optional verified phone number lets you access your existing account if you lose access, without a new password. Your password and fresh phone verification are required to change or remove it.'
+            : copy.intro}
         </Typography>
 
         {error ? <Typography accessibilityRole="alert" style={{ color: colors.destructive }} testID="recovery-error">{error}</Typography> : null}
@@ -277,16 +293,21 @@ export function PhoneRecoveryScreen({ mode }: Props) {
             {isSettings ? <Typography variant="muted">You may need to sign in again in your browser. The Android app session is not transferred.</Typography> : null}
             <Button onPress={openWebsite} testID="recovery-open-website">Continue on website</Button>
           </>
+        ) : step === 'pending' ? (
+          <>
+            <Typography accessibilityLiveRegion="polite" testID="recovery-session-pending">{copy.pending}</Typography>
+            <Button loading={busy} onPress={() => void retrySavedSession()} testID="recovery-session-retry">{copy.retry}</Button>
+          </>
         ) : step === 'success' ? (
           <>
             <Typography accessibilityLiveRegion="polite" testID="recovery-success">
               {isSettings
-                ? action === 'remove' ? 'Your recovery number was removed. SMS password recovery is now disabled for this account.' : 'Your recovery number is verified and saved.'
-                : 'Your password was reset. Previous signed-in sessions were revoked. Sign in with your new password.'}
+                ? action === 'remove' ? 'Your recovery number was removed. SMS account access is now disabled for this account.' : 'Your recovery number is verified and saved.'
+                : copy.success}
             </Typography>
             {isSettings && status.data?.hasVerifiedPhone ? <Typography variant="label">Verified number: {status.data.maskedPhone}</Typography> : null}
-            <Button onPress={() => router.replace(isSettings ? '/(tabs)/profile' : '/(auth)/login')} testID="recovery-done">
-              {isSettings ? 'Back to profile' : 'Back to sign in'}
+            <Button onPress={() => router.replace(isSettings ? '/(tabs)/profile' : '/(tabs)')} testID="recovery-done">
+              {isSettings ? 'Back to profile' : copy.done}
             </Button>
           </>
         ) : isSettings && status.isPending ? (
@@ -318,57 +339,48 @@ export function PhoneRecoveryScreen({ mode }: Props) {
             {step === 'phone' ? (
               <>
                 <View style={styles.group}>
-                  <Typography variant="label">{isSettings && action === 'bind' ? 'Number to verify' : 'Verified recovery number'}</Typography>
-                  <Input value={phone} onChangeText={setPhone} editable={!busy} accessibilityLabel="Phone number with country code"
+                  <Typography variant="label">{isSettings && action === 'bind' ? 'Number to verify' : copy.phone}</Typography>
+                  <Input value={phone} onChangeText={setPhone} editable={!busy} accessibilityLabel={copy.phone}
                     placeholder="+212…" keyboardType="phone-pad" textContentType="telephoneNumber"
                     autoComplete="tel" autoCapitalize="none" autoCorrect={false} maxLength={16} testID="recovery-phone" />
-                  <Typography variant="muted">Include + and the country calling code.</Typography>
+                  <Typography variant="muted">{copy.phoneHint}</Typography>
                 </View>
-                <View style={styles.group}>
-                  <Typography variant="label">{isSettings ? 'Current password' : 'New password'}</Typography>
+                {isSettings ? <View style={styles.group}>
+                  <Typography variant="label">Current password</Typography>
                   <Input value={password} onChangeText={setPassword} editable={!busy} secureTextEntry
-                    accessibilityLabel={isSettings ? 'Current password' : 'New password'}
-                    textContentType={isSettings ? 'password' : 'newPassword'} autoComplete={isSettings ? 'current-password' : 'new-password'}
+                    accessibilityLabel="Current password"
+                    textContentType="password" autoComplete="current-password"
                     autoCapitalize="none" autoCorrect={false} testID="recovery-password" />
-                </View>
-                {!isSettings ? (
-                  <View style={styles.group}>
-                    <Typography variant="label">Confirm new password</Typography>
-                    <Input value={confirmPassword} onChangeText={setConfirmPassword} editable={!busy} secureTextEntry
-                      accessibilityLabel="Confirm new password" textContentType="newPassword" autoComplete="new-password"
-                      autoCapitalize="none" autoCorrect={false} testID="recovery-password-confirm" />
-                    <Typography variant="muted">At least 6 characters; maximum 72 UTF-8 bytes.</Typography>
-                  </View>
-                ) : null}
+                </View> : null}
                 <Button variant="outline" accessibilityRole="checkbox" accessibilityState={{ checked: consent }}
-                  accessibilityLabel="I agree to receive an SMS for phone verification" style={styles.consent}
+                  accessibilityLabel={copy.consent} style={styles.consent}
                   disabled={busy} onPress={() => setConsent(value => !value)} testID="recovery-consent">
                   <Ionicons name={consent ? 'checkbox-outline' : 'square-outline'} size={22} color={colors.primary} />
-                  <Typography style={styles.consentText}>I agree to receive an SMS for phone verification.</Typography>
+                  <Typography style={styles.consentText}>{copy.consent}</Typography>
                 </Button>
-                <Typography variant="muted">Firebase processes the phone number to verify it and prevent abuse. Carrier charges may apply. Protect this number: anyone who controls it can reset your account password.</Typography>
+                <Typography variant="muted">{copy.privacy}</Typography>
                 <Button onPress={() => void sendCode()} loading={busy} disabled={cooldown > 0}
-                  testID="recovery-send-code">{cooldown > 0 ? `Request again in ${cooldown}s` : 'Send verification SMS'}</Button>
+                  testID="recovery-send-code">{cooldown > 0 ? `${copy.wait} ${cooldown}` : copy.send}</Button>
               </>
             ) : (
               <>
                 <Typography accessibilityLiveRegion="polite">
-                  {automaticallyVerified ? 'Android verified this phone automatically.' : `Firebase accepted the SMS request for the number ending in ${phone.trim().slice(-4)}. Enter the code when it arrives.`}
+                  {automaticallyVerified ? copy.automatic : copy.sent}
                 </Typography>
                 {!automaticallyVerified ? (
                   <View style={styles.group}>
-                    <Typography variant="label">SMS verification code</Typography>
+                    <Typography variant="label">{copy.code}</Typography>
                     <Input value={code} onChangeText={setCode} editable={!busy} keyboardType="number-pad"
-                      textContentType="oneTimeCode" autoComplete="sms-otp" accessibilityLabel="6-digit SMS code"
+                      textContentType="oneTimeCode" autoComplete="sms-otp" accessibilityLabel={copy.code}
                       autoCapitalize="none" autoCorrect={false} maxLength={6} testID="recovery-code" />
                   </View>
                 ) : null}
                 <Button variant={isSettings && action === 'remove' ? 'destructive' : 'default'}
                   loading={busy} onPress={() => void submit()} testID="recovery-confirm">
-                  {isSettings ? action === 'remove' ? 'Verify and remove number' : 'Verify and save number' : 'Verify and reset password'}
+                  {isSettings ? action === 'remove' ? 'Verify and remove number' : 'Verify and save number' : copy.confirm}
                 </Button>
-                <Button variant="outline" disabled={busy} onPress={() => void startOver()} testID="recovery-restart">Start over / request another code</Button>
-                <Typography variant="muted">A fresh verification is required for every attempt. Firebase SMS delivery and app validation depend on the project configuration and your carrier.</Typography>
+                <Button variant="outline" disabled={busy} onPress={() => void startOver()} testID="recovery-restart">{copy.restart}</Button>
+                <Typography variant="muted">{copy.delivery}</Typography>
               </>
             )}
           </>

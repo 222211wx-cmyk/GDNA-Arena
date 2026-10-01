@@ -7,6 +7,7 @@
 import { apiPath, postJson, ApiError, resetSnapshotHandle } from "./api";
 import { OfflineQueue } from "./offline-queue";
 import { deleteDb } from "./idb";
+import { announceAccountChange, subscribeAccountChanges } from "../lib/account-session-events";
 
 export interface SessionUser {
   id: number;
@@ -24,49 +25,21 @@ let generation = 0;
 let refreshRequest = 0;
 let pendingMutations = 0;
 let verificationNeeded = false;
+let externalChange = false;
 let mutationTail: Promise<void> = Promise.resolve();
 const refreshControllers = new Set<AbortController>();
 const listeners = new Set<(u: SessionUser | null, status: SessionStatus) => void>();
 
-const CHANNEL = "gdna-lite:account";
-const channel: BroadcastChannel | null =
-  typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(CHANNEL) : null;
-
-// Cross-tab account changes: if another tab logs in/out or switches accounts, this
-// tab purges the previous account's private data and re-derives its session so no
-// offline snapshot or queued ciphertext leaks across the switch.
-if (channel) {
-  channel.onmessage = (e: MessageEvent) => {
-    const msg = e.data as { type?: string; accountId?: number | null } | undefined;
-    if (msg?.type !== "account-change") return;
-    if (msg.accountId !== undefined) accountChangedElsewhere(msg.accountId);
-  };
-}
-// Fallback for browsers without BroadcastChannel: the localStorage "last-account"
-// key change fires a storage event in other tabs.
-if (typeof window !== "undefined") {
-  window.addEventListener("storage", (e) => {
-    if (e.key !== "gdna-lite:last-account") return;
-    const next = e.newValue ? Number(e.newValue) : null;
-    accountChangedElsewhere(next);
-  });
-}
+let stopAccountEvents: (() => void) | null = null;
+let refreshFlight: Promise<SessionUser | null> | null = null;
 
 function readLastId(): number | null {
   try {
     const raw = localStorage.getItem("gdna-lite:last-account");
-    return raw ? Number(raw) : null;
+    const id = raw ? Number(raw) : null;
+    return id !== null && Number.isSafeInteger(id) && id > 0 ? id : null;
   } catch {
     return null;
-  }
-}
-
-function writeLastId(id: number | null): void {
-  try {
-    if (id == null) localStorage.removeItem("gdna-lite:last-account");
-    else localStorage.setItem("gdna-lite:last-account", String(id));
-  } catch {
-    /* ignore */
   }
 }
 
@@ -112,27 +85,25 @@ function setCurrent(
   lastKnownId = nextId;
   status = nextStatus;
   sessionError = null;
-  if (announce) writeLastId(nextId);
   // Notify other tabs so they purge the prior account's private data too.
   if (announce && (previousId !== nextId || forceAnnouncement)) {
-    try {
-      channel?.postMessage({ type: "account-change", accountId: nextId });
-    } catch {
-      /* ignore */
-    }
+    announceAccountChange(nextId);
   }
   notify();
 }
 
-function accountChangedElsewhere(nextId: number | null): void {
-  if (nextId === (current?.id ?? null) && (status === "authenticated" || status === "anonymous")) return;
+function accountChangedElsewhere(): void {
+  externalChange = true;
   generation++;
   if (pendingMutations > 0) verificationNeeded = true;
   refreshControllers.forEach((controller) => controller.abort());
-  // This is a confirmed account change from another tab, not a failed /me.
-  // Hide the previous identity immediately while verifying the new cookie.
-  setCurrent(null, false, false, "checking");
-  void refreshSession();
+  // Untrusted hint: suspend private UI, but purge only after /me confirms it.
+  current = null;
+  status = "checking";
+  sessionError = null;
+  notify();
+  refreshFlight = null;
+  void refreshSession(false);
 }
 
 function sessionUser(data: SessionUser): SessionUser {
@@ -151,6 +122,7 @@ function sessionChanged(): Error {
 function mutateSession<T>(operation: (token: number) => Promise<T>): Promise<T> {
   const token = ++generation;
   refreshControllers.forEach((controller) => controller.abort());
+  refreshFlight = null;
   pendingMutations++;
   const result = mutationTail.then(() => operation(token)).finally(() => {
     pendingMutations--;
@@ -184,11 +156,30 @@ export function getSessionError(): string | null {
 
 export function subscribeSession(listener: (u: SessionUser | null, status: SessionStatus) => void): () => void {
   listeners.add(listener);
+  stopAccountEvents ??= subscribeAccountChanges(accountChangedElsewhere);
   listener(current, status);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      stopAccountEvents?.();
+      stopAccountEvents = null;
+      generation++;
+      refreshControllers.forEach(controller => controller.abort());
+      refreshFlight = null;
+    }
+  };
 }
 
-export async function refreshSession(): Promise<SessionUser | null> {
+export function refreshSession(announce = !externalChange): Promise<SessionUser | null> {
+  if (refreshFlight) return refreshFlight;
+  const flight = verifySession(announce).finally(() => {
+    if (refreshFlight === flight) refreshFlight = null;
+  });
+  refreshFlight = flight;
+  return flight;
+}
+
+async function verifySession(announce: boolean): Promise<SessionUser | null> {
   if (pendingMutations > 0) return current;
   const token = generation;
   const request = ++refreshRequest;
@@ -199,18 +190,21 @@ export async function refreshSession(): Promise<SessionUser | null> {
   try {
     const res = await fetch(apiPath("/api/auth/me"), {
       credentials: "include",
+      cache: "no-store",
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
     if (!isCurrent()) return current;
     if (res.status === 401) {
-      setCurrent(null);
+      setCurrent(null, announce);
+      externalChange = false;
       return null;
     }
     if (!res.ok) throw new ApiError(res.status, `Session verification unavailable (${res.status}) — please retry`);
     const data = (await res.json()) as SessionUser;
     if (!isCurrent()) return current;
-    setCurrent(sessionUser(data));
+    setCurrent(sessionUser(data), announce);
+    externalChange = false;
     return current;
   } catch (err) {
     // 429, 5xx, network/JSON failures are NOT logout and never purge private
@@ -236,6 +230,7 @@ export async function login(username: string, password: string): Promise<Session
       const user = sessionUser(data);
       verificationNeeded = false;
       setCurrent(user, true, true);
+      externalChange = false;
       return user;
     } catch (err) {
       if (receivedResponse || err instanceof SyntaxError) verificationNeeded = true;
@@ -260,6 +255,7 @@ export async function logout(): Promise<void> {
       }
       verificationNeeded = false;
       setCurrent(null, true, true);
+      externalChange = false;
     } catch (err) {
       if (token === generation) {
         sessionError = err instanceof Error ? err.message : "Logout unavailable — please retry";

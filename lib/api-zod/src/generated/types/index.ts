@@ -125,6 +125,7 @@ export * from './offlineRecoveryStatus';
 export * from './playResult';
 export * from './presignClipUploadBody';
 export * from './presignClipUploadBodyAction';
+export * from './recoveryAccessCredentials';
 export * from './recoveryConfig';
 export * from './recoveryErrorResponse';
 export * from './recoveryFirebaseConfig';

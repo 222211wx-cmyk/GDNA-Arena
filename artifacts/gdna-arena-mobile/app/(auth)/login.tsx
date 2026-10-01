@@ -10,7 +10,8 @@ import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '@workspace/gdna-ds/components/native/button';
-import { recoveryCopy } from '@/lib/recovery-copy';
+import { recoveryCopy, phoneRecoveryCopy } from '@/lib/recovery-copy';
+import { Typography } from '@workspace/gdna-ds/components/native/typography';
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -57,6 +58,9 @@ export default function LoginScreen() {
         {/* Card */}
         <View style={s.card}>
           <Text style={s.title}>Welcome Back</Text>
+          <Typography variant="muted" style={s.accountNote} testID="notice-single-account">
+            {recoveryCopy().singleAccountNotice}
+          </Typography>
 
           {error ? (
             <View style={s.errorBox}>
@@ -107,7 +111,7 @@ export default function LoginScreen() {
 
           <Link href="/(auth)/forgot-password" asChild>
             <Button variant="ghost" disabled={loading} style={s.linkRow} testID="login-forgot-password">
-              Forgot password?
+              {phoneRecoveryCopy().link}
             </Button>
           </Link>
 
@@ -154,6 +158,7 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     padding: 24,
   },
   title: { fontSize: 20, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 20 },
+  accountNote: { marginBottom: 20 },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: colors.muted, borderRadius: 8, padding: 10,

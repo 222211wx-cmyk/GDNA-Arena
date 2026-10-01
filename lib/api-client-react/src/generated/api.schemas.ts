@@ -75,6 +75,14 @@ export interface RecoveryPhoneCredentials {
   currentPassword: string;
 }
 
+export interface RecoveryAccessCredentials {
+  /**
+     * @minLength 20
+     * @maxLength 8192
+     */
+  idToken: string;
+}
+
 export interface RecoveryPasswordCredentials {
   /**
      * @minLength 20

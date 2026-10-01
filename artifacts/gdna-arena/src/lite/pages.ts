@@ -25,6 +25,7 @@ import { exhaustedMessagingNotice, messagingSubscriptionCopy, remainingMessaging
 import { recoveryCopy } from "../i18n/recovery-copy";
 import { offlineRecoveryCopy } from "../i18n/offline-recovery-copy";
 import { recoveryWebHref } from "../lib/recovery-links";
+import { coreCopy, coreCopyLocales } from "../i18n/core-auth-copy";
 
 interface Ctx {
   s: Strings;
@@ -523,6 +524,7 @@ export function settingsPage(ctx: Ctx): HTMLElement {
 
 /* ── Login ────────────────────────────────────────────────────────── */
 export function loginPage(ctx: Ctx): HTMLElement {
+  const copy = coreCopy(ctx.lang in coreCopyLocales ? ctx.lang as keyof typeof coreCopyLocales : "en");
   const err = el("div", {});
   const uInput = el("input", { class: "l-input", type: "text", autocomplete: "username", name: "username" }) as HTMLInputElement;
   const pInput = el("input", { class: "l-input", type: "password", autocomplete: "current-password", name: "password" }) as HTMLInputElement;
@@ -530,6 +532,11 @@ export function loginPage(ctx: Ctx): HTMLElement {
 
   const form = el("form", { class: "l-card l-stack" }, [
     el("div", { class: "l-h1", text: ctx.s.login }),
+    el("div", { class: "l-banner l-small l-muted l-stack", role: "note", "data-testid": "notice-lite-single-account" }, [
+      el("p", { text: copy.singleAccount }),
+      el("p", { text: copy.sessionNotice }),
+      el("p", { text: copy.accessNotice }),
+    ]),
     el("div", { class: "l-field" }, [el("label", { class: "l-label", text: ctx.s.username }), uInput]),
     el("div", { class: "l-field" }, [el("label", { class: "l-label", text: ctx.s.password }), pInput]),
     err,
@@ -537,6 +544,7 @@ export function loginPage(ctx: Ctx): HTMLElement {
     el("a", { class: "l-gold", href: recoveryWebHref("/recover-account", "/lite/login", ctx.lang), text: recoveryCopy(ctx.lang).forgot, "data-testid": "link-lite-forgot-password" }),
     el("a", { class: "l-gold", href: recoveryWebHref("/recover-with-code", "/lite/login", ctx.lang), text: offlineRecoveryCopy(ctx.lang).link, "data-testid": "link-lite-recover-with-code" }),
     el("p", { class: "l-small l-muted", text: recoveryCopy(ctx.lang).fullWeb }),
+    el("a", { class: "l-gold", href: `${import.meta.env.BASE_URL.replace(/\/$/, "")}/register?lang=${encodeURIComponent(ctx.lang)}`, text: copy.registerHere, "data-testid": "link-lite-register" }),
   ]) as HTMLFormElement;
 
   form.addEventListener("submit", (e) => {

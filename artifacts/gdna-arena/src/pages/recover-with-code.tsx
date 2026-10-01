@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { offlineRecoveryCopy, offlineRecoveryErrorKind } from "@/i18n/offline-recovery-copy";
 import { recoveryReturnPath } from "@/lib/recovery-links";
+import { announceAccountChange } from "@/lib/account-session-events";
 import { RecoveryWarnings } from "@/components/auth/recovery-code-settings";
 import { useRecoveryLanguage, useRecoveryMetadata } from "./recover-account";
 
@@ -100,6 +101,7 @@ export default function RecoverWithCode() {
     setError("");
     try {
       const data = await redeemRecoveryCode({ code: normalized, newPassword }, { cache: "no-store", credentials: "include", signal: controller.signal });
+      announceAccountChange();
       if (id !== seq.current) return;
       setResult({ success: true, username: data.username, revocationPending: data.revocationPending });
       // Only the recovered account's revoked session is refreshed; other accounts stay signed in.

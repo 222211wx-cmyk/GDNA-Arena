@@ -6,10 +6,12 @@ import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Checkbox } from "@workspace/gdna-ds/components/ui/checkbox";
 import { recoveryCopy } from "@/i18n/recovery-copy";
 import { createPhoneRecoverySession, recoveryErrorText, recoveryRequest, type PhoneRecoverySession } from "@/lib/phone-recovery";
+import { announceAccountChange } from "@/lib/account-session-events";
 
-type Action = "reset" | "bind" | "remove";
-export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }: {
+type Action = "access" | "reset" | "bind" | "remove";
+export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel, onAccess }: {
   action: Action; config: FirebaseOptions; lang: string; onSuccess: () => void; onCancel?: () => void;
+  onAccess?: (idToken: string) => Promise<void>;
 }) {
   const copy = recoveryCopy(lang);
   const id = useId();
@@ -72,7 +74,7 @@ export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }:
     setError("");
     if (!consent) { setError(copy.consentRequired); return; }
     if (step === "phone" && !/^\+[1-9]\d{7,14}$/.test(phone.trim())) { setError(copy.invalidPhone); return; }
-    if (action !== "reset" && !currentPassword) { setError(copy.stepUp); return; }
+    if (action !== "reset" && action !== "access" && !currentPassword) { setError(copy.stepUp); return; }
     if (step === "sms" && !/^\d{6}$/.test(sms.trim())) { setError(copy.invalidCode); return; }
     if (step === "verified" && action === "reset") {
       if (newPassword.length < 6 || new TextEncoder().encode(newPassword).length > 72) { setError(copy.passwordShort); return; }
@@ -93,7 +95,18 @@ export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }:
         if (isCurrent()) setStep("sms");
       } else if (step === "sms") {
         await session.current!.confirm(sms.trim());
-        if (isCurrent()) { setSms(""); setStep("verified"); }
+        if (!isCurrent()) return;
+        if (action === "access") {
+          // Direct access consumes the proof immediately after real SMS
+          // confirmation; there is no password or extra verification stage.
+          posting = true;
+          const idToken = await session.current!.token();
+          if (!isCurrent()) return;
+          if (!onAccess) throw new Error("Recovery access is unavailable");
+          await onAccess(idToken);
+          await dispose().catch(() => {});
+          if (isCurrent()) { clearProof(); onSuccess(); }
+        } else { setSms(""); setStep("verified"); }
       } else {
         // Fresh phone-provider proof is obtained only after consent and SMS
         // confirmation. Never persist it or send it to any other API.
@@ -104,6 +117,7 @@ export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }:
         await recoveryRequest(action === "reset" ? "reset" : `phone/${action}`, action === "reset"
           ? { idToken, newPassword }
           : { idToken, currentPassword }, request.current.signal);
+        if (action === "reset") announceAccountChange();
         // The server mutation is already committed. A local widget cleanup
         // failure must not turn that committed result into a false failure.
         // close still attempts sign-out and deletion through nested finally.
@@ -124,13 +138,13 @@ export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }:
       if (isCurrent()) { lock.current = false; setBusy(false); }
     }
   };
-  const actionLabel = action === "reset" ? copy.reset : action === "remove" ? copy.remove : copy.bind;
+  const actionLabel = action === "access" ? copy.access : action === "reset" ? copy.reset : action === "remove" ? copy.remove : copy.bind;
   return (
     <form onSubmit={submit} className="space-y-4" dir={lang === "ar" ? "rtl" : "ltr"} data-testid={`form-phone-${action}`}>
       {error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="status-recovery-error">{error}</p>}
       {action === "remove" && <p className="text-sm text-muted-foreground" data-testid="text-remove-recovery-warning">{copy.removeWarning}</p>}
       {step === "phone" && <>
-        {action !== "reset" && <div className="space-y-2">
+        {action !== "reset" && action !== "access" && <div className="space-y-2">
           <Label htmlFor={`${id}-current`}>{copy.currentPassword}</Label>
           <Input id={`${id}-current`} type="password" autoComplete="current-password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} disabled={busy} required data-testid="input-recovery-current-password" />
           <p className="text-xs text-muted-foreground">{copy.stepUp}</p>
@@ -138,7 +152,7 @@ export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }:
         <div className="space-y-2">
           <Label htmlFor={`${id}-phone`}>{copy.phone}</Label>
           <Input id={`${id}-phone`} type="tel" dir="ltr" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy} maxLength={16} required aria-describedby={`${id}-phone-hint`} data-testid="input-recovery-phone" />
-          <p id={`${id}-phone-hint`} className="text-xs text-muted-foreground">{copy.phoneHint}</p>
+          <p id={`${id}-phone-hint`} className="text-xs text-muted-foreground">{action === "access" ? copy.accessPhoneHint : copy.phoneHint}</p>
         </div>
         <div className="flex items-start gap-3">
           <Checkbox id={`${id}-consent`} checked={consent} onCheckedChange={value => setConsent(value === true)} disabled={busy} className="mt-1" data-testid="checkbox-recovery-sms-consent" />
@@ -152,6 +166,7 @@ export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }:
         <Label htmlFor={`${id}-sms`}>{copy.sms}</Label>
         <Input id={`${id}-sms`} dir="ltr" inputMode="numeric" autoComplete="one-time-code" value={sms} onChange={e => setSms(e.target.value)} minLength={6} maxLength={6} disabled={busy} required aria-describedby={`${id}-sms-hint`} data-testid="input-recovery-sms-code" />
         <p id={`${id}-sms-hint`} className="text-xs text-muted-foreground">{copy.smsHint}</p>
+        {action === "access" && <p className="text-xs text-muted-foreground">{copy.smsPrivacy}</p>}
       </div>}
       {step === "verified" && <>
         <p role="status" className="text-sm text-primary" data-testid="status-recovery-phone-verified">{copy.verified}</p>
@@ -168,7 +183,7 @@ export function PhoneRecoveryFlow({ action, config, lang, onSuccess, onCancel }:
         </>}
       </>}
       <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={busy || !consent} data-testid="button-recovery-submit">{busy ? copy.busy : step === "phone" ? copy.send : step === "sms" ? copy.confirmSms : actionLabel}</Button>
+        <Button type="submit" disabled={busy || !consent} data-testid="button-recovery-submit">{busy ? copy.busy : step === "phone" ? copy.send : step === "sms" ? action === "access" ? copy.confirmAccess : copy.confirmSms : actionLabel}</Button>
         {step !== "phone" && <Button type="button" variant="outline" disabled={busy} onClick={() => void startAgain()} data-testid="button-recovery-restart">{copy.restart}</Button>}
         {onCancel && <Button type="button" variant="ghost" disabled={busy} onClick={onCancel} data-testid="button-recovery-cancel">{copy.cancel}</Button>}
       </div>

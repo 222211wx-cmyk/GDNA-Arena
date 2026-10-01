@@ -463,9 +463,10 @@ export async function uploadForeground(
 
 export async function currentUploadOwner(signal?: AbortSignal): Promise<number> {
   const response = await fetch(`${import.meta.env.BASE_URL}api/auth/me`, { credentials: "include", cache: "no-store", signal });
-  if (!response.ok) throw new Error("Reconnectez-vous pour reprendre le transfert");
+  if (response.status === 401) throw new Error("Reconnectez-vous pour reprendre le transfert");
+  if (!response.ok) throw new Error(`Vérification de session indisponible (${response.status}) — réessayez`);
   const me = await response.json();
-  if (!Number.isSafeInteger(me?.id)) throw new Error("Compte non vérifié");
+  if (!Number.isSafeInteger(me?.id) || me.id <= 0 || typeof me.username !== "string") throw new Error("Compte non vérifié — réessayez");
   return me.id;
 }
 
@@ -594,10 +595,14 @@ export async function discardQueuedUpload(id: string, owner: number) {
 }
 
 export async function uploadClip(file: File, metadata: ClipUploadMetadata, signal: AbortSignal, progress: ClipUploadProgress,
-  options?: { onStored?: (record: QueueRecord) => void; onForegroundOnly?: (message: string) => void }) {
+  options?: { expectedOwner?: number | null; onStored?: (record: QueueRecord) => void; onForegroundOnly?: (message: string) => void }) {
   signal.throwIfAborted();
   validateClipSize(file.size);
   const owner = await currentUploadOwner(signal);
+  signal.throwIfAborted();
+  if (options?.expectedOwner !== undefined && options.expectedOwner !== owner) {
+    throw new Error("Le compte a changé — ce fichier ne sera pas transféré avec un autre compte");
+  }
   let record: QueueRecord;
   try {
     record = await enqueueFile(file, metadata, owner, true);

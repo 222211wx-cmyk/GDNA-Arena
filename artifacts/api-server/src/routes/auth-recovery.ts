@@ -6,6 +6,7 @@ import {
   BindRecoveryPhoneBody, BindRecoveryPhoneResponse, GetRecoveryConfigResponse,
   GetRecoveryPhoneResponse, RemoveRecoveryPhoneBody, RemoveRecoveryPhoneResponse,
   ResetRecoveryPasswordBody, ResetRecoveryPasswordResponse,
+  AccessRecoveryAccountBody, AccessRecoveryAccountResponse,
 } from "@workspace/api-zod";
 import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import {
@@ -15,6 +16,9 @@ import {
   revokeRecoveryPushBindings, validRecoveryPassword, verifyPhoneProof,
 } from "../lib/phone-recovery";
 import { completeOfflineRecoveryRevocation } from "../lib/offline-recovery-revocation";
+import { authorizeNewSession, SessionRevokedError } from "../lib/session-security";
+import { configureSessionLifetime } from "../lib/session-policy";
+import { revokeCallPushSession } from "../lib/firebase-call-push";
 
 const router: IRouter = Router();
 const BASE = "/auth/recovery";
@@ -179,6 +183,86 @@ router.post(`${BASE}/phone/remove`, mutationGuard, async (req, res): Promise<voi
     });
     res.json(RemoveRecoveryPhoneResponse.parse({ hasVerifiedPhone: false, maskedPhone: null }));
   } catch (error) { replyError(req, res, error); }
+});
+
+router.post(`${BASE}/access`, mutationGuard, async (req, res): Promise<void> => {
+  let rotatingSession = false;
+  try {
+    await limitMutation(req, false);
+    const parsed = AccessRecoveryAccountBody.strict().safeParse(req.body);
+    if (!parsed.success) throw new PhoneRecoveryError(400);
+    const proof = await verifyPhoneProof(parsed.data.idToken);
+    await enforceRecoveryRateLimit("phone", proof.phone, 10);
+    const revoked = await recoveryTransaction(async client => {
+      // Same lock order and durable proof ledger as password recovery.
+      await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+      await lockRecoveryPhone(client, proof);
+      const found = await client.query<{ user_id: number }>(
+        `SELECT user_id FROM auth_recovery_phones WHERE phone_e164 = $1 AND firebase_project_id = $2`,
+        [proof.phone, proof.projectId],
+      );
+      const userId = found.rows[0]?.user_id;
+      if (!userId) throw new PhoneRecoveryError(400);
+      await requireRecoveryUser(client, userId);
+      const mapping = await client.query(
+        `SELECT user_id FROM auth_recovery_phones WHERE user_id = $1 AND phone_e164 = $2
+         AND firebase_project_id = $3 AND verified_auth_time <= $4 FOR UPDATE`,
+        [userId, proof.phone, proof.projectId, proof.authTime],
+      );
+      if (!mapping.rowCount) throw new PhoneRecoveryError(400);
+      await consumeRecoveryProof(client, proof);
+      // SMS grants access to this existing account; its password is unchanged.
+      const changed = await client.query<{ credential_epoch: number }>(
+        `UPDATE users SET credential_epoch = credential_epoch + 1
+         WHERE id = $1 RETURNING credential_epoch`, [userId],
+      );
+      const credentialEpoch = changed.rows[0].credential_epoch;
+      await client.query(
+        `INSERT INTO auth_offline_recovery_revocations (user_id, credential_epoch)
+         VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE
+         SET credential_epoch = EXCLUDED.credential_epoch, created_at = NOW()`,
+        [userId, credentialEpoch],
+      );
+      const sessions = await client.query<{ sid: string }>(
+        `DELETE FROM user_sessions WHERE sess->>'userId' = $1::text RETURNING sid`, [userId],
+      );
+      await revokeRecoveryPushBindings(client, userId);
+      // Match phone reset policy: retain recovery codes, E2EE registrations and
+      // historical messages. This endpoint does not perform account erasure.
+      assertFreshPhoneProof(proof);
+      return { userId, credentialEpoch, sessionIds: sessions.rows.map(row => row.sid) };
+    });
+    for (const sid of revoked.sessionIds) disconnectSessionSockets(sid);
+    disconnectUserSockets(revoked.userId);
+    const firebaseRevoked = await completeOfflineRecoveryRevocation(revoked.userId);
+    if (!firebaseRevoked) req.log.warn("Recovery succeeded; Firebase push mirror revocation pending");
+    // Session persistence takes its own user SHARE lock: never save while the
+    // recovery transaction holds the UPDATE lock. The captured epoch, not a
+    // later snapshot, fences concurrent recovery/password changes at insertion.
+    const previousSessionId = req.sessionID;
+    const previousSessionUserId = req.session?.userId;
+    rotatingSession = true;
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate(err => err ? reject(err) : resolve()),
+    );
+    disconnectSessionSockets(previousSessionId);
+    if (previousSessionUserId && previousSessionUserId !== revoked.userId) {
+      void revokeCallPushSession(previousSessionUserId, previousSessionId).catch(() => {});
+    }
+    req.session.userId = revoked.userId;
+    authorizeNewSession(req.session, revoked.credentialEpoch);
+    configureSessionLifetime(req.session);
+    await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+    res.json(AccessRecoveryAccountResponse.parse({ success: true }));
+  } catch (error) {
+    if (rotatingSession) {
+      // A failed explicit save must not be retried implicitly at response end.
+      req.session = null as unknown as typeof req.session;
+      res.clearCookie("connect.sid", { path: "/", httpOnly: true, sameSite: "lax",
+        secure: process.env.NODE_ENV === "production" });
+    }
+    replyError(req, res, error instanceof SessionRevokedError ? new PhoneRecoveryError(400) : error);
+  }
 });
 
 router.post(`${BASE}/reset`, mutationGuard, async (req, res): Promise<void> => {

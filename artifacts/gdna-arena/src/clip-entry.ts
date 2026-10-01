@@ -1,5 +1,6 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
+import { announceAccountChange, fetchSharedClipSession, subscribeAccountChanges, subscribeSessionWake } from "./lib/account-session-events";
 import {
   MAX_CLIP_BYTES,
   uploadClip,
@@ -146,6 +147,7 @@ let selectedQueueId: string | null = null;
 const pendingUploads = element<HTMLDivElement>("pending-uploads");
 let pollingJobs = false;
 let foregroundOnly = false;
+let accountReloading = false;
 
 async function pollPendingJobs() {
   if (pollingJobs || uploadOwner === null || document.visibilityState === "hidden") return;
@@ -168,17 +170,14 @@ setInterval(() => { void pollPendingJobs(); }, 5_000);
 window.addEventListener("pageshow", () => { void pollPendingJobs(); });
 document.addEventListener("visibilitychange", () => { void pollPendingJobs(); });
 
-async function refreshPendingUploads() {
+async function refreshPendingUploads(verifiedOwner?: number) {
   if (uploadOwner === null) return;
   try {
-    const owner = await currentUploadOwner();
+    const owner = verifiedOwner ?? await currentUploadOwner();
+    if (accountReloading) return;
     if (owner !== uploadOwner) {
-      uploadController?.abort();
-      uploadOwner = owner;
-      cachedFile = null; selectedQueueId = null; input.value = "";
-      receipt.hidden = true; receipt.replaceChildren();
-      progressWrap.hidden = true;
-      updateSubmitState();
+      acceptAccount(owner);
+      return;
     }
     const records = await listQueue(owner);
     pendingUploads.replaceChildren();
@@ -219,7 +218,7 @@ async function refreshPendingUploads() {
       pause.onclick = () => {
         pauseQueuedUpload(record.id);
         navigator.serviceWorker?.controller?.postMessage({ type: "CLIP_UPLOAD_PAUSE", id: record.id });
-        void markQueuedPaused(record.id, record.owner).then(refreshPendingUploads).catch(error => {
+        void markQueuedPaused(record.id, record.owner).then(() => refreshPendingUploads()).catch(error => {
           uploadError.textContent = error instanceof Error ? error.message : "Pause impossible";
         });
       };
@@ -247,6 +246,7 @@ async function refreshPendingUploads() {
 // Hand off only on departure. While this page is alive XHR gives real byte-level
 // progress; the same Web Lock prevents the worker from racing it.
 window.addEventListener("pagehide", () => {
+  if (accountReloading) return;
   if (!activeQueueId || !("serviceWorker" in navigator)) return;
   navigator.serviceWorker.controller?.postMessage({ type: "CLIP_UPLOAD_START", id: activeQueueId });
   void navigator.serviceWorker.getRegistration().then(registration => {
@@ -305,7 +305,7 @@ function displayNameValidationError() {
 function updateSubmitState() {
   // Selection is enough to make the action discoverable. Size, duration and
   // title errors are explained after a click instead of by a disabled button.
-  submit.disabled = Boolean(uploadController) || !cachedFile;
+  submit.disabled = accountReloading || uploadOwner === null || Boolean(uploadController) || !cachedFile;
 }
 
 function formatBytes(bytes: number) {
@@ -502,7 +502,7 @@ function reportUploadProgress(
 form.addEventListener("submit", async event => {
   event.preventDefault();
   const file = cachedFile;
-  if (!file || uploadController || submissionPending) return;
+   if (!file || uploadOwner === null || accountReloading || uploadController || submissionPending) return;
   submissionPending = true;
   foregroundOnly = false;
   uploadError.textContent = "";
@@ -563,6 +563,7 @@ form.addEventListener("submit", async event => {
     const published = selectedQueueId && uploadOwner !== null
       ? await runQueuedUpload(selectedQueueId, uploadOwner, operation.signal, onProgress)
       : await uploadClip(file, metadata, operation.signal, onProgress, {
+      expectedOwner: uploadOwner,
       onStored: record => { activeQueueId = record.id; selectedQueueId = record.id; void refreshPendingUploads(); },
       onForegroundOnly: message => { foregroundOnly = true; uploadError.textContent = message; },
     });
@@ -692,36 +693,118 @@ async function loadStorageStatus() {
   }
 }
 
-async function loadAuth() {
+let authFlight: Promise<void> | null = null;
+let authGeneration = 0;
+let verifiedAccount: number | null | undefined;
+
+function reloadForAccountChange() {
+  if (accountReloading) return;
+  accountReloading = true;
+  ++authGeneration;
+  // Account-bound selections cannot safely follow a new cookie owner. Durable
+  // uploads stay in their owner-scoped queue; do not hand off a stale active job.
+  uploadController?.abort();
+  durationController?.abort();
+  if (activeQueueId) {
+    pauseQueuedUpload(activeQueueId);
+    navigator.serviceWorker?.controller?.postMessage({ type: "CLIP_UPLOAD_PAUSE", id: activeQueueId });
+  }
+  activeQueueId = null;
+  uploadOwner = null;
+  form.hidden = true;
+  calls.setAccount(null);
+  reels?.destroy();
+  window.location.reload();
+}
+
+function acceptAccount(id: number | null): boolean {
+  if (verifiedAccount !== undefined && verifiedAccount !== id) {
+    announceAccountChange(id);
+    reloadForAccountChange();
+    return false;
+  }
+  verifiedAccount = id;
+  return true;
+}
+
+function clearComposerIdentity() {
+  uploadController?.abort();
+  durationController?.abort();
+  uploadOwner = null;
+  cachedFile = null;
+  selectedDuration = null;
+  selectedQueueId = null;
+  selectedFileKey = null;
+  input.value = "";
+  displayName.value = "";
+  pendingUploads.replaceChildren();
+  receipt.replaceChildren();
+  receipt.hidden = true;
+  form.hidden = true;
+  calls.setAccount(null);
+  updateSubmitState();
+}
+
+async function verifyAuth() {
+  const generation = authGeneration;
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
   try {
-    const response = await fetch(`${BASE}api/auth/me`, {
-      credentials: "include", cache: "no-store", signal: controller.signal,
-    });
+    const response = await fetchSharedClipSession();
+    controller.signal.throwIfAborted();
+    if (accountReloading || generation !== authGeneration) return;
     if (response.status === 401) {
-      calls.setAccount(null);
+      clearComposerIdentity();
+      if (!acceptAccount(null)) return;
       auth.innerHTML = `<a href="${BASE}login">سجل الدخول لرفع الصوت أو الفيديو</a>`;
       return;
     }
-    if (!response.ok) throw new Error();
-    const me = await response.json().catch(() => null);
-    if (me && Number.isSafeInteger(me.id)) {
+    if (!response.ok) throw new Error(`Session verification unavailable (${response.status}) — Réessayer`);
+    const me = await response.json();
+    if (accountReloading || generation !== authGeneration) return;
+    if (!me || !Number.isSafeInteger(me.id) || me.id <= 0 || typeof me.username !== "string") {
+      throw new Error("Réponse de session invalide — Réessayer");
+    }
+    if (!acceptAccount(me.id)) return;
+    {
       calls.setAccount(me.id);
       uploadOwner = me.id;
-      void refreshPendingUploads();
+      void refreshPendingUploads(me.id);
       // The R2 status endpoint is authenticated; only probe it once we know the
       // viewer is signed in. It never blocks the form (rendered right below).
       void loadStorageStatus();
     }
     auth.textContent = "يمكنك رفع ملفك الآن";
     form.hidden = false;
-  } catch {
-    auth.innerHTML = `تعذر التحقق من الجلسة. <a href="${BASE}login">تسجيل الدخول</a>`;
+  } catch (error) {
+    if (accountReloading || generation !== authGeneration) return;
+    // Network errors, 429 and 5xx are not logout. Preserve a verified selection.
+    auth.replaceChildren();
+    const message = document.createElement("span");
+    message.textContent = error instanceof Error ? error.message : "تعذر التحقق من الجلسة — حاول مجدداً";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Réessayer — إعادة المحاولة";
+    retry.onclick = () => void loadAuth();
+    auth.append(message, retry);
   } finally {
     clearTimeout(timer);
   }
 }
+
+function loadAuth(): Promise<void> {
+  if (authFlight) return authFlight;
+  const flight = verifyAuth().finally(() => { if (authFlight === flight) authFlight = null; });
+  authFlight = flight;
+  return flight;
+}
+
+const stopAccountEvents = subscribeAccountChanges(reloadForAccountChange);
+const stopSessionWake = subscribeSessionWake(() => void loadAuth());
+window.addEventListener("pagehide", event => {
+  // BFCache retains this document and its subscriptions for pageshow.
+  if (!event.persisted) { stopAccountEvents(); stopSessionWake(); }
+});
 
 document.body.dataset.clipReady = "true";
 // Mount the fullscreen Reels feed immediately (it resolves its own viewer
