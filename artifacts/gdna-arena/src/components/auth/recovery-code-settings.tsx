@@ -13,6 +13,8 @@ import { KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { offlineRecoveryCopy, offlineRecoveryErrorKind, type OfflineRecoveryCopy } from "@/i18n/offline-recovery-copy";
+import { useRecoveryReminderPreference } from "@/hooks/use-recovery-reminder-preference";
+import { isRecoveryCodeExpiringSoon, recoveryReminderCopy } from "../../../../../lib/recovery-code-reminder";
 
 const NO_STORE: RequestInit = { cache: "no-store", credentials: "include" };
 
@@ -44,6 +46,8 @@ export function RecoveryCodeSettings({ showPageLink = false }: { showPageLink?: 
   const { user } = useAuth();
   const { lang } = useLang();
   const copy = offlineRecoveryCopy(lang);
+  const reminderCopy = recoveryReminderCopy(lang);
+  const reminder = useRecoveryReminderPreference(user?.id);
   const queryClient = useQueryClient();
   const queryKey = [...getGetRecoveryCodeStatusQueryKey(), user?.id ?? 0] as const;
   const status = useGetRecoveryCodeStatus({
@@ -64,6 +68,7 @@ export function RecoveryCodeSettings({ showPageLink = false }: { showPageLink?: 
   const inFlight = useRef<AbortController | null>(null);
   const seq = useRef(0);
   const codeRef = useRef<HTMLElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const clearSecrets = () => { setPassword(""); setIssued(null); setCopyState(""); };
 
@@ -110,6 +115,7 @@ export function RecoveryCodeSettings({ showPageLink = false }: { showPageLink?: 
   }, [issued]);
 
   useEffect(() => { if (issued) codeRef.current?.focus(); }, [issued]);
+  useEffect(() => { if (mode !== "idle") passwordRef.current?.focus(); }, [mode]);
 
   const open = (next: Mode) => { setMode(next); setError(""); setNotice(""); setAck(false); clearSecrets(); };
   const close = () => {
@@ -202,6 +208,27 @@ export function RecoveryCodeSettings({ showPageLink = false }: { showPageLink?: 
         {data.active ? copy.active.replace("{date}", formatRecoveryDate(data.expiresAt, lang)) : copy.inactive}
       </p>}
 
+      <div className="space-y-2">
+        <div className="flex items-start gap-2">
+          <Checkbox id="recovery-expiry-reminder" checked={reminder.enabled} disabled={!reminder.ready}
+            onCheckedChange={value => reminder.setEnabled(value === true)}
+            aria-describedby="recovery-expiry-reminder-hint" data-testid="checkbox-recovery-expiry-reminder" />
+          <Label htmlFor="recovery-expiry-reminder" className="text-sm font-normal leading-snug">{reminderCopy.label}</Label>
+        </div>
+        <p id="recovery-expiry-reminder-hint" className="text-sm text-muted-foreground">{reminderCopy.hint}</p>
+        {reminder.failed && <p role="alert" className="text-sm text-destructive">{reminderCopy.storageError}</p>}
+      </div>
+
+      {reminder.enabled && status.isSuccess && !status.isFetching && isRecoveryCodeExpiringSoon(data)
+        && mode === "idle" && !issued && !busy && <Alert data-testid="alert-recovery-code-expiry">
+          <AlertTitle>{reminderCopy.label}</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{reminderCopy.warning.replace("{date}", formatRecoveryDate(data?.expiresAt ?? null, lang))}</p>
+            <Button variant="link" className="h-auto whitespace-normal p-0 text-start" onClick={() => open("generate")}
+              data-testid="button-recovery-code-expiry-replace">{reminderCopy.replace}</Button>
+          </AlertDescription>
+        </Alert>}
+
       {notice && <p role="status" className="text-sm text-primary" data-testid="status-recovery-code-notice">{notice}</p>}
       {error && mode === "idle" && <p role="alert" className="text-sm text-destructive" data-testid="status-recovery-code-action-error">{error}</p>}
 
@@ -233,7 +260,7 @@ export function RecoveryCodeSettings({ showPageLink = false }: { showPageLink?: 
         {mode === "generate" && data?.active && <p className="text-sm text-muted-foreground">{copy.passwordStepUp}</p>}
         <div className="space-y-1">
           <Label htmlFor="recovery-code-password">{copy.currentPassword}</Label>
-          <Input id="recovery-code-password" type="password" autoComplete="current-password" value={password} maxLength={1024}
+          <Input ref={passwordRef} id="recovery-code-password" type="password" autoComplete="current-password" value={password} maxLength={1024}
             onChange={e => setPassword(e.target.value)} disabled={busy} data-testid="input-recovery-code-password" />
         </div>
         {mode === "generate" && <div className="flex items-start gap-2">

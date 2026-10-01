@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, I18nManager, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { AppState, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -18,11 +18,16 @@ import {
 } from '@/lib/offline-recovery';
 import { recoveryCopy } from '@/lib/recovery-copy';
 import { FormMessage, RecoveryConsequences } from '@/components/RecoveryNotices';
+import { useRecoveryReminderPreference } from '@/hooks/useRecoveryReminderPreference';
+import { isRecoveryCodeExpiringSoon, recoveryReminderCopy } from '../../../lib/recovery-code-reminder';
 
 type Busy = 'issue' | 'remove' | null;
 
 export default function SecurityScreen() {
   const t = recoveryCopy();
+  const deviceLanguage = Intl.DateTimeFormat().resolvedOptions().locale.slice(0, 2);
+  const language = ['ar', 'en', 'fr', 'es', 'de'].includes(deviceLanguage) ? deviceLanguage : 'ar';
+  const reminderCopy = recoveryReminderCopy(language);
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -30,6 +35,10 @@ export default function SecurityScreen() {
   const { isOnline } = useOnline();
   const queryClient = useQueryClient();
   const userId = user?.id ?? null;
+  const reminder = useRecoveryReminderPreference(userId);
+  const scroll = useRef<ScrollView>(null);
+  const passwordPosition = useRef(0);
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
   // Non-secret status only, scoped per account so identities never share it.
   const statusKey = [...getGetRecoveryCodeStatusQueryKey(), userId] as const;
 
@@ -40,6 +49,7 @@ export default function SecurityScreen() {
       staleTime: 60_000,
       gcTime: 5 * 60_000,
       refetchOnWindowFocus: true,
+      refetchOnMount: 'always',
     },
     request: recoveryApiOptions(),
   });
@@ -69,14 +79,18 @@ export default function SecurityScreen() {
   }, []);
 
   useEffect(() => invalidate, [userId, invalidate]);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', state => { if (state !== 'active') invalidate(); });
-    return () => sub.remove();
-  }, [invalidate]);
-
   const refreshStatus = useCallback((uid: number | null) => {
     void queryClient.invalidateQueries({ queryKey: [...getGetRecoveryCodeStatusQueryKey(), uid] });
   }, [queryClient]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      setForeground(state === 'active');
+      if (state !== 'active') invalidate();
+      else refreshStatus(currentUser.current);
+    });
+    return () => sub.remove();
+  }, [invalidate, refreshStatus]);
 
   const errorText = (e: unknown) => {
     const kind = classifyRecoveryError(e);
@@ -121,12 +135,17 @@ export default function SecurityScreen() {
   };
 
   const dismissCode = () => { setIssued(null); setAcknowledged(false); };
-  const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString() : '');
+  const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(language) : '');
   const active = status.data?.active ?? false;
-  const dir = { direction: I18nManager.isRTL ? 'rtl' : 'ltr' } as const;
+  const showReminder = userId !== null && foreground && isOnline && reminder.enabled
+    && !reminder.loading && !reminder.saving && !reminder.error
+    && status.isSuccess && status.isFetchedAfterMount && !status.isFetching
+    && !issued && busy === null && isRecoveryCodeExpiringSoon(status.data);
+  const dir = { direction: language === 'ar' ? 'rtl' : 'ltr' } as const;
 
   return (
     <ScrollView
+      ref={scroll}
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={[s.content, dir, { paddingTop: insets.top + space(4), paddingBottom: insets.bottom + space(8) }]}
       keyboardShouldPersistTaps="handled"
@@ -140,6 +159,28 @@ export default function SecurityScreen() {
       <Typography variant="muted">{t.intro}</Typography>
 
       {!isOnline ? <FormMessage text={t.offline} tone="error" /> : null}
+
+      <Card style={s.gap}>
+        <View style={s.row}>
+          <Typography variant="label" style={s.flex}>{reminderCopy.label}</Typography>
+          <Switch testID="recovery-reminder-toggle" value={reminder.enabled}
+            onValueChange={reminder.setEnabled} disabled={userId === null || reminder.loading || reminder.saving}
+            accessibilityLabel={reminderCopy.label} accessibilityHint={reminderCopy.hint}
+            trackColor={{ true: colors.primary, false: colors.border }} />
+        </View>
+        <Typography variant="muted">{reminderCopy.hint}</Typography>
+        {reminder.error ? <FormMessage text={reminderCopy.storageError} tone="error" /> : null}
+      </Card>
+
+      {showReminder ? (
+        <Card style={s.gap} testID="recovery-expiry-reminder">
+          <FormMessage text={reminderCopy.warning.replace('{date}', formatDate(status.data?.expiresAt))} tone="info" />
+          <Button variant="outline" testID="recovery-reminder-replace"
+            onPress={() => scroll.current?.scrollTo({ y: passwordPosition.current, animated: true })}>
+            <Typography>{reminderCopy.replace}</Typography>
+          </Button>
+        </Card>
+      ) : null}
 
       {issued ? (
         <Card style={s.gap}>
@@ -182,7 +223,7 @@ export default function SecurityScreen() {
             ) : null}
           </Card>
 
-          <Card style={s.gap}>
+          <Card style={s.gap} onLayout={event => { passwordPosition.current = event.nativeEvent.layout.y; }}>
             <Typography variant="label">{t.password}</Typography>
             <Input value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoCorrect={false}
               autoComplete="current-password" textContentType="password" placeholder={t.passwordHint}
