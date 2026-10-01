@@ -24,4 +24,5 @@ export * from "./clips";
 export * from "./message-safety-reports";
 export * from "./gdna";
 export * from "./operators";
+export * from "./auth-recovery";
 

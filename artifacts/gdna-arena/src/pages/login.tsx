@@ -12,6 +12,8 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { coreCopy } from "@/i18n/core-auth-copy";
+import { recoveryCopy } from "@/i18n/recovery-copy";
+import { recoveryEnrollmentReturnPath, recoveryRoute } from "@/lib/recovery-links";
 import { MESSAGES_ENTRY_PATH, messagesAuthUrl, messagesReturnPath } from "@/lib/messages-entry";
 
 const BRAND_STATEMENT =
@@ -71,9 +73,9 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
   const copy = coreCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
 
-  const destination = returnTo ?? messagesReturnPath(search);
-  const messengerLogin = messagesEntry || destination !== null;
-  const [mode, setMode] = useState<"choice" | "auth">(messengerLogin ? "auth" : "choice");
+  const destination = returnTo ?? messagesReturnPath(search) ?? recoveryEnrollmentReturnPath(search);
+  const messengerLogin = messagesEntry || messagesReturnPath(search) !== null;
+  const [mode, setMode] = useState<"choice" | "auth">(messengerLogin || destination !== null ? "auth" : "choice");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -105,7 +107,7 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
   };
 
   // A restored cookie needs no second login; keep the room/call intent intact.
-  if (messengerLogin && user && destination) return <Redirect to={destination} replace />;
+  if (user && destination) return <Redirect to={destination} replace />;
 
   return (
     <div
@@ -198,6 +200,9 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
                       />
                     </div>
                   </div>
+                  <Link href={recoveryRoute("/recover-account", messagesReturnPath(search), lang)} className="inline-block text-sm text-primary hover:underline" data-testid="link-forgot-password">
+                    {recoveryCopy(lang).forgot}
+                  </Link>
                   <label
                     className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground"
                     data-testid="checkbox-remember-me"

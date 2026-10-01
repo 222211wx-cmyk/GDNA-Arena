@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { coreCopy } from "@/i18n/core-auth-copy";
 import { messagesAuthUrl, messagesReturnPath } from "@/lib/messages-entry";
+import { recoveryEnrollmentReturnPath } from "@/lib/recovery-links";
 
 export default function Register() {
   const [, setLocation] = useLocation();
@@ -17,7 +18,7 @@ export default function Register() {
   const { register, user } = useAuth();
   const { lang } = useLang();
   const copy = coreCopy(lang);
-  const destination = messagesReturnPath(search);
+  const destination = messagesReturnPath(search) ?? recoveryEnrollmentReturnPath(search);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [birthDate, setBirthDate] = useState("");

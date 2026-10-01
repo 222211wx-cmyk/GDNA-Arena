@@ -635,6 +635,98 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /auth/recovery/config:
+    get:
+      operationId: getRecoveryConfig
+      tags: [auth]
+      summary: Public no-store Firebase phone recovery configuration
+      description: Configured reports local configuration only, not Firebase console provider, billing, SMS delivery or authorized-domain readiness.
+      responses:
+        "200":
+          description: Configuration presence
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryConfig" }
+        "429": { $ref: "#/components/responses/RecoveryError" }
+  /auth/recovery/phone:
+    get:
+      operationId: getRecoveryPhone
+      tags: [auth]
+      summary: Get the authenticated citizen's masked recovery phone
+      responses:
+        "200":
+          description: Verified-phone binding status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryPhoneStatus" }
+        "401": { $ref: "#/components/responses/RecoveryError" }
+        "429": { $ref: "#/components/responses/RecoveryError" }
+        "503": { $ref: "#/components/responses/RecoveryError" }
+  /auth/recovery/phone/bind:
+    post:
+      operationId: bindRecoveryPhone
+      tags: [auth]
+      summary: Bind an SMS-verified phone using the current local password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryPhoneCredentials" }
+      responses:
+        "200":
+          description: Verified phone linked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryPhoneStatus" }
+        "400": { $ref: "#/components/responses/RecoveryError" }
+        "401": { $ref: "#/components/responses/RecoveryError" }
+        "403": { $ref: "#/components/responses/RecoveryError" }
+        "409": { $ref: "#/components/responses/RecoveryError" }
+        "429": { $ref: "#/components/responses/RecoveryError" }
+        "503": { $ref: "#/components/responses/RecoveryError" }
+  /auth/recovery/phone/remove:
+    post:
+      operationId: removeRecoveryPhone
+      tags: [auth]
+      summary: Unlink the current phone after a fresh SMS verification and password check
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryPhoneCredentials" }
+      responses:
+        "200":
+          description: Verified phone unlinked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryPhoneStatus" }
+        "400": { $ref: "#/components/responses/RecoveryError" }
+        "401": { $ref: "#/components/responses/RecoveryError" }
+        "403": { $ref: "#/components/responses/RecoveryError" }
+        "429": { $ref: "#/components/responses/RecoveryError" }
+        "503": { $ref: "#/components/responses/RecoveryError" }
+  /auth/recovery/reset:
+    post:
+      operationId: resetRecoveryPassword
+      tags: [auth]
+      summary: Reset the local password from an already bound SMS-verified phone
+      description: Uses a fresh single-use Firebase phone auth event, never a supplied username or Firebase UID as the local account ID. Revokes all app sessions and push bindings. Does not log in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryPasswordCredentials" }
+      responses:
+        "200":
+          description: Password reset; sign in using the new password
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryResetSuccess" }
+        "400": { $ref: "#/components/responses/RecoveryError" }
+        "403": { $ref: "#/components/responses/RecoveryError" }
+        "429": { $ref: "#/components/responses/RecoveryError" }
+        "503": { $ref: "#/components/responses/RecoveryError" }
+
   /auth/register:
     post:
       operationId: register
@@ -1258,7 +1350,61 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  responses:
+    RecoveryError:
+      description: Recovery request rejected or temporarily unavailable
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
   schemas:
+    RecoveryFirebaseConfig:
+      type: object
+      additionalProperties: false
+      required: [apiKey, authDomain, projectId, messagingSenderId, appId]
+      properties:
+        apiKey: { type: string }
+        authDomain: { type: string }
+        projectId: { type: string }
+        messagingSenderId: { type: string }
+        appId: { type: string }
+    RecoveryConfig:
+      type: object
+      required: [configured, firebaseConfig]
+      properties:
+        configured: { type: boolean }
+        firebaseConfig:
+          anyOf:
+            - { $ref: "#/components/schemas/RecoveryFirebaseConfig" }
+            - { type: "null" }
+    RecoveryPhoneStatus:
+      type: object
+      required: [hasVerifiedPhone, maskedPhone]
+      properties:
+        hasVerifiedPhone: { type: boolean }
+        maskedPhone: { type: [string, "null"] }
+    RecoveryPhoneCredentials:
+      type: object
+      additionalProperties: false
+      required: [idToken, currentPassword]
+      properties:
+        idToken: { type: string, minLength: 20, maxLength: 8192 }
+        currentPassword: { type: string, minLength: 1, maxLength: 1024 }
+    RecoveryPasswordCredentials:
+      type: object
+      additionalProperties: false
+      required: [idToken, newPassword]
+      properties:
+        idToken: { type: string, minLength: 20, maxLength: 8192 }
+        newPassword:
+          type: string
+          minLength: 6
+          maxLength: 72
+          description: Current app minimum; server also enforces bcrypt's 72 UTF-8 byte maximum.
+    RecoveryResetSuccess:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, enum: [true] }
     NativeCallPushInstallation:
       type: object
       additionalProperties: false
@@ -1565,6 +1711,8 @@ components:
       type: object
       properties:
         error:
+          type: string
+        code:
           type: string
       required: [error]
 

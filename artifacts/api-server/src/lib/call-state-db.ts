@@ -354,8 +354,10 @@ export class CallStateDb {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('call-state', 0))");
       await work(client);
-      await notifyOnClient(client, paths);
       await client.query("COMMIT");
+      // Notification is optional (subscribers also poll). A failed pg_notify
+      // must not abort the transaction that saved the invitation.
+      await notifyOnClient(client, paths);
     } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
     finally { client.release(); }
   }
@@ -367,8 +369,8 @@ export class CallStateDb {
       const transaction = new CallStateTransaction(client);
       const result = await work(transaction);
       await transaction.commit();
-      await notifyOnClient(client, transaction.paths());
       await client.query("COMMIT");
+      await notifyOnClient(client, transaction.paths());
       return result;
     } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
     finally { client.release(); }

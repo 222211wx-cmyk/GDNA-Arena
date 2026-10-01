@@ -13,7 +13,7 @@ import { el, mount, skeleton } from "./lite/dom";
 import { networkBanner } from "./lite/components";
 import { parseRoute, href, editionOf, type Route } from "./lite/router";
 import { EDITION_LANGS, RTL_LANGS, stringsFor, type LiteLang, type Strings } from "./lite/i18n";
-import { refreshSession, subscribeSession, getUser } from "./lite/session";
+import { refreshSession, subscribeSession, getUser, getSessionStatus, getSessionError, type SessionStatus } from "./lite/session";
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import { syncQueue } from "./lite/messaging";
 import {
@@ -175,7 +175,7 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
       { label: c.s.nav_data, r: { kind: "data" } },
       { label: c.s.nav_settings, r: { kind: "settings" } },
     ];
-    const links = items.map(({ label, r }) => {
+    const links: HTMLElement[] = items.map(({ label, r }) => {
       const active = r.kind === route.kind;
       return el("a", {
         href: href(r),
@@ -187,6 +187,16 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
       }, [label]);
     });
     const user = getUser();
+    const sessionStatus = getSessionStatus();
+    if (!user && sessionStatus !== "anonymous") {
+      links.push(el("span", {
+        class: "l-small l-muted",
+        style: "margin-inline-start:auto",
+        text: sessionStatus === "checking" ? c.s.loading : c.s.section_error,
+      }));
+      mount(nav, ...links);
+      return;
+    }
     links.push(
       el("a", {
         href: href({ kind: "login" }),
@@ -203,6 +213,23 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
 
   function renderOutlet(): void {
     const c = ctx();
+    const sessionStatus = getSessionStatus();
+    // These routes consume authenticated identity or offer sign-in. Do not
+    // misrepresent an unavailable initial /me as an anonymous citizen.
+    const needsSession = ["messages", "settings", "login", "data", "partners-dashboard"].includes(route.kind);
+    if (needsSession && !getUser() && sessionStatus !== "anonymous") {
+      mount(outlet, el("div", { class: "l-card l-stack", role: "status" }, [
+        el("div", {
+          text: sessionStatus === "checking" ? c.s.loading : getSessionError() ?? c.s.section_error,
+        }),
+        sessionStatus === "checking" ? skeleton(3) : el("button", {
+          class: "l-btn l-btn-sm",
+          text: c.s.retry,
+          onClick: () => void refreshSession(),
+        }),
+      ]));
+      return;
+    }
     let page: HTMLElement;
     switch (route.kind) {
       case "home":
@@ -313,11 +340,14 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
   // Re-render the whole view on account change so a logout/switch cannot leave one
   // account's snapshots or conversation on screen under another session.
   let lastNavId: number | null = getUser()?.id ?? null;
-  const unsubSession = subscribeSession((u) => {
+  let lastSessionStatus: SessionStatus = getSessionStatus();
+  const unsubSession = subscribeSession((u, sessionStatus) => {
     const id = u?.id ?? null;
     calls.setAccount(id);
-    if (id !== lastNavId) {
-      lastNavId = id;
+    const changed = id !== lastNavId || (!u && sessionStatus !== lastSessionStatus);
+    lastNavId = id;
+    lastSessionStatus = sessionStatus;
+    if (changed) {
       render();
     } else {
       renderNav();
@@ -359,7 +389,7 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
   const onOnline = () => {
     uiDrainPasses = 0; // reconnect resets the UI retry budget
     lastPassStopped = false;
-    void drain("online");
+    void refreshSession().then(() => void drain("online"));
   };
   window.addEventListener("online", onOnline);
   const onSwMessage = (e: MessageEvent) => {

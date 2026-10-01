@@ -894,6 +894,95 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Configured reports local configuration only, not Firebase console provider, billing, SMS delivery or authorized-domain readiness.
+ * @summary Public no-store Firebase phone recovery configuration
+ */
+export const GetRecoveryConfigResponse = zod.object({
+  "configured": zod.boolean(),
+  "firebaseConfig": zod.union([zod.object({
+  "apiKey": zod.string(),
+  "authDomain": zod.string(),
+  "projectId": zod.string(),
+  "messagingSenderId": zod.string(),
+  "appId": zod.string()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Get the authenticated citizen's masked recovery phone
+ */
+export const GetRecoveryPhoneResponse = zod.object({
+  "hasVerifiedPhone": zod.boolean(),
+  "maskedPhone": zod.string().nullable()
+})
+
+
+/**
+ * @summary Bind an SMS-verified phone using the current local password
+ */
+export const bindRecoveryPhoneBodyIdTokenMin = 20;
+export const bindRecoveryPhoneBodyIdTokenMax = 8192;
+
+export const bindRecoveryPhoneBodyCurrentPasswordMax = 1024;
+
+
+
+export const BindRecoveryPhoneBody = zod.object({
+  "idToken": zod.string().min(bindRecoveryPhoneBodyIdTokenMin).max(bindRecoveryPhoneBodyIdTokenMax),
+  "currentPassword": zod.string().min(1).max(bindRecoveryPhoneBodyCurrentPasswordMax)
+})
+
+export const BindRecoveryPhoneResponse = zod.object({
+  "hasVerifiedPhone": zod.boolean(),
+  "maskedPhone": zod.string().nullable()
+})
+
+
+/**
+ * @summary Unlink the current phone after a fresh SMS verification and password check
+ */
+export const removeRecoveryPhoneBodyIdTokenMin = 20;
+export const removeRecoveryPhoneBodyIdTokenMax = 8192;
+
+export const removeRecoveryPhoneBodyCurrentPasswordMax = 1024;
+
+
+
+export const RemoveRecoveryPhoneBody = zod.object({
+  "idToken": zod.string().min(removeRecoveryPhoneBodyIdTokenMin).max(removeRecoveryPhoneBodyIdTokenMax),
+  "currentPassword": zod.string().min(1).max(removeRecoveryPhoneBodyCurrentPasswordMax)
+})
+
+export const RemoveRecoveryPhoneResponse = zod.object({
+  "hasVerifiedPhone": zod.boolean(),
+  "maskedPhone": zod.string().nullable()
+})
+
+
+/**
+ * Uses a fresh single-use Firebase phone auth event, never a supplied username or Firebase UID as the local account ID. Revokes all app sessions and push bindings. Does not log in.
+ * @summary Reset the local password from an already bound SMS-verified phone
+ */
+export const resetRecoveryPasswordBodyIdTokenMin = 20;
+export const resetRecoveryPasswordBodyIdTokenMax = 8192;
+
+export const resetRecoveryPasswordBodyNewPasswordMin = 6;
+export const resetRecoveryPasswordBodyNewPasswordMax = 72;
+
+
+
+export const ResetRecoveryPasswordBody = zod.object({
+  "idToken": zod.string().min(resetRecoveryPasswordBodyIdTokenMin).max(resetRecoveryPasswordBodyIdTokenMax),
+  "newPassword": zod.string().min(resetRecoveryPasswordBodyNewPasswordMin).max(resetRecoveryPasswordBodyNewPasswordMax).describe('Current app minimum; server also enforces bcrypt\'s 72 UTF-8 byte maximum.')
+})
+
+export const ResetRecoveryPasswordResponse = zod.object({
+  "success": zod.literal(true)
+})
+
+
+/**
  * @summary Register a new player
  */
 export const registerBodyUsernameMin = 3;

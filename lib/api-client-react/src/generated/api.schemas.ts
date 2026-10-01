@@ -5,6 +5,56 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface RecoveryFirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  messagingSenderId: string;
+  appId: string;
+}
+
+export interface RecoveryConfig {
+  configured: boolean;
+  firebaseConfig: RecoveryFirebaseConfig | null;
+}
+
+export interface RecoveryPhoneStatus {
+  hasVerifiedPhone: boolean;
+  /** @nullable */
+  maskedPhone: string | null;
+}
+
+export interface RecoveryPhoneCredentials {
+  /**
+     * @minLength 20
+     * @maxLength 8192
+     */
+  idToken: string;
+  /**
+     * @minLength 1
+     * @maxLength 1024
+     */
+  currentPassword: string;
+}
+
+export interface RecoveryPasswordCredentials {
+  /**
+     * @minLength 20
+     * @maxLength 8192
+     */
+  idToken: string;
+  /**
+     * Current app minimum; server also enforces bcrypt's 72 UTF-8 byte maximum.
+     * @minLength 6
+     * @maxLength 72
+     */
+  newPassword: string;
+}
+
+export interface RecoveryResetSuccess {
+  success: true;
+}
+
 export type NativeCallPushInstallationProvider = typeof NativeCallPushInstallationProvider[keyof typeof NativeCallPushInstallationProvider];
 
 
@@ -434,6 +484,7 @@ export interface HealthStatus {
 
 export interface ErrorResponse {
   error: string;
+  code?: string;
 }
 
 export type CallPushConfigFirebase = {
@@ -785,6 +836,11 @@ export interface TransactionsResponse {
   transactions: TransactionItem[];
   balance: number;
 }
+
+/**
+ * Recovery request rejected or temporarily unavailable
+ */
+export type RecoveryErrorResponse = ErrorResponse;
 
 export type PresignClipUploadBodyAction = typeof PresignClipUploadBodyAction[keyof typeof PresignClipUploadBodyAction];
 

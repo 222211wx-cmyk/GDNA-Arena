@@ -1,4 +1,5 @@
 import { isMessagesEntryPath, messagesReturnPath } from "./messages-entry";
+import { recoveryEnrollmentReturnPath } from "./recovery-links";
 
 /** Dependency-free: safe to import before either application entry. */
 type Connection = EventTarget & { effectiveType?: string; saveData?: boolean; downlink?: number };
@@ -28,6 +29,10 @@ export function getAutoLiteReferral(search: string): string | null {
 /** Explicit full messenger links must never lose rooms/tools to an automatic redirect. */
 export function shouldAutoRedirectToLite(route: string, forced: boolean, referral: string | null, search = ""): boolean {
   const path = route.replace(/\/+$/, "") || "/";
+  // Explicit Lite recovery/enrollment links must open the full website,
+  // otherwise slow networks bounce back to Lite before verification can load.
+  if (path === "/recover-account" || path === "/recovery-phone") return false;
+  if ((path === "/login" || path === "/register") && recoveryEnrollmentReturnPath(search)) return false;
   if (isMessagesEntryPath(path) || path.startsWith("/messages/")) return false;
   if ((path === "/login" || path === "/register") && messagesReturnPath(search)) return false;
   if (path === "/clip" || path === "/clips" || /^\/clip\/HELX-\d{6}$/.test(path)) return false;

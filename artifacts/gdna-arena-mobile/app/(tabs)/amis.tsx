@@ -154,6 +154,7 @@ function Settings() {
     try {
       if (value) await enablePush(user.id); else await disablePush(user.id);
       setPhonePush(value);
+      setPushError(value ? callSetupError() : null);
     } catch (error) {
       setPushError(error instanceof Error ? error.message : 'Phone notifications could not be changed.');
       setFullScreenDenied(error instanceof FullScreenIntentAccessError);

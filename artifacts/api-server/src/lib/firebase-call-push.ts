@@ -101,7 +101,7 @@ interface FirebaseServices {
   messaging: Messaging;
 }
 
-interface PublicFirebaseConfig {
+export interface PublicFirebaseConfig {
   apiKey: string;
   authDomain: string;
   projectId: string;
@@ -197,22 +197,34 @@ export function shouldRevokeFirebaseRefreshTokens(sessionFilter?: string): boole
   return !sessionFilter;
 }
 
-function asPublicConfig(): PublicFirebaseConfig | null {
+export function asPublicConfig(): PublicFirebaseConfig | null {
   const raw = process.env.FIREBASE_WEB_CONFIG?.trim();
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const keys = ["apiKey", "authDomain", "projectId", "messagingSenderId", "appId"] as const;
     if (!keys.every(key => typeof value[key] === "string" && value[key].trim().length > 0)) return null;
     return {
-      apiKey: value.apiKey as string,
-      authDomain: value.authDomain as string,
-      projectId: value.projectId as string,
-      messagingSenderId: value.messagingSenderId as string,
-      appId: value.appId as string,
+      apiKey: (value.apiKey as string).trim(),
+      authDomain: (value.authDomain as string).trim(),
+      projectId: (value.projectId as string).trim(),
+      messagingSenderId: (value.messagingSenderId as string).trim(),
+      appId: (value.appId as string).trim(),
     };
   } catch {
     return null;
+  }
+}
+
+/** Boolean-only inspection: never export the original configuration JSON. */
+export function hasFirebaseWebEmulatorConfiguration(): boolean {
+  try {
+    const value: unknown = JSON.parse(process.env.FIREBASE_WEB_CONFIG ?? "");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+    return Object.keys(value).some(key => /emulator/i.test(key));
+  } catch {
+    return true;
   }
 }
 
@@ -279,7 +291,10 @@ async function loadServices(): Promise<FirebaseServices> {
       }
       let app: App;
       try {
-        app = getApps()[0] ?? initializeApp({ credential: cert(account) });
+        // Recovery has its own verification-only named app. It must never
+        // become the Firestore/FCM/custom-token application's credential.
+        app = getApps().find(candidate => candidate.name === "[DEFAULT]") ??
+          initializeApp({ credential: cert(account) });
       } catch {
         console.warn("[FCM] disabled: no valid Firebase credential");
         throw new CallPushError("FCM is disabled: no valid Firebase credential");
@@ -303,7 +318,8 @@ export async function getNativeCallMessaging(): Promise<Messaging> {
     console.warn("[NativeFCM] unavailable: no valid Firebase server credential");
     throw new CallPushError("Native FCM credential unavailable");
   }
-  const app = getApps()[0] ?? initializeApp({ credential: cert(account) });
+  const app = getApps().find(candidate => candidate.name === "[DEFAULT]") ??
+    initializeApp({ credential: cert(account) });
   return getMessaging(app);
 }
 

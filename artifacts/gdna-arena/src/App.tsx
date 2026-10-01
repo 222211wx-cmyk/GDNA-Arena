@@ -18,6 +18,8 @@ import { Navbar } from "@/components/layout/navbar";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
+import RecoverAccount from "@/pages/recover-account";
+import RecoveryPhone from "@/pages/recovery-phone";
 import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
 import Games from "@/pages/games";
@@ -164,6 +166,8 @@ function PageWrapper() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/login"><Login /></Route>
+          <Route path="/recover-account" component={RecoverAccount} />
+          <Route path="/recovery-phone" component={RecoveryPhone} />
           <Route path="/register" component={Register} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/hub" component={Hub} />

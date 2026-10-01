@@ -12,11 +12,13 @@ import { revokeAllCallPushSessions, revokeCallPushSession } from "../lib/firebas
 import { deleteAccountClips } from "../lib/clip-account-delete.js";
 import { deleteAccountCitizenSocial } from "../lib/citizen-media-cleanup.js";
 import { ClipUploadError } from "../lib/clip-upload-protocol.js";
+import { configureSessionLifetime, sessionLifetime, SHORT_SESSION_TTL_MS } from "../lib/session-policy";
+import { PhoneRecoveryError, recoveryTransaction, requireRecoveryUser, revokeRecoveryPushBindings } from "../lib/phone-recovery";
 
 const pool = nullablePool!;
 
-// FINAL OWNER DECISION (Aug 2026): citizen auth is username + password only.
-// No citizen email input, email verification, recovery codes, or mail provider.
+// Citizen login remains username + password, with no citizen email or mail.
+// Latest owner decision enables optional, verified Firebase SMS recovery.
 // Register once → logged in immediately → stays in via long rolling session.
 
 // ── رسائل الترحيب — يتلقاها كل مواطن جديد فور تسجيله ─────────────
@@ -152,7 +154,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     throw err;
   }
 
-  // Simple flow: register → logged in immediately, 30-day remembered session.
+  // Simple flow: register → logged in immediately, persistent rolling session.
   // Regeneration can replace an already-authenticated session, so capture its
   // owner before Express destroys the old session object. Never bind cleanup
   // to the newly-created citizen.
@@ -169,7 +171,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     void revokeCallPushSession(previousSessionUserId, previousSessionId).catch(() => {});
   }
   req.session.userId = user.id;
-  req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+  configureSessionLifetime(req.session);
   req.log.info({ userId: user.id }, "User registered — logged in");
   sendWelcomeNotification(user.id).catch(() => {});
   res.status(201).json(serializeUser(user));
@@ -228,8 +230,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   // existing "a b" account onto another citizen's "ab" account.
   const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
   const password = typeof req.body?.password === "string" ? req.body.password : "";
-  // "Se souvenir de moi" — must be explicitly true; omitted = standard 7 days
-  const rememberMe = req.body?.rememberMe === true;
+  // Persist by default; an explicit unchecked preference keeps the short policy.
+  const rememberMe = req.body?.rememberMe !== false;
   if (!username || !password) {
     res.status(400).json({ error: "اسم المستخدم وكلمة السر مطلوبان — Nom d'utilisateur et mot de passe requis" });
     return;
@@ -261,20 +263,37 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  // Regenerate the session ID after credential verification (anti session-fixation)
+  // Recheck the credential under the user lock and persist the new session
+  // before releasing it. A concurrent recovery reset cannot accept a stale
+  // pre-reset password then create a session after its all-session deletion.
   const previousSessionId = req.sessionID;
   const previousSessionUserId = req.session.userId;
-  await new Promise<void>((resolve, reject) =>
-    req.session.regenerate((err) => (err ? reject(err) : resolve()))
-  );
+  let credentialStillValid = true;
+  await recoveryTransaction(async client => {
+    const locked = await client.query<{ password_hash: string }>(
+      "SELECT password_hash FROM users WHERE id = $1 FOR UPDATE", [user.id],
+    );
+    if (locked.rows[0]?.password_hash !== user.passwordHash) {
+      credentialStillValid = false;
+      return;
+    }
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve())),
+    );
+    req.session.userId = user.id;
+    configureSessionLifetime(req.session, rememberMe);
+    await new Promise<void>((resolve, reject) =>
+      req.session.save(err => err ? reject(err) : resolve()),
+    );
+  });
+  if (!credentialStillValid) {
+    res.status(401).json({ error: "الاسم أو كلمة السر غير صحيحة — Nom ou mot de passe incorrect" });
+    return;
+  }
   disconnectSessionSockets(previousSessionId);
   if (previousSessionUserId) {
     void revokeCallPushSession(previousSessionUserId, previousSessionId).catch(() => {});
   }
-  req.session.userId = user.id;
-  // Remember me: 30-day secure token cookie, renewed on every visit (rolling)
-  // → the citizen enters instantly, like YouTube, until they log out.
-  if (rememberMe) req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
   req.log.info({ userId: user.id, rememberMe }, "User logged in");
   res.json(serializeUser(user));
   } catch (err) {
@@ -298,48 +317,49 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
       return;
     }
 
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-    if (!user) {
-      res.status(401).json({ error: "سجّل الدخول أولاً — Connectez-vous d'abord" });
-      return;
-    }
-    let valid = false;
-    try {
-      valid = await bcrypt.compare(currentPassword, user.passwordHash);
-    } catch {
-      valid = false;
-    }
-    if (!valid) {
-      res.status(400).json({ error: "كلمة السر الحالية غير صحيحة — Mot de passe actuel incorrect" });
-      return;
-    }
-
+    // Preserve an explicit short-session choice through credential rotation.
+    const rememberMe = sessionLifetime(req.session) > SHORT_SESSION_TTL_MS;
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [passwordHash, userId]);
-    // Revoke every OTHER session — a stolen session must not survive a
-    // password change. The current session is re-established below.
-    const revokedSessions = await pool.query<{ sid: string }>(
-      `DELETE FROM user_sessions
-       WHERE (sess->>'userId')::int = $1
-       RETURNING sid`,
-      [userId],
-    );
+    const revokedSessionIds = await recoveryTransaction(async client => {
+      const user = await requireRecoveryUser(client, userId, req.sessionID);
+      let valid = false;
+      try { valid = await bcrypt.compare(currentPassword, user.password_hash); } catch { /* fail closed */ }
+      if (!valid) throw new PhoneRecoveryError(400, "كلمة السر الحالية غير صحيحة — Mot de passe actuel incorrect");
+      // The session store uses a separate pool connection: rotate BEFORE this
+      // transaction deletes sessions, otherwise destroy(oldSid) would wait on
+      // our own uncommitted DELETE. The user lock still fences competing resets.
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate((err) => (err ? reject(err) : resolve())),
+      );
+      await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
+      const revokedSessions = await client.query<{ sid: string }>(
+        "DELETE FROM user_sessions WHERE sess->>'userId' = $1::text RETURNING sid", [userId],
+      );
+      await revokeRecoveryPushBindings(client, userId);
+      // Save the replacement while the user is still locked so a competing
+      // reset cannot delete all sessions and then have this request revive one.
+      req.session.userId = userId;
+      configureSessionLifetime(req.session, rememberMe);
+      await new Promise<void>((resolve, reject) =>
+        req.session.save(err => err ? reject(err) : resolve()),
+      );
+      return revokedSessions.rows.map(({ sid }) => sid);
+    });
     // Revoke pending-upgrade and fully registered realtime channels for every
-    // deleted session before issuing the replacement credential.
-    for (const { sid } of revokedSessions.rows) disconnectSessionSockets(sid);
+    // deleted session; the replacement credential was saved under the user lock.
+    for (const sid of revokedSessionIds) disconnectSessionSockets(sid);
     disconnectUserSockets(userId);
     const firebaseRevoked = await revokeAllCallPushSessions(userId);
-    await new Promise<void>((resolve, reject) =>
-      req.session.regenerate((err) => (err ? reject(err) : resolve()))
-    );
-    req.session.userId = userId;
-    req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
     req.log.info({ userId }, "Password changed from settings");
     res.json({
       message: "تم تغيير كلمة السر بنجاح ✅ — Mot de passe modifié",
       firebaseRevocationPending: !firebaseRevoked,
     });
   } catch (err) {
+    if (err instanceof PhoneRecoveryError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
     req.log.error(err, "Change password error");
     res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
   }
@@ -408,6 +428,39 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
 
+  // Renew only the still-live row. A session loaded before logout, password
+  // revocation, or expiry must not be recreated by express-session's upsert.
+  // Cookie-only changes are excluded from its session hash (resave is false);
+  // the middleware's subsequent touch is UPDATE-only, never an INSERT.
+  try {
+    const ttl = sessionLifetime(req.session);
+    const expires = new Date(Date.now() + ttl).toISOString();
+    const renewed = await pool.query(
+      `UPDATE user_sessions
+       SET sess = jsonb_set(
+             jsonb_set(sess::jsonb, '{cookie,originalMaxAge}', to_jsonb($3::bigint)),
+             '{cookie,expires}', to_jsonb($4::text)
+           )::json,
+           expire = $4::timestamptz
+       WHERE sid = $1 AND sess->>'userId' = $2::text AND expire > NOW()
+       RETURNING sid`,
+      [req.sessionID, userId, ttl, expires],
+    );
+    if (!renewed.rowCount) {
+      disconnectSessionSockets(req.sessionID);
+      await new Promise<void>((resolve, reject) =>
+        req.session.destroy(err => err ? reject(err) : resolve()),
+      );
+      clearSessionCookie(res);
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+    req.session.cookie.maxAge = ttl;
+  } catch (err) {
+    req.log.error(err, "Session renewal unavailable");
+    res.status(503).json({ error: "Session temporarily unavailable — please retry" });
+    return;
+  }
   res.json(serializeUser(user));
 });
 
@@ -433,6 +486,10 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
             birth_date = NULL, last_seen_at = NOW()
         WHERE id = $3
       `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
+      // Soft-deletion does not fire FK cascades. Release the phone mapping,
+      // but preserve global consumed-event digests so erasure cannot replay it.
+      await client.query("DELETE FROM auth_recovery_phones WHERE user_id = $1", [userId]);
+      await revokeRecoveryPushBindings(client, userId);
       await deleteAccountClips(client, userId);
       await deleteAccountCitizenSocial(client, userId);
       await client.query("DELETE FROM dm_send_receipts WHERE sender_id=$1", [userId]);

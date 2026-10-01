@@ -93,6 +93,12 @@ import type {
   NativeCallPushRemoval,
   PlayResult,
   PresignClipUploadBody,
+  RecoveryConfig,
+  RecoveryErrorResponse,
+  RecoveryPasswordCredentials,
+  RecoveryPhoneCredentials,
+  RecoveryPhoneStatus,
+  RecoveryResetSuccess,
   RegistrationInput,
   RequeuedClipThumbnail,
   SuccessResponse,
@@ -3532,6 +3538,474 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+
+export const getGetRecoveryConfigUrl = () => {
+
+
+
+
+  return `/api/auth/recovery/config`
+}
+
+/**
+ * Configured reports local configuration only, not Firebase console provider, billing, SMS delivery or authorized-domain readiness.
+ * @summary Public no-store Firebase phone recovery configuration
+ */
+export const getRecoveryConfig = async ( options?: Parameters<typeof customFetch>[1]): Promise<RecoveryConfig> => {
+
+  return customFetch<RecoveryConfig>(getGetRecoveryConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecoveryConfigQueryKey = () => {
+    return [
+    `/api/auth/recovery/config`
+    ] as const;
+    }
+
+
+export const getGetRecoveryConfigQueryOptions = <TData = Awaited<ReturnType<typeof getRecoveryConfig>>, TError = ErrorType<RecoveryErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecoveryConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecoveryConfig>>> = ({ signal }) => getRecoveryConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecoveryConfig>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRecoveryConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getRecoveryConfig>>>
+export type GetRecoveryConfigQueryError = ErrorType<RecoveryErrorResponse>
+
+
+export function useGetRecoveryConfig<TData = Awaited<ReturnType<typeof getRecoveryConfig>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryConfig>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRecoveryConfig>>,
+          TError,
+          Awaited<ReturnType<typeof getRecoveryConfig>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRecoveryConfig<TData = Awaited<ReturnType<typeof getRecoveryConfig>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryConfig>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRecoveryConfig>>,
+          TError,
+          Awaited<ReturnType<typeof getRecoveryConfig>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRecoveryConfig<TData = Awaited<ReturnType<typeof getRecoveryConfig>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Public no-store Firebase phone recovery configuration
+ */
+
+export function useGetRecoveryConfig<TData = Awaited<ReturnType<typeof getRecoveryConfig>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRecoveryConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetRecoveryPhoneUrl = () => {
+
+
+
+
+  return `/api/auth/recovery/phone`
+}
+
+/**
+ * @summary Get the authenticated citizen's masked recovery phone
+ */
+export const getRecoveryPhone = async ( options?: Parameters<typeof customFetch>[1]): Promise<RecoveryPhoneStatus> => {
+
+  return customFetch<RecoveryPhoneStatus>(getGetRecoveryPhoneUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecoveryPhoneQueryKey = () => {
+    return [
+    `/api/auth/recovery/phone`
+    ] as const;
+    }
+
+
+export const getGetRecoveryPhoneQueryOptions = <TData = Awaited<ReturnType<typeof getRecoveryPhone>>, TError = ErrorType<RecoveryErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryPhone>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecoveryPhoneQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecoveryPhone>>> = ({ signal }) => getRecoveryPhone({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecoveryPhone>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRecoveryPhoneQueryResult = NonNullable<Awaited<ReturnType<typeof getRecoveryPhone>>>
+export type GetRecoveryPhoneQueryError = ErrorType<RecoveryErrorResponse>
+
+
+export function useGetRecoveryPhone<TData = Awaited<ReturnType<typeof getRecoveryPhone>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryPhone>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRecoveryPhone>>,
+          TError,
+          Awaited<ReturnType<typeof getRecoveryPhone>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRecoveryPhone<TData = Awaited<ReturnType<typeof getRecoveryPhone>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryPhone>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRecoveryPhone>>,
+          TError,
+          Awaited<ReturnType<typeof getRecoveryPhone>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRecoveryPhone<TData = Awaited<ReturnType<typeof getRecoveryPhone>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryPhone>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get the authenticated citizen's masked recovery phone
+ */
+
+export function useGetRecoveryPhone<TData = Awaited<ReturnType<typeof getRecoveryPhone>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryPhone>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRecoveryPhoneQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getBindRecoveryPhoneUrl = () => {
+
+
+
+
+  return `/api/auth/recovery/phone/bind`
+}
+
+/**
+ * @summary Bind an SMS-verified phone using the current local password
+ */
+export const bindRecoveryPhone = async (recoveryPhoneCredentials: RecoveryPhoneCredentials, options?: Parameters<typeof customFetch>[1]): Promise<RecoveryPhoneStatus> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<RecoveryPhoneStatus>(getBindRecoveryPhoneUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recoveryPhoneCredentials)
+  }
+);}
+
+
+
+
+
+export const getBindRecoveryPhoneMutationKey = () => ['bindRecoveryPhone'] as const;
+
+export const getBindRecoveryPhoneMutationOptions = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bindRecoveryPhone>>, TError,BindRecoveryPhoneMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bindRecoveryPhone>>, TError,BindRecoveryPhoneMutationVariables, TContext> => {
+
+const mutationKey = getBindRecoveryPhoneMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bindRecoveryPhone>>, BindRecoveryPhoneMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  bindRecoveryPhone(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BindRecoveryPhoneMutationResult = NonNullable<Awaited<ReturnType<typeof bindRecoveryPhone>>>
+    export type BindRecoveryPhoneMutationBody = BodyType<RecoveryPhoneCredentials>
+    export type BindRecoveryPhoneMutationError = ErrorType<RecoveryErrorResponse>
+    export type BindRecoveryPhoneMutationVariables = {data: BodyType<RecoveryPhoneCredentials>}
+
+    /**
+ * @summary Bind an SMS-verified phone using the current local password
+ */
+export const useBindRecoveryPhone = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bindRecoveryPhone>>, TError,BindRecoveryPhoneMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof bindRecoveryPhone>>,
+        TError,
+        BindRecoveryPhoneMutationVariables,
+        TContext
+      > => {
+      return useMutation(getBindRecoveryPhoneMutationOptions(options), queryClient);
+    }
+
+export const getRemoveRecoveryPhoneUrl = () => {
+
+
+
+
+  return `/api/auth/recovery/phone/remove`
+}
+
+/**
+ * @summary Unlink the current phone after a fresh SMS verification and password check
+ */
+export const removeRecoveryPhone = async (recoveryPhoneCredentials: RecoveryPhoneCredentials, options?: Parameters<typeof customFetch>[1]): Promise<RecoveryPhoneStatus> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<RecoveryPhoneStatus>(getRemoveRecoveryPhoneUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recoveryPhoneCredentials)
+  }
+);}
+
+
+
+
+
+export const getRemoveRecoveryPhoneMutationKey = () => ['removeRecoveryPhone'] as const;
+
+export const getRemoveRecoveryPhoneMutationOptions = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRecoveryPhone>>, TError,RemoveRecoveryPhoneMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeRecoveryPhone>>, TError,RemoveRecoveryPhoneMutationVariables, TContext> => {
+
+const mutationKey = getRemoveRecoveryPhoneMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeRecoveryPhone>>, RemoveRecoveryPhoneMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  removeRecoveryPhone(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveRecoveryPhoneMutationResult = NonNullable<Awaited<ReturnType<typeof removeRecoveryPhone>>>
+    export type RemoveRecoveryPhoneMutationBody = BodyType<RecoveryPhoneCredentials>
+    export type RemoveRecoveryPhoneMutationError = ErrorType<RecoveryErrorResponse>
+    export type RemoveRecoveryPhoneMutationVariables = {data: BodyType<RecoveryPhoneCredentials>}
+
+    /**
+ * @summary Unlink the current phone after a fresh SMS verification and password check
+ */
+export const useRemoveRecoveryPhone = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRecoveryPhone>>, TError,RemoveRecoveryPhoneMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeRecoveryPhone>>,
+        TError,
+        RemoveRecoveryPhoneMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRemoveRecoveryPhoneMutationOptions(options), queryClient);
+    }
+
+export const getResetRecoveryPasswordUrl = () => {
+
+
+
+
+  return `/api/auth/recovery/reset`
+}
+
+/**
+ * Uses a fresh single-use Firebase phone auth event, never a supplied username or Firebase UID as the local account ID. Revokes all app sessions and push bindings. Does not log in.
+ * @summary Reset the local password from an already bound SMS-verified phone
+ */
+export const resetRecoveryPassword = async (recoveryPasswordCredentials: RecoveryPasswordCredentials, options?: Parameters<typeof customFetch>[1]): Promise<RecoveryResetSuccess> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<RecoveryResetSuccess>(getResetRecoveryPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recoveryPasswordCredentials)
+  }
+);}
+
+
+
+
+
+export const getResetRecoveryPasswordMutationKey = () => ['resetRecoveryPassword'] as const;
+
+export const getResetRecoveryPasswordMutationOptions = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetRecoveryPassword>>, TError,ResetRecoveryPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetRecoveryPassword>>, TError,ResetRecoveryPasswordMutationVariables, TContext> => {
+
+const mutationKey = getResetRecoveryPasswordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetRecoveryPassword>>, ResetRecoveryPasswordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  resetRecoveryPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetRecoveryPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof resetRecoveryPassword>>>
+    export type ResetRecoveryPasswordMutationBody = BodyType<RecoveryPasswordCredentials>
+    export type ResetRecoveryPasswordMutationError = ErrorType<RecoveryErrorResponse>
+    export type ResetRecoveryPasswordMutationVariables = {data: BodyType<RecoveryPasswordCredentials>}
+
+    /**
+ * @summary Reset the local password from an already bound SMS-verified phone
+ */
+export const useResetRecoveryPassword = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetRecoveryPassword>>, TError,ResetRecoveryPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resetRecoveryPassword>>,
+        TError,
+        ResetRecoveryPasswordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getResetRecoveryPasswordMutationOptions(options), queryClient);
+    }
 
 export const getRegisterUrl = () => {
 

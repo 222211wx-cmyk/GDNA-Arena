@@ -31,6 +31,8 @@ const RESERVED = new Set([
   "operators",
   "data",
   "login",
+  "recover-account",
+  "recovery-phone",
 ]);
 
 const EDITIONS = new Set(["in", "africa", "brasil"]);

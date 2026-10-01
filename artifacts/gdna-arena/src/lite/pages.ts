@@ -22,6 +22,8 @@ import { EDITION_LANGS, RTL_LANGS, stringsFor, type LiteLang, type Strings } fro
 import { href, type Route } from "./router";
 import { reportMeasurement } from "../lib/operator-telemetry";
 import { exhaustedMessagingNotice, messagingSubscriptionCopy, remainingMessagingCopy } from "../lib/messaging-subscription-copy";
+import { recoveryCopy } from "../i18n/recovery-copy";
+import { recoveryWebHref } from "../lib/recovery-links";
 
 interface Ctx {
   s: Strings;
@@ -464,6 +466,7 @@ function conversationView(ctx: Ctx, user: SessionUser, roomId: number): HTMLElem
 /* ── Settings ─────────────────────────────────────────────────────── */
 export function settingsPage(ctx: Ctx): HTMLElement {
   const user = getUser();
+  const recovery = recoveryCopy(ctx.lang);
   const langs = EDITION_LANGS[ctx.edition] ?? EDITION_LANGS.default;
   const allLangs: LiteLang[] = ["en", "fr", "ar", "es", "de", ...langs.filter((l) => !["en", "fr", "ar", "es", "de"].includes(l))];
   const uniqueLangs = Array.from(new Set(allLangs));
@@ -491,9 +494,22 @@ export function settingsPage(ctx: Ctx): HTMLElement {
       user
         ? el("div", { class: "l-row l-spread" }, [
             el("span", { class: "l-gold", text: `@${user.username}` }),
-            el("button", { class: "l-btn l-btn-sm", text: ctx.s.logout, onClick: () => void logout().then(() => ctx.navigate({ kind: "home", edition: ctx.edition })) }),
+            el("button", { class: "l-btn l-btn-sm", text: ctx.s.logout, onClick: () => {
+              void logout()
+                .then(() => ctx.navigate({ kind: "home", edition: ctx.edition }))
+                .catch(() => {
+                  // Logout already exposes the failure and retry in the
+                  // session gate; never navigate as if revocation succeeded.
+                });
+            } }),
           ])
         : el("button", { class: "l-btn l-btn-primary l-btn-sm", text: ctx.s.login, onClick: () => ctx.navigate({ kind: "login" }) }),
+    ]),
+    el("div", { class: "l-card l-stack" }, [
+      el("div", { class: "l-h2", text: recovery.phoneTitle }),
+      el("p", { class: "l-small l-muted", text: recovery.optIn }),
+      el("a", { class: "l-btn l-btn-primary l-btn-sm", href: recoveryWebHref("/recovery-phone", "/lite/settings", ctx.lang), text: recovery.manage, "data-testid": "link-lite-recovery-phone" }),
+      el("p", { class: "l-small l-muted", text: recovery.fullWeb }),
     ]),
   ]);
   return root;
@@ -512,6 +528,8 @@ export function loginPage(ctx: Ctx): HTMLElement {
     el("div", { class: "l-field" }, [el("label", { class: "l-label", text: ctx.s.password }), pInput]),
     err,
     el("div", { class: "l-row" }, [btn]),
+    el("a", { class: "l-gold", href: recoveryWebHref("/recover-account", "/lite/login", ctx.lang), text: recoveryCopy(ctx.lang).forgot, "data-testid": "link-lite-forgot-password" }),
+    el("p", { class: "l-small l-muted", text: recoveryCopy(ctx.lang).fullWeb }),
   ]) as HTMLFormElement;
 
   form.addEventListener("submit", (e) => {

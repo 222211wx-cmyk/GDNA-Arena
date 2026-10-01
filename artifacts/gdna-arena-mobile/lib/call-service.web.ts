@@ -1,4 +1,5 @@
 export const callSetupError = () => 'Locked-screen calls require an installed native build.';
+export async function nativeCallsEnabled(_id: number): Promise<boolean> { return false; }
 export class FullScreenIntentAccessError extends Error {}
 export async function canUseFullScreenIntent() { return false; }
 export async function openFullScreenIntentSettings() { throw new FullScreenIntentAccessError(callSetupError()); }

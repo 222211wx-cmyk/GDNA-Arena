@@ -1,6 +1,5 @@
 import * as Notifications from 'expo-notifications';
 import * as Constants from 'expo-constants';
-import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { AppState, Platform } from 'react-native';
 import { apiGet, getApiBase, getHeaders, type AuthUser } from '@/lib/api';
@@ -11,11 +10,12 @@ import {
   setBaseUrl,
 } from '@workspace/api-client-react';
 import { createPushTapGuard, resolvePushTap } from '@/lib/push-tap';
-import { enableNativeCalls, disableNativeCalls, refreshNativeCalls, canUseFullScreenIntent, FullScreenIntentAccessError } from './call-service';
+import { enableNativeCalls, disableNativeCalls, refreshNativeCalls, nativeCallsEnabled, recordCallSetupError } from './call-service';
 import { RegistrationGeneration } from './call-actions';
+import { pushInstallation, providerInstallationIds } from './push-installation';
 
-const ID_KEY = 'gdna.expo.push.installation';
 const enabledKey = (id: number) => `gdna.expo.push.enabled.${id}`;
+const nativeEnabledKey = (id: number) => `gdna.native.calls.enabled.${id}`;
 function expoProjectId(): string {
   const id = Constants.default.expoConfig?.extra?.eas?.projectId ?? Constants.default.easConfig?.projectId;
   if (typeof id !== 'string' || !/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(id)) {
@@ -36,28 +36,22 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function installationId(): Promise<string> {
-  let id = await SecureStore.getItemAsync(ID_KEY);
-  if (!id) {
-    id = Crypto.randomUUID().replace(/-/g, '');
-    await SecureStore.setItemAsync(ID_KEY, id);
-  }
-  return id;
-}
-
 export async function pushEnabled(userId: number): Promise<boolean> {
-  if ((await SecureStore.getItemAsync(enabledKey(userId))) !== 'yes') return false;
+  // Phone-call enrollment is not evidence of Expo enrollment, or vice versa.
+  // In particular an optional Expo project/token failure must not hide FCM opt-in.
+  if (Platform.OS === 'android') return nativeCallsEnabled(userId);
+  // Retain the existing generic-alert status on iOS; deferred VoIP still
+  // explicitly fails enrollment in the native call service.
   try { expoProjectId(); } catch { return false; }
-  if (!(await Notifications.getPermissionsAsync()).granted) return false;
-  if (!await canUseFullScreenIntent()) {
-    throw new FullScreenIntentAccessError('Full-screen call alerts are off in Android Settings. Allow them, then re-enable phone alerts.');
-  }
-  return true;
+  return expoAlertsEnabled(userId);
 }
 
-export async function enablePush(userId: number): Promise<void> {
-  const current = registration.capture();
-  const request = apiOptions();
+async function expoAlertsEnabled(userId: number): Promise<boolean> {
+  if ((await SecureStore.getItemAsync(enabledKey(userId))) !== 'yes') return false;
+  return (await Notifications.getPermissionsAsync()).granted;
+}
+
+async function registerExpoAlerts(userId: number, current: () => boolean, request: ReturnType<typeof apiOptions>, askPermission: boolean): Promise<void> {
   const projectId = expoProjectId();
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('amis', {
@@ -65,7 +59,8 @@ export async function enablePush(userId: number): Promise<void> {
     });
   }
   const permission = await Notifications.getPermissionsAsync();
-  const granted = permission.granted ? permission : await Notifications.requestPermissionsAsync();
+  if (!current()) throw new Error('Notification registration was cancelled.');
+  const granted = permission.granted || !askPermission ? permission : await Notifications.requestPermissionsAsync();
   if (!granted.granted) throw new Error('Notifications are off. Allow notifications in your phone settings, then try again.');
   const fresh = await apiGet<AuthUser>('/auth/me');
   if (fresh.id !== userId) throw new Error('Account changed. Sign in again before enabling notifications.');
@@ -74,34 +69,71 @@ export async function enablePush(userId: number): Promise<void> {
     throw new Error('Expo did not return a valid push token.');
   }
   if (!current()) throw new Error('Notification registration was cancelled.');
-  try {
-    await enableNativeCalls(userId);
-    if (!current()) throw new Error('Notification registration was cancelled.');
-    await registration.run(async valid => {
-      if (!valid()) return;
-      await registerExpoPushInstallation({ installationId: await installationId(), token: token.data }, request);
-    });
-  } catch (error) {
-    if (current()) {
-      try { await disableNativeCalls(userId); }
-      catch { throw new Error('Notification setup failed and registration cleanup could not reach the server. Retry disabling phone alerts when online.'); }
+  await registration.run(async valid => {
+    if (!valid() || !current()) return;
+    const installation = await pushInstallation();
+    if (!valid() || !current()) return;
+    if (!installation.id) throw new Error('Expo notification installation identity is unavailable.');
+    // Do not move an existing Expo subscription to a different ID: unlike
+    // native registration the server does not deduplicate Expo tokens.
+    if (installation.expoId !== installation.id) {
+      throw new Error('Existing Expo notification identities conflict. Generic alerts need server-side reconciliation before re-registration.');
     }
-    throw error;
-  }
+    await registerExpoPushInstallation({ installationId: installation.id, token: token.data }, request);
+  });
   if (!current()) throw new Error('Notification registration was cancelled.');
   await SecureStore.setItemAsync(enabledKey(userId), 'yes');
   if (!current()) await SecureStore.deleteItemAsync(enabledKey(userId));
 }
 
+function optionalExpoError(error: unknown): Error {
+  const reason = error instanceof Error ? error.message : 'Expo registration unavailable.';
+  return new Error(`Native call enrollment is saved, but generic phone alert registration is incomplete. ${reason}`);
+}
+
+export async function enablePush(userId: number): Promise<void> {
+  const current = registration.capture();
+  const request = apiOptions();
+  const fresh = await apiGet<AuthUser>('/auth/me');
+  if (fresh.id !== userId) throw new Error('Account changed. Sign in again before enabling notifications.');
+  if (!current()) throw new Error('Notification registration was cancelled.');
+  // FCM/PushKit is the call transport. No Expo configuration or network call
+  // may precede it, and an optional alert failure must never revoke it.
+  await enableNativeCalls(userId);
+  if (!current()) throw new Error('Notification registration was cancelled.');
+  try {
+    await registerExpoAlerts(userId, current, request, true);
+  } catch (error) {
+    if (!current()) throw new Error('Notification registration was cancelled.');
+    if (Platform.OS !== 'android') throw error;
+    recordCallSetupError(optionalExpoError(error));
+    // Android native opt-in succeeded; the existing status display reports
+    // the separate optional-alert error rather than claiming complete setup.
+  }
+  if (!current()) throw new Error('Notification registration was cancelled.');
+}
+
 export async function disablePush(userId: number): Promise<void> {
   registration.invalidate();
   const request = apiOptions();
-  await SecureStore.deleteItemAsync(enabledKey(userId));
-  await disableNativeCalls(userId);
-  await registration.run(async () => {
-    const id = await SecureStore.getItemAsync(ID_KEY);
-    if (id) await removeExpoPushInstallation({ installationId: id }, request);
-  });
+  // Failure to remove one provider must not skip removal of the other.
+  const results = await Promise.allSettled([
+    SecureStore.deleteItemAsync(enabledKey(userId)),
+    disableNativeCalls(userId),
+    registration.run(async () => {
+      const installation = await pushInstallation(false);
+      const removals = await Promise.allSettled(providerInstallationIds(installation, 'expo')
+        .map(installationId => removeExpoPushInstallation({ installationId }, request)));
+      if (removals.some(result => result.status === 'rejected')) {
+        throw new Error('Expo notification removal could not reach the server for every installation.');
+      }
+    }),
+  ]);
+  if (results.some(result => result.status === 'rejected')) {
+    const error = new Error('Phone alert removal did not finish for every provider. Retry disabling phone alerts when online.');
+    recordCallSetupError(error);
+    throw error;
+  }
 }
 
 export async function forgetPushOnLogout(userId: number): Promise<void> {
@@ -111,14 +143,22 @@ export async function forgetPushOnLogout(userId: number): Promise<void> {
 export async function refreshPushIfAllowed(userId: number): Promise<void> {
   const current = registration.capture();
   const request = apiOptions();
-  if (!await pushEnabled(userId)) return;
-  if (!current()) return;
+  // Refresh the native opt-in even if Expo never registered or its project
+  // configuration has since become unavailable. Neither path prompts here.
   await refreshNativeCalls(userId);
-  const token = await Notifications.getExpoPushTokenAsync({ projectId: expoProjectId() });
   if (!current()) return;
-  await registration.run(async valid => {
-    if (valid()) await registerExpoPushInstallation({ installationId: await installationId(), token: token.data }, request);
-  });
+  const nativeAllowed = await SecureStore.getItemAsync(nativeEnabledKey(userId)) === 'yes';
+  const expoAllowed = await SecureStore.getItemAsync(enabledKey(userId)) === 'yes';
+  if (!current() || (!nativeAllowed && !expoAllowed)) return;
+  try {
+    await registerExpoAlerts(userId, current, request, false);
+    if (nativeAllowed && current()) recordCallSetupError(null);
+  } catch (error) {
+    if (!current()) return;
+    const failure = Platform.OS === 'android' && nativeAllowed ? optionalExpoError(error) : error;
+    recordCallSetupError(failure);
+    throw failure;
+  }
 }
 
 async function dismissStaleCallAlerts(): Promise<void> {
@@ -161,7 +201,7 @@ export function listenForPushTaps(navigate: (path: string) => void): () => void 
     try {
       const route = await guardedTap(request.identifier, async () => {
         const account = await apiGet<AuthUser>('/auth/me');
-        if (!await pushEnabled(account.id)) return null;
+        if (!await expoAlertsEnabled(account.id)) return null;
         return resolvePushTap(data, account.id,
           async roomId => { await apiGet(`/messages/rooms/${roomId}`); },
           async callId => (await checkExpoPushCall(callId, apiOptions())).active,

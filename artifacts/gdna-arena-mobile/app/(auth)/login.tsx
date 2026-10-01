@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { Button } from '@workspace/gdna-ds/components/native/button';
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -102,6 +103,12 @@ export default function LoginScreen() {
               <Text style={s.btnText}>Sign in</Text>
             )}
           </TouchableOpacity>
+
+          <Link href="/(auth)/forgot-password" asChild>
+            <Button variant="ghost" disabled={loading} style={s.linkRow} testID="login-forgot-password">
+              Forgot password?
+            </Button>
+          </Link>
 
           <Link href="/(auth)/register" asChild>
             <TouchableOpacity style={s.linkRow}>

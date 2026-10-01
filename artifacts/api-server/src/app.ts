@@ -10,6 +10,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
 import { clipAwareJsonBody } from "./lib/clip-metadata-json.js";
+import { PERSISTENT_SESSION_TTL_MS } from "./lib/session-policy";
 
 const app: Express = express();
 
@@ -168,7 +169,7 @@ export const sessionMiddleware = session({
     // reverse proxy loses X-Forwarded-Proto. trust proxy 1 reads that header.
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: PERSISTENT_SESSION_TTL_MS,
     sameSite: "lax",
   },
 });

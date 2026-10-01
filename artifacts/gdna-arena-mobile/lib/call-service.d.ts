@@ -1,5 +1,6 @@
 export declare function callSetupError(): string | null;
 export declare function recordCallSetupError(error: unknown): void;
+export declare function nativeCallsEnabled(id: number): Promise<boolean>;
 export declare class FullScreenIntentAccessError extends Error {}
 export declare function canUseFullScreenIntent(): Promise<boolean>;
 export declare function openFullScreenIntentSettings(): Promise<void>;

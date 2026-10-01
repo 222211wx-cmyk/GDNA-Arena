@@ -5,6 +5,16 @@ description: Provider identity and acceptance criteria for native mobile notific
 
 Keep Expo push tokens distinct from direct FCM tokens and browser Web Push subscriptions; do not send one provider's token through another provider.
 
+Android call enrollment must remain independent of optional Expo generic alerts,
+while provider registrations identify the same physical installation for deduplication.
+
+**Why:** coupling these registrations let an Expo setup failure undo working call
+enrollment, and unrelated installation identities bypassed duplicate-alert suppression.
+
+**How to apply:** preserve native success when optional alerts fail, report each
+failure honestly, and retain historical provider identities until owned cleanup is
+confirmed. Never delete or suppress every device merely because it shares a user.
+
 User decision: iOS VoIP is deferred until Apple Developer provisioning is available. The iOS VoIP stub must explicitly report unavailable, never fake PushKit registration or delivery success. Keep the real implementation available for later explicit re-enable; Android build/FCM and web push must remain independent of APNs secrets.
 
 Use Firebase for Android call wake-up and direct APNs PushKit for iOS; do not initialize an unrelated iOS Firebase application merely to enable Android FCM. Keep permission requests citizen-initiated and the server authoritative for calls; native call UI does not authorize joining media. iOS PushKit calls must be reported to CallKit before the JS bridge is available, with native completion ownership.

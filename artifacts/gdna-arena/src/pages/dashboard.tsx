@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { RecoveryPhoneSettings } from "@/components/auth/recovery-phone-settings";
 import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 import { task39Text } from "@/i18n/task39";
@@ -951,6 +952,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Settings — change password directly (no email codes) */}
+      <RecoveryPhoneSettings key={user.id} />
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="bg-card/50 border-primary/20">
           <CardHeader>

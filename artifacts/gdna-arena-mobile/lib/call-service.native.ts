@@ -8,9 +8,9 @@ import {
 } from '@workspace/api-client-react';
 import { apiGet, apiPost, getApiBase, getHeaders, loadSessionCookie, type AuthUser } from './api';
 import { parseCallPush, RegistrationGeneration, type CallPush, type CallAction } from './call-actions';
+import { pushInstallation, providerInstallationIds } from './push-installation';
 
 const enabledKey = (id: number) => `gdna.native.calls.enabled.${id}`;
-const ID_KEY = 'gdna.native.calls.installation';
 // Android channel sound is immutable after creation; do not reuse legacy "calls".
 const CALL_CHANNEL_ID = 'native-calls-ringtone-v1';
 const CALL_SOUND = 'gdna_call';
@@ -66,11 +66,21 @@ function diagnostic(error: unknown) {
   setupError = error instanceof Error ? error.message : 'Native call setup failed.';
 }
 export const callSetupError = () => setupError;
-export function recordCallSetupError(error: unknown) { diagnostic(error); }
-async function installationId() {
-  let id = await SecureStore.getItemAsync(ID_KEY);
-  if (!id) { id = Crypto.randomUUID(); await SecureStore.setItemAsync(ID_KEY, id); }
-  return id;
+export function recordCallSetupError(error: unknown) {
+  if (error === null) setupError = null;
+  else diagnostic(error);
+}
+export async function nativeCallsEnabled(userId: number): Promise<boolean> {
+  if (await SecureStore.getItemAsync(enabledKey(userId)) !== 'yes') return false;
+  if (Platform.OS === 'ios' && !iosVoipEnabled) throw new Error(IOS_VOIP_DISABLED);
+  if (!messaging && !voip) throw new Error(setupError ?? 'Native call support unavailable in this build.');
+  if (Platform.OS === 'android') {
+    if ((await notifee.getNotificationSettings()).authorizationStatus < 1) return false;
+    if (!await canUseFullScreenIntent()) {
+      throw new FullScreenIntentAccessError('Full-screen call alerts are off in Android Settings. Allow them, then re-enable phone alerts.');
+    }
+  }
+  return true;
 }
 export function resetCallAccount() {
   generation.invalidate();
@@ -95,21 +105,32 @@ async function registerToken(userId: number, token: string) {
   const request = options();
   await generation.run(async current => {
     const account = await apiGet<AuthUser>('/auth/me');
-    if (!current() || account.id !== userId || enabledUser !== userId) return;
-    const id = await installationId();
+    if (!current()) return;
+    if (account.id !== userId || enabledUser !== userId) throw new Error('Account changed during call registration.');
+    const installation = await pushInstallation();
+    const id = installation.id;
+    if (!id) throw new Error('Native call installation identity is unavailable.');
     if (!current()) return;
     await registerNativeCallPushInstallation({
       installationId: id, provider: Platform.OS === 'android' ? 'fcm' : 'apns-voip', token,
     }, request);
+    // The backend transfers an identical native token to the shared ID. Also
+    // remove a known legacy registration if its token had rotated. Retain its
+    // persisted ID so a failed cleanup can be retried, including on disable.
+    for (const staleId of providerInstallationIds(installation, 'native')) {
+      if (staleId === id || !current()) continue;
+      try { await removeNativeCallPushInstallation({ installationId: staleId }, request); }
+      catch { throw new Error('Native call registration was saved, but legacy installation cleanup failed. Retry phone alert setup or disable alerts when online.'); }
+    }
   });
 }
 export async function enableNativeCalls(userId: number) {
-  if (Platform.OS === 'ios' && !iosVoipEnabled) throw new Error(IOS_VOIP_DISABLED);
-  if (!messaging && !voip) throw new Error(setupError ?? 'Locked-screen calls need a native build with Firebase / PushKit configured.');
   generation.invalidate();
   const current = generation.capture();
   enabledUser = userId;
   try {
+  if (Platform.OS === 'ios' && !iosVoipEnabled) throw new Error(IOS_VOIP_DISABLED);
+  if (!messaging && !voip) throw new Error(setupError ?? 'Locked-screen calls need a native build with Firebase / PushKit configured.');
   if (Platform.OS === 'android') {
     await androidTelecom().register();
     const permission = await notifee.requestPermission();
@@ -137,18 +158,30 @@ export async function enableNativeCalls(userId: number) {
   }
   setupError = null;
   } catch (error) {
-    if (current()) enabledUser = null;
+    if (current()) { enabledUser = null; diagnostic(error); }
     throw error;
   }
 }
 export async function disableNativeCalls(userId: number) {
   const request = options();
   resetCallAccount();
-  await SecureStore.deleteItemAsync(enabledKey(userId));
-  await generation.run(async () => {
-    const id = await SecureStore.getItemAsync(ID_KEY);
-    if (id) await removeNativeCallPushInstallation({ installationId: id }, request);
-  });
+  const results = await Promise.allSettled([
+    SecureStore.deleteItemAsync(enabledKey(userId)),
+    generation.run(async () => {
+      const installation = await pushInstallation(false);
+      const removals = await Promise.allSettled(providerInstallationIds(installation, 'native')
+        .map(installationId => removeNativeCallPushInstallation({ installationId }, request)));
+      if (removals.some(result => result.status === 'rejected')) {
+        throw new Error('Native call removal could not reach the server for every installation.');
+      }
+    }),
+  ]);
+  if (results.some(result => result.status === 'rejected')) {
+    const error = new Error('Native call removal did not finish for every installation. Retry disabling phone alerts when online.');
+    diagnostic(error);
+    throw error;
+  }
+  setupError = null;
 }
 export async function refreshNativeCalls(userId: number) {
   const current = generation.capture();

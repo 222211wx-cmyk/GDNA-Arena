@@ -12,6 +12,7 @@ import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiGet, type TransactionItem } from '@/lib/api';
+import { Button } from '@workspace/gdna-ds/components/native/button';
 
 function getRank(xp: number): { label: string; color: string; next: number; progress: number } {
   const tiers = [
@@ -191,6 +192,16 @@ export default function ProfileScreen() {
         <Text style={[s.menuBtnText, { color: colors.primary }]}>Finance and wallet</Text>
         <Ionicons name="chevron-forward" size={16} color={colors.primary} />
       </TouchableOpacity>
+
+      <Button
+        variant="outline"
+        style={{ marginHorizontal: 16, marginBottom: 10 }}
+        onPress={() => router.push('/recovery-phone')}
+        testID="profile-recovery-phone"
+        accessibilityLabel="Manage your recovery phone number"
+      >
+        Recovery phone number
+      </Button>
 
       {/* Logout */}
       <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>

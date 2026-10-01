@@ -3,7 +3,8 @@ export const MAX_IMAGE_PLAINTEXT_BYTES = 5 * MIB;
 export const AES_GCM_TAG_BYTES = 16;
 export const MAX_ENCRYPTED_IMAGE_BYTES = MAX_IMAGE_PLAINTEXT_BYTES + AES_GCM_TAG_BYTES;
 export const MAX_ATTACHMENT_PLAINTEXT_BYTES = 25 * MIB;
-export const MAX_ENCRYPTED_ATTACHMENT_BYTES = MAX_ATTACHMENT_PLAINTEXT_BYTES;
+// AES-GCM appends its authentication tag to the allowed plaintext payload.
+export const MAX_ENCRYPTED_ATTACHMENT_BYTES = MAX_ATTACHMENT_PLAINTEXT_BYTES + AES_GCM_TAG_BYTES;
 
 export type MessageUploadIntent = {
   roomId: number | null;
