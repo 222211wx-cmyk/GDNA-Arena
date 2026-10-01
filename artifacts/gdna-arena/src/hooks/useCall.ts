@@ -261,6 +261,7 @@ export function useCall(user: { id: number; username: string } | null) {
   // Mirror of the call the user is currently in or being offered — WS handlers
   // use this ref to IGNORE call events whose callId does not belong to us.
   const currentCallIdRef = useRef<string | null>(null);
+  const offeredCallIdRef = useRef<string | null>(null);
   // These are deliberately local browser refs. They protect this tab from
   // replay after reconnect; authoritative call state remains server-owned.
   const currentCallPeerRef = useRef<string | null>(null);
@@ -393,8 +394,14 @@ export function useCall(user: { id: number; username: string } | null) {
 
   const sendWS = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(data));
+      try {
+        wsRef.current.send(JSON.stringify(data));
+        return true;
+      } catch {
+        return false;
+      }
     }
+    return false;
   }, []);
 
   // Group calls own their own UI/controller. A direct dial must not race a
@@ -486,6 +493,9 @@ export function useCall(user: { id: number; username: string } | null) {
   const resumeCurrentCall = useCallback(() => {
     const callId = currentCallIdRef.current;
     if (callId && registeredSocketRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+      // During key/config preparation this id is still browser-local. Resuming
+      // it would make the server end a call that has not been offered yet.
+      if (callDirectionRef.current === "outgoing" && offeredCallIdRef.current !== callId) return;
       // This is intentionally the only action reconnect performs for an
       // incoming ring: it never requests devices or answers on the user's
       // behalf. The server returns the canonical state/signal transcript.
@@ -1219,7 +1229,10 @@ export function useCall(user: { id: number; username: string } | null) {
     hybridFallbackTimerRef.current = null;
     hybridSwitchRequestedRef.current = false;
     agoraStandbyTokenRef.current = null;
-    if (!preserveCallSecret) callSecretRef.current = null;
+    if (!preserveCallSecret) {
+      callSecretRef.current = null;
+      offeredCallIdRef.current = null;
+    }
     pendingCallIceRef.current = [];
     pendingRemoteIceRef.current = [];
     callSignalingReadyRef.current.clear();
@@ -1886,9 +1899,13 @@ export function useCall(user: { id: number; username: string } | null) {
           }
           if (callDirectionRef.current === "outgoing") {
             const pc = callPcRef.current;
-            if (agora && agoraRef.current) {
+            if (agora) {
+              // Consent can arrive before token fetching/client creation, or
+              // be the first durable snapshot after reconnect. It confirms the
+              // invitation, not WebRTC readiness; startCall still owns joining.
+              settleCallReady(msg.callId);
               clearRingTimer();
-              setCallPhase("accepted");
+              if (!mediaConnectedRef.current) setCallPhase("accepted");
               return;
             }
             // Replayed acceptance cannot regress an active call to accepted or
@@ -2047,6 +2064,7 @@ export function useCall(user: { id: number; username: string } | null) {
         // ── Call rejected / ended — only for OUR current call ──────────────
         if ((msg.type === "call-rejected" || msg.type === "call-ended")
             && msg.callId === currentCallIdRef.current) {
+          settleCallReady(msg.callId, new Error("CALL_SETUP_REJECTED"));
           settleDurableAnswer(msg.callId, new Error("CALL_SETUP_REJECTED"));
           clearRingTimer();
           if (callDirectionRef.current === "outgoing") {
@@ -2277,7 +2295,7 @@ export function useCall(user: { id: number; username: string } | null) {
       showCallError("أنهِ مكالمة المجموعة أولاً قبل بدء مكالمة مباشرة");
       return;
     }
-    if (callStatus !== "idle") {
+    if (callStatus !== "idle" || currentCallIdRef.current) {
       showCallError("مكالمة أخرى جارية بالفعل — أنهِها أولاً");
       return;
     }
@@ -2352,6 +2370,9 @@ export function useCall(user: { id: number; username: string } | null) {
 
       let offer: RTCSessionDescriptionInit | null = null;
       const selectedConfig = await fetchCallRtcConfig();
+      if (currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration) {
+        throw new Error("CALL_SETUP_CANCELLED");
+      }
       // Hybrid explicitly uses Agora when authenticated TURN is unavailable;
       // it must never present a STUN-only direct path as call readiness.
       const useAgoraInitially = selectedConfig.provider === "agora" ||
@@ -2374,8 +2395,11 @@ export function useCall(user: { id: number; username: string } | null) {
           throw new Error("CALL_SETUP_CANCELLED");
         }
       }
+      if (wsRef.current?.readyState !== WebSocket.OPEN || !registeredSocketRef.current) {
+        throw new Error("Call signaling disconnected before the invitation was sent");
+      }
       const callReady = waitForCallReady(callId);
-      sendWS({
+      const sent = sendWS({
         type: "call-offer",
         to: targetUsername,
         offer,
@@ -2386,7 +2410,13 @@ export function useCall(user: { id: number; username: string } | null) {
         transport: agoraConfig ? { provider: "agora", version: 1 } : WEBRTC_TRANSPORT,
         e2e,
       });
+      if (!sent) {
+        settleCallReady(callId, new Error("Call signaling disconnected before the invitation was sent"));
+        await callReady;
+        return;
+      }
       offered = true;
+      offeredCallIdRef.current = callId;
       historyRef.current = { peer: targetUsername, video: withVideo, start: Date.now(), outgoing: true, answered: false };
 
       // The signaling server owns the 30-second ring timeout and durable
@@ -2422,16 +2452,18 @@ export function useCall(user: { id: number; username: string } | null) {
       }
     } catch (err: unknown) {
       console.error("[CALL] Failed to start:", err);
+      const message = err instanceof Error ? err.message : "";
       if (callStateStarted &&
         (currentCallIdRef.current !== callId || callGenerationRef.current !== callGeneration)) {
         // A late acknowledgement can arrive after local cancellation. End
         // that exact offer without touching a newer call's UI or media.
-        if (offered) sendWS({ type: "call-end", to: targetUsername, callId });
+        if (offered && message !== "CALL_SETUP_REJECTED") {
+          sendWS({ type: "call-end", to: targetUsername, callId });
+        }
         return;
       }
       clearRingTimer();
       // Only a callee who actually received an offer needs an end signal.
-      const message = err instanceof Error ? err.message : "";
       if (offered && message !== "CALL_SETUP_REJECTED") {
         sendWS({ type: "call-end", to: targetUsername, callId });
       }
@@ -2445,11 +2477,13 @@ export function useCall(user: { id: number; username: string } | null) {
       if (message !== "CALL_SETUP_REJECTED") {
         showCallError(message.includes("secure") || message.includes("Secure") || message.includes("E2E")
           ? `🔐 ${message}`
-          : mediaFailureMessage(err));
+          : message.startsWith("Call signaling")
+            ? "انقطع اتصال إشارات المكالمة قبل إرسال الدعوة — انتظر إعادة الاتصال وحاول مجدداً"
+            : mediaFailureMessage(err));
       }
       setCallStatus("idle");
     }
-  }, [callStatus, createDirectCallerOffer, createAgoraCall, fetchCallRtcConfig, isOnline, leaveAgora, sendWS, signalingDeviceIdFor, setActualMediaConnected, user, waitForCallReady]);
+  }, [callStatus, createDirectCallerOffer, createAgoraCall, fetchCallRtcConfig, isOnline, leaveAgora, sendWS, settleCallReady, signalingDeviceIdFor, setActualMediaConnected, user, waitForCallReady]);
 
   // ── Answer an incoming call ────────────────────────────────────────────────
   const answerCall = useCallback(async (withVideo = true) => {

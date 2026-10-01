@@ -1,4 +1,4 @@
-import { CallPushError, callSessionBinding, getCallStateDb, type CallStateDb } from "./call-state-db";
+import { CallPushError, callFailureDiagnosticCode, callSessionBinding, getCallStateDb, type CallStateDb, type CallStateTransaction } from "./call-state-db";
 import { sendAuthoritativeIncomingCallPush } from "./firebase-call-push";
 import { sendBrowserCallTerminalPush } from "./browser-push";
 export { CallPushError, callSessionBinding } from "./call-state-db";
@@ -123,6 +123,42 @@ export function canonicalCallRecord(callId: string, data: Record<string, unknown
   };
 }
 
+/** Expired locks alone never end a legacy conversation. Re-read the call and
+ * its participant locks under the existing serialized transaction, then
+ * require authoritative revocation of at least one recorded session. */
+async function recoverAbandonedLegacyCall(
+  db: CallStateDb, transaction: CallStateTransaction, callId: string, lockedUserId: number, now: Date,
+): Promise<CallRecord | null> {
+  const snapshot = await transaction.get(ref(db, callId));
+  const raw = snapshot.data();
+  const record = raw ? canonicalCallRecord(callId, raw) : null;
+  if (!record || raw?.endedAt || record.status !== "answered" || raw?.heartbeatEnabled === true ||
+    !Number.isSafeInteger(record.caller.id) || record.caller.id <= 0 ||
+    !Number.isSafeInteger(record.callee.id) || record.callee.id <= 0 ||
+    record.caller.id === record.callee.id) return null;
+  const participantIds = [record.caller.id, record.callee.id];
+  if (!participantIds.includes(lockedUserId) || !Number.isFinite(now.getTime())) return null;
+  const locks = [
+    await transaction.get(lockRef(db, record.caller.id)),
+    await transaction.get(lockRef(db, record.callee.id)),
+  ];
+  if (locks[participantIds.indexOf(lockedUserId)].data()?.callId !== callId) return null;
+  for (const lock of locks) {
+    if (lock.data()?.callId !== callId) continue;
+    // Missing/malformed expiry is not evidence of an elapsed lock.
+    const expiry = asDate(lock.data()?.expiresAt, new Date(NaN)).getTime();
+    if (!Number.isFinite(expiry) || expiry > now.getTime()) return null;
+  }
+  const callerRevoked = await transaction.isRecordedSessionRevoked(record.caller.id, record.callerSessionTag);
+  const answererRevoked = record.answerer?.userId === record.callee.id &&
+    await transaction.isRecordedSessionRevoked(record.callee.id, record.answerer.sessionTag);
+  if (!callerRevoked && !answererRevoked) return null;
+  transaction.update(ref(db, callId), { endedAt: now });
+  for (const [index, id] of participantIds.entries())
+    if (locks[index].data()?.callId === callId) transaction.delete(lockRef(db, id));
+  return { ...record, endedAt: now };
+}
+
 export async function createAuthoritativeCall(input: Omit<CallRecord, "status" | "createdAt" | "expiresAt" | "replayIce" | "preAnswerIce" | "callerSessionTag"> & {
   callerSessionId: string; expiresAt?: Date;
 }): Promise<CallRecord> {
@@ -135,31 +171,42 @@ export async function createAuthoritativeCall(input: Omit<CallRecord, "status" |
   const record: CallRecord = {
     ...input, callerSessionTag, status: "ringing", createdAt, expiresAt, replayIce: { caller: [], callee: [] }, preAnswerIce: {},
   };
+  const recoveredLegacyCalls: CallRecord[] = [];
   try {
     await db.runTransaction(async transaction => {
       const call = ref(db, input.callId);
       const callerLock = lockRef(db, input.caller.id);
       const calleeLock = lockRef(db, input.callee.id);
-      const [existing, callerBusy, calleeBusy] = await Promise.all([
-        transaction.get(call), transaction.get(callerLock), transaction.get(calleeLock),
-      ]);
+      // A PostgreSQL transaction owns one client: do not queue concurrent
+      // queries on it as we could with the former Firestore store.
+      const existing = await transaction.get(call);
+      const callerBusy = await transaction.get(callerLock);
+      const calleeBusy = await transaction.get(calleeLock);
       if (existing.exists) throw new CallPushError("Call ID is already in use");
-      for (const lock of [callerBusy, calleeBusy]) {
+      for (const [userId, lock] of [[input.caller.id, callerBusy], [input.callee.id, calleeBusy]] as const) {
         if (!lock.exists) continue;
         // A committed terminal call is authoritative even if a leftover lock
         // still has a future expiry (for example after a failed prior cleanup).
         const oldId = lock.data()?.callId;
         if (typeof oldId === "string" && isValidCallId(oldId)) {
+          if (recoveredLegacyCalls.some(previous => previous.callId === oldId)) continue;
           const oldSnapshot = await transaction.get(ref(db, oldId));
-          const old = oldSnapshot.data() ? canonicalCallRecord(oldId, oldSnapshot.data()!) : null;
+          const oldData = oldSnapshot.data();
+          const old = oldData ? canonicalCallRecord(oldId, oldData) : null;
           if (old?.endedAt || old?.status === "missed" || old?.status === "declined") continue;
           if (asDate(lock.data()?.expiresAt).getTime() > Date.now())
             throw new CallPushError("A participant is already in a call");
           // An old web client has no lease protocol: an elapsed historical lock
-          // alone is not proof that its answered media call has ended.
-          if (old?.status === "answered" && !old.endedAt &&
-            oldSnapshot.data()?.heartbeatEnabled !== true)
-            throw new CallPushError("A participant is already in a call");
+          // alone is not proof that its answered media call has ended. A revoked
+          // recorded participant session can prove abandonment.
+          // Also protect malformed legacy records: a missing binding must not
+          // bypass this guard just because canonicalization rejected the call.
+          if (oldData?.status === "answered" && !oldData.endedAt &&
+            oldData.heartbeatEnabled !== true) {
+            const recovered = await recoverAbandonedLegacyCall(db, transaction, oldId, userId, new Date());
+            if (!recovered) throw new CallPushError("A participant is already in a call");
+            recoveredLegacyCalls.push(recovered);
+          }
         } else if (asDate(lock.data()?.expiresAt).getTime() > Date.now()) {
           throw new CallPushError("A participant is already in a call");
         }
@@ -179,8 +226,9 @@ export async function createAuthoritativeCall(input: Omit<CallRecord, "status" |
     });
   } catch (error) {
     if (error instanceof CallPushError) throw error;
-    throw new CallPushError("Call state creation failed");
+    throw new CallPushError("Call state creation failed", callFailureDiagnosticCode(error));
   }
+  for (const recovered of recoveredLegacyCalls) notifyTerminal(recovered, "ended");
   void incomingSink({
     callId: record.callId,
     callerId: record.caller.id,
@@ -426,29 +474,36 @@ export async function heartbeatAuthoritativeCall(
   return renewed;
 }
 
-/** Reclaim only timed-out invitations and explicitly leased answered calls.
+/** Reclaim timed-out invitations, explicitly leased answered calls, and locked
+ * legacy calls with expired locks AND a revoked recorded participant session.
  * Each decision is rechecked under the same PostgreSQL transaction as lock
  * deletion, so cleanup cannot delete a subsequent call's lock. */
 export async function cleanupStaleAuthoritativeCalls(now = new Date()): Promise<number> {
   const db = getCallStateDb();
+  let cleaned = 0;
   // A previous server version may have committed a terminal call but left
   // its lock. Reconcile it without touching a lock belonging to a new call.
   const lockSnapshots = await db.collection("callLocks").get();
   for (const lock of lockSnapshots.docs) {
     const oldId = lock.data()?.callId;
     if (typeof oldId !== "string" || !isValidCallId(oldId)) continue;
-    await db.runTransaction(async transaction => {
-      const latest = await transaction.get(lockRef(db, Number(lock.id)));
-      if (latest.data()?.callId !== oldId) return;
+    const lockUserId = Number(lock.id);
+    if (!Number.isSafeInteger(lockUserId) || lockUserId <= 0 || String(lockUserId) !== lock.id) continue;
+    const recovered = await db.runTransaction(async transaction => {
+      const latest = await transaction.get(lockRef(db, lockUserId));
+      if (latest.data()?.callId !== oldId) return null;
       const call = await transaction.get(ref(db, oldId));
       const data = call.data();
       if ((data && (data.endedAt || data.status === "missed" || data.status === "declined")) ||
-        (!data && asDate(latest.data()?.updatedAt).getTime() + HEARTBEAT_LEASE_MS <= now.getTime()))
-        transaction.delete(lockRef(db, Number(lock.id)));
+        (!data && asDate(latest.data()?.updatedAt).getTime() + HEARTBEAT_LEASE_MS <= now.getTime())) {
+        transaction.delete(lockRef(db, lockUserId));
+        return null;
+      }
+      return recoverAbandonedLegacyCall(db, transaction, oldId, lockUserId, now);
     });
+    if (recovered) { cleaned++; notifyTerminal(recovered, "ended"); }
   }
   const snapshots = await db.collection("callInvites").get();
-  let cleaned = 0;
   for (const snapshot of snapshots.docs) {
     const data = snapshot.data();
     if (!data || data.endedAt || !(

@@ -3,6 +3,10 @@ name: Browser call verification
 description: Cross-route acceptance coverage and real browser push test constraints
 ---
 
+- A missed-call history row without a durable invitation or Agora-token request does not prove a media-provider failure.
+  **Why:** Production attempts can terminate during invitation signaling while still writing missed-call history; provider configuration can be valid throughout.
+  **How to apply:** Identify the call-offer failure stage before changing Agora, push, or entitlements. A PostgreSQL concurrent-query deprecation warning alone is not evidence that the transaction failed.
+
 - Preserve `/messages` as the messenger entry, but receive calls across the entire website, not only inside that page. Do not add a new product tab or substitute a native application.
   **Why:** On 2026-10-01 the owner clarified that the immediate problem is in-app reception on Market/Arena and other pages, not FCM waking a closed phone.
   **How to apply:** Keep authenticated call signaling and incoming UI independent of the selected page and optional push permissions. Cover alternate lightweight shells, not just the main router. Respect browser audio activation requirements without adding unsolicited setup banners.

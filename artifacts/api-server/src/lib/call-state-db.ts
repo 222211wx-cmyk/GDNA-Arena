@@ -8,7 +8,15 @@ type PoolClient = {
 };
 
 export class CallPushError extends Error {
-  constructor(message: string) { super(message); this.name = "CallPushError"; }
+  constructor(message: string, readonly diagnosticCode?: string) { super(message); this.name = "CallPushError"; }
+}
+
+/** Diagnostics must never include driver messages, queries, parameters or call secrets. */
+export function callFailureDiagnosticCode(error: unknown): string {
+  if (error instanceof CallPushError && error.diagnosticCode) return error.diagnosticCode;
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)
+    ? `POSTGRES_${code}` : "CALL_OFFER_FAILED";
 }
 
 export function callSessionBinding(sessionId: string): string {
@@ -243,11 +251,26 @@ export class CallStateCollectionReference {
   }
 }
 
-class CallStateTransaction extends StateReader {
+export class CallStateTransaction extends StateReader {
   private writes: Array<() => Promise<void>> = [];
   private touched = new Set<string>();
   constructor(client: PoolClient) { super(client); }
   get(ref: CallStateDocumentReference) { return this.read(ref); }
+  /** Only a well-formed recorded binding can prove revocation. Session IDs
+   * stay inside PostgreSQL; query errors abort the enclosing transaction. */
+  async isRecordedSessionRevoked(userId: unknown, binding: unknown): Promise<boolean> {
+    if (typeof userId !== "number" || !Number.isSafeInteger(userId) || userId <= 0 ||
+      typeof binding !== "string" || !/^[a-f0-9]{64}$/.test(binding)) return false;
+    const result = await this.client.query<{ live: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM user_sessions
+         WHERE sess->>'userId' = $1 AND expire > NOW()
+           AND encode(sha256(convert_to(sid, 'UTF8')), 'hex') = $2
+       ) AS live`,
+      [String(userId), binding],
+    );
+    return result.rows[0]?.live === false;
+  }
   create(ref: CallStateDocumentReference, data: CallStateValue) {
     this.writes.push(async () => {
       const result = await this.client.query("INSERT INTO call_state_documents(path,data) VALUES ($1,$2) ON CONFLICT(path) DO NOTHING", [ref.path, encode(data)]);

@@ -60,7 +60,18 @@ export async function fetchAgoraToken(channel: string, deviceId: string): Promis
       ? body.error
       : `Agora token request failed: HTTP ${response.status}`);
     if (response.status !== 503 || attempt === 2) break;
-    await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+    // The service advertises a two-second startup window. Retrying at 250/500ms
+    // exhausted all attempts before that window had even elapsed.
+    const retryAfter = response.headers.get("Retry-After");
+    const retrySeconds = retryAfter?.trim() ? Number(retryAfter) : NaN;
+    const retryAt = retryAfter ? Date.parse(retryAfter) : NaN;
+    const advertisedDelay = Number.isFinite(retrySeconds) && retrySeconds >= 0
+      ? retrySeconds * 1_000
+      : Number.isFinite(retryAt) ? Math.max(0, retryAt - Date.now()) : NaN;
+    const retryDelay = Number.isFinite(advertisedDelay)
+      ? Math.min(30_000, advertisedDelay)
+      : 250 * (attempt + 1);
+    await new Promise(resolve => setTimeout(resolve, retryDelay));
   }
   throw lastError ?? new Error("تعذّر الحصول على رمز Agora");
 }

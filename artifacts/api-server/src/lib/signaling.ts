@@ -8,9 +8,10 @@ import {
   canControlDirectCallRecording, expireAuthoritativeCall, getAuthoritativeCall, isDurableCallParticipant, switchAuthoritativeCallProvider, terminateAuthoritativeCall,
   canonicalCallRecord, cleanupStaleAuthoritativeCalls, heartbeatAuthoritativeCall, type CallRecord, type CallTransport, type StoredDescription,
 } from "./call-signal-store";
-import { CallPushError, callSessionBinding, getCallStateDb } from "./call-state-db";
+import { CallPushError, callFailureDiagnosticCode, callSessionBinding, getCallStateDb } from "./call-state-db";
 import { canIssueGroupAgoraToken, getGroupCall } from "./group-call-store";
 import { sendBrowserCallTerminalPush } from "./browser-push";
+import { logger } from "./logger";
 
 interface RTCIceCandidateInit { candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null; }
 interface E2eCallEnvelope { devices: Record<string, { wrappedSecret: string; fingerprint: string }>; }
@@ -351,6 +352,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         return;
       }
       if (msg.type === "call-offer") {
+        let stage = "media-protocol";
         try {
           const provider = requireReadyCallMediaProvider();
           const offeredProvider = msg.transport?.provider ?? (provider === "hybrid" ? "webrtc" : provider);
@@ -360,11 +362,15 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           const valid = (msg.deferredMedia === true ? transportMatches(msg.transport, "webrtc") && msg.offer === null :
             permitted && (offeredProvider === "agora" ? msg.offer === null : validDescription(msg.offer, "offer")));
           if (!valid || (msg.deferredMedia === true && provider !== "webrtc" && provider !== "hybrid")) throw new Error("MEDIA_PROTOCOL_MISMATCH");
+          stage = "recipient-lookup";
           const target = await pool?.query<{ id: number; username: string }>(`SELECT id, username FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1`, [msg.to]);
           const callee = target?.rows[0];
           if (!callee || callee.id === self.userId) { send(ws, { type: "call-unavailable", callId: msg.callId, to: msg.to }); return; }
+          stage = "block-policy";
           if (await currentCallBlocked(self.userId, callee.id)) { send(ws, { type: "call-blocked", callId: msg.callId }); return; }
+          stage = "secure-envelope";
           if (!await validateEnvelope(callee.id, msg.e2e)) { send(ws, { type: "call-unavailable", callId: msg.callId, code: "SECURE_DEVICE_KEYS_CHANGED", reason: "secure-device-keys-changed" }); return; }
+          stage = "durable-create";
           const record = await createAuthoritativeCall({
             callId: msg.callId, caller: { id: self.userId, name: self.username, avatar: await callerAvatar(self.userId) },
             callee: { id: callee.id, name: callee.username.toLowerCase(), avatar: null }, type: msg.video ? "video" : "voice",
@@ -373,10 +379,12 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           });
           // Persistence is complete before call-ready. Remote replicas receive
           // the same ringing document through their participant subscription.
+          stage = "call-ready";
           send(ws, { type: "call-ready", callId: record.callId, expiresAt: record.expiresAt.toISOString(), deferredMedia: record.deferredMedia });
         } catch (error) {
           const code = error instanceof Error && error.message === "MEDIA_PROTOCOL_MISMATCH" ? "MEDIA_PROTOCOL_MISMATCH" :
             error instanceof CallPushError && error.message.includes("already in a call") ? "CALL_BUSY" : "CALL_SIGNALING_UNAVAILABLE";
+          logger.warn({ event: "call_offer_failed", stage, code, diagnosticCode: callFailureDiagnosticCode(error) }, "Call offer failed");
           send(ws, { type: code === "CALL_BUSY" ? "call-busy" : "call-unavailable", callId: msg.callId, to: msg.to, code, reason: code === "CALL_SIGNALING_UNAVAILABLE" ? "Authoritative call state is unavailable" : undefined });
         }
         return;
