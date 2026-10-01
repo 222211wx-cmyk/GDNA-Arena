@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, serial, integer, timestamp, boolean, date, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean, date, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -29,6 +29,7 @@ export const usersTable = pgTable("users", {
   isStar: boolean("is_star").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
+  freeMessagesUsedRange: check("users_free_messages_used_range", sql`${t.freeMessagesUsed} BETWEEN 0 AND 10`),
   emailLowerUnique: uniqueIndex("users_email_lower_uniq").on(sql`lower(${t.email})`),
   usernameLowerUnique: uniqueIndex("users_username_lower_uniq").on(sql`lower(${t.username})`),
 }));

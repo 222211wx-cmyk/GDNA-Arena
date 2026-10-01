@@ -14,3 +14,9 @@ Do not assume Drizzle's table filter makes a partial-schema push safe for unrela
 **Why:** In this workspace, a Clips-only push preview proposed dropping dozens of unrelated serial sequences despite filtering the tables. Forcing that preview would threaten other sections; a reviewed additive update was necessary.
 
 **How to apply:** Review every proposed statement, including sequences and constraints, before applying schema changes. Preserve existing names and historical SQL. Never use `--force` to bypass unexplained DROP statements.
+
+Committed schema declarations and SQL files do not prove the development database was updated. Check its actual columns before concluding that another Publish will fix a missing production column.
+
+**Why:** Both databases can match each other while both lag behind the deployed code; in that case Publish computes no schema changes and the same authentication failure persists.
+
+**How to apply:** Review and apply narrowly additive development changes first, then inspect the development-to-production diff for removals. Publish copies schema, not migration data backfills; usage counters also need a safe monotonic application-level reconciliation.

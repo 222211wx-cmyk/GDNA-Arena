@@ -2,19 +2,22 @@ import { Router } from "express";
 import { pool } from "@workspace/db";
 import { UpdateMessagingSubscriptionBody } from "@workspace/api-zod";
 import { requireAdmin } from "../middleware/require-admin";
-import { FREE_MESSAGE_LIMIT } from "../lib/messaging-quota";
+import { FREE_MESSAGE_LIMIT, getMessagingQuota } from "../lib/messaging-quota";
 
 const router = Router();
 router.get("/messages/subscription", async (req, res) => {
   res.setHeader("Cache-Control", "private, no-store");
   if (!req.session?.userId) { res.status(401).json({ error: "Authentication required" }); return; }
-  const { rows } = await pool.query(
-    "SELECT has_active_subscription, free_messages_used FROM users WHERE id=$1", [req.session.userId],
-  );
-  if (!rows.length) { res.status(401).json({ error: "Authentication required" }); return; }
-  const hasActiveSubscription = rows[0].has_active_subscription === true;
-  const freeMessagesRemaining = Math.max(0, FREE_MESSAGE_LIMIT - rows[0].free_messages_used);
-  res.json({ hasActiveSubscription, canSendMessages: hasActiveSubscription || freeMessagesRemaining > 0, freeMessagesRemaining });
+  try {
+    const quota = await getMessagingQuota(req.session.userId);
+    if (!quota) { res.status(401).json({ error: "Authentication required" }); return; }
+    const hasActiveSubscription = quota.has_active_subscription === true;
+    const freeMessagesRemaining = Math.max(0, FREE_MESSAGE_LIMIT - quota.free_messages_used);
+    res.json({ hasActiveSubscription, canSendMessages: hasActiveSubscription || freeMessagesRemaining > 0, freeMessagesRemaining });
+  } catch (error) {
+    req.log.error({ err: error }, "Messaging quota status failed");
+    res.status(503).json({ error: "Unable to verify messaging subscription. Try again." });
+  }
 });
 
 router.get("/admin/messaging-subscriptions", requireAdmin, async (req, res) => {

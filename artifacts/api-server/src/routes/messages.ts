@@ -1206,7 +1206,9 @@ router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): P
         return;
       }
       if (!await reserveMessageSend(client, userId)) {
-        await client.query("ROLLBACK");
+        // Only quota reconciliation has written here. Retain historical usage
+        // even on denial so later deletion cannot reopen an exhausted trial.
+        await client.query("COMMIT");
         res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
       }
       const inserted = await client.query(
@@ -1237,7 +1239,8 @@ router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): P
     try {
       await client.query("BEGIN");
       if (!await reserveMessageSend(client, userId)) {
-        await client.query("ROLLBACK");
+        // No message was reserved/inserted; persist the historical cursor only.
+        await client.query("COMMIT");
         res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
       }
       const inserted = await client.query(
