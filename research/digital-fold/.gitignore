@@ -1,0 +1,4 @@
+__pycache__/
+# Full per-trial archives/restorations remain on disk, not duplicated in git.
+measurement-run/**/*.archive
+measurement-run/**/*.restored
