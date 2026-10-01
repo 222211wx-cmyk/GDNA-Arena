@@ -1,5 +1,5 @@
 /**
- * /messages.call — MESSAGERI - المراسلات
+ * /messages — MESSAGERI - المراسلات
  * Branded MESSAGERI. Limited to public chat, groups, and messaging legends and
  * non-private citizens. This is NOT AMIS; it does not embed Social or games.
  */

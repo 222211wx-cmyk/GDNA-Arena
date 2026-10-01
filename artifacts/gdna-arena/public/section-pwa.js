@@ -58,7 +58,7 @@
       // The installable document must be the intended section. In particular,
       // never prompt with the root Lite or the other section's manifest.
       if (current() !== target) {
-        location.assign(base + (target === "messages" ? "messages.call" : target));
+        location.assign(base + target);
         return "navigating";
       }
       if (window.matchMedia?.("(display-mode: standalone)").matches ||

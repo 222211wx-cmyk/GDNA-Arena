@@ -1,10 +1,10 @@
-export const MESSAGES_ENTRY_PATH = "/messages.call";
+export const MESSAGES_ENTRY_PATH = "/messages";
 
 /** Exact standalone messenger entry points (the remaining names are aliases). */
 export function isMessagesEntryPath(path: string): boolean {
   const route = path.replace(/\/+$/, "") || "/";
   return route === MESSAGES_ENTRY_PATH || route === "/message-calle" ||
-    route === "/messages" || route === "/messagerie" ||
+    route === "/messages.call" || route === "/messagerie" ||
     route === "/message%20calle" || route === "/message calle";
 }
 

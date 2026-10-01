@@ -4,6 +4,11 @@
  * being evaluated, and registering this listener afterwards loses that click.
  */
 if (typeof self.addEventListener === "function") {
+  // The dedicated FCM scope has no page clients to close for an update.
+  // Activate replacements immediately so tokens never use a stale project.
+  self.addEventListener("install", (event) => {
+    event.waitUntil(self.skipWaiting());
+  });
   self.addEventListener("notificationclick", (event) => {
     // notificationclick is the one worker event whose lifetime must explicitly
     // cover all focus, navigation, and decline-request work.
@@ -141,11 +146,20 @@ function isTerminalCall(data) {
     type === "DECLINED_CALL" || type === "CALL_DECLINED";
 }
 
+function appBase() {
+  // The worker's push-only scope is intentionally not a product route. Resolve
+  // notification assets/API/navigation from the script's artifact directory.
+  if (typeof URL === "function" && self.location && typeof self.location.href === "string") {
+    try { return new URL("./", self.location.href).toString(); } catch {}
+  }
+  return self.registration && self.registration.scope || "/";
+}
+
 function assetUrl(file) {
-  const scope = self.registration && self.registration.scope;
-  if (typeof URL === "function" && typeof scope === "string" && scope) {
+  const base = appBase();
+  if (typeof URL === "function" && typeof base === "string" && base) {
     try {
-      return new URL(file, scope).toString();
+      return new URL(file, base).toString();
     } catch {
       // Fall through to the root-relative artifact path.
     }
@@ -411,10 +425,7 @@ function handleBackgroundMessage(payload) {
 }
 
 function appUrl(route, params) {
-  const scope = self.registration && self.registration.scope;
-  const base = typeof scope === "string" && scope
-    ? scope
-    : (self.location && self.location.href) || "/";
+  const base = appBase();
   const cleanRoute = String(route || "").replace(/^\/+/, "");
   if (typeof URL !== "function") {
     const root = typeof base === "string" && /^https?:\/\//.test(base)

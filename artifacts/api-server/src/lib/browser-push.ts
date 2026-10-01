@@ -6,6 +6,8 @@ import {
 } from "node:crypto";
 import webPush from "web-push";
 import { pool } from "@workspace/db";
+import { getCallStateDb } from "./call-state-db";
+import { logger } from "./logger";
 
 const VAPID_ROW_ID = "primary";
 const MAX_ENDPOINT_LENGTH = 2_048;
@@ -363,7 +365,7 @@ export async function removeBrowserPushSubscription(input: {
 export async function sendBrowserIncomingCallPush(input: IncomingCallPush): Promise<void> {
   const remainingSeconds = Math.floor((input.expiresAt.getTime() - Date.now()) / 1_000);
   const ttl = Math.min(30, remainingSeconds);
-  if (ttl <= 0) return;
+  if (!Number.isFinite(ttl) || ttl <= 0) return;
 
   const payload = JSON.stringify({
     type: "INCOMING_CALL",
@@ -373,7 +375,9 @@ export async function sendBrowserIncomingCallPush(input: IncomingCallPush): Prom
     expiresAt: input.expiresAt.toISOString(),
     url: `/messages?callId=${encodeURIComponent(input.callId)}`,
   });
-  await sendBrowserCallPayload(input.calleeId, input.callId, "INCOMING_CALL", payload, ttl);
+  await sendBrowserCallPayload(
+    input.calleeId, input.callId, "INCOMING_CALL", payload, ttl, input.expiresAt.getTime(),
+  );
 }
 
 /** Closes ringing cards on every callee installation after a durable terminal transition. */
@@ -381,7 +385,7 @@ export async function sendBrowserCallTerminalPush(input: TerminalCallPush): Prom
   // Shared terminal sink for all authoritative call paths; independent of Web Push availability.
   void import("./native-call-push").then(({ sendNativeCallTerminalPush }) =>
     sendNativeCallTerminalPush(input)).catch(() => {
-    console.warn("[NativeCallPush] Terminal wake-up unavailable");
+    logger.warn("[NativeCallPush] Terminal wake-up unavailable");
   });
   await sendBrowserCallPayload(
     input.calleeId,
@@ -403,11 +407,12 @@ async function sendBrowserCallPayload(
   notificationType: "INCOMING_CALL" | "CALL_ENDED",
   payload: string,
   ttl: number,
+  expiresAt?: number,
 ): Promise<void> {
   const queueKey = `${calleeId}:${callId}`;
   const previous = callDeliveryQueues.get(queueKey) ?? Promise.resolve();
   const current = previous.catch(() => {}).then(() =>
-    sendBrowserCallPayloadNow(calleeId, callId, notificationType, payload, ttl));
+    sendBrowserCallPayloadNow(calleeId, callId, notificationType, payload, ttl, expiresAt));
   callDeliveryQueues.set(queueKey, current);
   try {
     await current;
@@ -424,7 +429,9 @@ async function sendBrowserCallPayloadNow(
   notificationType: "INCOMING_CALL" | "CALL_ENDED",
   payload: string,
   ttl: number,
+  expiresAt?: number,
 ): Promise<void> {
+  if (expiresAt !== undefined && expiresAt <= Date.now()) return;
   const keys = await durableVapidKeys();
   const activeSessions = await pool.query<{ sid: string }>(
     `SELECT sid FROM user_sessions
@@ -452,34 +459,53 @@ async function sendBrowserCallPayloadNow(
       WHERE user_id = $1 AND session_hash = ANY($2::text[])`,
     [calleeId, activeHashes],
   );
-  console.info("[WEB_PUSH] Matching active installations", {
+  logger.info({
     notificationType, sessions: activeHashes.length, installations: subscriptions.rowCount,
-  });
+  }, "[WEB_PUSH] Matching active installations");
   webPush.setVapidDetails(vapidSubject(), keys.publicKey, keys.privateKey);
 
-  await Promise.allSettled(subscriptions.rows.map(async subscription => {
+  // The queue and database/provider setup may outlive the original ring. Never
+  // revive a terminal invitation or extend its server-owned expiry with a stale TTL.
+  if (notificationType === "INCOMING_CALL") {
+    const snapshot = await getCallStateDb().collection("callInvites").doc(callId).get();
+    const call = snapshot.data();
+    if (!call || call.toId !== calleeId || call.status !== "ringing" || call.endedAt ||
+      !(call.expiresAt instanceof Date) || !Number.isFinite(call.expiresAt.getTime())) return;
+    expiresAt = Math.min(expiresAt ?? call.expiresAt.getTime(), call.expiresAt.getTime());
+  }
+  const remainingTtl = () => expiresAt === undefined
+    ? ttl
+    : Math.min(ttl, Math.floor((expiresAt - Date.now()) / 1_000));
+  if (remainingTtl() <= 0) return;
+
+  const results = await Promise.allSettled(subscriptions.rows.map(async subscription => {
     if (!isAllowedBrowserPushEndpoint(subscription.endpoint)) {
       await pool.query(`DELETE FROM browser_push_subscriptions WHERE id = $1`, [subscription.id]);
       return;
     }
-    // Keep the same tuple represented by the database uniqueness constraint.
-    browserPushDeliveryKey(subscription.id, callId, notificationType);
-    const claim = await pool.query(
+    if (remainingTtl() <= 0) return;
+    const claim = await pool.query<{ id: string }>(
       `INSERT INTO browser_push_deliveries (subscription_id, call_id, notification_type)
        VALUES ($1, $2, $3)
        ON CONFLICT (subscription_id, call_id, notification_type) DO NOTHING
        RETURNING id`,
       [subscription.id, callId, notificationType],
     );
-    if (!claim.rowCount) return;
-    const subscriptionKeys = decryptJson<{ p256dh?: unknown; auth?: unknown }>(subscription.encrypted_keys);
-    if (typeof subscriptionKeys.p256dh !== "string" || typeof subscriptionKeys.auth !== "string") return;
+    const claimId = claim.rows[0]?.id;
+    if (!claimId) return;
+    let providerAccepted = false;
     try {
+      const subscriptionKeys = decryptJson<{ p256dh?: unknown; auth?: unknown }>(subscription.encrypted_keys);
+      if (typeof subscriptionKeys.p256dh !== "string" || typeof subscriptionKeys.auth !== "string") {
+        throw new BrowserPushError("Browser push subscription keys are invalid");
+      }
+      const deliveryTtl = remainingTtl();
+      if (deliveryTtl <= 0) return;
       const delivered = await webPush.sendNotification({
         endpoint: subscription.endpoint,
         keys: { p256dh: subscriptionKeys.p256dh, auth: subscriptionKeys.auth },
       }, payload, {
-        TTL: ttl,
+        TTL: deliveryTtl,
         timeout: 5_000,
         urgency: "high",
         // Incoming and terminal events intentionally share a topic. If cancel
@@ -487,19 +513,31 @@ async function sendBrowserCallPayloadNow(
         // the queued ring and cannot leave a stale OS prompt behind.
         topic: browserCallPushTopic(callId),
       });
-      console.info("[WEB_PUSH] Provider accepted delivery", { notificationType, statusCode: delivered.statusCode });
+      providerAccepted = true;
+      logger.info({ notificationType, statusCode: delivered.statusCode }, "[WEB_PUSH] Provider accepted delivery");
     } catch (error) {
       const statusCode = typeof error === "object" && error !== null &&
         "statusCode" in error ? (error as { statusCode?: unknown }).statusCode : undefined;
-      console.warn("[WEB_PUSH] Delivery failed", {
+      logger.warn({
         notificationType,
         statusCode: typeof statusCode === "number" ? statusCode : null,
         errorType: error instanceof Error ? error.name : "UnknownError",
-      });
+      }, "[WEB_PUSH] Delivery failed");
       if (statusCode === 404 || statusCode === 410) {
         await pool.query(`DELETE FROM browser_push_subscriptions WHERE id = $1`, [subscription.id]);
       }
       throw error;
+    } finally {
+      if (!providerAccepted) {
+        // Delete only this invocation's returned claim, not the tuple: a newer
+        // successful attempt must never lose its dedupe record during cleanup.
+        await pool.query(`DELETE FROM browser_push_deliveries WHERE id = $1`, [claimId]);
+      }
     }
   }));
+  const failedCount = results.filter(result => result.status === "rejected").length;
+  if (failedCount > 0) {
+    logger.warn({ notificationType, failedCount }, "[WEB_PUSH] Call delivery incomplete");
+    throw new BrowserPushError("Browser call push delivery failed");
+  }
 }

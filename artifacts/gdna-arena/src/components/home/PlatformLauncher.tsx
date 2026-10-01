@@ -8,7 +8,7 @@ type Module = { id: string; letter: string; route: string; names: Record<Lang, s
 const MODULES: Module[] = [
   { id: "clips", letter: "Hc", route: "/clips",
     names: { ar: "كليبات", en: "Clips", fr: "Clips", es: "Clips", de: "Clips" } },
-  { id: "messages", letter: "Hm", route: "/messages.call",
+  { id: "messages", letter: "Hm", route: "/messages",
     names: { ar: "الرسائل", en: "Messages", fr: "Messages", es: "Mensajes", de: "Nachrichten" } },
   { id: "arena", letter: "Ha", route: "/games",
     names: { ar: "الساحة", en: "Arena", fr: "Arène", es: "Arena", de: "Arena" } },

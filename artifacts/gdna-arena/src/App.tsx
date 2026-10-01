@@ -114,8 +114,8 @@ function ArenaDocumentTitle() {
       ['meta[property="og:description"]', "content", description],
       ['meta[name="twitter:title"]', "content", title],
       ['meta[name="twitter:description"]', "content", description],
-      ['link[rel="canonical"]', "href", "https://helixly.app/messages.call"],
-      ['meta[property="og:url"]', "content", "https://helixly.app/messages.call"],
+      ['link[rel="canonical"]', "href", "https://helixly.app/messages"],
+      ['meta[property="og:url"]', "content", "https://helixly.app/messages"],
     ] as const;
     if (messenger) {
       const previousTitle = document.title;
@@ -215,7 +215,7 @@ function PageWrapper() {
           <Route path="/message-calle">
             <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />
           </Route>
-          <Route path="/messages">
+          <Route path="/messages.call">
             <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />
           </Route>
           <Route path="/messagerie">

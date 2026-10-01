@@ -13,6 +13,7 @@ import { DEFERRED_INVITATION_TTL_MS } from "./deferred-call-policy";
 import { sendBrowserCallTerminalPush, sendBrowserIncomingCallPush } from "./browser-push";
 import { sendExpoPush } from "./expo-push";
 import { sendNativeIncomingCallPush } from "./native-call-push";
+import { logger } from "./logger";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -921,7 +922,6 @@ export async function sendAuthenticatedFcmPush(
   senderId: number,
   request: FcmSendRequest,
 ): Promise<FcmSendOutcome> {
-  const services = await loadServices();
   const callDb = await getAuthoritativeCallFirestore();
   if (request.kind === "call") {
     const snapshot = await callRef(callDb, request.callId).get();
@@ -945,6 +945,20 @@ export async function sendAuthenticatedFcmPush(
     if (await blockedPushPair(senderId, calleeId)) {
       throw new CallPushError("Push is unavailable for this call");
     }
+    // The existing authorized retry must also reach browser installations.
+    // Keep this independent of Firebase provisioning, just like initial dispatch.
+    try {
+      await sendBrowserIncomingCallPush({
+        callId: request.callId,
+        callerName,
+        calleeId,
+        expiresAt,
+        video: callType === "video",
+      });
+    } catch {
+      logger.warn("[WebPush] Incoming call retry unavailable");
+    }
+    const services = await loadServices();
     const payload: Record<string, string> = {
       type: "INCOMING_CALL",
       callId: request.callId,
@@ -1015,6 +1029,7 @@ export async function sendAuthenticatedFcmPush(
       ORDER BY member.user_id`,
     [request.roomId, senderId],
   );
+  const services = await loadServices();
   const results = await Promise.allSettled(recipients.rows.map(recipient =>
     sendPush(
       services,

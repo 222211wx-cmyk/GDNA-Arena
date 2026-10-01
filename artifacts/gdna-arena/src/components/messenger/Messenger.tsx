@@ -125,23 +125,31 @@ function WebPushRow({
   status,
   permission,
   enabled,
+  reason,
+  isOnline,
   onEnable,
 }: {
   st: Record<string, string>;
   status: FirebaseStatus;
   permission: CallNotificationPermission;
   enabled: boolean;
+  reason: string | null;
+  isOnline: boolean;
   onEnable?: () => void | Promise<unknown>;
 }) {
+  const [busy, setBusy] = useState(false);
+  const canRetry = permission === "granted" && !enabled && status === "error";
   const message = permission === "granted" && enabled && status === "ready"
     ? (st.push_enabled ?? "Background notifications are enabled for messages and calls.")
     : permission === "denied"
       ? (st.push_denied ?? "Notifications are blocked in your browser settings.")
       : status === "loading"
         ? (st.push_loading ?? "Checking background notification setup…")
-        : enabled && permission !== "unsupported"
-          ? (st.push_hint ?? "Enable browser notifications to receive messages and calls when this tab is closed.")
-          : (st.push_unavailable ?? "Background notifications are optional and are not configured. In-app calls still work.");
+        : canRetry
+          ? (reason ?? "Browser permission is granted, but background notification registration failed. Retry to restore it.")
+          : enabled && permission !== "unsupported"
+            ? (st.push_hint ?? "Enable browser notifications to receive messages and calls when this tab is closed.")
+            : (reason ?? st.push_unavailable ?? "Background notifications are optional and are not configured. In-app calls still work.");
 
   return (
     <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3" data-testid="messenger-push-settings">
@@ -154,17 +162,21 @@ function WebPushRow({
           <p className="mt-1 mb-0 text-[11px] text-muted-foreground">{message}</p>
         </div>
       </div>
-      {permission === "default" && enabled && onEnable && (
+      {((permission === "default" && enabled) || canRetry) && onEnable && (
         <Button
           type="button"
           size="sm"
           variant="outline"
           className="mt-3 gap-1.5"
-          data-testid="button-enable-messenger-notifications"
-          onClick={() => { void Promise.resolve(onEnable()).catch(() => undefined); }}
+          disabled={busy || !isOnline}
+          data-testid={canRetry ? "button-retry-messenger-notifications" : "button-enable-messenger-notifications"}
+          onClick={async () => {
+            setBusy(true);
+            try { await onEnable(); } finally { setBusy(false); }
+          }}
         >
           <BellRing className="h-3.5 w-3.5" />
-          {st.enable_push ?? "Enable notifications"}
+          {canRetry ? (st.retry ?? "Retry notification registration") : (st.enable_push ?? "Enable notifications")}
         </Button>
       )}
     </div>
@@ -299,7 +311,7 @@ function ToggleRow({ label, value, onChange, disabled = false }: { label: string
   );
 }
 
-function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline, notificationPermission, firebaseStatus, pushEnabled, enableCallNotifications, secureDeviceCapacityBlocked = false, retrySecureDeviceRegistration = async () => {} }: {
+function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, showToast, onBlockChanged, currentUserId, inline = false, isOnline, onOffline, notificationPermission, firebaseStatus, pushEnabled, pushReason, enableCallNotifications, secureDeviceCapacityBlocked = false, retrySecureDeviceRegistration = async () => {} }: {
   st: Record<string, string>;
   activeRoom: DmRoom | null;
   onClose: () => void;
@@ -316,6 +328,7 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
   notificationPermission: CallNotificationPermission;
   firebaseStatus: FirebaseStatus;
   pushEnabled: boolean;
+  pushReason: string | null;
   enableCallNotifications?: () => void | Promise<unknown>;
   secureDeviceCapacityBlocked?: boolean;
   retrySecureDeviceRegistration?: () => Promise<void>;
@@ -461,6 +474,8 @@ function SettingsPanel({ st, activeRoom, onClose, onMuteChanged, onRoomDeleted, 
               status={firebaseStatus}
               permission={notificationPermission}
               enabled={pushEnabled}
+              reason={pushReason}
+              isOnline={isOnline}
               onEnable={enableCallNotifications}
             />
             <ToggleRow label={st.read_receipts ?? "Read receipts"} value={settings.readReceipts}
@@ -2714,6 +2729,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             notificationPermission={callExtras.notificationPermission}
             firebaseStatus={callExtras.firebaseStatus}
             pushEnabled={callExtras.pushEnabled}
+            pushReason={callExtras.pushReason}
             enableCallNotifications={callExtras.enableCallNotifications}
             secureDeviceCapacityBlocked={e2eCapacityBlocked}
             retrySecureDeviceRegistration={retryE2eRegistration}
@@ -3290,6 +3306,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
             notificationPermission={callExtras.notificationPermission}
             firebaseStatus={callExtras.firebaseStatus}
             pushEnabled={callExtras.pushEnabled}
+            pushReason={callExtras.pushReason}
             enableCallNotifications={callExtras.enableCallNotifications}
             secureDeviceCapacityBlocked={e2eCapacityBlocked}
             retrySecureDeviceRegistration={retryE2eRegistration}

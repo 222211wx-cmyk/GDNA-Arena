@@ -198,6 +198,42 @@ const json = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   return body as T;
 };
 
+/** Wait for the config-bound worker, not Container.ready (which may be the PWA). */
+function waitForMessagingWorker(
+  registration: ServiceWorkerRegistration,
+  scriptUrl: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let watched: ServiceWorker | null = null;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      registration.removeEventListener("updatefound", watch);
+      watched?.removeEventListener("statechange", check);
+      if (error) reject(error);
+      else resolve();
+    };
+    const check = () => {
+      if (registration.active?.state === "activated" && registration.active.scriptURL === scriptUrl) {
+        finish();
+      } else if (watched?.state === "redundant") {
+        finish(new Error("The Firebase notification worker installation was rejected"));
+      }
+    };
+    const watch = () => {
+      watched?.removeEventListener("statechange", check);
+      watched = registration.installing ?? registration.waiting ?? registration.active;
+      watched?.addEventListener("statechange", check);
+      check();
+    };
+    const timeout = setTimeout(() => finish(new Error("The Firebase notification worker did not become active")), 10_000);
+    registration.addEventListener("updatefound", watch);
+    watch();
+  });
+}
+
 /**
  * Firebase is loaded only after the server confirms that this deployment is
  * configured. Keeping the SDK behind dynamic imports also keeps normal chat
@@ -232,11 +268,7 @@ export async function createCallFirebase(
   // after the server confirms call-push is configured; this keeps optional
   // Firebase startup out of ordinary web sessions and avoids a second
   // initializeApp call.
-  const [{ app, db, firebaseConfig, messaging: messagingReady, getToken, onMessage }, authSdk, firestoreSdk] = await Promise.all([
-    import("./firebase"),
-    import("firebase/auth"),
-    import("firebase/firestore"),
-  ]);
+  const { app, db, firebaseConfig, messaging: messagingReady, getToken, onMessage } = await import("./firebase");
   if (!matchesFirebaseIdentity(config.firebase, app.options) ||
     !matchesFirebaseIdentity(config.firebase, firebaseConfig)) {
     throw new Error("Firebase web configuration does not match the configured call project");
@@ -248,95 +280,118 @@ export async function createCallFirebase(
     Boolean(messaging),
     config.pushReason,
   );
-  const auth = authSdk.getAuth(app);
-  await authSdk.setPersistence(auth, authSdk.inMemoryPersistence);
-  const session = await json<{ customToken: string; userId: string }>("/api/call-push/session", { method: "POST" });
-  await authSdk.signInWithCustomToken(auth, session.customToken);
+  let disposed = false;
+  let cleanupAuth: (() => Promise<void>) | null = null;
   const unsubs: Array<() => void> = [];
   const callIds = new Set<string>();
-  let readyCount = 0;
-  let settleReady: (() => void) | null = null;
-  let rejectReady: ((error: Error) => void) | null = null;
-  const ready = new Promise<void>((resolve, reject) => {
-    settleReady = resolve;
-    rejectReady = reject;
-  });
-  const snapshotReady = () => {
-    readyCount += 1;
-    if (readyCount === 2) settleReady?.();
-  };
-  const snapshotFailed = (error: Error) => {
-    onSnapshotError(error);
-    rejectReady?.(error);
-  };
   const activeUnsub = new Map<string, () => void>();
-  const watchCall = (callId: string) => {
-    if (activeUnsub.has(callId)) return;
-    const stop = firestoreSdk.onSnapshot(firestoreSdk.doc(db, "callInvites", callId), snap => {
-      const data = snap.data();
-      const status = data?.status;
-      // A normally completed call stays durably `answered`; endedAt is the
-      // canonical terminal marker and avoids rewriting the lifecycle status.
-      const ended = data?.endedAt != null;
-      if (ended || (typeof status === "string" && ["declined", "missed", "ended"].includes(status))) {
-        activeUnsub.get(callId)?.();
-        activeUnsub.delete(callId);
-        callIds.delete(callId);
-        onTerminal(callId, ended ? "ended" : status as string);
-      }
-    }, error => {
-      activeUnsub.delete(callId);
+  // Firestore is an optional foreground/history channel, not a prerequisite for
+  // an HTTP-session-bound FCM registration. Even its authentication may fail
+  // without blocking background push or the authoritative WS/REST channels.
+  const ready = (async () => {
+    const [authSdk, firestoreSdk] = await Promise.all([
+      import("firebase/auth"),
+      import("firebase/firestore"),
+    ]);
+    if (disposed) return;
+    const auth = authSdk.getAuth(app);
+    await authSdk.setPersistence(auth, authSdk.inMemoryPersistence);
+    if (disposed) return;
+    const session = await json<{ customToken: string; userId: string }>("/api/call-push/session", { method: "POST" });
+    if (disposed) return;
+    await authSdk.signInWithCustomToken(auth, session.customToken);
+    cleanupAuth = async () => {
+      // An older cleanup must not sign a newly selected account out.
+      if (auth.currentUser?.uid === session.userId) await authSdk.signOut(auth).catch(() => {});
+    };
+    if (disposed) { await cleanupAuth(); return; }
+    let settleReady: (() => void) | null = null;
+    let rejectReady: ((error: Error) => void) | null = null;
+    const snapshotsReady = new Promise<void>((resolve, reject) => {
+      settleReady = resolve;
+      rejectReady = reject;
+    });
+    const readyQueries = new Set<string>();
+    const snapshotReady = (query: string) => {
+      readyQueries.add(query);
+      if (readyQueries.size === 2) settleReady?.();
+    };
+    const snapshotFailed = (error: Error) => {
+      if (disposed) return;
       onSnapshotError(error);
-    });
-    activeUnsub.set(callId, stop);
-  };
+      rejectReady?.(error);
+    };
+    const watchCall = (callId: string) => {
+      if (activeUnsub.has(callId)) return;
+      const stop = firestoreSdk.onSnapshot(firestoreSdk.doc(db, "callInvites", callId), snap => {
+        if (disposed) return;
+        const data = snap.data();
+        const status = data?.status;
+        // A normally completed call stays durably `answered`; endedAt is the
+        // canonical terminal marker and avoids rewriting the lifecycle status.
+        const ended = data?.endedAt != null;
+        if (ended || (typeof status === "string" && ["declined", "missed", "ended"].includes(status))) {
+          activeUnsub.get(callId)?.();
+          activeUnsub.delete(callId);
+          callIds.delete(callId);
+          onTerminal(callId, ended ? "ended" : status as string);
+        }
+      }, error => {
+        activeUnsub.delete(callId);
+        if (!disposed) onSnapshotError(error);
+      });
+      activeUnsub.set(callId, stop);
+    };
 
-  const callsQuery = firestoreSdk.query(
-    firestoreSdk.collection(db, "callInvites"),
-    // Firebase rules and the server store identity claims as numbers.
-    firestoreSdk.where("toId", "==", Number(session.userId)),
-    firestoreSdk.where("status", "==", "ringing"),
-  );
-  unsubs.push(firestoreSdk.onSnapshot(callsQuery, snapshot => {
-    snapshot.docChanges().forEach(change => {
-      if (change.type === "removed") return;
-      const id = change.doc.id;
-      if (callIds.has(id)) return;
-      callIds.add(id);
-      watchCall(id);
-      // A Firestore document is only a wake-up signal. The WS resume endpoint
-      // returns the authenticated, authoritative invitation envelope.
-      onRinging(id);
-    });
-    snapshotReady();
-  }, snapshotFailed));
+    const callsQuery = firestoreSdk.query(
+      firestoreSdk.collection(db, "callInvites"),
+      // Firebase rules and the server store identity claims as numbers.
+      firestoreSdk.where("toId", "==", Number(session.userId)),
+      firestoreSdk.where("status", "==", "ringing"),
+    );
+    unsubs.push(firestoreSdk.onSnapshot(callsQuery, snapshot => {
+      if (disposed) return;
+      snapshot.docChanges().forEach(change => {
+        if (change.type === "removed") return;
+        const id = change.doc.id;
+        if (callIds.has(id)) return;
+        callIds.add(id);
+        watchCall(id);
+        // A Firestore document is only a wake-up signal. The WS resume endpoint
+        // returns the authenticated, authoritative invitation envelope.
+        onRinging(id);
+      });
+      snapshotReady("calls");
+    }, snapshotFailed));
 
-  const missedQuery = firestoreSdk.query(
-    firestoreSdk.collection(db, "users", String(session.userId), "missedCalls"),
-    firestoreSdk.orderBy("time", "desc"),
-    firestoreSdk.limit(100),
-  );
-  unsubs.push(firestoreSdk.onSnapshot(missedQuery, snapshot => {
-    const items = snapshot.docs
-      .map(doc => parseMissedCall(doc.id, doc.data()))
-      .filter((item): item is MissedCall => item !== null)
-      .sort((left, right) => Date.parse(right.time as string) - Date.parse(left.time as string));
-    onMissedCalls(items);
-    snapshotReady();
-  }, snapshotFailed));
+    const missedQuery = firestoreSdk.query(
+      firestoreSdk.collection(db, "users", String(session.userId), "missedCalls"),
+      firestoreSdk.orderBy("time", "desc"),
+      firestoreSdk.limit(100),
+    );
+    unsubs.push(firestoreSdk.onSnapshot(missedQuery, snapshot => {
+      if (disposed) return;
+      const items = snapshot.docs
+        .map(doc => parseMissedCall(doc.id, doc.data()))
+        .filter((item): item is MissedCall => item !== null)
+        .sort((left, right) => Date.parse(right.time as string) - Date.parse(left.time as string));
+      onMissedCalls(items);
+      snapshotReady("missed");
+    }, snapshotFailed));
+    await snapshotsReady;
+  })();
+  // The caller observes errors separately; avoid an unhandled rejection if the
+  // optional session fails before its promise is consumed.
+  void ready.catch(() => {});
 
   return {
     enabled: true as const,
     pushEnabled: pushCapability.enabled,
     pushReason: pushCapability.reason,
     vapidPublicKey: config.vapidPublicKey,
-    userId: session.userId,
-    watchCall,
     ready,
-    async enableMessaging() {
+    async enableMessaging(sessionIsCurrent: () => boolean = () => true) {
       if (!("Notification" in window)) throw new Error("Notifications are not supported by this browser");
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") return permission;
       if (!pushCapability.enabled) {
         throw new Error(
           pushCapability.reason
@@ -346,6 +401,12 @@ export async function createCallFirebase(
       if (!messaging || !getToken || !onMessage) {
         throw new Error("Background call notifications are not supported by this browser (IndexedDB, Push API, and a service worker are required)");
       }
+      if (disposed || !sessionIsCurrent()) throw new Error("Call notification session changed");
+      const permission = Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+      if (permission !== "granted") return permission;
+      if (disposed || !sessionIsCurrent()) throw new Error("Call notification session changed");
       const serviceWorkerUrl = new URL(`${import.meta.env.BASE_URL ?? "/"}firebase-messaging-sw.js`, window.location.origin);
       // This is Firebase's public web configuration, not a credential. Passing
       // it makes background handler initialization synchronous on a cold start.
@@ -357,26 +418,20 @@ export async function createCallFirebase(
       // the HTTP cache and force the update before asking Firebase for a token
       // so getToken cannot bind a new token to a stale worker.
       const registrationUrl = serviceWorkerUrl.toString();
-      let registration = await navigator.serviceWorker.register(registrationUrl, {
+      const registration = await navigator.serviceWorker.register(registrationUrl, {
+        // FCM must never replace the canonical offline/WebPush PWA worker.
+        scope: new URL("firebase-cloud-messaging-push-scope/", new URL("./", serviceWorkerUrl)).pathname,
         updateViaCache: "none",
       });
       if (typeof registration.update === "function") await registration.update();
-      // `update()` may leave an old active worker in place until the next
-      // navigation. Do not mint a replacement-project token through that
-      // worker; remove the stale registration and install the config-bound
-      // script again when the active script URL is still different.
-      if (registration.active?.scriptURL && registration.active.scriptURL !== registrationUrl &&
-        typeof registration.unregister === "function") {
-        await registration.unregister();
-        registration = await navigator.serviceWorker.register(registrationUrl, {
-          updateViaCache: "none",
-        });
-        if (typeof registration.update === "function") await registration.update();
-      }
+      await waitForMessagingWorker(registration, registrationUrl);
+      if (disposed || !sessionIsCurrent()) throw new Error("Call notification session changed");
       let token = await getToken(messaging, {
         vapidKey: config.vapidPublicKey,
         serviceWorkerRegistration: registration,
       });
+      if (!token) throw new Error("Firebase did not create a call notification token");
+      if (disposed || !sessionIsCurrent()) throw new Error("Call notification session changed");
       // Keep one browser installation stable across reloads. This avoids
       // leaking a new Firestore device row every time a tab mounts while still
       // allowing the server to revoke it on a real logout/session revocation.
@@ -393,7 +448,9 @@ export async function createCallFirebase(
         return registerFcm(registration);
       };
       await registerToken();
+      if (disposed || !sessionIsCurrent()) throw new Error("Call notification session changed");
       const updateFocus = () => {
+        if (disposed || !sessionIsCurrent()) return;
         // Firebase v9 refreshes tokens through getToken rather than an
         // onTokenRefresh callback. Re-check on foreground and re-register a
         // rotated token against the same installation.
@@ -401,7 +458,7 @@ export async function createCallFirebase(
           vapidKey: config.vapidPublicKey,
           serviceWorkerRegistration: registration,
         }).then(nextToken => {
-          if (nextToken && nextToken !== token) {
+          if (!disposed && sessionIsCurrent() && nextToken && nextToken !== token) {
             token = nextToken;
             void registerToken();
           }
@@ -413,6 +470,7 @@ export async function createCallFirebase(
       };
       document.addEventListener("visibilitychange", updateFocus);
       const stopMessage = onMessage(messaging, payload => {
+        if (disposed || !sessionIsCurrent()) return;
         if (payload.data?.type === "NEW_MESSAGE" || payload.data?.event === "NEW_MESSAGE") {
           // A focused tab already owns the private message UI. Ask the
           // messenger to refresh its authoritative room state instead of
@@ -466,13 +524,10 @@ export async function createCallFirebase(
       };
     },
     cleanup: async () => {
+      disposed = true;
       activeUnsub.forEach(stop => stop());
       unsubs.forEach(stop => stop());
-      // Do not sign a newly selected Arena account out if an older hook's
-      // asynchronous cleanup finishes after the new Firebase session starts.
-      if (auth.currentUser?.uid === session.userId) {
-        await authSdk.signOut(auth).catch(() => {});
-      }
+      await cleanupAuth?.();
     },
   };
 }

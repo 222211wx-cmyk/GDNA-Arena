@@ -3,7 +3,7 @@
   "name": "Hm Messages",
   "short_name": "Hm Messages",
   "description": "Your conversations, groups and calls on Helixly.",
-  "start_url": "./messages.call",
+  "start_url": "./messages",
   "scope": "./",
   "display": "standalone",
   "background_color": "#000000",
