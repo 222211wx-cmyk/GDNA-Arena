@@ -31,7 +31,8 @@ export function shouldAutoRedirectToLite(route: string, forced: boolean, referra
   const path = route.replace(/\/+$/, "") || "/";
   // Explicit Lite recovery/enrollment links must open the full website,
   // otherwise slow networks bounce back to Lite before verification can load.
-  if (path === "/recover-account" || path === "/recovery-phone") return false;
+  if (path === "/recover-account" || path === "/recovery-phone" || path === "/recovery-code" || path === "/recover-with-code") return false;
+  // recoveryEnrollmentReturnPath also accepts /recovery-code round-trips.
   if ((path === "/login" || path === "/register") && recoveryEnrollmentReturnPath(search)) return false;
   if (isMessagesEntryPath(path) || path.startsWith("/messages/")) return false;
   if ((path === "/login" || path === "/register") && messagesReturnPath(search)) return false;

@@ -12,6 +12,8 @@ import { CallPushError, callFailureDiagnosticCode, callSessionBinding, getCallSt
 import { canIssueGroupAgoraToken, getGroupCall } from "./group-call-store";
 import { sendBrowserCallTerminalPush } from "./browser-push";
 import { logger } from "./logger";
+import { sessionIsLive } from "./session-security";
+import { sessionCredentialEpoch } from "./session-policy";
 
 interface RTCIceCandidateInit { candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null; }
 interface E2eCallEnvelope { devices: Record<string, { wrappedSecret: string; fingerprint: string }>; }
@@ -57,8 +59,28 @@ const clients = new Map<string, Set<Client>>();
 const byUserId = new Map<number, Set<Client>>();
 const socketsBySessionId = new Map<string, Set<WebSocket>>();
 const lives = new Map<string, { hostUsername: string; title: string; domain: string; startedAt: Date }>();
+const socketBindings = new WeakMap<WebSocket, { sessionId: string; userId: number; credentialEpoch: number }>();
+const outboundQueues = new WeakMap<WebSocket, Promise<void>>();
 
-function send(ws: WebSocket, data: object) { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data)); }
+function send(ws: WebSocket, data: object) {
+  const binding = socketBindings.get(ws);
+  if (!binding) return;
+  // Check outbound data too: an idle revoked socket on another replica must
+  // not keep receiving private room/call events before its next inbound frame.
+  const next = (outboundQueues.get(ws) ?? Promise.resolve()).then(async () => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    if (!await sessionIsLive(binding.sessionId, binding.userId, binding.credentialEpoch)) {
+      endSessionSocket(ws); return;
+    }
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+  }).catch(() => { if (ws.readyState === WebSocket.OPEN) ws.close(1013, "Session validation unavailable"); });
+  outboundQueues.set(ws, next);
+}
+function endSessionSocket(ws: WebSocket) {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "session-ended" }));
+  ws.close(4001, "Session ended");
+}
 function clientsForUsername(name: string) { return clients.get(name.toLowerCase()) ?? new Set<Client>(); }
 function findByUsername(name: string) { return [...clientsForUsername(name)].find(client => client.ws.readyState === WebSocket.OPEN); }
 function broadcastToUser(userId: number, data: object) { for (const client of byUserId.get(userId) ?? []) send(client.ws, data); }
@@ -88,10 +110,6 @@ function validRecordingControl(msg: SignalMsg): msg is Extract<SignalMsg, { type
   return msg.type === "call-recording-control" && /^[A-Za-z0-9_-]{1,128}$/.test(msg.callId) &&
     /^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId) &&
     (msg.action === "request" || msg.action === "accept" || msg.action === "reject" || msg.action === "stop" || msg.action === "revoke");
-}
-async function sessionIsActive(sessionId: string, userId: number) {
-  const result = await pool?.query(`SELECT 1 FROM user_sessions WHERE sid=$1 AND (sess->>'userId')::int=$2 AND expire > NOW() LIMIT 1`, [sessionId, userId]);
-  return !!result?.rowCount;
 }
 async function currentCallBlocked(callerId: number, calleeId: number) {
   if (!pool) return true;
@@ -297,8 +315,8 @@ export async function declineCallForUser(callId: string, userId: number): Promis
     throw error instanceof CallPushError ? error : new CallPushError("Call state status update failed");
   }
 }
-export function disconnectSessionSockets(sessionId: string) { for (const ws of [...(socketsBySessionId.get(sessionId) ?? [])]) { send(ws, { type: "session-ended" }); ws.close(4001, "Session ended"); } }
-export function disconnectUserSockets(userId: number) { for (const client of [...(byUserId.get(userId) ?? [])]) { send(client.ws, { type: "session-ended" }); client.ws.close(4001, "Session revoked"); } }
+export function disconnectSessionSockets(sessionId: string) { for (const ws of [...(socketsBySessionId.get(sessionId) ?? [])]) endSessionSocket(ws); }
+export function disconnectUserSockets(userId: number) { for (const client of [...(byUserId.get(userId) ?? [])]) endSessionSocket(client.ws); }
 export async function broadcastRoomEvent(roomId: number, event: object, recipients?: number[]) {
   if (!pool) return;
   const members = await pool.query<{ user_id: number }>(`SELECT user_id FROM dm_room_members WHERE room_id=$1`, [roomId]);
@@ -318,7 +336,8 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
   const wss = new WebSocketServer({ noServer: true });
   httpServer.on("upgrade", (req, socket, head) => {
     if ((req.url ?? "").split("?")[0] !== "/api/ws") return;
-    sessionMiddleware(req as any, {} as any, () => {
+    sessionMiddleware(req as any, {} as any, error => {
+      if (error) { socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n"); socket.destroy(); return; }
       if (!(req as any).session?.userId) { socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n"); socket.destroy(); return; }
       wss.handleUpgrade(req, socket, head, ws => wss.emit("connection", ws, req));
     });
@@ -327,13 +346,18 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
     let self: Client | null = null;
     const sessionUserId = (req as any).session.userId as number;
     const sessionId = (req as any).sessionID as string;
+    const credentialEpoch = sessionCredentialEpoch((req as any).session);
+    socketBindings.set(ws, { sessionId, userId: sessionUserId, credentialEpoch });
     const sockets = socketsBySessionId.get(sessionId) ?? new Set<WebSocket>(); sockets.add(ws); socketsBySessionId.set(sessionId, sockets);
     ws.on("message", async raw => {
       let msg: SignalMsg; try { msg = JSON.parse(raw.toString()); } catch { return; }
+      // No process-local revocation cache: every frame uses canonical PG state.
+      try {
+        if (!await sessionIsLive(sessionId, sessionUserId, credentialEpoch)) { endSessionSocket(ws); return; }
+      } catch { ws.close(1013, "Session validation unavailable"); return; }
       if (msg.type === "register") {
         if (self) return;
         try {
-          if (!await sessionIsActive(sessionId, sessionUserId)) { send(ws, { type: "session-ended" }); ws.close(4001, "Session ended"); return; }
           const user = await pool?.query<{ username: string }>(`SELECT username FROM users WHERE id=$1 LIMIT 1`, [sessionUserId]);
           const username = user?.rows[0]?.username?.toLowerCase(); if (!username) { send(ws, { type: "error", message: "Unknown user" }); return; }
           self = { ws, userId: sessionUserId, sessionId, deviceId: validDeviceId(msg.deviceId, sessionId), username, liveId: null };

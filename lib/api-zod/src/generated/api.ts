@@ -894,6 +894,72 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Authenticated offline recovery code status, never the code itself
+ */
+export const GetRecoveryCodeStatusResponse = zod.object({
+  "active": zod.boolean(),
+  "expiresAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Reverify current password and replace any previous single-use offline code
+ */
+export const generateRecoveryCodeBodyCurrentPasswordMax = 1024;
+
+
+
+export const GenerateRecoveryCodeBody = zod.object({
+  "currentPassword": zod.string().min(1).max(generateRecoveryCodeBodyCurrentPasswordMax)
+})
+
+export const GenerateRecoveryCodeResponse = zod.object({
+  "code": zod.string(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Reverify current password and invalidate the offline recovery code
+ */
+export const removeRecoveryCodeBodyCurrentPasswordMax = 1024;
+
+
+
+export const RemoveRecoveryCodeBody = zod.object({
+  "currentPassword": zod.string().min(1).max(removeRecoveryCodeBodyCurrentPasswordMax)
+})
+
+export const RemoveRecoveryCodeResponse = zod.object({
+  "active": zod.boolean(),
+  "expiresAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * Requires a previously saved random code, not a claimed username. Does not sign in or restore lost E2EE private keys. Code consumption and local revocation are atomic.
+ * @summary Single-use code ownership proof resets password and revokes previous devices
+ */
+export const redeemRecoveryCodeBodyCodeMax = 160;
+
+export const redeemRecoveryCodeBodyNewPasswordMin = 6;
+export const redeemRecoveryCodeBodyNewPasswordMax = 72;
+
+
+
+export const RedeemRecoveryCodeBody = zod.object({
+  "code": zod.string().min(1).max(redeemRecoveryCodeBodyCodeMax),
+  "newPassword": zod.string().min(redeemRecoveryCodeBodyNewPasswordMin).max(redeemRecoveryCodeBodyNewPasswordMax)
+})
+
+export const RedeemRecoveryCodeResponse = zod.object({
+  "success": zod.literal(true),
+  "username": zod.string(),
+  "revocationPending": zod.boolean()
+})
+
+
+/**
  * Configured reports local configuration only, not Firebase console provider, billing, SMS delivery or authorized-domain readiness.
  * @summary Public no-store Firebase phone recovery configuration
  */

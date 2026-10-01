@@ -55,15 +55,16 @@ import r2Router from "./r2";
 import gdnaRouter from "./gdna";
 import liteRouter from "./lite";
 import operatorsRouter from "./operators";
+import authOfflineRecoveryRouter from "./auth-offline-recovery";
 
 const router: IRouter = Router();
-
 router.use(healthRouter);
 router.use(operatorsRouter);
 router.use(liteRouter);
 router.use(gdnaRouter);
 router.use(authRouter);
 router.use(authRecoveryRouter);
+router.use(authOfflineRecoveryRouter);
 router.use(leaderboardRouter);
 router.use(chatRouter);
 router.use(gamesRouter);

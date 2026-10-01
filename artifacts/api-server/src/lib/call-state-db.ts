@@ -263,9 +263,10 @@ export class CallStateTransaction extends StateReader {
       typeof binding !== "string" || !/^[a-f0-9]{64}$/.test(binding)) return false;
     const result = await this.client.query<{ live: boolean }>(
       `SELECT EXISTS (
-         SELECT 1 FROM user_sessions
-         WHERE sess->>'userId' = $1 AND expire > NOW()
-           AND encode(sha256(convert_to(sid, 'UTF8')), 'hex') = $2
+          SELECT 1 FROM user_sessions s JOIN users u ON s.sess->>'userId'=u.id::text
+          WHERE s.sess->>'userId' = $1 AND s.expire > NOW()
+            AND COALESCE(s.sess->>'credentialEpoch','0')=u.credential_epoch::text
+            AND encode(sha256(convert_to(s.sid, 'UTF8')), 'hex') = $2
        ) AS live`,
       [String(userId), binding],
     );

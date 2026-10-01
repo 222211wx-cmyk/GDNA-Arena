@@ -8,6 +8,7 @@ import webPush from "web-push";
 import { pool } from "@workspace/db";
 import { getCallStateDb } from "./call-state-db";
 import { logger } from "./logger";
+import { lockLiveSession } from "./session-security";
 
 const VAPID_ROW_ID = "primary";
 const MAX_ENDPOINT_LENGTH = 2_048;
@@ -219,6 +220,7 @@ export async function registerBrowserPushSubscription(input: {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await lockLiveSession(client, input.userId, input.sessionId);
     const endpointOwner = await client.query<{ user_id: number; session_hash: string }>(
       `SELECT user_id, session_hash
          FROM browser_push_subscriptions
@@ -288,6 +290,7 @@ export async function renewBrowserPushSubscriptionWithClient(
   const encryptedKeys = encryptJson(input.subscription.keys);
   try {
     await client.query("BEGIN");
+    await lockLiveSession(client, input.userId, input.sessionId);
     const endpoints = input.oldEndpoint === input.subscription.endpoint
       ? [input.oldEndpoint]
       : [input.oldEndpoint, input.subscription.endpoint];
@@ -434,8 +437,9 @@ async function sendBrowserCallPayloadNow(
   if (expiresAt !== undefined && expiresAt <= Date.now()) return;
   const keys = await durableVapidKeys();
   const activeSessions = await pool.query<{ sid: string }>(
-    `SELECT sid FROM user_sessions
-      WHERE (sess->>'userId')::int = $1 AND expire > NOW()`,
+    `SELECT s.sid FROM user_sessions s JOIN users u ON u.id=$1
+      WHERE s.sess->>'userId'=$1::text AND s.expire > NOW()
+        AND COALESCE(s.sess->>'credentialEpoch','0')=u.credential_epoch::text`,
     [calleeId],
   );
   const activeHashes = activeSessions.rows.map(row => browserPushSessionHash(row.sid));

@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
 import rateLimit from "express-rate-limit";
+import { SessionRevokedError } from "../lib/session-security";
 import {
   BrowserPushError,
   BrowserPushRenewalConflictError,
@@ -94,6 +95,9 @@ router.post("/browser-push/subscriptions", mutationLimiter, async (req, res): Pr
     });
     res.status(204).end();
   } catch (error) {
+    if (error instanceof SessionRevokedError) {
+      res.status(401).json({ error: "Not authenticated" }); return;
+    }
     const conflict = error instanceof BrowserPushError && error.message.includes("another session");
     res.status(conflict ? 409 : 503).json({
       error: error instanceof BrowserPushError ? error.message : "Browser push registration failed",
@@ -124,6 +128,9 @@ router.post("/browser-push/subscriptions/renew", mutationLimiter, async (req, re
     });
     res.status(204).end();
   } catch (error) {
+    if (error instanceof SessionRevokedError) {
+      res.status(401).json({ error: "Not authenticated" }); return;
+    }
     res.status(error instanceof BrowserPushRenewalConflictError ? 409 : 503).json({
       error: error instanceof BrowserPushError ? error.message : "Browser push renewal failed",
     });

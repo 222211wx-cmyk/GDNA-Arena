@@ -8,12 +8,15 @@ import { logger } from "../lib/logger";
 import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { isAdultForGames, normalizeBirthDate } from "../lib/age";
-import { revokeAllCallPushSessions, revokeCallPushSession } from "../lib/firebase-call-push";
 import { deleteAccountClips } from "../lib/clip-account-delete.js";
 import { deleteAccountCitizenSocial } from "../lib/citizen-media-cleanup.js";
 import { ClipUploadError } from "../lib/clip-upload-protocol.js";
 import { configureSessionLifetime, sessionLifetime, SHORT_SESSION_TTL_MS } from "../lib/session-policy";
-import { PhoneRecoveryError, recoveryTransaction, requireRecoveryUser, revokeRecoveryPushBindings } from "../lib/phone-recovery";
+import { revokeCallPushSession } from "../lib/firebase-call-push";
+import { PhoneRecoveryError, requireRecoveryUser, revokeRecoveryPushBindings } from "../lib/phone-recovery";
+import { authorizeNewSession, lockLiveSession, SessionRevokedError } from "../lib/session-security";
+import { sessionCredentialEpoch } from "../lib/session-policy";
+import { completeOfflineRecoveryRevocation } from "../lib/offline-recovery-revocation";
 
 const pool = nullablePool!;
 
@@ -171,7 +174,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     void revokeCallPushSession(previousSessionUserId, previousSessionId).catch(() => {});
   }
   req.session.userId = user.id;
+  authorizeNewSession(req.session, 0);
   configureSessionLifetime(req.session);
+  await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
   req.log.info({ userId: user.id }, "User registered — logged in");
   sendWelcomeNotification(user.id).catch(() => {});
   res.status(201).json(serializeUser(user));
@@ -238,7 +243,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
 
   const matches = await db
-    .select()
+    .select({ user: usersTable, credentialEpoch: sql<number>`credential_epoch` })
     .from(usersTable)
     .where(sql`LOWER(${usersTable.username}) = LOWER(${username})`)
     .orderBy(usersTable.id)
@@ -246,11 +251,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   // Legacy duplicates must never be resolved by picking an arbitrary account.
   if (matches.length !== 1) {
-    // Generic message (same as wrong password) — prevents account enumeration
     res.status(401).json({ error: "الاسم أو كلمة السر غير صحيحة — Nom ou mot de passe incorrect" });
     return;
   }
-  const [user] = matches;
+  // Capture the epoch from the SAME snapshot as the verified password.
+  const [{ user, credentialEpoch }] = matches;
 
   let valid = false;
   try {
@@ -263,40 +268,29 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  // Recheck the credential under the user lock and persist the new session
-  // before releasing it. A concurrent recovery reset cannot accept a stale
-  // pre-reset password then create a session after its all-session deletion.
+  // The fenced store checks the verified epoch while holding its own user
+  // SHARE lock. Do not hold a different connection's user UPDATE lock across
+  // session.save: that would deadlock with the epoch-aware store.
   const previousSessionId = req.sessionID;
   const previousSessionUserId = req.session.userId;
-  let credentialStillValid = true;
-  await recoveryTransaction(async client => {
-    const locked = await client.query<{ password_hash: string }>(
-      "SELECT password_hash FROM users WHERE id = $1 FOR UPDATE", [user.id],
-    );
-    if (locked.rows[0]?.password_hash !== user.passwordHash) {
-      credentialStillValid = false;
-      return;
-    }
-    await new Promise<void>((resolve, reject) =>
-      req.session.regenerate((err) => (err ? reject(err) : resolve())),
-    );
-    req.session.userId = user.id;
-    configureSessionLifetime(req.session, rememberMe);
-    await new Promise<void>((resolve, reject) =>
-      req.session.save(err => err ? reject(err) : resolve()),
-    );
-  });
-  if (!credentialStillValid) {
-    res.status(401).json({ error: "الاسم أو كلمة السر غير صحيحة — Nom ou mot de passe incorrect" });
-    return;
-  }
+  await new Promise<void>((resolve, reject) =>
+    req.session.regenerate((err) => (err ? reject(err) : resolve())),
+  );
   disconnectSessionSockets(previousSessionId);
   if (previousSessionUserId) {
     void revokeCallPushSession(previousSessionUserId, previousSessionId).catch(() => {});
   }
+  req.session.userId = user.id;
+  authorizeNewSession(req.session, credentialEpoch);
+  configureSessionLifetime(req.session, rememberMe);
+  await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
   req.log.info({ userId: user.id, rememberMe }, "User logged in");
   res.json(serializeUser(user));
   } catch (err) {
+    if (err instanceof SessionRevokedError) {
+      res.status(401).json({ error: "الاسم أو كلمة السر غير صحيحة — Nom ou mot de passe incorrect" });
+      return;
+    }
     req.log.error(err, "Login error");
     res.status(500).json({ error: "خطأ مؤقت في الخادم — حاول مرة أخرى | Erreur serveur temporaire — réessayez" });
   }
@@ -320,36 +314,54 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     // Preserve an explicit short-session choice through credential rotation.
     const rememberMe = sessionLifetime(req.session) > SHORT_SESSION_TTL_MS;
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    const revokedSessionIds = await recoveryTransaction(async client => {
+    const client = await pool.connect();
+    let revokedSessionIds: string[] = [];
+    let credentialEpoch: number;
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL lock_timeout = '5s'");
+      // Shared reset/enrollment order: E2EE advisory lock -> user -> SID.
+      await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
       const user = await requireRecoveryUser(client, userId, req.sessionID);
+      await lockLiveSession(client, userId, req.sessionID, sessionCredentialEpoch(req.session));
       let valid = false;
       try { valid = await bcrypt.compare(currentPassword, user.password_hash); } catch { /* fail closed */ }
-      if (!valid) throw new PhoneRecoveryError(400, "كلمة السر الحالية غير صحيحة — Mot de passe actuel incorrect");
-      // The session store uses a separate pool connection: rotate BEFORE this
-      // transaction deletes sessions, otherwise destroy(oldSid) would wait on
-      // our own uncommitted DELETE. The user lock still fences competing resets.
-      await new Promise<void>((resolve, reject) =>
-        req.session.regenerate((err) => (err ? reject(err) : resolve())),
+      if (!valid) {
+        throw new PhoneRecoveryError(400, "كلمة السر الحالية غير صحيحة — Mot de passe actuel incorrect");
+      }
+      // Compare and replace under the SAME locked credential snapshot.
+      const updated = await client.query<{ credential_epoch: number }>(
+        `UPDATE users SET password_hash=$1, credential_epoch=credential_epoch+1
+         WHERE id=$2 RETURNING credential_epoch`, [passwordHash, userId],
       );
-      await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
+      credentialEpoch = updated.rows[0].credential_epoch;
+      await client.query(
+        `INSERT INTO auth_offline_recovery_revocations (user_id, credential_epoch) VALUES ($1,$2)
+         ON CONFLICT (user_id) DO UPDATE SET credential_epoch=EXCLUDED.credential_epoch, created_at=NOW()`,
+        [userId, credentialEpoch],
+      );
       const revokedSessions = await client.query<{ sid: string }>(
-        "DELETE FROM user_sessions WHERE sess->>'userId' = $1::text RETURNING sid", [userId],
+        "DELETE FROM user_sessions WHERE sess->>'userId'=$1::text RETURNING sid", [userId],
       );
+      revokedSessionIds = revokedSessions.rows.map(({ sid }) => sid);
       await revokeRecoveryPushBindings(client, userId);
-      // Save the replacement while the user is still locked so a competing
-      // reset cannot delete all sessions and then have this request revive one.
-      req.session.userId = userId;
-      configureSessionLifetime(req.session, rememberMe);
-      await new Promise<void>((resolve, reject) =>
-        req.session.save(err => err ? reject(err) : resolve()),
-      );
-      return revokedSessions.rows.map(({ sid }) => sid);
-    });
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally { client.release(); }
     // Revoke pending-upgrade and fully registered realtime channels for every
-    // deleted session; the replacement credential was saved under the user lock.
+    // deleted session before issuing an epoch-fenced replacement after commit.
     for (const sid of revokedSessionIds) disconnectSessionSockets(sid);
     disconnectUserSockets(userId);
-    const firebaseRevoked = await revokeAllCallPushSessions(userId);
+    const firebaseRevoked = await completeOfflineRecoveryRevocation(userId);
+    await new Promise<void>((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve()))
+    );
+    req.session.userId = userId;
+    authorizeNewSession(req.session, credentialEpoch);
+    configureSessionLifetime(req.session, rememberMe);
+    await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
     req.log.info({ userId }, "Password changed from settings");
     res.json({
       message: "تم تغيير كلمة السر بنجاح ✅ — Mot de passe modifié",
@@ -358,6 +370,10 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
   } catch (err) {
     if (err instanceof PhoneRecoveryError) {
       res.status(err.status).json({ error: err.message });
+      return;
+    }
+    if (err instanceof SessionRevokedError) {
+      res.status(401).json({ error: "Not authenticated" });
       return;
     }
     req.log.error(err, "Change password error");
@@ -443,8 +459,10 @@ router.get("/auth/me", async (req, res): Promise<void> => {
            )::json,
            expire = $4::timestamptz
        WHERE sid = $1 AND sess->>'userId' = $2::text AND expire > NOW()
+         AND COALESCE(sess->>'credentialEpoch', '0') = $5::text
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id=$2::integer AND u.credential_epoch=$5::integer)
        RETURNING sid`,
-      [req.sessionID, userId, ttl, expires],
+      [req.sessionID, userId, ttl, expires, sessionCredentialEpoch(req.session)],
     );
     if (!renewed.rowCount) {
       disconnectSessionSockets(req.sessionID);
@@ -478,18 +496,30 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
     const anonymousName = `deleted_user_${userId}`;
     const client = await pool.connect();
     let revokedSessionIds: string[] = [];
+
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+      await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [userId]);
+      await lockLiveSession(client, userId, req.sessionID, sessionCredentialEpoch(req.session));
       await client.query(`
         UPDATE users
         SET username = $1, email = $2, password_hash = 'DELETED',
-            birth_date = NULL, last_seen_at = NOW()
+            birth_date = NULL, last_seen_at = NOW(), credential_epoch = credential_epoch + 1
         WHERE id = $3
       `, [anonymousName, `${anonymousName}@deleted.gdna`, userId]);
+      await client.query(
+        `INSERT INTO auth_offline_recovery_revocations (user_id, credential_epoch)
+         SELECT id, credential_epoch FROM users WHERE id=$1
+         ON CONFLICT (user_id) DO UPDATE SET credential_epoch=EXCLUDED.credential_epoch, created_at=NOW()`,
+        [userId],
+      );
       // Soft-deletion does not fire FK cascades. Release the phone mapping,
       // but preserve global consumed-event digests so erasure cannot replay it.
       await client.query("DELETE FROM auth_recovery_phones WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM auth_recovery_codes WHERE user_id = $1", [userId]);
       await revokeRecoveryPushBindings(client, userId);
+      await client.query("DELETE FROM dm_user_e2ee_keys WHERE user_id=$1", [userId]);
       await deleteAccountClips(client, userId);
       await deleteAccountCitizenSocial(client, userId);
       await client.query("DELETE FROM dm_send_receipts WHERE sender_id=$1", [userId]);
@@ -555,7 +585,7 @@ router.delete("/auth/me", async (req, res): Promise<void> => {
 
     for (const sessionId of revokedSessionIds) disconnectSessionSockets(sessionId);
     disconnectUserSockets(userId);
-    const firebaseRevoked = await revokeAllCallPushSessions(userId);
+    const firebaseRevoked = await completeOfflineRecoveryRevocation(userId);
     await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
     clearSessionCookie(res);
     res.json({

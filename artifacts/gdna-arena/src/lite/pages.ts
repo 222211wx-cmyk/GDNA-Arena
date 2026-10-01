@@ -23,6 +23,7 @@ import { href, type Route } from "./router";
 import { reportMeasurement } from "../lib/operator-telemetry";
 import { exhaustedMessagingNotice, messagingSubscriptionCopy, remainingMessagingCopy } from "../lib/messaging-subscription-copy";
 import { recoveryCopy } from "../i18n/recovery-copy";
+import { offlineRecoveryCopy } from "../i18n/offline-recovery-copy";
 import { recoveryWebHref } from "../lib/recovery-links";
 
 interface Ctx {
@@ -511,6 +512,11 @@ export function settingsPage(ctx: Ctx): HTMLElement {
       el("a", { class: "l-btn l-btn-primary l-btn-sm", href: recoveryWebHref("/recovery-phone", "/lite/settings", ctx.lang), text: recovery.manage, "data-testid": "link-lite-recovery-phone" }),
       el("p", { class: "l-small l-muted", text: recovery.fullWeb }),
     ]),
+    el("div", { class: "l-card l-stack" }, [
+      el("div", { class: "l-h2", text: offlineRecoveryCopy(ctx.lang).title }),
+      el("p", { class: "l-small l-muted", text: offlineRecoveryCopy(ctx.lang).intro }),
+      el("a", { class: "l-btn l-btn-primary l-btn-sm", href: recoveryWebHref("/recovery-code", "/lite/settings", ctx.lang), text: offlineRecoveryCopy(ctx.lang).openPage, "data-testid": "link-lite-recovery-code" }),
+    ]),
   ]);
   return root;
 }
@@ -529,6 +535,7 @@ export function loginPage(ctx: Ctx): HTMLElement {
     err,
     el("div", { class: "l-row" }, [btn]),
     el("a", { class: "l-gold", href: recoveryWebHref("/recover-account", "/lite/login", ctx.lang), text: recoveryCopy(ctx.lang).forgot, "data-testid": "link-lite-forgot-password" }),
+    el("a", { class: "l-gold", href: recoveryWebHref("/recover-with-code", "/lite/login", ctx.lang), text: offlineRecoveryCopy(ctx.lang).link, "data-testid": "link-lite-recover-with-code" }),
     el("p", { class: "l-small l-muted", text: recoveryCopy(ctx.lang).fullWeb }),
   ]) as HTMLFormElement;
 

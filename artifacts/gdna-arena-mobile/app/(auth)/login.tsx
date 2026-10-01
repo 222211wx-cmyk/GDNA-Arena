@@ -10,6 +10,7 @@ import { useColors } from '@workspace/gdna-ds/hooks/use-colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '@workspace/gdna-ds/components/native/button';
+import { recoveryCopy } from '@/lib/recovery-copy';
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -113,6 +114,12 @@ export default function LoginScreen() {
           <Link href="/(auth)/register" asChild>
             <TouchableOpacity style={s.linkRow}>
               <Text style={s.linkText}>New citizen? <Text style={s.linkHighlight}>Register here</Text></Text>
+            </TouchableOpacity>
+          </Link>
+
+          <Link href="/(auth)/recover" asChild>
+            <TouchableOpacity style={s.linkRow} accessibilityRole="link">
+              <Text style={s.linkHighlight}>{recoveryCopy().recoverLink}</Text>
             </TouchableOpacity>
           </Link>
         </View>

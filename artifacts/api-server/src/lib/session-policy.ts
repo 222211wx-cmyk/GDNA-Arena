@@ -8,10 +8,19 @@ const LEGACY_REMEMBERED_TTL_MS = 30 * DAY_MS;
 declare module "express-session" {
   interface SessionData {
     rememberMe?: boolean;
+    // Server-only snapshot of the credentials that authorized this session.
+    credentialEpoch?: number;
   }
 }
 
 type CitizenSession = Session & Partial<SessionData>;
+
+/** Missing markers belong only to pre-fencing credentials (epoch zero). */
+export function sessionCredentialEpoch(session: Partial<SessionData>): number {
+  if (session.credentialEpoch === undefined) return 0;
+  return Number.isSafeInteger(session.credentialEpoch) && session.credentialEpoch! >= 0
+    ? session.credentialEpoch! : -1;
+}
 
 /** Only an explicit opt-out selects the existing seven-day rolling policy. */
 export function configureSessionLifetime(session: CitizenSession, rememberMe = true): void {

@@ -15,6 +15,7 @@ import { coreCopy } from "@/i18n/core-auth-copy";
 import { recoveryCopy } from "@/i18n/recovery-copy";
 import { recoveryEnrollmentReturnPath, recoveryRoute } from "@/lib/recovery-links";
 import { MESSAGES_ENTRY_PATH, messagesAuthUrl, messagesReturnPath } from "@/lib/messages-entry";
+import { offlineRecoveryCopy } from "@/i18n/offline-recovery-copy";
 
 const BRAND_STATEMENT =
   "منصة إمبراطورية حديثة - سمارت ودكاء اصطناعي حيوي مستقل ذات نظام داخلي سمارت لتطوير الذات والتنبؤات المستقبلية";
@@ -202,6 +203,9 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
                   </div>
                   <Link href={recoveryRoute("/recover-account", messagesReturnPath(search), lang)} className="inline-block text-sm text-primary hover:underline" data-testid="link-forgot-password">
                     {recoveryCopy(lang).forgot}
+                  </Link>
+                  <Link href={recoveryRoute("/recover-with-code", messagesReturnPath(search), lang)} className="ms-4 inline-block text-sm text-primary hover:underline" data-testid="link-recover-with-code">
+                    {offlineRecoveryCopy(lang).link}
                   </Link>
                   <label
                     className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground"

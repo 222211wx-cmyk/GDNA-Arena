@@ -91,6 +91,11 @@ import type {
   MissedCallsSeenInput,
   NativeCallPushInstallation,
   NativeCallPushRemoval,
+  OfflineRecoveryAuthorization,
+  OfflineRecoveryCredentials,
+  OfflineRecoveryIssued,
+  OfflineRecoveryResult,
+  OfflineRecoveryStatus,
   PlayResult,
   PresignClipUploadBody,
   RecoveryConfig,
@@ -3538,6 +3543,372 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+
+export const getGetRecoveryCodeStatusUrl = () => {
+
+
+
+
+  return `/api/auth/recovery-code/status`
+}
+
+/**
+ * @summary Authenticated offline recovery code status, never the code itself
+ */
+export const getRecoveryCodeStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<OfflineRecoveryStatus> => {
+
+  return customFetch<OfflineRecoveryStatus>(getGetRecoveryCodeStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecoveryCodeStatusQueryKey = () => {
+    return [
+    `/api/auth/recovery-code/status`
+    ] as const;
+    }
+
+
+export const getGetRecoveryCodeStatusQueryOptions = <TData = Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError = ErrorType<RecoveryErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecoveryCodeStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecoveryCodeStatus>>> = ({ signal }) => getRecoveryCodeStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRecoveryCodeStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getRecoveryCodeStatus>>>
+export type GetRecoveryCodeStatusQueryError = ErrorType<RecoveryErrorResponse>
+
+
+export function useGetRecoveryCodeStatus<TData = Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRecoveryCodeStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getRecoveryCodeStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRecoveryCodeStatus<TData = Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRecoveryCodeStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getRecoveryCodeStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRecoveryCodeStatus<TData = Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Authenticated offline recovery code status, never the code itself
+ */
+
+export function useGetRecoveryCodeStatus<TData = Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError = ErrorType<RecoveryErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRecoveryCodeStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRecoveryCodeStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateRecoveryCodeUrl = () => {
+
+
+
+
+  return `/api/auth/recovery-code/generate`
+}
+
+/**
+ * @summary Reverify current password and replace any previous single-use offline code
+ */
+export const generateRecoveryCode = async (offlineRecoveryAuthorization: OfflineRecoveryAuthorization, options?: Parameters<typeof customFetch>[1]): Promise<OfflineRecoveryIssued> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<OfflineRecoveryIssued>(getGenerateRecoveryCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(offlineRecoveryAuthorization)
+  }
+);}
+
+
+
+
+
+export const getGenerateRecoveryCodeMutationKey = () => ['generateRecoveryCode'] as const;
+
+export const getGenerateRecoveryCodeMutationOptions = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateRecoveryCode>>, TError,GenerateRecoveryCodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateRecoveryCode>>, TError,GenerateRecoveryCodeMutationVariables, TContext> => {
+
+const mutationKey = getGenerateRecoveryCodeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateRecoveryCode>>, GenerateRecoveryCodeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateRecoveryCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateRecoveryCodeMutationResult = NonNullable<Awaited<ReturnType<typeof generateRecoveryCode>>>
+    export type GenerateRecoveryCodeMutationBody = BodyType<OfflineRecoveryAuthorization>
+    export type GenerateRecoveryCodeMutationError = ErrorType<RecoveryErrorResponse>
+    export type GenerateRecoveryCodeMutationVariables = {data: BodyType<OfflineRecoveryAuthorization>}
+
+    /**
+ * @summary Reverify current password and replace any previous single-use offline code
+ */
+export const useGenerateRecoveryCode = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateRecoveryCode>>, TError,GenerateRecoveryCodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof generateRecoveryCode>>,
+        TError,
+        GenerateRecoveryCodeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGenerateRecoveryCodeMutationOptions(options), queryClient);
+    }
+
+export const getRemoveRecoveryCodeUrl = () => {
+
+
+
+
+  return `/api/auth/recovery-code/remove`
+}
+
+/**
+ * @summary Reverify current password and invalidate the offline recovery code
+ */
+export const removeRecoveryCode = async (offlineRecoveryAuthorization: OfflineRecoveryAuthorization, options?: Parameters<typeof customFetch>[1]): Promise<OfflineRecoveryStatus> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<OfflineRecoveryStatus>(getRemoveRecoveryCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(offlineRecoveryAuthorization)
+  }
+);}
+
+
+
+
+
+export const getRemoveRecoveryCodeMutationKey = () => ['removeRecoveryCode'] as const;
+
+export const getRemoveRecoveryCodeMutationOptions = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRecoveryCode>>, TError,RemoveRecoveryCodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeRecoveryCode>>, TError,RemoveRecoveryCodeMutationVariables, TContext> => {
+
+const mutationKey = getRemoveRecoveryCodeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeRecoveryCode>>, RemoveRecoveryCodeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  removeRecoveryCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveRecoveryCodeMutationResult = NonNullable<Awaited<ReturnType<typeof removeRecoveryCode>>>
+    export type RemoveRecoveryCodeMutationBody = BodyType<OfflineRecoveryAuthorization>
+    export type RemoveRecoveryCodeMutationError = ErrorType<RecoveryErrorResponse>
+    export type RemoveRecoveryCodeMutationVariables = {data: BodyType<OfflineRecoveryAuthorization>}
+
+    /**
+ * @summary Reverify current password and invalidate the offline recovery code
+ */
+export const useRemoveRecoveryCode = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRecoveryCode>>, TError,RemoveRecoveryCodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeRecoveryCode>>,
+        TError,
+        RemoveRecoveryCodeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRemoveRecoveryCodeMutationOptions(options), queryClient);
+    }
+
+export const getRedeemRecoveryCodeUrl = () => {
+
+
+
+
+  return `/api/auth/recovery-code/reset`
+}
+
+/**
+ * Requires a previously saved random code, not a claimed username. Does not sign in or restore lost E2EE private keys. Code consumption and local revocation are atomic.
+ * @summary Single-use code ownership proof resets password and revokes previous devices
+ */
+export const redeemRecoveryCode = async (offlineRecoveryCredentials: OfflineRecoveryCredentials, options?: Parameters<typeof customFetch>[1]): Promise<OfflineRecoveryResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<OfflineRecoveryResult>(getRedeemRecoveryCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(offlineRecoveryCredentials)
+  }
+);}
+
+
+
+
+
+export const getRedeemRecoveryCodeMutationKey = () => ['redeemRecoveryCode'] as const;
+
+export const getRedeemRecoveryCodeMutationOptions = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof redeemRecoveryCode>>, TError,RedeemRecoveryCodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof redeemRecoveryCode>>, TError,RedeemRecoveryCodeMutationVariables, TContext> => {
+
+const mutationKey = getRedeemRecoveryCodeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof redeemRecoveryCode>>, RedeemRecoveryCodeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  redeemRecoveryCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RedeemRecoveryCodeMutationResult = NonNullable<Awaited<ReturnType<typeof redeemRecoveryCode>>>
+    export type RedeemRecoveryCodeMutationBody = BodyType<OfflineRecoveryCredentials>
+    export type RedeemRecoveryCodeMutationError = ErrorType<RecoveryErrorResponse>
+    export type RedeemRecoveryCodeMutationVariables = {data: BodyType<OfflineRecoveryCredentials>}
+
+    /**
+ * @summary Single-use code ownership proof resets password and revokes previous devices
+ */
+export const useRedeemRecoveryCode = <TError = ErrorType<RecoveryErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof redeemRecoveryCode>>, TError,RedeemRecoveryCodeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof redeemRecoveryCode>>,
+        TError,
+        RedeemRecoveryCodeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRedeemRecoveryCodeMutationOptions(options), queryClient);
+    }
 
 export const getGetRecoveryConfigUrl = () => {
 

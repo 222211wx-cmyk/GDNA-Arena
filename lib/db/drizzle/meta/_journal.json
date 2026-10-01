@@ -197,6 +197,13 @@
       "when": 1790877600000,
       "tag": "0027_phone_auth_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790877600001,
+      "tag": "0028_offline_account_recovery",
+      "breakpoints": true
     }
   ]
 }

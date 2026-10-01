@@ -22,6 +22,8 @@ import { isStarAccount, generateStarReply, hasStarInvite, type StarDef } from ".
 import { broadcastMessageToRoom, broadcastRoomEvent } from "../lib/signaling";
 import { notifyMessageRecipients } from "../lib/message-push";
 import { citizenProjection } from "../lib/citizen-projection";
+import { lockLiveSession, SessionRevokedError } from "../lib/session-security";
+import { sessionCredentialEpoch } from "../lib/session-policy";
 import {
   authorizeMessageUpload,
   MAX_ENCRYPTED_ATTACHMENT_BYTES,
@@ -423,6 +425,7 @@ router.put("/messages/e2e/key", async (req, res): Promise<void> => {
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+    await lockLiveSession(client, userId, req.sessionID, sessionCredentialEpoch(req.session));
     const existing = await client.query<{ fingerprint: string }>(
       `SELECT fingerprint FROM dm_user_e2ee_keys WHERE user_id=$1 AND device_id=$2`,
       [userId, deviceId],
@@ -446,6 +449,9 @@ router.put("/messages/e2e/key", async (req, res): Promise<void> => {
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof SessionRevokedError) {
+      res.status(401).json({ error: "Not authenticated" }); return;
+    }
     throw error;
   } finally {
     client.release();
@@ -477,6 +483,7 @@ router.delete("/messages/e2e/devices/:deviceId", async (req, res): Promise<void>
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
+    await lockLiveSession(client, userId, req.sessionID, sessionCredentialEpoch(req.session));
     const removed = await client.query(
       `DELETE FROM dm_user_e2ee_keys WHERE user_id=$1 AND device_id=$2 RETURNING device_id`,
       [userId, deviceId],
@@ -486,6 +493,9 @@ router.delete("/messages/e2e/devices/:deviceId", async (req, res): Promise<void>
     res.status(204).end();
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
+    if (error instanceof SessionRevokedError) {
+      res.status(401).json({ error: "Not authenticated" }); return;
+    }
     throw error;
   } finally {
     client.release();

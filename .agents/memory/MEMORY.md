@@ -5,7 +5,8 @@
 - [GDNA Empire Design System](gdna-design-system.md) — gdna-arena consumes @workspace/gdna-ds (gold primary, dark canonical); local ui/ deleted, single global Toaster; nav must stay FLAT — owner rejected grouping sections in a dropdown.
 - [Games black-screen report](games-black-screen.md) — owner's blocked-game complaint likely from stale production build; check republish status before debugging dev.
 - [GlobalStar earnings security](globalstar-earnings-security.md) — identity from session only, withdrawal advisory lock, auth before multer, is_admin gate on admin routes.
-- [Session persistence](session-persistence.md) — sessions persist in Postgres; citizen auth is username + password only, with no email, verification, Resend, or recovery flow.
+- [Session persistence](session-persistence.md) — preserve username/password sign-in and remembered sessions; optional ownership recovery stays separate.
+- [Offline ownership recovery](offline-account-recovery.md) — saved codes restore account access, not lost E2EE history; revocation needs generation fencing and durable provider cleanup.
 - [API hardening](api-hardening.md) — helmet + tiered rate limits (auth 10/15min, AI 30/5min, global 600/5min) on api-server; trust proxy 1; secure cookies auto in prod.
 - [AMIS call system](amis-calls.md) — call signaling must ride /api/ws (prod router only forwards /api/*); WS upgrades session-authenticated, identity never trusted from client.
 - [Browser call verification](browser-call-verification.md) — test fresh recipients outside Messages; real Web Push needs a normal profile and exact-call notification checks.

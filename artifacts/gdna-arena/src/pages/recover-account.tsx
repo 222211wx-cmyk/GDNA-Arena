@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearch } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { ShieldCheck } from "lucide-react";
@@ -7,8 +7,9 @@ import { useLang, type Lang } from "@/contexts/LangContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { recoveryCopy } from "@/i18n/recovery-copy";
 import { recoveryErrorText, recoveryRequest, type RecoveryConfig } from "@/lib/phone-recovery";
-import { recoveryReturnPath } from "@/lib/recovery-links";
+import { recoveryReturnPath, recoveryRoute } from "@/lib/recovery-links";
 import { PhoneRecoveryFlow } from "@/components/auth/phone-recovery-flow";
+import { offlineRecoveryCopy } from "@/i18n/offline-recovery-copy";
 
 export function useRecoveryLanguage() {
   const search = useSearch();
@@ -91,6 +92,7 @@ export default function RecoverAccount() {
                 // cookie identity without creating a new login.
                 void refreshUser();
               }} />}
+        <Link href={recoveryRoute("/recover-with-code", next, lang)} className="block text-sm text-primary hover:underline" data-testid="link-recover-account-with-code">{offlineRecoveryCopy(lang).link}</Link>
         <div className="flex flex-wrap gap-4">
           <a href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}${signIn}`} className="text-sm text-primary hover:underline" data-testid="link-recovery-sign-in">{copy.signIn}</a>
           {next && <a href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}${next}`} className="text-sm text-muted-foreground hover:underline" data-testid="link-recovery-return">{copy.back}</a>}

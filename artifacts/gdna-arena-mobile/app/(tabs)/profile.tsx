@@ -13,6 +13,7 @@ import { nativeTheme } from '@workspace/gdna-ds/lib/native-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiGet, type TransactionItem } from '@/lib/api';
 import { Button } from '@workspace/gdna-ds/components/native/button';
+import { recoveryCopy } from '@/lib/recovery-copy';
 
 function getRank(xp: number): { label: string; color: string; next: number; progress: number } {
   const tiers = [
@@ -202,6 +203,19 @@ export default function ProfileScreen() {
       >
         Recovery phone number
       </Button>
+
+      {/* Security: offline recovery code */}
+      <TouchableOpacity
+        style={[s.menuBtn, { borderColor: colors.primary + '44' }]}
+        onPress={() => router.push('/security')}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={recoveryCopy().entry}
+      >
+        <Ionicons name="key-outline" size={18} color={colors.primary} />
+        <Text style={[s.menuBtnText, { color: colors.primary }]}>{recoveryCopy().entry}</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+      </TouchableOpacity>
 
       {/* Logout */}
       <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>

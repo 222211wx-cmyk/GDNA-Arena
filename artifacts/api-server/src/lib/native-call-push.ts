@@ -6,6 +6,7 @@ import { logger } from "./logger";
 import { getNativeCallMessaging } from "./firebase-call-push";
 import { getCallStateDb } from "./call-state-db";
 import { isApnsVoipMock } from "./apns-voip-mode";
+import { lockLiveSession } from "./session-security";
 import {
   nativeSessionHash, validNativeToken, nativeIncomingPayload, nativeFcmMessage,
   nativeApnsHeaders, nativeCallUUID, type NativeIncomingCall, type NativeProvider,
@@ -24,11 +25,7 @@ export async function registerNativeCallInstallation(userId: number, sid: string
   try {
     await client.query("BEGIN");
     // Check canonical session at mutation time, not a supplied user ID or stale session mirror.
-    const session = await client.query(
-      "SELECT sid FROM user_sessions WHERE sid=$1 AND (sess->>'userId')::int=$2 AND expire>now()",
-      [sid, userId],
-    );
-    if (!session.rowCount) throw new Error("Not authenticated");
+    await lockLiveSession(client, userId, sid);
     // Transfer a rotated/reinstalled device token rather than leave an old account owner.
     await client.query("DELETE FROM native_call_push_installations WHERE provider=$1 AND token=$2 AND installation_id<>$3",
       [body.provider, token, body.installationId]);
@@ -115,7 +112,9 @@ export async function sendNativeCallTerminalPush(input: { callId: string; callee
 
 async function activeHashes(userId: number): Promise<string[]> {
   const sessions = await pool.query<{ sid: string }>(
-    "SELECT sid FROM user_sessions WHERE (sess->>'userId')::int=$1 AND expire>now()", [userId]);
+    `SELECT s.sid FROM user_sessions s JOIN users u ON u.id=$1
+     WHERE s.sess->>'userId'=$1::text AND s.expire>now()
+       AND COALESCE(s.sess->>'credentialEpoch','0')=u.credential_epoch::text`, [userId]);
   return sessions.rows.map(row => nativeSessionHash(row.sid));
 }
 async function deliver(userId: number, eventKey: string, payload: Record<string, string | boolean>) {

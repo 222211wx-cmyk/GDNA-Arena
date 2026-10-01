@@ -11,6 +11,8 @@ import { logger } from "./lib/logger";
 import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
 import { clipAwareJsonBody } from "./lib/clip-metadata-json.js";
 import { PERSISTENT_SESSION_TTL_MS } from "./lib/session-policy";
+import { fenceSessionStore, requireLiveSession } from "./lib/session-security";
+import { startOfflineRecoveryRevocationSweep } from "./lib/offline-recovery-revocation";
 
 const app: Express = express();
 
@@ -156,7 +158,7 @@ const sessionSecret = process.env.SESSION_SECRET
     : "gdna-arena-dev-secret");
 export const sessionMiddleware = session({
   store: pool
-    ? new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: false })
+    ? fenceSessionStore(new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: false }))
     : undefined,
   secret: sessionSecret,
   resave: false,
@@ -175,6 +177,7 @@ export const sessionMiddleware = session({
 });
 
 app.use(sessionMiddleware);
+app.use("/api", requireLiveSession);
 
 // ── Rate limiting (brute-force & abuse shields) ──────────────────────────────
 // Strict shield on credential endpoints: 10 attempts / 15 min per IP.
@@ -230,5 +233,6 @@ app.use("/api", router);
 // Postgres call state is durable, so expiration cannot depend on a process
 // timer surviving a restart. FCM availability is unrelated to this sweep.
 startFirebaseCallExpirationSweep();
+startOfflineRecoveryRevocationSweep();
 
 export default app;

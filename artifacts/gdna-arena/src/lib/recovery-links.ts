@@ -6,7 +6,7 @@ export function recoveryReturnPath(search: string): string | null {
   return /^\/(?:lite(?:\/(?:login|settings|in|africa|brasil))?|dashboard|messages|messages\.call|message-calle|messagerie)(?:[?#]|$)/.test(next) ? next : null;
 }
 
-export function recoveryRoute(route: "/recover-account" | "/recovery-phone", next: string | null = null, lang?: string): string {
+export function recoveryRoute(route: "/recover-account" | "/recovery-phone" | "/recovery-code" | "/recover-with-code", next: string | null = null, lang?: string): string {
   const query = new URLSearchParams();
   if (next && recoveryReturnPath(`next=${encodeURIComponent(next)}`)) query.set("next", next);
   if (lang && ["en", "fr", "ar", "es", "de"].includes(lang)) query.set("lang", lang);
@@ -18,12 +18,12 @@ export function recoveryEnrollmentReturnPath(search: string): string | null {
   const next = new URLSearchParams(search).get("next");
   if (!next || /[\\\u0000-\u001f]/.test(next)) return null;
   const [path, query = ""] = next.split("?");
-  if (path !== "/recovery-phone") return null;
+  if (path !== "/recovery-phone" && path !== "/recovery-code") return null;
   const params = new URLSearchParams(query);
-  return recoveryRoute("/recovery-phone", recoveryReturnPath(query), params.get("lang") ?? undefined);
+  return recoveryRoute(path, recoveryReturnPath(query), params.get("lang") ?? undefined);
 }
 
 /** For anchors crossing between the Lite shell and full website. */
-export function recoveryWebHref(route: "/recover-account" | "/recovery-phone", next: string, lang: string): string {
+export function recoveryWebHref(route: "/recover-account" | "/recovery-phone" | "/recovery-code" | "/recover-with-code", next: string, lang: string): string {
   return `${import.meta.env.BASE_URL.replace(/\/$/, "")}${recoveryRoute(route, next, lang)}`;
 }

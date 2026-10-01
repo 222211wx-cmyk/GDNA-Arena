@@ -5,6 +5,44 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface OfflineRecoveryStatus {
+  active: boolean;
+  /** @nullable */
+  expiresAt: string | null;
+}
+
+export interface OfflineRecoveryAuthorization {
+  /**
+     * @minLength 1
+     * @maxLength 1024
+     */
+  currentPassword: string;
+}
+
+export interface OfflineRecoveryIssued {
+  code: string;
+  expiresAt: string;
+}
+
+export interface OfflineRecoveryCredentials {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  code: string;
+  /**
+     * @minLength 6
+     * @maxLength 72
+     */
+  newPassword: string;
+}
+
+export interface OfflineRecoveryResult {
+  success: true;
+  username: string;
+  revocationPending: boolean;
+}
+
 export interface RecoveryFirebaseConfig {
   apiKey: string;
   authDomain: string;

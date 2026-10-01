@@ -14,6 +14,7 @@ import { sendBrowserCallTerminalPush, sendBrowserIncomingCallPush } from "./brow
 import { sendExpoPush } from "./expo-push";
 import { sendNativeIncomingCallPush } from "./native-call-push";
 import { logger } from "./logger";
+import { withLiveSession, SessionRevokedError } from "./session-security";
 
 const FOCUS_FRESH_MS = 30_000;
 const DEVICE_BATCH_SIZE = 500;
@@ -25,6 +26,9 @@ const MESSAGE_PUSH_TTL_SECONDS = 86_400;
 const PUSH_CLAIM_STALE_MS = 60_000;
 const PUSH_CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+function firebaseSessionFence(db: Firestore, userId: number) {
+  return db.collection("users").doc(String(userId)).collection("security").doc("sessionFence");
+}
 export function isValidCallId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
@@ -566,10 +570,9 @@ async function deviceTokens(
   // never leaves this server; only its one-way sessionTag is stored in
   // Firestore and compared here.
   const canonicalSessions = await pgPool.query<{ sid: string }>(
-    `SELECT sid
-       FROM user_sessions
-      WHERE (sess->>'userId')::int = $1
-        AND expire > NOW()`,
+     `SELECT s.sid FROM user_sessions s JOIN users u ON u.id=$1
+       WHERE s.sess->>'userId'=$1::text AND s.expire > NOW()
+         AND COALESCE(s.sess->>'credentialEpoch','0')=u.credential_epoch::text`,
     [userId],
   );
   const activeSessionTags = new Set(canonicalSessions.rows.map(row => sessionTag(row.sid)));
@@ -745,27 +748,40 @@ export async function getCallPushStatus(): Promise<CallPushStatus> {
 export async function createCallPushSession(
   userId: number,
   sessionId: string,
-  sessionExpiresAt?: Date,
+  _sessionExpiresAt?: Date,
 ): Promise<{ customToken: string; userId: string }> {
   const { auth, db } = await loadServices();
   try {
-    const firebaseUserId = String(userId);
-    const tag = sessionTag(sessionId);
-    // Rules require this record for every Firestore read. It is server-owned,
-    // expires with the HTTP session, and is marked revoked at logout so an
-    // already-issued Firebase ID token immediately loses document access.
-    await db.collection("users").doc(String(userId)).collection("sessions").doc(tag).set({
-      expiresAt: sessionExpiresAt && sessionExpiresAt.getTime() > Date.now()
-        ? sessionExpiresAt
-        : new Date(Date.now() + 60 * 60 * 1000),
-      revokedAt: null,
-      updatedAt: new Date(),
+    return await withLiveSession(userId, sessionId, async (client, binding) => {
+      const pending = await client.query(
+        "SELECT 1 FROM auth_offline_recovery_revocations WHERE user_id=$1", [userId],
+      );
+      if (pending.rowCount) throw new CallPushError("Firebase recovery cleanup is pending — please retry");
+      const firebaseUserId = String(userId);
+      const tag = sessionTag(sessionId);
+      // Rules require this record for every Firestore read. It is server-owned,
+      // expires with the canonical HTTP session, and is marked revoked at logout.
+      const ref = db.collection("users").doc(String(userId)).collection("sessions").doc(tag);
+      await db.runTransaction(async transaction => {
+        const fence = await transaction.get(firebaseSessionFence(db, userId));
+        const previous = await transaction.get(ref);
+        if (!firebaseEpochAllowed(fence.data(), binding.credentialEpoch)) throw new SessionRevokedError();
+        // Revocation is monotonic for a SID; a stale issuance can never clear
+        // the logout/reset tombstone, including provider transaction retries.
+        if (previous.exists && previous.data()?.revokedAt !== null) throw new SessionRevokedError();
+        transaction.set(ref, {
+          expiresAt: binding.expiresAt,
+          revokedAt: null,
+          updatedAt: new Date(),
+        });
+      });
+      return {
+        customToken: await auth.createCustomToken(firebaseUserId, { userId, sessionTag: tag }),
+        userId: firebaseUserId,
+      };
     });
-    return {
-      customToken: await auth.createCustomToken(firebaseUserId, { userId, sessionTag: tag }),
-      userId: firebaseUserId,
-    };
-  } catch {
+  } catch (error) {
+    if (error instanceof SessionRevokedError || error instanceof CallPushError) throw error;
     throw new CallPushError("Firebase custom-token issuance failed");
   }
 }
@@ -801,16 +817,27 @@ export async function registerCallPushDevice(
   }
   const { db } = await loadServices();
   try {
-    const now = new Date();
-    await db.collection("users").doc(String(userId)).collection("devices").doc(input.installationId).set({
-      token: input.token,
-      configurationId: pushConfigurationId(),
-      focused: input.focused,
-      focusUpdatedAt: now,
-      sessionTag: sessionTag(sessionId),
-      updatedAt: now,
+    await withLiveSession(userId, sessionId, async (client, binding) => {
+      const pending = await client.query(
+        "SELECT 1 FROM auth_offline_recovery_revocations WHERE user_id=$1", [userId],
+      );
+      if (pending.rowCount) throw new CallPushError("Firebase recovery cleanup is pending — please retry");
+      const now = new Date();
+      await db.runTransaction(async transaction => {
+        const fence = await transaction.get(firebaseSessionFence(db, userId));
+        if (!firebaseEpochAllowed(fence.data(), binding.credentialEpoch)) throw new SessionRevokedError();
+        transaction.set(db.collection("users").doc(String(userId)).collection("devices").doc(input.installationId as string), {
+          token: input.token,
+          configurationId: pushConfigurationId(),
+          focused: input.focused,
+          focusUpdatedAt: now,
+          sessionTag: sessionTag(sessionId),
+          updatedAt: now,
+        });
+      });
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof SessionRevokedError || error instanceof CallPushError) throw error;
     throw new CallPushError("Firebase device registration failed");
   }
 }
@@ -1098,9 +1125,11 @@ export async function removeCallPushDevice(userId: number, sessionId: string, in
   if (!validInstallationId(installationId)) throw new CallPushError("Invalid installation ID");
   const { db } = await loadServices();
   try {
-    await (await ownedDeviceRef(db, userId, sessionId, installationId)).delete();
+    await withLiveSession(userId, sessionId, async () => {
+      await (await ownedDeviceRef(db, userId, sessionId, installationId)).delete();
+    });
   } catch (error) {
-    if (error instanceof CallPushError) throw error;
+    if (error instanceof SessionRevokedError || error instanceof CallPushError) throw error;
     throw new CallPushError("Firebase device removal failed");
   }
 }
@@ -1117,12 +1146,14 @@ export async function setCallPushFocus(
   }
   const { db } = await loadServices();
   try {
-    await (await ownedDeviceRef(db, userId, sessionId, installationId)).update({
-      focused,
-      focusUpdatedAt: new Date(),
+    await withLiveSession(userId, sessionId, async () => {
+      await (await ownedDeviceRef(db, userId, sessionId, installationId)).update({
+        focused,
+        focusUpdatedAt: new Date(),
+      });
     });
   } catch (error) {
-    if (error instanceof CallPushError) throw error;
+    if (error instanceof SessionRevokedError || error instanceof CallPushError) throw error;
     throw new CallPushError("Firebase focus update failed");
   }
 }
@@ -1681,11 +1712,29 @@ export async function markMissedCallsSeen(userId: number, ids: unknown): Promise
 async function revokeFirebaseUser(
   userId: number,
   sessionFilter?: string,
+  requireProviderConfirmation = false,
+  credentialEpoch?: number,
 ): Promise<boolean> {
   const problem = configurationProblem();
-  if (problem) return true;
+  // A durable recovery cannot assume missing credentials mean no historical
+  // mirrors exist. Keep the retry row until the provider confirms cleanup.
+  if (problem) return !requireProviderConfirmation;
   try {
     const { db, auth } = await loadServices();
+    if (credentialEpoch !== undefined) {
+      await db.runTransaction(async transaction => {
+        const ref = firebaseSessionFence(db, userId);
+        const previous = await transaction.get(ref);
+        const minimum = previous.data()?.minimumCredentialEpoch;
+        if (minimum !== undefined && (!Number.isSafeInteger(minimum) || minimum < 0)) {
+          throw new CallPushError("Firebase session fence is invalid");
+        }
+        transaction.set(ref, {
+          minimumCredentialEpoch: Math.max(minimum ?? 0, credentialEpoch),
+          updatedAt: new Date(),
+        });
+      });
+    }
     const user = db.collection("users").doc(String(userId));
     const tag = sessionFilter ? sessionTag(sessionFilter) : undefined;
     if (tag) {
@@ -1714,6 +1763,10 @@ async function revokeFirebaseUser(
           await batch.commit();
           if (snapshot.size < DEVICE_BATCH_SIZE) break;
         }
+        const remaining = collectionName === "sessions"
+          ? await user.collection(collectionName).where("revokedAt", "==", null).limit(1).get()
+          : await user.collection(collectionName).limit(1).get();
+        if (remaining.size) return false;
       }
     }
     if (tag) {
@@ -1723,7 +1776,9 @@ async function revokeFirebaseUser(
     } else if (shouldRevokeFirebaseRefreshTokens(sessionFilter)) {
       // Refresh-token revocation is account-wide and must never be part of a
       // single-session logout. It belongs only to explicit all-session flows.
-      await auth.revokeRefreshTokens(String(userId));
+      try { await auth.revokeRefreshTokens(String(userId)); } catch (error) {
+        if ((error as { code?: string })?.code !== "auth/user-not-found") throw error;
+      }
     }
     return true;
   } catch {
@@ -1737,8 +1792,10 @@ export function revokeCallPushSession(userId: number, activeSessionId: string): 
   return revokeFirebaseUser(userId, activeSessionId);
 }
 
-export function revokeAllCallPushSessions(userId: number): Promise<boolean> {
-  return revokeFirebaseUser(userId);
+export function revokeAllCallPushSessions(
+  userId: number, options?: { requireProviderConfirmation?: boolean; credentialEpoch?: number },
+): Promise<boolean> {
+  return revokeFirebaseUser(userId, undefined, options?.requireProviderConfirmation, options?.credentialEpoch);
 }
 
 async function expireInvitation(db: CallDatabase, callId: string, data: Record<string, unknown>): Promise<void> {
@@ -1782,4 +1839,9 @@ export function startFirebaseCallExpirationSweep(): void {
   void run();
   const timer = setInterval(() => { void run(); }, 60_000);
   timer.unref?.();
+}
+
+function firebaseEpochAllowed(data: FirebaseFirestore.DocumentData | undefined, epoch: number): boolean {
+  const minimum = data?.minimumCredentialEpoch;
+  return minimum === undefined || (Number.isSafeInteger(minimum) && minimum >= 0 && epoch >= minimum);
 }

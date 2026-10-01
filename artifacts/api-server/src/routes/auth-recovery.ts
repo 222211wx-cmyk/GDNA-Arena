@@ -7,7 +7,6 @@ import {
   GetRecoveryPhoneResponse, RemoveRecoveryPhoneBody, RemoveRecoveryPhoneResponse,
   ResetRecoveryPasswordBody, ResetRecoveryPasswordResponse,
 } from "@workspace/api-zod";
-import { revokeAllCallPushSessions } from "../lib/firebase-call-push";
 import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import {
   PhoneRecoveryError, RECOVERY_UNAVAILABLE, assertFreshPhoneProof, consumeRecoveryProof,
@@ -15,6 +14,7 @@ import {
   recoveryTransaction, requireCurrentRecoveryPassword, requireRecoveryUser,
   revokeRecoveryPushBindings, validRecoveryPassword, verifyPhoneProof,
 } from "../lib/phone-recovery";
+import { completeOfflineRecoveryRevocation } from "../lib/offline-recovery-revocation";
 
 const router: IRouter = Router();
 const BASE = "/auth/recovery";
@@ -193,6 +193,8 @@ router.post(`${BASE}/reset`, mutationGuard, async (req, res): Promise<void> => {
     await enforceRecoveryRateLimit("phone", proof.phone, 10);
     const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
     const revoked = await recoveryTransaction(async client => {
+      // All credential reset paths use the same device/user lock order.
+      await client.query("SELECT pg_advisory_xact_lock(47201, 1)");
       await lockRecoveryPhone(client, proof);
       // Account identity derives ONLY from an already bound verified phone.
       const found = await client.query<{ user_id: number }>(
@@ -210,7 +212,16 @@ router.post(`${BASE}/reset`, mutationGuard, async (req, res): Promise<void> => {
       );
       if (!mapping.rowCount) throw new PhoneRecoveryError(400);
       await consumeRecoveryProof(client, proof);
-      await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
+      const changed = await client.query<{ credential_epoch: number }>(
+        `UPDATE users SET password_hash = $1, credential_epoch = credential_epoch + 1
+         WHERE id = $2 RETURNING credential_epoch`, [passwordHash, userId],
+      );
+      await client.query(
+        `INSERT INTO auth_offline_recovery_revocations (user_id, credential_epoch)
+         VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE
+         SET credential_epoch = EXCLUDED.credential_epoch, created_at = NOW()`,
+        [userId, changed.rows[0].credential_epoch],
+      );
       const sessions = await client.query<{ sid: string }>(
         `DELETE FROM user_sessions WHERE sess->>'userId' = $1::text RETURNING sid`, [userId],
       );
@@ -220,7 +231,7 @@ router.post(`${BASE}/reset`, mutationGuard, async (req, res): Promise<void> => {
     });
     for (const sid of revoked.sessionIds) disconnectSessionSockets(sid);
     disconnectUserSockets(revoked.userId);
-    const firebaseRevoked = await revokeAllCallPushSessions(revoked.userId);
+    const firebaseRevoked = await completeOfflineRecoveryRevocation(revoked.userId);
     if (!firebaseRevoked) req.log.warn("Recovery succeeded; Firebase push mirror revocation pending");
     // Do not regenerate, issue a replacement cookie, or auto-login.
     if (req.session?.userId === revoked.userId) {

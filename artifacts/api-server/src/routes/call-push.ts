@@ -18,6 +18,7 @@ import { getAuthoritativeCall, heartbeatAuthoritativeCall, terminateAuthoritativ
 import { registerFcmDevice, sendDerivedFcm } from "../server/fcm";
 import { registerExpoInstallation, removeExpoInstallation } from "../lib/expo-push";
 import { registerNativeCallInstallation, removeNativeCallInstallation } from "../lib/native-call-push";
+import { SessionRevokedError } from "../lib/session-security";
 
 const callPushLimiter = rateLimit({
   windowMs: 60_000,
@@ -58,6 +59,9 @@ router.post("/expo-push/installations", callPushLimiter, async (req, res): Promi
     await registerExpoInstallation(userId, req.sessionID, req.body);
     res.json({ ok: true });
   } catch (error) {
+    if (error instanceof SessionRevokedError) {
+      res.status(401).json({ error: "Not authenticated" }); return;
+    }
     res.status(error instanceof Error && error.message.startsWith("Invalid ") ? 400 : 503)
       .json({ error: error instanceof Error && error.message.startsWith("Invalid ") ? error.message : "Expo push registration unavailable" });
   }
@@ -104,6 +108,7 @@ function authenticatedUserId(req: Request): number | null {
 }
 
 function errorStatus(error: unknown): number {
+  if (error instanceof SessionRevokedError) return 401;
   if (!(error instanceof CallPushError)) return 500;
   if (error.message.includes("does not belong")) return 403;
   if (error.message.includes("Only the call caller") ||
@@ -114,6 +119,7 @@ function errorStatus(error: unknown): number {
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof SessionRevokedError) return error.message;
   return error instanceof CallPushError ? error.message : "Call push service failed";
 }
 

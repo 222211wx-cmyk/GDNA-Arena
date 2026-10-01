@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
+import { withLiveSession } from "./session-security";
 
 export const validInstallation = (value: unknown): value is string =>
   typeof value === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(value);
@@ -15,14 +16,14 @@ export async function registerExpoInstallation(userId: number, sid: string, inpu
   }
   // One physical installation can only belong to one authenticated session/account.
   // An old session cannot delete a newer registration.
-  await pool.query(
+  await withLiveSession(userId, sid, client => client.query(
     `INSERT INTO expo_push_installations (user_id, session_hash, installation_id, token)
      VALUES ($1,$2,$3,$4)
      ON CONFLICT (installation_id) DO UPDATE
        SET user_id=EXCLUDED.user_id, session_hash=EXCLUDED.session_hash,
            token=EXCLUDED.token, updated_at=now()`,
     [userId, sessionHash(sid), body.installationId, body.token],
-  );
+  ));
 }
 
 export async function removeExpoInstallation(userId: number, sid: string, installationId: unknown) {
@@ -43,7 +44,9 @@ type Notification = {
 export async function sendExpoPush(userId: number, eventKey: string, notification: Notification): Promise<void> {
   // Canonical PG sessions, not just a client-provided account ID, authorize delivery.
   const sessions = await pool.query<{ sid: string }>(
-    `SELECT sid FROM user_sessions WHERE (sess->>'userId')::int=$1 AND expire>now()`,
+    `SELECT s.sid FROM user_sessions s JOIN users u ON u.id=$1
+     WHERE s.sess->>'userId'=$1::text AND s.expire>now()
+       AND COALESCE(s.sess->>'credentialEpoch','0')=u.credential_epoch::text`,
     [userId],
   );
   const hashes = sessions.rows.map(row => sessionHash(row.sid));

@@ -10,6 +10,7 @@ import { task39Text } from "@/i18n/task39";
 import { dashboardLocale, dashboardText, type DashboardCopyKey } from "@/i18n/dashboard-copy";
 import { useEffect, useState } from "react";
 import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown, ScrollText, Users, ShieldCheck } from "lucide-react";
+import { RecoveryCodeSettings } from "@/components/auth/recovery-code-settings";
 
 type DailyArchonDirective = {
   id: number;
@@ -953,6 +954,7 @@ export default function Dashboard() {
 
       {/* Settings — change password directly (no email codes) */}
       <RecoveryPhoneSettings key={user.id} />
+      <RecoveryCodeSettings key={`code-${user.id}`} showPageLink />
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="bg-card/50 border-primary/20">
           <CardHeader>

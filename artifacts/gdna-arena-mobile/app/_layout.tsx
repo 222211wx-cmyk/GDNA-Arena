@@ -63,6 +63,7 @@ function RootLayoutNav() {
         <Stack.Screen name="conversation/[roomId]" options={{ headerShown: false }} />
         <Stack.Screen name="finance" options={{ headerShown: false }} />
         <Stack.Screen name="recovery-phone" options={{ headerShown: false }} />
+        <Stack.Screen name="security" options={{ headerShown: false }} />
         <Stack.Screen name="clips" options={{ headerShown: false }} />
         <Stack.Screen name="clip/[code]" options={{ headerShown: false }} />
       </Stack>
