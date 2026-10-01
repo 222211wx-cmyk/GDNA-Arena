@@ -13,7 +13,7 @@ router.get("/messages/subscription", async (req, res) => {
     if (!quota) { res.status(401).json({ error: "Authentication required" }); return; }
     const hasActiveSubscription = quota.has_active_subscription === true;
     const freeMessagesRemaining = Math.max(0, FREE_MESSAGE_LIMIT - quota.free_messages_used);
-    res.json({ hasActiveSubscription, canSendMessages: hasActiveSubscription || freeMessagesRemaining > 0, freeMessagesRemaining });
+    res.json({ hasActiveSubscription, canSendMessages: true, freeMessagesRemaining, messagingPolicy: "unlimited" });
   } catch (error) {
     req.log.error({ err: error }, "Messaging quota status failed");
     res.status(503).json({ error: "Unable to verify messaging subscription. Try again." });

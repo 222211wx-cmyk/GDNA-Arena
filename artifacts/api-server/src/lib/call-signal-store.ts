@@ -68,6 +68,7 @@ const MAX_PREANSWER_DEVICES = 3;
 const MAX_PREANSWER_ICE = 16;
 const MAX_CALL_LIFETIME_MS = 4 * 60 * 60 * 1000;
 const HEARTBEAT_LEASE_MS = 120_000;
+const BUSY_RECOVERY_MIN_AGE_MS = 30 * 60 * 1000;
 
 function ref(db: CallStateDb, callId: string) {
   return db.collection("callInvites").doc(callId);
@@ -246,6 +247,67 @@ export async function getAuthoritativeCall(callId: string): Promise<CallRecord |
   const db = getCallStateDb();
   const snapshot = await ref(db, callId).get();
   return snapshot.exists && snapshot.data() ? canonicalCallRecord(callId, snapshot.data()!) : null;
+}
+
+export interface BusyCallCandidate {
+  callId: string;
+  startedAt: string;
+  eligibleForRecovery: boolean;
+}
+
+/** Age permits an owner-confirmed action, never automatic termination. Invalid
+ * timestamps and records fail closed; no peer, device or session data escapes. */
+function busyRecoveryStart(record: CallRecord | null, raw: Record<string, unknown> | undefined, userId: number, now: Date): Date | null {
+  if (!record || !raw || raw.endedAt || record.status !== "answered" ||
+    !Number.isSafeInteger(record.caller.id) || record.caller.id <= 0 ||
+    !Number.isSafeInteger(record.callee.id) || record.callee.id <= 0 ||
+    record.caller.id === record.callee.id ||
+    (record.caller.id !== userId && record.callee.id !== userId)) return null;
+  const startedAt = asDate(raw.answeredAt ?? raw.createdAt, new Date(NaN));
+  return Number.isFinite(startedAt.getTime()) &&
+    now.getTime() - startedAt.getTime() > BUSY_RECOVERY_MIN_AGE_MS ? startedAt : null;
+}
+
+export async function getBusyCallCandidate(userId: number): Promise<BusyCallCandidate | null> {
+  const db = getCallStateDb();
+  return db.runTransaction(async transaction => {
+    const lock = await transaction.get(lockRef(db, userId));
+    const callId = lock.data()?.callId;
+    if (!isValidCallId(callId)) return null;
+    const snapshot = await transaction.get(ref(db, callId));
+    const raw = snapshot.data();
+    const record = raw ? canonicalCallRecord(callId, raw) : null;
+    const startedAt = busyRecoveryStart(record, raw, userId, new Date());
+    return startedAt ? { callId, startedAt: startedAt.toISOString(), eligibleForRecovery: true } : null;
+  });
+}
+
+/** Intentionally accepts a new authenticated participant session. The explicit
+ * confirmation belongs at the API boundary; exact call/lock/age checks belong
+ * here, serialized with creation, heartbeats, normal end and every sweep. */
+export async function recoverBusyCall(callId: string, userId: number): Promise<CallRecord | null> {
+  if (!isValidCallId(callId)) return null;
+  const db = getCallStateDb();
+  const completed = await db.runTransaction(async transaction => {
+    const ownerLock = await transaction.get(lockRef(db, userId));
+    if (ownerLock.data()?.callId !== callId) return null;
+    const snapshot = await transaction.get(ref(db, callId));
+    const raw = snapshot.data();
+    const record = raw ? canonicalCallRecord(callId, raw) : null;
+    const now = new Date();
+    if (!busyRecoveryStart(record, raw, userId, now) || !record) return null;
+    const locks = [
+      await transaction.get(lockRef(db, record.caller.id)),
+      await transaction.get(lockRef(db, record.callee.id)),
+    ];
+    // Answered remains the canonical status after ending an answered call.
+    transaction.update(ref(db, callId), { endedAt: now });
+    for (const [index, id] of [record.caller.id, record.callee.id].entries())
+      if (locks[index].data()?.callId === callId) transaction.delete(lockRef(db, id));
+    return { ...record, endedAt: now };
+  });
+  if (completed) notifyTerminal(completed, "ended");
+  return completed;
 }
 
 function sessionOwns(record: CallRecord, userId: number, sessionId: string, deviceId: string, requireSelected = false): boolean {
@@ -463,7 +525,16 @@ export async function heartbeatAuthoritativeCall(
     if (!record || record.status !== "answered" || record.endedAt ||
       !sessionOwns(record, userId, sessionId, deviceId, true)) return;
     const now = new Date();
-    const lease = new Date(now.getTime() + (background ? MAX_CALL_LIFETIME_MS : HEARTBEAT_LEASE_MS));
+    // The lease is shared by both participants: a foreground peer must not
+    // shorten grace already granted to a background participant. Do not import
+    // legacy lock lifetimes when a call first opts into heartbeat protection.
+    const raw = snapshot.data();
+    const grantedUntil = raw?.heartbeatEnabled === true
+      ? asDate(raw.leaseExpiresAt, now).getTime() : now.getTime();
+    const lease = new Date(Math.max(
+      Number.isFinite(grantedUntil) ? grantedUntil : now.getTime(),
+      now.getTime() + (background ? MAX_CALL_LIFETIME_MS : HEARTBEAT_LEASE_MS),
+    ));
     const locks = await Promise.all([transaction.get(lockRef(db, record.caller.id)), transaction.get(lockRef(db, record.callee.id))]);
     if (locks.some(lock => lock.data()?.callId !== callId)) return;
     transaction.update(ref(db, callId), { heartbeatEnabled: true, lastHeartbeatAt: now, leaseExpiresAt: lease });

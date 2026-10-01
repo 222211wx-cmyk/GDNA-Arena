@@ -211,6 +211,8 @@ export function useCall(user: { id: number; username: string } | null) {
   const preflightClientRef = useRef<IAgoraRTCClient | null>(null);
   const mediaConnectedRef = useRef(false);
   const mediaHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const leaseHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const leaseCallIdRef = useRef<string | null>(null);
   const reducedVideoRef = useRef(false);
   const callDirectionRef = useRef<"outgoing" | "incoming" | null>(null);
   const ringtoneRef = useRef<CallRingtone | null>(null);
@@ -305,6 +307,8 @@ export function useCall(user: { id: number; username: string } | null) {
 
   // ── Error feedback ─────────────────────────────────────────────────────────
   const [callError,    setCallError]    = useState<string | null>(null);
+  const [callBusy, setCallBusy] = useState(false);
+  const clearCallBusy = useCallback(() => setCallBusy(false), []);
   const [connectionTest, setConnectionTest] = useState<ConnectionTestStatus>("idle");
   const [networkQuality, setNetworkQuality] = useState<CallNetworkQuality>("unknown");
   const [networkState, setNetworkState] = useState<CallNetworkState>(() =>
@@ -628,6 +632,24 @@ export function useCall(user: { id: number; username: string } | null) {
     };
   }, []);
 
+  const renewConnectedCallLease = useCallback(() => {
+    const callId = leaseCallIdRef.current;
+    if (!callId || currentCallIdRef.current !== callId || !mediaConnectedRef.current ||
+      groupCallActiveRef.current) return;
+    sendWS({ type: "call-heartbeat", callId, background: document.visibilityState === "hidden" });
+  }, [sendWS]);
+
+  useEffect(() => {
+    document.addEventListener("visibilitychange", renewConnectedCallLease);
+    return () => {
+      document.removeEventListener("visibilitychange", renewConnectedCallLease);
+      if (leaseHeartbeatRef.current) clearInterval(leaseHeartbeatRef.current);
+      leaseHeartbeatRef.current = null;
+      leaseCallIdRef.current = null;
+      // Unmount is not a background transition: never extend an ended lease.
+    };
+  }, [renewConnectedCallLease]);
+
   const setActualMediaConnected = useCallback((next: boolean) => {
     mediaConnectedRef.current = next;
     if (mediaHeartbeatRef.current) {
@@ -640,6 +662,9 @@ export function useCall(user: { id: number; username: string } | null) {
     };
     // A false transition must be observable before call state is cleared.
     if (!next) {
+      if (leaseHeartbeatRef.current) clearInterval(leaseHeartbeatRef.current);
+      leaseHeartbeatRef.current = null;
+      leaseCallIdRef.current = null;
       sendState();
       return;
     }
@@ -649,7 +674,16 @@ export function useCall(user: { id: number; username: string } | null) {
     setCallStatus("active");
     sendState();
     mediaHeartbeatRef.current = setInterval(sendState, 5_000);
-  }, [sendWS]);
+    // Opt in only after real connected media, never for legacy server records
+    // merely discovered during registration or for a different call.
+    if (!groupCallActiveRef.current && currentCallIdRef.current) {
+      leaseCallIdRef.current = currentCallIdRef.current;
+      if (!leaseHeartbeatRef.current) {
+        renewConnectedCallLease();
+        leaseHeartbeatRef.current = setInterval(renewConnectedCallLease, 30_000);
+      }
+    }
+  }, [renewConnectedCallLease, sendWS]);
 
   useEffect(() => subscribeCallNetwork(navigator, window, setNetworkState), []);
 
@@ -2099,6 +2133,7 @@ export function useCall(user: { id: number; username: string } | null) {
             settleDurableAnswer(msg.callId, new Error("CALL_SETUP_REJECTED"));
           }
           if (typeof msg.callId === "string" && msg.callId !== currentCallIdRef.current) return;
+          setCallBusy(msg.type === "call-busy" || msg.code === "CALL_BUSY");
           clearRingTimer();
           callGenerationRef.current += 1;
           currentCallIdRef.current = null;
@@ -2119,7 +2154,7 @@ export function useCall(user: { id: number; username: string } | null) {
               : msg.code === "MEDIA_PROTOCOL_MISMATCH"
               ? "إصدار وسائط المكالمة غير متوافق — حدّث الصفحة وحاول مجدداً"
             : msg.type === "call-busy"
-              ? "📞 المواطن في مكالمة أخرى حالياً — حاول لاحقاً"
+              ? "📞 أحد المشاركين في مكالمة أخرى. يمكنك التحقق من مكالمتك السابقة في المراسلات."
               : msg.type === "call-blocked"
                 ? "🚫 لا يمكن إجراء هذه المكالمة — التواصل بينكما محجوب"
                 : "تعذّر إكمال المكالمة حالياً — حاول مجدداً بعد لحظات.");
@@ -2251,6 +2286,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setCurrentLiveId(null);
       setConnectionTest("idle");
       setCallError(null);
+      setCallBusy(false);
     };
   }, [user?.id, user?.username, isOnline, answerWebRtcOffer, beginCallerWebRtc, flushPendingCallIce, leaveAgora, rejectPendingCallSetups, resumeCurrentCall, scheduleHybridFallback, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting, settleCallReady, settleDurableAnswer, signalingDeviceIdFor, switchToAgoraAfterServerAck]);
 
@@ -2316,6 +2352,7 @@ export function useCall(user: { id: number; username: string } | null) {
       return;
     }
     const callId = `call_${crypto.randomUUID().replace(/-/g, "")}`;
+    setCallBusy(false);
     let offered = false;
     let callGeneration = 0;
     let callStateStarted = false;
@@ -2931,7 +2968,7 @@ export function useCall(user: { id: number; username: string } | null) {
     recordingLocalUserId: user?.id, recordingParticipantIds,
     onlineUsers, activeLives, currentLiveId,
     localStream, remoteStream, screenSharing,
-    callError,
+    callError, callBusy, clearCallBusy,
     connectionTest,
     networkState, networkQuality,
     callDevices, selectedMicrophoneId, selectedCameraId, selectedSpeakerId,

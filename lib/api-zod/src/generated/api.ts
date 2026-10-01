@@ -15,8 +15,9 @@ export const getMessagingSubscriptionResponseFreeMessagesRemainingMax = 10;
 
 export const GetMessagingSubscriptionResponse = zod.object({
   "hasActiveSubscription": zod.boolean().describe('True only for an administrator\'s manual activation.'),
-  "canSendMessages": zod.boolean().describe('True while manually activated or before ten lifetime authored messages.'),
-  "freeMessagesRemaining": zod.number().int().min(getMessagingSubscriptionResponseFreeMessagesRemainingMin).max(getMessagingSubscriptionResponseFreeMessagesRemainingMax).describe('Remaining lifetime free sends; active sends still decrement this allowance.')
+  "canSendMessages": zod.boolean().describe('True for authenticated citizens under the unlimited direct-messaging policy. Membership, blocking, moderation and rate limits still apply.'),
+  "freeMessagesRemaining": zod.number().int().min(getMessagingSubscriptionResponseFreeMessagesRemainingMin).max(getMessagingSubscriptionResponseFreeMessagesRemainingMax).describe('Legacy trial remainder from preserved historical usage, not a current allowance or send limit.'),
+  "messagingPolicy": zod.enum(['unlimited']).optional().describe('Direct messaging is unlimited independently of the actual subscription flag.')
 })
 
 
@@ -1268,6 +1269,34 @@ export const MarkMissedCallsSeenBody = zod.object({
 })
 
 export const MarkMissedCallsSeenResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Check only the authenticated participant's old answered locked call
+ */
+export const GetCallBusyStateResponse = zod.object({
+  "candidate": zod.object({
+  "callId": zod.string(),
+  "startedAt": zod.coerce.date(),
+  "eligibleForRecovery": zod.boolean()
+}).nullable()
+})
+
+
+/**
+ * @summary Explicitly end the authenticated participant's same old locked call, including from a new session
+ */
+export const recoverCallBusyBodyCallIdRegExp = new RegExp('^[A-Za-z0-9_-]{1,128}$');
+
+
+export const RecoverCallBusyBody = zod.object({
+  "callId": zod.string().regex(recoverCallBusyBodyCallIdRegExp),
+  "confirmed": zod.literal(true)
+})
+
+export const RecoverCallBusyResponse = zod.object({
   "ok": zod.boolean()
 })
 

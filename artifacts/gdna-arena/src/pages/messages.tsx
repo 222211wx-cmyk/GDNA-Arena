@@ -13,6 +13,7 @@ import { installText, requestSectionInstall } from "@/lib/section-install";
 import { dashboardText } from "@/i18n/dashboard-copy";
 import { SOCIAL_T } from "@/components/social/social-i18n";
 import Messenger from "@/components/messenger/Messenger";
+import BusyCallRecovery from "@/components/messenger/BusyCallRecovery";
 import Login from "@/pages/login";
 import { MESSAGES_ENTRY_PATH } from "@/lib/messages-entry";
 
@@ -64,6 +65,7 @@ export default function MessagesPage() {
       </div>
       {installHelp && <p role="status" className="text-sm text-muted-foreground">{installHelp}</p>}
       {logoutError && <p role="alert" className="text-sm text-destructive">{logoutError}</p>}
+      <BusyCallRecovery />
       <Messenger
         variant="full"
         initialRoomId={initialRoomId}

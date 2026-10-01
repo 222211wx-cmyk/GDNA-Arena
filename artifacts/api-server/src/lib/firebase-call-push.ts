@@ -6,6 +6,7 @@ import { getMessaging, type Messaging } from "firebase-admin/messaging";
 import { pool as pgPool } from "@workspace/db";
 import {
   getCallStateDb,
+  callFailureDiagnosticCode,
   type CallDatabase,
   type CallStateDocumentReference,
 } from "./call-state-db";
@@ -1811,11 +1812,11 @@ async function expireInvitation(db: CallDatabase, callId: string, data: Record<s
   };
   if (!Number.isInteger(invitation.caller.id) || !Number.isInteger(invitation.calleeId) ||
     (invitation.type !== "video" && invitation.type !== "voice")) return;
-  await finishDeferredCallInvitation(invitation, "missed").catch(() => {});
+  await finishDeferredCallInvitation(invitation, "missed");
 }
 
 export function startFirebaseCallExpirationSweep(): void {
-  const run = async () => {
+  const sweep = async () => {
     let last: any;
     for (let page = 0; page < SWEEP_MAX_PAGES; page += 1) {
       try {
@@ -1831,10 +1832,17 @@ export function startFirebaseCallExpirationSweep(): void {
         }));
         if (snapshot.size < SWEEP_PAGE_SIZE) return;
         last = snapshot.docs[snapshot.docs.length - 1];
-      } catch {
+      } catch (error) {
+        logger.warn({ event: "call_invitation_cleanup_failed", diagnosticCode: callFailureDiagnosticCode(error) }, "Call invitation cleanup failed");
         return;
       }
     }
+  };
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try { await sweep(); } finally { running = false; }
   };
   void run();
   const timer = setInterval(() => { void run(); }, 60_000);

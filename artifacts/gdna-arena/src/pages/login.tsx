@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { coreCopy } from "@/i18n/core-auth-copy";
+import { unlimitedMessagingAccessCopy } from "@/lib/messaging-subscription-copy";
 import { recoveryCopy } from "@/i18n/recovery-copy";
 import { recoveryEnrollmentReturnPath, recoveryRoute } from "@/lib/recovery-links";
 import { MESSAGES_ENTRY_PATH, messagesAuthUrl, messagesReturnPath } from "@/lib/messages-entry";
@@ -139,7 +140,7 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
         <div role="note" data-testid="notice-single-account" className="mx-auto max-w-2xl rounded-md border border-primary/30 bg-primary/10 p-3 text-xs leading-relaxed text-muted-foreground space-y-2">
           <p>{copy.singleAccount}</p>
           <p>{copy.sessionNotice}</p>
-          <p>{copy.accessNotice}</p>
+          <p>{messengerLogin ? unlimitedMessagingAccessCopy(lang) : copy.accessNotice}</p>
         </div>
 
         {messengerLogin || mode === "auth" ? (

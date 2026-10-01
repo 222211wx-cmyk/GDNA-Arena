@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { CLIENT_MESSAGE_ID, messageRequestHash, messageReplay, saveMessageReceipt } from "../lib/message-idempotency";
 import { expectedSenderGuard } from "../lib/message-sender-guard";
 import { requireMessagingSubscription } from "../middleware/require-messaging-subscription";
-import { MESSAGING_ACTIVATION_MESSAGE, reserveMessageSend } from "../lib/messaging-quota";
 import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
@@ -873,10 +872,6 @@ router.post("/messages/arena-withdraw", requireMessagingSubscription, async (req
       );
     }
 
-    if (!await reserveMessageSend(client, userId)) {
-      await client.query("ROLLBACK");
-      res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
-    }
     const insertedMessage = await client.query(
       `INSERT INTO dm_messages (room_id, user_id, username, content, type)
        VALUES ($1, $2, $3, $4, 'text')
@@ -1215,12 +1210,6 @@ router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): P
         res.status(409).json({ error: "Secure device keys changed; refresh and retry" });
         return;
       }
-      if (!await reserveMessageSend(client, userId)) {
-        // Only quota reconciliation has written here. Retain historical usage
-        // even on denial so later deletion cannot reopen an exhausted trial.
-        await client.query("COMMIT");
-        res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
-      }
       const inserted = await client.query(
         `INSERT INTO dm_messages
            (room_id, user_id, username, content, audio_url, video_url, file_url, type, reply_to_id, expires_at)
@@ -1248,11 +1237,6 @@ router.post("/messages/rooms/:id/send", expectedSenderGuard, async (req, res): P
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      if (!await reserveMessageSend(client, userId)) {
-        // No message was reserved/inserted; persist the historical cursor only.
-        await client.query("COMMIT");
-        res.status(403).json({ code: "MESSAGING_SUBSCRIPTION_REQUIRED", error: MESSAGING_ACTIVATION_MESSAGE }); return;
-      }
       const inserted = await client.query(
         `INSERT INTO dm_messages
            (room_id, user_id, username, content, audio_url, video_url, file_url, type, reply_to_id, expires_at)

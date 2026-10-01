@@ -33,7 +33,7 @@
 - [Language policy](language-policy.md) — preserve foundational AR/EN/FR/ES/DE in language switchers; Arabic remains the canonical first-visit default.
 - [Production schema ownership](production-schema-ownership.md) — Publish owns production schema application; never replay Drizzle application migrations during startup.
 - [Royal Reserve policy](royal-reserve-policy.md) — messaging calls are free, without credit or reserve consent; preserve legacy finance records and require internet.
-- [Messaging entitlements](messaging-entitlement-policy.md) — message sending requires manual admin activation; reading and free calling remain independent.
+- [Messaging entitlements](messaging-entitlement-policy.md) — owner removed the ten-message quota and activation gate; preserve historical records and abuse protections.
 - [Drizzle peer alignment](drizzle-peer-alignment.md) — Firebase Admin can split Drizzle type identities through optional OpenTelemetry peers; align consumers, not query casts.
 - [pnpm script policy](pnpm-script-policy.md) — pnpm 10.26.1 denied-script selectors use literal matching; split combined versions without weakening strict checks.
 - [Optional AI policy](optional-ai-policy.md) — keep core availability independent of AI credentials and credits; no automatic paid-provider replacement.

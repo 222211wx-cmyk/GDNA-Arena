@@ -9,7 +9,7 @@
 import { apiPath, safeRead, postJson, ApiError } from "./api";
 import { OfflineQueue, drainQueue, type QueuedMessage, type DrainResult } from "./offline-queue";
 import type { SessionUser } from "./session";
-import { exhaustedMessagingNotice, parseMessagingEntitlement, type MessagingEntitlement } from "../lib/messaging-subscription-copy";
+import { parseMessagingEntitlement, type MessagingEntitlement } from "../lib/messaging-subscription-copy";
 
 type E2EE = typeof import("../lib/amis-e2ee");
 let e2eePromise: Promise<E2EE> | null = null;
@@ -100,7 +100,7 @@ export class RecipientNotSetUpError extends Error {
   }
 }
 
-/** Live entitlement only: never read an offline snapshot of administrator grants. */
+/** Compatibility status reader; sending no longer depends on this endpoint. */
 export async function fetchMessagingSubscription(): Promise<MessagingEntitlement> {
   const result = await safeRead<unknown>("/api/messages/subscription");
   return parseMessagingEntitlement(result.data);
@@ -117,9 +117,6 @@ export async function sendText(
   text: string,
   opts: { online: boolean } = { online: navigator.onLine },
 ): Promise<{ status: "sent" | "queued"; clientMessageId: string }> {
-  if (!(await fetchMessagingSubscription()).canSendMessages) {
-    throw new ApiError(403, exhaustedMessagingNotice);
-  }
   const e2ee = await loadE2EE();
   await e2ee.ensureDeviceIdentity(user.id);
 

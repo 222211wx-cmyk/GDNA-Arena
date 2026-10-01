@@ -328,7 +328,14 @@ export async function broadcastMessageToRoom(roomId: number, message: object) { 
 export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {
   // Startup and periodic reconciliation are bounded by the transaction's
   // conditional lock ownership checks; legacy answered calls are excluded.
-  const cleanup = () => { void cleanupStaleAuthoritativeCalls().catch(() => {}); };
+  let cleanupRunning = false;
+  const cleanup = () => {
+    if (cleanupRunning) return;
+    cleanupRunning = true;
+    void cleanupStaleAuthoritativeCalls().catch(error => {
+      logger.warn({ event: "call_cleanup_failed", diagnosticCode: callFailureDiagnosticCode(error) }, "Call cleanup failed");
+    }).finally(() => { cleanupRunning = false; });
+  };
   cleanup();
   const cleanupInterval = setInterval(cleanup, 30_000);
   cleanupInterval.unref();

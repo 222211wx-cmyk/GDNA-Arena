@@ -28,6 +28,7 @@ import type {
   ArenaWithdrawInput,
   ArenaWithdrawResponse,
   AuthUser,
+  BusyCallRecoveryConfirmation,
   CallDeclineResponse,
   CallPushConfig,
   CallPushDeviceInput,
@@ -69,6 +70,7 @@ import type {
   GdnaMemoryRemoval,
   GdnaQuestion,
   GdnaStatus,
+  GetCallBusyState200,
   GetClipsFeedParams,
   GetExhaustedClipThumbnailsParams,
   GetGsFiguresParams,
@@ -5445,6 +5447,195 @@ export const useMarkMissedCallsSeen = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getMarkMissedCallsSeenMutationOptions(options), queryClient);
+    }
+
+export const getGetCallBusyStateUrl = () => {
+
+
+
+
+  return `/api/call/busy-state`
+}
+
+/**
+ * @summary Check only the authenticated participant's old answered locked call
+ */
+export const getCallBusyState = async ( options?: Parameters<typeof customFetch>[1]): Promise<GetCallBusyState200> => {
+
+  return customFetch<GetCallBusyState200>(getGetCallBusyStateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCallBusyStateQueryKey = () => {
+    return [
+    `/api/call/busy-state`
+    ] as const;
+    }
+
+
+export const getGetCallBusyStateQueryOptions = <TData = Awaited<ReturnType<typeof getCallBusyState>>, TError = ErrorType<ErrorResponse>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCallBusyState>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCallBusyStateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCallBusyState>>> = ({ signal }) => getCallBusyState({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCallBusyState>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCallBusyStateQueryResult = NonNullable<Awaited<ReturnType<typeof getCallBusyState>>>
+export type GetCallBusyStateQueryError = ErrorType<ErrorResponse>
+
+
+export function useGetCallBusyState<TData = Awaited<ReturnType<typeof getCallBusyState>>, TError = ErrorType<ErrorResponse>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCallBusyState>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCallBusyState>>,
+          TError,
+          Awaited<ReturnType<typeof getCallBusyState>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCallBusyState<TData = Awaited<ReturnType<typeof getCallBusyState>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCallBusyState>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCallBusyState>>,
+          TError,
+          Awaited<ReturnType<typeof getCallBusyState>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCallBusyState<TData = Awaited<ReturnType<typeof getCallBusyState>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCallBusyState>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Check only the authenticated participant's old answered locked call
+ */
+
+export function useGetCallBusyState<TData = Awaited<ReturnType<typeof getCallBusyState>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCallBusyState>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCallBusyStateQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecoverCallBusyUrl = () => {
+
+
+
+
+  return `/api/call/recover-busy`
+}
+
+/**
+ * @summary Explicitly end the authenticated participant's same old locked call, including from a new session
+ */
+export const recoverCallBusy = async (busyCallRecoveryConfirmation: BusyCallRecoveryConfirmation, options?: Parameters<typeof customFetch>[1]): Promise<CallPushOk> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CallPushOk>(getRecoverCallBusyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(busyCallRecoveryConfirmation)
+  }
+);}
+
+
+
+
+
+export const getRecoverCallBusyMutationKey = () => ['recoverCallBusy'] as const;
+
+export const getRecoverCallBusyMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recoverCallBusy>>, TError,RecoverCallBusyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recoverCallBusy>>, TError,RecoverCallBusyMutationVariables, TContext> => {
+
+const mutationKey = getRecoverCallBusyMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recoverCallBusy>>, RecoverCallBusyMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  recoverCallBusy(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecoverCallBusyMutationResult = NonNullable<Awaited<ReturnType<typeof recoverCallBusy>>>
+    export type RecoverCallBusyMutationBody = BodyType<BusyCallRecoveryConfirmation>
+    export type RecoverCallBusyMutationError = ErrorType<ErrorResponse>
+    export type RecoverCallBusyMutationVariables = {data: BodyType<BusyCallRecoveryConfirmation>}
+
+    /**
+ * @summary Explicitly end the authenticated participant's same old locked call, including from a new session
+ */
+export const useRecoverCallBusy = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recoverCallBusy>>, TError,RecoverCallBusyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof recoverCallBusy>>,
+        TError,
+        RecoverCallBusyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRecoverCallBusyMutationOptions(options), queryClient);
     }
 
 export const getDeclineCallUrl = (params: DeclineCallParams,) => {

@@ -13,8 +13,8 @@ import {
   setCallPushFocus,
   parseFcmSendRequest,
 } from "../lib/firebase-call-push";
-import { declineCallForUser } from "../lib/signaling";
-import { getAuthoritativeCall, heartbeatAuthoritativeCall, terminateAuthoritativeCall } from "../lib/call-signal-store";
+import { broadcastToUser, declineCallForUser } from "../lib/signaling";
+import { getAuthoritativeCall, getBusyCallCandidate, recoverBusyCall, heartbeatAuthoritativeCall, terminateAuthoritativeCall } from "../lib/call-signal-store";
 import { registerFcmDevice, sendDerivedFcm } from "../server/fcm";
 import { registerExpoInstallation, removeExpoInstallation } from "../lib/expo-push";
 import { registerNativeCallInstallation, removeNativeCallInstallation } from "../lib/native-call-push";
@@ -316,6 +316,40 @@ router.post("/fcm/send", fcmSendLimiter, async (req, res): Promise<void> => {
     res.json({ ok: true, ...(await sendDerivedFcm(userId, request)) });
   } catch (error) {
     res.status(errorStatus(error)).json({ error: errorMessage(error) });
+  }
+});
+
+router.get("/call/busy-state", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  if (!requestOriginAllowed(req)) { res.status(403).json({ error: "Request origin is not allowed" }); return; }
+  res.setHeader("Cache-Control", "no-store, private");
+  try {
+    res.json({ candidate: await getBusyCallCandidate(userId) });
+  } catch {
+    res.status(503).json({ error: "Previous call status unavailable" });
+  }
+});
+
+router.post("/call/recover-busy", callPushLimiter, async (req, res): Promise<void> => {
+  const userId = authenticatedUserId(req);
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  if (!requestOriginAllowed(req)) { res.status(403).json({ error: "Request origin is not allowed" }); return; }
+  if (!req.is("application/json") || !isValidCallId(req.body?.callId) || req.body?.confirmed !== true) {
+    res.status(400).json({ error: "A valid call ID and explicit confirmation are required" }); return;
+  }
+  res.setHeader("Cache-Control", "no-store, private");
+  try {
+    const completed = await recoverBusyCall(req.body.callId, userId);
+    if (!completed) {
+      res.status(409).json({ error: "The previous call changed or is not eligible for recovery. Check again." }); return;
+    }
+    const event = { type: "call-ended", by: "owner-recovery", callId: completed.callId, signalId: `${completed.callId}:terminal` };
+    broadcastToUser(completed.caller.id, event);
+    broadcastToUser(completed.callee.id, event);
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ error: "Previous call recovery unavailable" });
   }
 });
 

@@ -1,20 +1,20 @@
 ---
-name: Manual messaging subscriptions
-description: Administrator-controlled citizen send access, separate from calling and vendor subscriptions.
+name: Messaging access without subscription quotas
+description: Owner removed the ten-message limit and activation requirement; preserve historical records and safety checks.
 ---
 
-A new citizen receives ten lifetime free messages. After those messages, an
-administrator must manually activate sending. The server is authoritative; a
-client boolean is not proof of entitlement. Reading history remains free and
-calling remains independent. Quotas do not reset on deletion, logout or device change.
+Message sending must not depend on a ten-message lifetime quota or manual
+subscription activation. This applies to the messaging system, not to unrelated
+platform permissions or financial entitlements. Reading history and calling
+remain independent.
 
-**Why:** The owner explicitly requested subscription-gated message sending and
-selected manual administrator activation rather than Stripe. Vendor subscriptions
-(EAS, hosting, Firebase) do not confer citizen messaging access. This supersedes
-unlimited free message-sending policy, not the existing free-call policy. The
-owner subsequently explicitly granted the first ten messages and requested
-the exhausted-trial text “Contactez l'AMIS pour activer”.
+**Why:** On 2026-10-01 the owner explicitly ordered removal of the ten-message
+quota and restoration of messaging access, superseding the earlier free-trial
+and administrator-activation policy. Scope was messaging only, with the
+underlying accounts and other platform sections preserved.
 
-**How to apply:** Provide enable/revoke administration and server-side send checks,
-not just a disabled button. Do not introduce Stripe or gate calls without a
-separate instruction. Preserve existing messages when access is revoked.
+**How to apply:** Remove the sending gate and activation prompts, not authentication,
+room membership, blocking, moderation, or abuse rate limits. Preserve historical
+subscription flags, counters, messages and audit records rather than granting
+every account a paid subscription or deleting financial data. Do not reintroduce
+Stripe or a calling quota.

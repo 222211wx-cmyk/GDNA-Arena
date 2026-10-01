@@ -5,16 +5,19 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { MessagingSubscriptionStatusMessagingPolicy } from './messagingSubscriptionStatusMessagingPolicy';
 
 export interface MessagingSubscriptionStatus {
   /** True only for an administrator's manual activation. */
   hasActiveSubscription: boolean;
-  /** True while manually activated or before ten lifetime authored messages. */
+  /** True for authenticated citizens under the unlimited direct-messaging policy. Membership, blocking, moderation and rate limits still apply. */
   canSendMessages: boolean;
   /**
-     * Remaining lifetime free sends; active sends still decrement this allowance.
+     * Legacy trial remainder from preserved historical usage, not a current allowance or send limit.
      * @minimum 0
      * @maximum 10
      */
   freeMessagesRemaining: number;
+  /** Direct messaging is unlimited independently of the actual subscription flag. */
+  messagingPolicy?: MessagingSubscriptionStatusMessagingPolicy;
 }

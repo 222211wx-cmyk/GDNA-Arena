@@ -59,7 +59,7 @@ paths:
             schema: { $ref: "#/components/schemas/MessagingSubscription" }
       responses:
         "200":
-          description: Administrator activated or revoked messaging
+          description: Administrator updated the stored subscription flag; direct messaging remains unlimited
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MessagingSubscription" }
@@ -1112,6 +1112,100 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /call/busy-state:
+    get:
+      operationId: getCallBusyState
+      tags: [call-push]
+      summary: Check only the authenticated participant's old answered locked call
+      responses:
+        "200":
+          description: An owner-recoverable call, or null; no other participant or session information
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidate]
+                properties:
+                  candidate:
+                    type: object
+                    nullable: true
+                    required: [callId, startedAt, eligibleForRecovery]
+                    properties:
+                      callId:
+                        type: string
+                      startedAt:
+                        type: string
+                        format: date-time
+                      eligibleForRecovery:
+                        type: boolean
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Request origin is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Previous call status unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /call/recover-busy:
+    post:
+      operationId: recoverCallBusy
+      tags: [call-push]
+      summary: Explicitly end the authenticated participant's same old locked call, including from a new session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusyCallRecoveryConfirmation"
+      responses:
+        "200":
+          description: Previous answered call ended; no new call is started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallPushOk"
+        "400":
+          description: Invalid call ID, non-JSON request, or missing explicit confirmation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Request origin is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Lock or call changed, call ended, requester is not a participant, or call is not over 30 minutes old
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Previous call recovery unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /call/decline:
     post:
       operationId: declineCall
@@ -1880,6 +1974,17 @@ components:
         userId: { type: string }
       required: [customToken, userId]
 
+    BusyCallRecoveryConfirmation:
+      type: object
+      required: [callId, confirmed]
+      properties:
+        callId:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,128}$'
+        confirmed:
+          type: boolean
+          enum: [true]
+
     CallPushOk:
       type: object
       properties:
@@ -2052,12 +2157,16 @@ components:
           description: True only for an administrator's manual activation.
         canSendMessages:
           type: boolean
-          description: True while manually activated or before ten lifetime authored messages.
+          description: True for authenticated citizens under the unlimited direct-messaging policy. Membership, blocking, moderation and rate limits still apply.
         freeMessagesRemaining:
           type: integer
           minimum: 0
           maximum: 10
-          description: Remaining lifetime free sends; active sends still decrement this allowance.
+          description: Legacy trial remainder from preserved historical usage, not a current allowance or send limit.
+        messagingPolicy:
+          type: string
+          enum: [unlimited]
+          description: Direct messaging is unlimited independently of the actual subscription flag.
     CitizenMessagingSubscription:
       type: object
       required: [id, username, hasActiveSubscription]

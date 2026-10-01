@@ -556,6 +556,12 @@ export interface CallPushSession {
   userId: string;
 }
 
+export interface BusyCallRecoveryConfirmation {
+  /** @pattern ^[A-Za-z0-9_-]{1,128}$ */
+  callId: string;
+  confirmed: true;
+}
+
 export interface CallPushOk {
   ok: boolean;
 }
@@ -693,17 +699,29 @@ export interface MessagingSubscription {
   hasActiveSubscription: boolean;
 }
 
+/**
+ * Direct messaging is unlimited independently of the actual subscription flag.
+ */
+export type MessagingSubscriptionStatusMessagingPolicy = typeof MessagingSubscriptionStatusMessagingPolicy[keyof typeof MessagingSubscriptionStatusMessagingPolicy];
+
+
+export const MessagingSubscriptionStatusMessagingPolicy = {
+  unlimited: 'unlimited',
+} as const;
+
 export interface MessagingSubscriptionStatus {
   /** True only for an administrator's manual activation. */
   hasActiveSubscription: boolean;
-  /** True while manually activated or before ten lifetime authored messages. */
+  /** True for authenticated citizens under the unlimited direct-messaging policy. Membership, blocking, moderation and rate limits still apply. */
   canSendMessages: boolean;
   /**
-     * Remaining lifetime free sends; active sends still decrement this allowance.
+     * Legacy trial remainder from preserved historical usage, not a current allowance or send limit.
      * @minimum 0
      * @maximum 10
      */
   freeMessagesRemaining: number;
+  /** Direct messaging is unlimited independently of the actual subscription flag. */
+  messagingPolicy?: MessagingSubscriptionStatusMessagingPolicy;
 }
 
 export interface CitizenMessagingSubscription {
@@ -1043,6 +1061,16 @@ limit?: number;
  * @maxLength 100
  */
 q?: string;
+};
+
+export type GetCallBusyState200Candidate = {
+  callId: string;
+  startedAt: string;
+  eligibleForRecovery: boolean;
+} | null;
+
+export type GetCallBusyState200 = {
+  candidate: GetCallBusyState200Candidate;
 };
 
 export type DeclineCallParams = {
