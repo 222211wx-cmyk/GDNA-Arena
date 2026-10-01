@@ -109,8 +109,14 @@ interface IncomingCall {
   callerId?: number;
   callerName?: string;
   callerAvatar?: string;
-  expiresAt?: number;
+  expiresAt: number;
   deferredMedia?: boolean;
+}
+
+interface IncomingExpiry {
+  callId: string;
+  generation: number;
+  expiresAt: number;
 }
 
 function isRtcDescription(
@@ -392,9 +398,72 @@ export function useCall(user: { id: number; username: string } | null) {
   // ── Ring timeout: client safety net (the server owns authoritative state) ──
   const RING_TIMEOUT_MS = 30_000;
   const ringTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearRingTimer = () => {
+  const incomingExpiryRef = useRef<IncomingExpiry | null>(null);
+  const expireIncomingRef = useRef<(expiry: IncomingExpiry) => void>(() => {});
+  const vibrationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopIncomingVibration = useCallback(() => {
+    if (vibrationTimerRef.current) clearInterval(vibrationTimerRef.current);
+    vibrationTimerRef.current = null;
+    if (typeof navigator.vibrate === "function") {
+      try { navigator.vibrate(0); } catch { /* best effort */ }
+    }
+  }, []);
+  const clearRingTimer = useCallback(() => {
     if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
+    incomingExpiryRef.current = null;
+    stopIncomingVibration();
+  }, [stopIncomingVibration]);
+
+  // Identity + generation checks keep a queued/throttled timer from clearing a
+  // newer invitation or a call whose Answer has already left incoming state.
+  expireIncomingRef.current = expiry => {
+    if (incomingExpiryRef.current !== expiry ||
+      currentCallIdRef.current !== expiry.callId ||
+      callGenerationRef.current !== expiry.generation) return;
+    clearRingTimer();
+    callGenerationRef.current += 1;
+    currentCallIdRef.current = null;
+    currentCallPeerRef.current = null;
+    callDirectionRef.current = null;
+    ringtoneRef.current?.stop();
+    setIncomingCall(null);
+    setActivePeer(null);
+    setActiveCallId(null);
+    setCallPhase("idle");
+    setCallStatus("idle");
+    showCallError("انتهت صلاحية دعوة المكالمة");
+    // No reject/end frame: expiry and missed-call persistence belong to server.
   };
+  const checkIncomingExpiry = useCallback(function check(expiry: IncomingExpiry) {
+    if (incomingExpiryRef.current !== expiry ||
+      currentCallIdRef.current !== expiry.callId ||
+      callGenerationRef.current !== expiry.generation) return;
+    const remaining = expiry.expiresAt - Date.now();
+    if (remaining <= 0) {
+      expireIncomingRef.current(expiry);
+      return;
+    }
+    if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
+    ringTimerRef.current = setTimeout(() => check(expiry), Math.min(remaining, 2_147_483_647));
+  }, []);
+
+  useEffect(() => {
+    const recheck = () => {
+      const expiry = incomingExpiryRef.current;
+      if (expiry) checkIncomingExpiry(expiry);
+    };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    return () => {
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", recheck);
+      clearRingTimer();
+    };
+  }, [checkIncomingExpiry, clearRingTimer]);
+
+  useEffect(() => {
+    if (!user || callStatus !== "ringing" || !incomingCall) clearRingTimer();
+  }, [callStatus, clearRingTimer, incomingCall, user?.id]);
 
   const sendWS = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -605,22 +674,22 @@ export function useCall(user: { id: number; username: string } | null) {
     }
     const started = ringtoneRef.current?.start(ringing) ?? false;
     if (!started) setSoundBlocked(true);
-    let vibrationTimer: ReturnType<typeof setInterval> | null = null;
     if (ringing === "incoming" && typeof navigator.vibrate === "function") {
       const vibrate = () => {
-        try { navigator.vibrate([180, 100, 180, 900]); } catch { /* best effort */ }
+        const expiry = incomingExpiryRef.current;
+        if (!expiry) return;
+        checkIncomingExpiry(expiry);
+        if (incomingExpiryRef.current !== expiry) return;
+        try { navigator.vibrate([0, 1000, 500, 1000]); } catch { /* best effort */ }
       };
       vibrate();
-      vibrationTimer = setInterval(vibrate, 2_300);
+      if (incomingExpiryRef.current) vibrationTimerRef.current = setInterval(vibrate, 3_000);
     }
     return () => {
       ringtoneRef.current?.stop();
-      if (vibrationTimer) clearInterval(vibrationTimer);
-      if (typeof navigator.vibrate === "function") {
-        try { navigator.vibrate(0); } catch { /* best effort */ }
-      }
+      stopIncomingVibration();
     };
-  }, [callPhase, callStatus, soundBlocked, user?.id]);
+  }, [callPhase, callStatus, checkIncomingExpiry, soundBlocked, stopIncomingVibration, user?.id]);
 
   useEffect(() => {
     // Audio activation is tab-scoped, not account-scoped. Do not close an
@@ -1070,6 +1139,7 @@ export function useCall(user: { id: number; username: string } | null) {
     canInitiateRestart: boolean,
     isCurrentCall: () => boolean = () => true,
   ): Promise<{ pc: RTCPeerConnection; stream: MediaStream }> => {
+    if (!isCurrentCall()) throw new Error("CALL_SETUP_CANCELLED");
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       throw new Error("Secure browser media is unavailable");
     }
@@ -1657,11 +1727,14 @@ export function useCall(user: { id: number; username: string } | null) {
 
   const answerWebRtcOffer = useCallback(async (msg: {
     callId: string; from: string; offer: RTCSessionDescriptionInit;
-  }, withVideo: boolean, mode: "deferred" | "direct" = "deferred"): Promise<RTCSessionDescriptionInit | null> => {
+  }, withVideo: boolean, mode: "deferred" | "direct" = "deferred",
+  canAnswer: () => boolean = () => true): Promise<RTCSessionDescriptionInit | null> => {
+    if (!canAnswer()) return null;
     if (mediaSetupCallRef.current === msg.callId) return null;
     mediaSetupCallRef.current = msg.callId;
     const generation = callGenerationRef.current;
-    const isCurrentCall = () => currentCallIdRef.current === msg.callId && callGenerationRef.current === generation;
+    const isCurrentCall = () => currentCallIdRef.current === msg.callId &&
+      callGenerationRef.current === generation && canAnswer();
     try {
       setCallPhase("connecting");
       const config = await loadDeferredConfig(isCurrentCall, fetchCallRtcConfig);
@@ -1676,6 +1749,7 @@ export function useCall(user: { id: number; username: string } | null) {
       if (!isCurrentCall()) return null;
       for (const candidate of pendingRemoteIceRef.current.splice(0)) {
         try { await pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
+        if (!isCurrentCall()) return null;
       }
       const answer = await pc.createAnswer();
       if (!isCurrentCall()) return null;
@@ -1841,6 +1915,9 @@ export function useCall(user: { id: number; username: string } | null) {
           // this selected-device snapshot. Only this durable winner opens the
           // Agora token/join gate.
           if (msg.type === "call-resumed" && msg.callId === currentCallIdRef.current) {
+            // This envelope is an authoritative answered snapshot, not a new
+            // invitation. Its original ringing deadline no longer applies.
+            clearRingTimer();
             settleDurableAnswer(msg.callId);
             // A resumed durable envelope records the provider transition. It
             // is equivalent to call-provider-changed after a socket restart,
@@ -1851,6 +1928,17 @@ export function useCall(user: { id: number; username: string } | null) {
           }
           // Ignore if already in / being offered another call
           if (!currentCallIdRef.current) {
+            const expiresAt = typeof msg.expiresAt === "number"
+              ? msg.expiresAt
+              : typeof msg.expiresAt === "string" &&
+                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(msg.expiresAt)
+                ? Date.parse(msg.expiresAt) : NaN;
+            // Only the canonical server deadline may open incoming UI. Never
+            // manufacture a fresh 30 seconds from receipt or a replay.
+            if (!Number.isFinite(expiresAt) || !Number.isFinite(new Date(expiresAt).getTime()) ||
+              expiresAt <= Date.now()) return;
+            if (typeof msg.expiresAt === "string" &&
+              new Date(expiresAt).toISOString().slice(0, 19) !== msg.expiresAt.slice(0, 19)) return;
             const deferred = isDeferredWebRtcTransport(msg.transport, msg.deferredMedia);
             const direct = isDirectWebRtcTransport(msg.transport, msg.deferredMedia, msg.offer);
             const agora = !deferred &&
@@ -1878,11 +1966,7 @@ export function useCall(user: { id: number; username: string } | null) {
               callerId: msg.callerId,
               callerName: msg.callerName,
               callerAvatar: msg.callerAvatar,
-              expiresAt: typeof msg.expiresAt === "number"
-                ? msg.expiresAt
-                : typeof msg.expiresAt === "string" && Number.isFinite(Date.parse(msg.expiresAt))
-                  ? Date.parse(msg.expiresAt)
-                  : undefined,
+              expiresAt,
               deferredMedia: deferred,
             });
             setCallPhase("ringing");
@@ -1894,6 +1978,9 @@ export function useCall(user: { id: number; username: string } | null) {
               );
             }
             clearRingTimer();
+            const expiry = { callId: msg.callId, generation: callGenerationRef.current, expiresAt };
+            incomingExpiryRef.current = expiry;
+            checkIncomingExpiry(expiry);
           }
         }
 
@@ -2288,7 +2375,7 @@ export function useCall(user: { id: number; username: string } | null) {
       setCallError(null);
       setCallBusy(false);
     };
-  }, [user?.id, user?.username, isOnline, answerWebRtcOffer, beginCallerWebRtc, flushPendingCallIce, leaveAgora, rejectPendingCallSetups, resumeCurrentCall, scheduleHybridFallback, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting, settleCallReady, settleDurableAnswer, signalingDeviceIdFor, switchToAgoraAfterServerAck]);
+  }, [user?.id, user?.username, isOnline, answerWebRtcOffer, beginCallerWebRtc, checkIncomingExpiry, clearRingTimer, flushPendingCallIce, leaveAgora, rejectPendingCallSetups, resumeCurrentCall, scheduleHybridFallback, setActualMediaConnected, setRealtimeConnected, setRealtimeConnecting, settleCallReady, settleDurableAnswer, signalingDeviceIdFor, switchToAgoraAfterServerAck]);
 
   // A route change or logout must not leave a microphone/camera LED on.
   useEffect(() => () => {
@@ -2526,13 +2613,35 @@ export function useCall(user: { id: number; username: string } | null) {
   const answerCall = useCallback(async (withVideo = true) => {
     const invitation = incomingCall;
     if (!invitation) return;
+    const expiry = incomingExpiryRef.current;
+    if (!expiry || expiry.callId !== invitation.callId ||
+      currentCallIdRef.current !== invitation.callId ||
+      callGenerationRef.current !== expiry.generation) return;
+    if (!Number.isFinite(invitation.expiresAt) || invitation.expiresAt <= Date.now()) {
+      expireIncomingRef.current(expiry);
+      return;
+    }
     const deferred = isDeferredWebRtcTransport(invitation.transport, invitation.deferredMedia);
     const agora = !deferred &&
       invitation.transport?.provider === "agora" &&
       invitation.transport?.version === 1 &&
       invitation.offer === null;
     const generation = callGenerationRef.current;
+    // Direct SDP preparation can cross the deadline (permissions, keys, TURN).
+    // Once consent is sent, only the authoritative server may end that call;
+    // in particular Agora's durable acceptance must survive the old deadline.
+    let consentSent = false;
+    const canAnswer = () => currentCallIdRef.current === invitation.callId &&
+      callGenerationRef.current === generation &&
+      (consentSent || Date.now() < invitation.expiresAt);
+    const assertCanAnswer = () => {
+      if (currentCallIdRef.current !== invitation.callId || callGenerationRef.current !== generation) {
+        throw new Error("CALL_SETUP_CANCELLED");
+      }
+      if (!canAnswer()) throw new Error("CALL_INVITATION_EXPIRED");
+    };
     try {
+      assertCanAnswer();
       if (!deferred && !agora && !isDirectWebRtcTransport(invitation.transport, invitation.deferredMedia, invitation.offer)) {
         throw new Error("Secure call media protocol is unavailable");
       }
@@ -2553,7 +2662,8 @@ export function useCall(user: { id: number; username: string } | null) {
       setCallStatus("calling");
       if (deferred) {
         // Compatibility path: the caller creates SDP after this consent frame.
-        sendWS({
+        assertCanAnswer();
+        consentSent = sendWS({
           type: "call-answer",
           to: invitation.from,
           answer: null,
@@ -2568,8 +2678,9 @@ export function useCall(user: { id: number; username: string } | null) {
         // Answer is only an invitation-consent signal. The durable selected
         // device/session is established by the authoritative store before any
         // callee token request or media permission operation.
+        assertCanAnswer();
         const answerReady = waitForDurableAnswer(invitation.callId);
-        sendWS({
+        consentSent = sendWS({
           type: "call-answer",
           to: invitation.from,
           answer: null,
@@ -2581,6 +2692,9 @@ export function useCall(user: { id: number; username: string } | null) {
         const resumeTimer = setInterval(() => sendWS({ type: "call-resume", callId: invitation.callId }), 500);
         try {
           await answerReady;
+          // This authoritative selected-device acknowledgement wins even if
+          // signaling send returned false or the original ring deadline passed.
+          consentSent = true;
         } finally {
           clearInterval(resumeTimer);
         }
@@ -2588,9 +2702,11 @@ export function useCall(user: { id: number; username: string } | null) {
           throw new Error("CALL_SETUP_CANCELLED");
         }
         const identity = await ensureDeviceIdentity(user.id);
+        assertCanAnswer();
         const envelope = invitation.e2e?.devices?.[identity.deviceId];
         if (!envelope) throw new Error("Secure call key is unavailable for this device");
         const secret = await decryptCallSecret(user.id, envelope);
+        assertCanAnswer();
         callSecretRef.current = secret;
         await createAgoraCall(
           invitation.callId,
@@ -2609,20 +2725,24 @@ export function useCall(user: { id: number; username: string } | null) {
       // answer here is the first callee media operation, after explicit Answer.
       if (!user) throw new Error("CALL_SETUP_CANCELLED");
       const identity = await ensureDeviceIdentity(user.id);
+      assertCanAnswer();
       const envelope = invitation.e2e?.devices?.[identity.deviceId];
       if (!envelope) throw new Error("Secure call key is unavailable for this device");
-      callSecretRef.current = await decryptCallSecret(user.id, envelope);
+      const secret = await decryptCallSecret(user.id, envelope);
+      assertCanAnswer();
+      callSecretRef.current = secret;
       const answer = await answerWebRtcOffer({
         callId: invitation.callId,
         from: invitation.from,
         offer: invitation.offer!,
-      }, withVideo && invitation.video, "direct");
+      }, withVideo && invitation.video, "direct", canAnswer);
+      assertCanAnswer();
       if (!answer) throw new Error("CALL_SETUP_CANCELLED");
       if (currentCallIdRef.current !== invitation.callId || callGenerationRef.current !== generation) return;
       // Direct SDP has now been negotiated. Only this point can start hybrid's
       // bounded fallback window; an unanswered invitation never can.
       scheduleHybridFallback(invitation.callId);
-      sendWS({
+      consentSent = sendWS({
         type: "call-answer",
         to: invitation.from,
         answer,
@@ -2633,9 +2753,11 @@ export function useCall(user: { id: number; username: string } | null) {
     } catch (err: unknown) {
       console.error("[CALL] Failed to answer:", err);
       if (currentCallIdRef.current !== invitation.callId || callGenerationRef.current !== generation) return;
+      clearRingTimer();
       void leaveAgora();
+      const expired = !consentSent && invitation.expiresAt <= Date.now();
       // Tell the caller the answer failed so they don't ring forever.
-      sendWS({ type: "call-reject", to: invitation.from, callId: invitation.callId });
+      if (!expired) sendWS({ type: "call-reject", to: invitation.from, callId: invitation.callId });
       currentCallIdRef.current = null;
       callGenerationRef.current += 1;
       callDirectionRef.current = null;
@@ -2646,15 +2768,18 @@ export function useCall(user: { id: number; username: string } | null) {
       setCallPhase("idle");
       setCallStatus("idle");
       const message = err instanceof Error ? err.message : "";
-      showCallError(message.includes("secure") || message.includes("Secure") || message.includes("E2E")
+      showCallError(expired ? "انتهت صلاحية دعوة المكالمة"
+        : message.includes("secure") || message.includes("Secure") || message.includes("E2E")
         ? `🔐 ${message}`
         : mediaFailureMessage(err));
     }
-  }, [answerWebRtcOffer, createAgoraCall, decryptCallSecret, incomingCall, leaveAgora, scheduleHybridFallback, sendWS, signalingDeviceIdFor, user, waitForDurableAnswer]);
+  }, [answerWebRtcOffer, clearRingTimer, createAgoraCall, decryptCallSecret, incomingCall, leaveAgora, scheduleHybridFallback, sendWS, signalingDeviceIdFor, user, waitForDurableAnswer]);
 
   // ── Reject call ───────────────────────────────────────────────────────────
   const rejectCall = useCallback(() => {
     if (!incomingCall) return;
+    if (currentCallIdRef.current !== incomingCall.callId || incomingExpiryRef.current?.callId !== incomingCall.callId) return;
+    clearRingTimer();
     sendWS({ type: "call-reject", to: incomingCall.from, callId: incomingCall.callId });
     currentCallIdRef.current = null;
     callGenerationRef.current += 1;
@@ -2662,7 +2787,7 @@ export function useCall(user: { id: number; username: string } | null) {
     setIncomingCall(null);
     setCallPhase("idle");
     setCallStatus("idle");
-  }, [incomingCall, sendWS]);
+  }, [clearRingTimer, incomingCall, sendWS]);
 
   const clearNotificationCallActionUrl = useCallback(() => {
     const url = new URL(window.location.href);
