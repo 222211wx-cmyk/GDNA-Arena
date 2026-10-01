@@ -2546,7 +2546,7 @@ function detectInitialLang(): Lang {
   return "ar";
 }
 
-export function LangProvider({ children }: { children: ReactNode }) {
+export function LangProvider({ children, manageDocument = true }: { children: ReactNode; manageDocument?: boolean }) {
   const [lang, setLangState] = useState<Lang>(detectInitialLang);
 
   const setLang = (l: Lang) => {
@@ -2556,9 +2556,11 @@ export function LangProvider({ children }: { children: ReactNode }) {
 
   // Apply RTL/LTR to <html> whenever language changes
   useEffect(() => {
+    // Supplementary React islands must not change a vanilla shell's language.
+    if (!manageDocument) return;
     document.documentElement.dir  = lang === "ar" ? "rtl" : "ltr";
     document.documentElement.lang = lang;
-  }, [lang]);
+  }, [lang, manageDocument]);
 
   const t = (key: string): string => {
     return T[lang]?.[key] ?? key;

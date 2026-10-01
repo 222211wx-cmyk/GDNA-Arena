@@ -3,9 +3,9 @@ name: Browser call verification
 description: Cross-route acceptance coverage and real browser push test constraints
 ---
 
-- Keep website calling work on the original `/messages` entry, without adding a new product tab or silently moving the solution into a native application.
-  **Why:** On 2026-10-01 the owner explicitly required this web-only entry, superseding the earlier dotted messenger URL, even while supplying a React Native implementation example.
-  **How to apply:** Adapt the intent to browser capabilities; explain that background notifications are not a guarantee of native full-screen, continuous ringing. Native-only libraries are not a web fix.
+- Preserve `/messages` as the messenger entry, but receive calls across the entire website, not only inside that page. Do not add a new product tab or substitute a native application.
+  **Why:** On 2026-10-01 the owner clarified that the immediate problem is in-app reception on Market/Arena and other pages, not FCM waking a closed phone.
+  **How to apply:** Keep authenticated call signaling and incoming UI independent of the selected page and optional push permissions. Cover alternate lightweight shells, not just the main router. Respect browser audio activation requirements without adding unsolicited setup banners.
 
 - Verify global incoming calls with a fresh recipient who has never opened Communications or Messages.
   **Why:** testing both peers inside Messages masked device registration failures even though the provider was already mounted globally.

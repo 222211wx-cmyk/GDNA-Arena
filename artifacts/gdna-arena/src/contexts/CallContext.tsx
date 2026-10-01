@@ -21,6 +21,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         localStream={call.localStream}
         remoteStream={call.remoteStream}
         incomingCall={call.incomingCall}
+        soundBlocked={call.soundBlocked}
+        onEnableCallSound={call.enableCallSound}
         onAnswer={call.answerCall}
         onReject={call.rejectCall}
         onEnd={call.endCall}

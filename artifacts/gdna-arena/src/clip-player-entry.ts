@@ -1,4 +1,5 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
+import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import { mountVideoActions, type VideoActionState } from "./components/clips/VideoActions";
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
 import { reelsIcons } from "./components/clips/reelsIcons";
@@ -177,6 +178,11 @@ export function renderClipPlayer(code: string) {
         <a class="direct-nav-item" href="${BASE}login">${reelsIcons.navFriends(false)}<span>Profil</span></a>
       </nav>
     </div>`;
+  const calls = createLightweightCallBoundary(root);
+  void identityPromise.then(identity => {
+    if (identity.status === "authenticated") calls.setAccount(identity.accountId);
+    else if (identity.status === "anonymous") calls.setAccount(null);
+  });
 
   const name = document.getElementById("player-name") as HTMLHeadingElement;
   const mediaRoot = document.getElementById("player-media") as HTMLDivElement;

@@ -246,7 +246,7 @@ export function useCall(user: { id: number; username: string } | null) {
   const [callStatus,   setCallStatus]   = useState<CallStatus>("idle");
   const [callPhase, setCallPhase] = useState<CallPhase>("idle");
   // Browsers start with audio locked until a trusted user gesture resumes an
-  // AudioContext. Starting in the blocked state keeps the global UI honest.
+  // AudioContext. Only the incoming overlay/settings expose sound recovery.
   const [soundBlocked, setSoundBlocked] = useState(true);
   const [secureCallRegistrationStatus, setSecureCallRegistrationStatus] =
     useState<SecureCallRegistrationStatus>("idle");
@@ -541,43 +541,46 @@ export function useCall(user: { id: number; username: string } | null) {
   );
 
   const enableCallSound = useCallback(async () => {
-    ringtoneRef.current ??= new CallRingtone();
-    const enabled = await ringtoneRef.current.enable();
+    const ringtone = ringtoneRef.current ??= new CallRingtone();
+    const enabled = await ringtone.enable();
+    // An unlock may settle after this provider unmounts. It must not publish
+    // readiness or restart a tone belonging to the disposed provider.
+    if (ringtoneRef.current !== ringtone) return false;
     setSoundBlocked(!enabled);
-    if (enabled) {
-      const kind = callStatus === "ringing"
-        ? "incoming"
-        : callStatus === "calling" && callDirectionRef.current === "outgoing" && callPhase === "ringing"
-          ? "ringback"
-          : null;
-      if (kind) ringtoneRef.current.start(kind);
-    }
+    // The effect below uses the current call state to start audio. Never use a
+    // pre-await ringing snapshot: the caller may have cancelled during resume().
     return enabled;
-  }, [callPhase, callStatus]);
+  }, []);
 
   // Unlock ringtone audio on the first ordinary trusted interaction, but never
-  // couple that interaction to a notification permission prompt.
+  // couple that interaction to a notification permission prompt. Listen before
+  // authentication settles so a login tap also unlocks this tab's audio.
   useEffect(() => {
-    if (!user || !soundBlocked) return;
+    if (!soundBlocked) return;
+    const removeListeners = () => {
+      window.removeEventListener("click", unlock, true);
+      window.removeEventListener("touchend", unlock, true);
+      window.removeEventListener("keydown", unlock, true);
+    };
     const unlock = (event: Event) => {
       if (!event.isTrusted) return;
       if (event instanceof KeyboardEvent && (event.metaKey || event.ctrlKey || event.altKey)) return;
       void enableCallSound().then((enabled) => {
-        if (!enabled) return;
-        window.removeEventListener("click", unlock);
-        window.removeEventListener("keydown", unlock);
+        if (enabled) removeListeners();
       });
     };
-    window.addEventListener("click", unlock);
-    window.addEventListener("keydown", unlock);
-    return () => {
-      window.removeEventListener("click", unlock);
-      window.removeEventListener("keydown", unlock);
-    };
-  }, [enableCallSound, soundBlocked, user?.id]);
+    // Capture keeps routed controls that stop bubbling from swallowing the
+    // gesture; touchend also covers mobile controls that suppress click.
+    window.addEventListener("click", unlock, true);
+    window.addEventListener("touchend", unlock, { capture: true, passive: true });
+    window.addEventListener("keydown", unlock, true);
+    return removeListeners;
+  }, [enableCallSound, soundBlocked]);
 
   useEffect(() => {
-    const ringing = callStatus === "ringing"
+    const ringing = !user
+      ? null
+      : callStatus === "ringing"
       ? "incoming"
       : callStatus === "calling" && callDirectionRef.current === "outgoing" && callPhase === "ringing"
         ? "ringback"
@@ -603,15 +606,17 @@ export function useCall(user: { id: number; username: string } | null) {
         try { navigator.vibrate(0); } catch { /* best effort */ }
       }
     };
-  }, [callPhase, callStatus]);
+  }, [callPhase, callStatus, soundBlocked, user?.id]);
 
   useEffect(() => {
-    if (!user) {
-      void ringtoneRef.current?.close();
-      return;
-    }
-    return () => { void ringtoneRef.current?.close(); };
-  }, [user?.id]);
+    // Audio activation is tab-scoped, not account-scoped. Do not close an
+    // already-unlocked context when the login handshake supplies the user.
+    return () => {
+      const ringtone = ringtoneRef.current;
+      ringtoneRef.current = null;
+      void ringtone?.close();
+    };
+  }, []);
 
   const setActualMediaConnected = useCallback((next: boolean) => {
     mediaConnectedRef.current = next;

@@ -8,8 +8,7 @@ import { isMessagesEntryPath, MESSAGES_ENTRY_PATH, messagesReturnPath } from "@/
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
 import { LegalProvider } from "@/contexts/LegalContext";
-import { CallProvider } from "@/contexts/CallContext";
-import { GroupCallProvider } from "@/contexts/GroupCallContext";
+import { GlobalCallBoundary } from "@/contexts/GlobalCallBoundary";
 import { ConnectivityProvider } from "@/contexts/ConnectivityContext";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import CookieBanner from "@/components/legal/CookieBanner";
@@ -291,14 +290,12 @@ function App() {
             <ConnectivityBanner />
             <LegalProvider>
               <AuthProvider>
-                <CallProvider>
-                  <GroupCallProvider>
-                    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                      <Router />
-                    </WouterRouter>
-                    <Toaster />
-                  </GroupCallProvider>
-                </CallProvider>
+                <GlobalCallBoundary>
+                  <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                    <Router />
+                  </WouterRouter>
+                  <Toaster />
+                </GlobalCallBoundary>
               </AuthProvider>
             </LegalProvider>
           </ConnectivityProvider>

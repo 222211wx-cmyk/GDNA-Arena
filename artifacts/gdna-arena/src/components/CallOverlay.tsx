@@ -44,6 +44,8 @@ interface Props {
   localStream:    MediaStream | null;
   remoteStream:   MediaStream | null;
   incomingCall:   IncomingCallView | null;
+  soundBlocked?:  boolean;
+  onEnableCallSound?: () => Promise<boolean>;
   onAnswer:       (video: boolean) => void;
   onReject:       () => void;
   onEnd:          () => void;
@@ -85,6 +87,7 @@ interface Props {
 
 export default function CallOverlay({
   status, callPhase, peer, localStream, remoteStream, incomingCall, onAnswer, onReject, onEnd,
+  soundBlocked = false, onEnableCallSound,
   screenSharing = false, onScreenShare, onStopScreen, callError,
   devices = [], selectedMicrophoneId = "", selectedCameraId = "", selectedSpeakerId = "",
   speakerSelectionSupported = false, deviceIssue = null, switchingDevice = null,
@@ -284,6 +287,19 @@ export default function CallOverlay({
                 {incomingCall.video ? st.incoming_video_call : st.incoming_voice_call}
               </p>
             </div>
+
+            {soundBlocked && onEnableCallSound && (
+              <Button
+                type="button"
+                data-testid="button-enable-incoming-call-sound"
+                variant="outline"
+                className="gap-2"
+                onClick={() => void onEnableCallSound()}
+              >
+                <Volume2 className="h-4 w-4" aria-hidden="true" />
+                {ct.enable_sound}
+              </Button>
+            )}
 
             {callError && (
               <div

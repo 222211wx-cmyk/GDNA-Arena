@@ -1,4 +1,5 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
+import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import {
   MAX_CLIP_BYTES,
   uploadClip,
@@ -106,6 +107,7 @@ root.innerHTML = `
 </main>
 </div>
 </div>`;
+const calls = createLightweightCallBoundary(root);
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const auth = element<HTMLDivElement>("auth");
@@ -698,12 +700,14 @@ async function loadAuth() {
       credentials: "include", cache: "no-store", signal: controller.signal,
     });
     if (response.status === 401) {
+      calls.setAccount(null);
       auth.innerHTML = `<a href="${BASE}login">سجل الدخول لرفع الصوت أو الفيديو</a>`;
       return;
     }
     if (!response.ok) throw new Error();
     const me = await response.json().catch(() => null);
     if (me && Number.isSafeInteger(me.id)) {
+      calls.setAccount(me.id);
       uploadOwner = me.id;
       void refreshPendingUploads();
       // The R2 status endpoint is authenticated; only probe it once we know the

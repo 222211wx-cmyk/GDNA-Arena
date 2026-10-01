@@ -14,6 +14,7 @@ import { networkBanner } from "./lite/components";
 import { parseRoute, href, editionOf, type Route } from "./lite/router";
 import { EDITION_LANGS, RTL_LANGS, stringsFor, type LiteLang, type Strings } from "./lite/i18n";
 import { refreshSession, subscribeSession, getUser } from "./lite/session";
+import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import { syncQueue } from "./lite/messaging";
 import {
   homePage,
@@ -123,6 +124,7 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
   app.appendChild(nav);
   app.appendChild(outlet);
   mount(host, app);
+  const calls = createLightweightCallBoundary(app);
 
   let route = parseRoute(location.pathname);
   let lang = defaultLangFor(editionOf(route), options.lang);
@@ -313,6 +315,7 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
   let lastNavId: number | null = getUser()?.id ?? null;
   const unsubSession = subscribeSession((u) => {
     const id = u?.id ?? null;
+    calls.setAccount(id);
     if (id !== lastNavId) {
       lastNavId = id;
       render();
@@ -371,6 +374,7 @@ export function mountLite(root?: Element | null, options: MountOptions = {}): ()
     window.removeEventListener("online", onOnline);
     navigator.serviceWorker?.removeEventListener?.("message", onSwMessage);
     unsubSession();
+    calls.dispose();
     net.dispose();
     mount(host);
   };
