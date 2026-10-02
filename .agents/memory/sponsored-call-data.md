@@ -9,8 +9,8 @@ The user approved an optional caller-funded data bundle for the recipient after 
 
 **How to apply:** Keep ordinary calls free and independent. Use actual operator/product eligibility and verified provider transactions; simulated platform coins are not funds. Do not infer depleted balance from failed calls, bypass blocks or declines, automatically debit the caller, guarantee worldwide availability, or market this as a replacement for emergency services. Any real payment-provider choice still requires explicit setup; this approval does not select or reintroduce Stripe.
 
-Connectivity and funding should accommodate the citizen rather than force one balance source.
+Ordinary connectivity uses the citizen's existing Wi-Fi subscription or mobile-data top-up; do not turn this into an in-app funding-choice flow.
 
-**Why:** When asked whether to use an internet bundle, SIM airtime, or an in-app balance, the owner answered “حسب المواطن”.
+**Why:** After answering “حسب المواطن”, the owner clarified that citizens bear connectivity costs through Wi-Fi or top-ups and objected to repeated questions about balance sources. The earlier interpretation as a request for a wallet/SIM payment selector was not established.
 
-**How to apply:** Offer only genuinely available options with explicit citizen choice. This does not authorize automatic deductions, establish carrier integrations, or override the existing simulation-only finance policy.
+**How to apply:** Let the device use its available internet connection and leave network charging to the operator under the citizen's plan. Do not infer a request for PSTN calling, direct carrier-balance deductions, a mandatory wallet, or a second per-call charge. Keep the separately approved optional sponsored-data feature distinct.
