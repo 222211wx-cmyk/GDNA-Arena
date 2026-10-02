@@ -40,6 +40,7 @@ type SignalMsg =
   | { type: "call-cancel"; callId: string } | { type: "call-reject"; to: string; callId: string }
   | { type: "call-end"; to: string; callId: string }
   | { type: "call-heartbeat"; callId: string; background?: boolean }
+  | { type: "call-media-state"; callId: string; connected: boolean }
   | { type: "call-provider-switch"; callId: string; provider: "agora" }
   | { type: "call-recording-control"; callId: string; requestId: string; action: "request" | "accept" | "reject" | "stop" | "revoke" }
   | { type: "call-webrtc-offer"; callId: string; offer: StoredDescription; transport?: CallTransport }
@@ -327,7 +328,7 @@ export async function broadcastMessageToRoom(roomId: number, message: object) { 
 
 export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {
   // Startup and periodic reconciliation are bounded by the transaction's
-  // conditional lock ownership checks; legacy answered calls are excluded.
+  // conditional lock ownership checks, including abandoned legacy calls.
   let cleanupRunning = false;
   const cleanup = () => {
     if (cleanupRunning) return;
@@ -376,6 +377,18 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
       }
       if (!self) { send(ws, { type: "error", message: "Not registered" }); return; }
       if (msg.type === "ping") { send(ws, { type: "pong" }); return; }
+      if (msg.type === "call-media-state") {
+        // Old web clients already emit this every five seconds, but a generic
+        // connected socket (or login session) must never renew a ghost call.
+        if (msg.connected === true) {
+          try {
+            await heartbeatAuthoritativeCall(msg.callId, self.userId, self.sessionId, self.deviceId);
+          } catch {
+            send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SIGNALING_UNAVAILABLE" });
+          }
+        }
+        return;
+      }
       if (msg.type === "call-heartbeat") {
         try { if (!await heartbeatAuthoritativeCall(msg.callId, self.userId, self.sessionId, self.deviceId, msg.background === true))
           send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SESSION_DENIED" });
@@ -546,7 +559,9 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
     ws.on("close", () => {
       const tracked = socketsBySessionId.get(sessionId); tracked?.delete(ws); if (!tracked?.size) socketsBySessionId.delete(sessionId);
       if (!self) return;
-      self.stopCalls?.(); // Calls are deliberately retained; socket close is not terminal.
+      // Preserve brief reconnects. Each participant must renew its call-specific
+      // lease within 60s; the peer alone cannot keep a disconnected call busy.
+      self.stopCalls?.();
       if (self.liveId) { lives.delete(self.liveId); wss.clients.forEach(client => send(client, { type: "live-ended", liveId: self!.liveId })); }
       removeClient(self); wss.clients.forEach(client => send(client, { type: "online-list", users: [...clients.keys()] }));
     });
