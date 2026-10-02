@@ -14,6 +14,8 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { directAttachmentUpload } from "./directAttachmentUpload";
+import { MessageInputBoundary } from "./MessageInputBoundary";
 import { trackEvent } from "@/lib/analytics";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -1328,7 +1330,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recStreamRef = useRef<MediaStream | null>(null);
   // Maps pending item id → its live XHR so individual items can be aborted
-  const xhrMapRef = useRef<Map<string, XMLHttpRequest>>(new Map());
+  const xhrMapRef = useRef<Map<string, { abort(): void }>>(new Map());
+  const directUploadsRef = useRef<Set<AbortController>>(new Set());
   const cancelledUploadIdsRef = useRef<Set<string>>(new Set());
   const activeUploadsRef = useRef<Set<XMLHttpRequest>>(new Set());
   const recCancelledRef = useRef(false);
@@ -1524,6 +1527,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       recStreamRef.current?.getTracks().forEach(t => t.stop());
       for (const xhr of activeUploadsRef.current) xhr.abort();
       activeUploadsRef.current.clear();
+      for (const controller of directUploadsRef.current) controller.abort();
+      directUploadsRef.current.clear();
       xhrMapRef.current.clear();
       cancelledUploadIdsRef.current.clear();
       for (const item of pendingRef.current) {
@@ -1589,8 +1594,11 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     void loadRooms().then(list => {
       if (cancelled || initialRoomId === null || !isOnline) return;
       const requestedRoom = list.find(room => room.id === initialRoomId);
-      if (requestedRoom) void openRoom(requestedRoom);
-      else onActiveRoomChange?.(null);
+      if (requestedRoom) {
+        // Returning from a picker or reconnecting must not reopen the same
+        // room: openRoom clears the pending attachment queue.
+        if (activeRoomIdRef.current !== requestedRoom.id) void openRoom(requestedRoom);
+      } else if (activeRoomIdRef.current === null) onActiveRoomChange?.(null);
     });
     return () => { cancelled = true; };
   }, [initialRoomId, isOnline, loadRooms, onActiveRoomChange]);
@@ -1970,46 +1978,6 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     setTimeout(() => textRef.current?.focus(), 100);
   }
 
-  // Upload one file/blob with real progress events (XHR — fetch has no upload progress).
-  // Returns the XHR so callers can register it in xhrMapRef for per-item cancellation.
-  function uploadWithProgress(
-    file: File | Blob,
-    fallbackName: string,
-    onProgress: (pct: number) => void,
-    onXhr: (xhr: XMLHttpRequest) => void,
-    uploadQuery: string,
-  ) {
-    if (!isOnline) return Promise.resolve({ ok: false, status: 0, json: {}, aborted: false });
-    return new Promise<{ ok: boolean; status: number; json: any; aborted: boolean }>((resolve) => {
-      const fd = new FormData();
-      fd.append("file", file, file instanceof File ? file.name : `${fallbackName}.webm`);
-      const xhr = new XMLHttpRequest();
-      onXhr(xhr);
-      activeUploadsRef.current.add(xhr);
-      xhr.open("POST", api(`/api/messages/upload${uploadQuery}`));
-      xhr.withCredentials = true;
-      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
-      xhr.onload = () => {
-        activeUploadsRef.current.delete(xhr);
-        let json: any = {};
-        try {
-          const parsed = JSON.parse(xhr.responseText);
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) json = parsed;
-        } catch { /* non-JSON error body */ }
-        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json, aborted: false });
-      };
-      xhr.onerror = () => {
-        activeUploadsRef.current.delete(xhr);
-        resolve({ ok: false, status: 0, json: {}, aborted: false });
-      };
-      xhr.onabort = () => {
-        activeUploadsRef.current.delete(xhr);
-        resolve({ ok: false, status: 0, json: {}, aborted: true });
-      };
-      xhr.send(fd);
-    });
-  }
-
   async function uploadAndSend(
     file: File | Blob,
     pendingId: string,
@@ -2037,9 +2005,20 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         cancelledUploadIdsRef.current.has(pendingId) || !pendingRef.current.some(p => p.id === pendingId)) {
       return "cancelled";
     }
-    const r = await uploadWithProgress(encryptedAttachment.blob, `${fallbackName}.enc`, onProgress, (xhr) => {
-      xhrMapRef.current.set(pendingId, xhr);
-    }, attachmentUploadQuery(roomId, encryptedAttachment.metadata.kind));
+    const controller = new AbortController();
+    xhrMapRef.current.set(pendingId, controller);
+    directUploadsRef.current.add(controller);
+    let r: { ok: boolean; status: number; json: { url?: string; error?: string }; aborted: boolean };
+    try {
+      const json = await directAttachmentUpload(
+        api(`/api/messages/upload/direct${attachmentUploadQuery(roomId, encryptedAttachment.metadata.kind)}`),
+        encryptedAttachment.blob, controller.signal, onProgress,
+      );
+      r = { ok: true, status: 200, json, aborted: false };
+    } catch (error) {
+      r = { ok: false, status: 0, json: { error: error instanceof Error ? error.message : st.upload_failed },
+        aborted: controller.signal.aborted };
+    } finally { directUploadsRef.current.delete(controller); }
     xhrMapRef.current.delete(pendingId);
     if (r.aborted || cancelledUploadIdsRef.current.has(pendingId)) return "cancelled";
     if (!mountedRef.current) return "cancelled";
@@ -2100,8 +2079,12 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    stageFiles(files, true);
-    setShowAttachTray(false);
+    try {
+      stageFiles(files, true);
+      setShowAttachTray(false);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : st.upload_failed);
+    }
   }
 
   async function shareDeviceContacts() {
@@ -2242,7 +2225,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
           break;
         }
       }
-    } finally { uploadingRef.current = false; setUploading(false); }
+    } catch (error) {
+      if (mountedRef.current) {
+        setToast(error instanceof Error ? error.message : st.upload_failed);
+        updatePending(prev => prev.map(p => p.status === "uploading"
+          ? { ...p, status: "error", progress: 0, autoSend: false } : { ...p, autoSend: false }));
+      }
+    } finally { uploadingRef.current = false; if (mountedRef.current) setUploading(false); }
   }
 
   useEffect(() => {
@@ -2972,6 +2961,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       </div>
 
       {/* ── Attachment preview strip (multi-file, per-file progress + individual cancel) ── */}
+      <MessageInputBoundary>
       {pending.length > 0 && (
         <div style={{ padding: "10px 14px", background: BG_BAR, borderTop: `1px solid ${GOLD_A(0.063)}`, flexShrink: 0 }}>
           <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
@@ -2981,7 +2971,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                   {p.previewUrl && p.file.type.startsWith("image/") ? (
                     <img src={p.previewUrl} alt={p.file.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : p.previewUrl && p.file.type.startsWith("video/") ? (
-                    <video src={p.previewUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
+                    <video src={p.previewUrl} preload="metadata" playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
                   ) : p.previewUrl && p.file.type.startsWith("audio/") ? (
                     <audio controls src={p.previewUrl} style={{ width: 88, height: 34 }} />
                   ) : (
@@ -3024,11 +3014,11 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                 ? `${st.uploading ?? "Uploading…"} (${pending.findIndex(p => p.status === "uploading") + 1}/${pending.length})`
                 : `${pending.length} file${pending.length !== 1 ? "s" : ""} ready`}
             </div>
-            <button onClick={() => void confirmPending()} disabled={!isOnline || uploading || pending.every(p => p.status === "uploading")} title={st.send}
+            <button type="button" onClick={() => void confirmPending()} disabled={!isOnline || uploading || pending.every(p => p.status === "uploading")} title={st.send}
               style={{ width: 42, height: 42, borderRadius: "50%", background: uploading ? "#1c1c1c" : GOLD, border: "none", color: uploading ? "#555" : "#000", cursor: uploading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Send size={18} />
             </button>
-            <button onClick={cancelPending} title={st.cancel_all ?? "Cancel all"} aria-label={st.cancel_all ?? "Cancel all"}
+            <button type="button" onClick={cancelPending} title={st.cancel_all ?? "Cancel all"} aria-label={st.cancel_all ?? "Cancel all"}
               style={{ width: 34, height: 34, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#ef4444", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <X size={15} />
             </button>
@@ -3043,6 +3033,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
 
       {/* ── Composer ── */}
       {composerEl}
+      </MessageInputBoundary>
     </div>
   );
 

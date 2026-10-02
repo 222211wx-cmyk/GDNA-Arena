@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { Readable } from "node:stream";
+import { beginChatUpload, readChatTicket, completeChatUpload, abortChatUpload, getDirectChatObject } from "../lib/chat-direct-upload";
 import { CLIENT_MESSAGE_ID, messageRequestHash, messageReplay, saveMessageReceipt } from "../lib/message-idempotency";
 import { expectedSenderGuard } from "../lib/message-sender-guard";
 import { requireMessagingSubscription } from "../middleware/require-messaging-subscription";
@@ -233,6 +235,38 @@ router.post("/messages/upload", requireMessagingSubscription, async (req, res): 
   });
 });
 
+router.post("/messages/upload/direct", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  try {
+    if (req.body?.action === "start") {
+      const intent = await authorizeMessageUpload(req.query, userId, getMembership);
+      if (!intent.roomId || await directRoomUnavailable(intent.roomId, userId)) {
+        res.status(403).json({ error: "Conversation unavailable" }); return;
+      }
+      const size = req.body.size;
+      if (!Number.isSafeInteger(size) || size < 17 || size > messageUploadByteLimit(intent, "application/octet-stream")) {
+        res.status(413).json({ error: "Invalid attachment size" }); return;
+      }
+      if (!uploadAllowed(userId)) { res.status(429).json({ error: "Upload limit reached — please try later" }); return; }
+      res.json(await beginChatUpload(userId, intent.roomId, size)); return;
+    }
+    const ticket = readChatTicket(String(req.body?.ticket || ""), userId);
+    if (!await getMembership(ticket.room, userId) || await directRoomUnavailable(ticket.room, userId)) {
+      res.status(403).json({ error: "Conversation unavailable" }); return;
+    }
+    if (req.body?.action === "abort") {
+      await abortChatUpload(ticket); res.json({ success: true }); return;
+    }
+    if (req.body?.action !== "complete") { res.status(400).json({ error: "Invalid action" }); return; }
+    res.json({ url: await completeChatUpload(ticket) });
+  } catch (error) {
+    console.error("Direct chat upload failed", error instanceof Error ? error.name : "Storage error");
+    res.status(error instanceof MessageUploadPolicyError ? error.status : 503)
+      .json({ error: "تعذر رفع الملف. بقيت المحادثة محفوظة — حاول مرة أخرى." });
+  }
+});
+
 // GET /messages/files/:name — serve an uploaded attachment (login required)
 router.get("/messages/files/:name", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
@@ -268,6 +302,14 @@ router.get("/messages/files/:name", async (req, res): Promise<void> => {
   };
 
   try {
+    if (/^r2chat-[a-f0-9-]+\.enc$/.test(name)) {
+      const object = await getDirectChatObject(name);
+      if (!(object.Body instanceof Readable)) throw new Error("Invalid storage stream");
+      setSecurityHeaders();
+      if (object.ContentLength !== undefined) res.setHeader("Content-Length", object.ContentLength);
+      object.Body.on("error", () => { if (!res.headersSent) res.sendStatus(503); else res.destroy(); }).pipe(res);
+      return;
+    }
     const file = await getChatObject(name);
     if (file) {
       setSecurityHeaders();

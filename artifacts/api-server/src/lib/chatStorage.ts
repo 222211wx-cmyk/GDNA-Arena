@@ -124,6 +124,11 @@ export async function getChatObject(name: string): Promise<File | null> {
 
 /** Permanently remove one chat attachment from private object storage. */
 export async function deleteChatObject(name: string): Promise<void> {
+  if (/^r2chat-[a-f0-9-]+\.enc$/.test(name)) {
+    const { deleteDirectChatObject } = await import("./chat-direct-upload");
+    await deleteDirectChatObject(name);
+    return;
+  }
   await chatObjectFile(name).delete({ ignoreNotFound: true });
 }
 
