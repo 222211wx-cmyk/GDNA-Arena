@@ -31,6 +31,7 @@ interface DeferredCallDeclineResult {
 interface Client {
   ws: WebSocket; userId: number; sessionId: string; deviceId: string; username: string;
   liveId: string | null; stopCalls?: () => void;
+  observedCalls: Set<string>;
 }
 type SignalMsg =
   | { type: "register"; userId: number; username: string; deviceId?: string }
@@ -150,6 +151,10 @@ function wirePayload(record: CallRecord, signal: { kind: string; signalId: strin
   return { type: signal.kind, from, callId: record.callId, signalId: signal.signalId, ...signal.payload, transport: record.transport };
 }
 function deliverCallSnapshot(client: Client, record: CallRecord) {
+  // History is not live presence. Do not resurrect an old answered call when
+  // a freshly registered socket subscribes to historical documents.
+  if (record.status === "ringing" && !record.endedAt) client.observedCalls.add(record.callId);
+  if (record.status === "answered" && !client.observedCalls.has(record.callId)) return;
   const caller = client.userId === record.caller.id &&
     record.callerSessionTag === callSessionBinding(client.sessionId) && record.callerDeviceId === client.deviceId;
   const selected = !!record.answerer && record.answerer.userId === client.userId &&
@@ -289,11 +294,6 @@ export async function declineCallForUser(callId: string, userId: number): Promis
       const expired = current.expiresAt.getTime() <= now.getTime();
       const status = expired ? "missed" : "declined";
       transaction.update(ref, { status, endedAt: now, ...(expired ? { expiredAt: now } : {}) });
-      for (const participant of [current.caller.id, current.callee.id]) {
-        const lock = db.collection("callLocks").doc(String(participant));
-        const lockSnapshot = await transaction.get(lock);
-        if (lockSnapshot.data()?.callId === callId) transaction.delete(lock);
-      }
       const inbox = db.collection("users").doc(String(current.callee.id)).collection("missedCalls").doc(callId);
       const existingInbox = await transaction.get(inbox);
       transaction.set(inbox, {
@@ -327,8 +327,7 @@ export async function broadcastRoomEvent(roomId: number, event: object, recipien
 export async function broadcastMessageToRoom(roomId: number, message: object) { return broadcastRoomEvent(roomId, { type: "chat-message", message }); }
 
 export function attachSignalingServer(httpServer: Server, sessionMiddleware: RequestHandler) {
-  // Startup and periodic reconciliation are bounded by the transaction's
-  // conditional lock ownership checks, including abandoned legacy calls.
+  // Expire unanswered invitations only; never derive busy state from history.
   let cleanupRunning = false;
   const cleanup = () => {
     if (cleanupRunning) return;
@@ -368,7 +367,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
         try {
           const user = await pool?.query<{ username: string }>(`SELECT username FROM users WHERE id=$1 LIMIT 1`, [sessionUserId]);
           const username = user?.rows[0]?.username?.toLowerCase(); if (!username) { send(ws, { type: "error", message: "Unknown user" }); return; }
-          self = { ws, userId: sessionUserId, sessionId, deviceId: validDeviceId(msg.deviceId, sessionId), username, liveId: null };
+          self = { ws, userId: sessionUserId, sessionId, deviceId: validDeviceId(msg.deviceId, sessionId), username, liveId: null, observedCalls: new Set() };
           addClient(self); send(ws, { type: "registered", userId: sessionUserId, username, onlineCount: clients.size });
           self.stopCalls = await subscribeCalls(self).catch(() => undefined);
           const online = [...clients.keys()]; wss.clients.forEach(client => send(client, { type: "online-list", users: online }));
@@ -420,16 +419,17 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
             callee: { id: callee.id, name: callee.username.toLowerCase(), avatar: null }, type: msg.video ? "video" : "voice",
             deferredMedia: msg.deferredMedia === true, transport: msg.deferredMedia ? { provider: "webrtc", version: 1 } : (msg.transport ?? { provider: offeredProvider, version: 1 }),
             initialOffer: msg.offer, latestOffer: msg.offer, e2e: msg.e2e as Record<string, unknown> | undefined, callerDeviceId: self.deviceId, callerSessionId: self.sessionId,
+            notifyOffline: ![...(byUserId.get(callee.id) ?? [])].some(client => client.ws.readyState === WebSocket.OPEN),
           });
+          self.observedCalls.add(record.callId);
           // Persistence is complete before call-ready. Remote replicas receive
           // the same ringing document through their participant subscription.
           stage = "call-ready";
           send(ws, { type: "call-ready", callId: record.callId, expiresAt: record.expiresAt.toISOString(), deferredMedia: record.deferredMedia });
         } catch (error) {
-          const code = error instanceof Error && error.message === "MEDIA_PROTOCOL_MISMATCH" ? "MEDIA_PROTOCOL_MISMATCH" :
-            error instanceof CallPushError && error.message.includes("already in a call") ? "CALL_BUSY" : "CALL_SIGNALING_UNAVAILABLE";
+          const code = error instanceof Error && error.message === "MEDIA_PROTOCOL_MISMATCH" ? "MEDIA_PROTOCOL_MISMATCH" : "CALL_SIGNALING_UNAVAILABLE";
           logger.warn({ event: "call_offer_failed", stage, code, diagnosticCode: callFailureDiagnosticCode(error) }, "Call offer failed");
-          send(ws, { type: code === "CALL_BUSY" ? "call-busy" : "call-unavailable", callId: msg.callId, to: msg.to, code, reason: code === "CALL_SIGNALING_UNAVAILABLE" ? "Authoritative call state is unavailable" : undefined });
+          send(ws, { type: "call-unavailable", callId: msg.callId, to: msg.to, code, reason: code === "CALL_SIGNALING_UNAVAILABLE" ? "Authoritative call state is unavailable" : undefined });
         }
         return;
       }
@@ -446,6 +446,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
           const calleeRinging = record.callee.id === self.userId && record.status === "ringing";
           const selected = record.answerer?.userId === self.userId && record.answerer.sessionTag === callSessionBinding(self.sessionId) && record.answerer.deviceId === self.deviceId;
           if (!caller && !calleeRinging && !selected) { send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SESSION_DENIED" }); return; }
+          self.observedCalls.add(record.callId);
           deliverCallSnapshot(self, record);
         } catch { send(ws, { type: "call-unavailable", callId: msg.callId, code: "CALL_SIGNALING_UNAVAILABLE" }); }
         return;
@@ -559,8 +560,8 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
     ws.on("close", () => {
       const tracked = socketsBySessionId.get(sessionId); tracked?.delete(ws); if (!tracked?.size) socketsBySessionId.delete(sessionId);
       if (!self) return;
-      // Preserve brief reconnects. Each participant must renew its call-specific
-      // lease within 60s; the peer alone cannot keep a disconnected call busy.
+      // Socket presence ends immediately. Historical call records cannot
+      // prevent this user from receiving a new invitation.
       self.stopCalls?.();
       if (self.liveId) { lives.delete(self.liveId); wss.clients.forEach(client => send(client, { type: "live-ended", liveId: self!.liveId })); }
       removeClient(self); wss.clients.forEach(client => send(client, { type: "online-list", users: [...clients.keys()] }));

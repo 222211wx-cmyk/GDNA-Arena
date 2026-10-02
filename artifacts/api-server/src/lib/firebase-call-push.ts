@@ -1530,18 +1530,12 @@ export async function declineDeferredCallInvitation(
       // seen=true acknowledgement and never creates a second record.
       const inboxRef = missedRef(db, invitation.calleeId, callId);
       const inboxSnapshot = await transaction.get(inboxRef);
-      const [callerLock, calleeLock] = await Promise.all([
-        transaction.get(db.collection("callLocks").doc(String(invitation.caller.id))),
-        transaction.get(db.collection("callLocks").doc(String(invitation.calleeId))),
-      ]);
       const endedAt = new Date();
       transaction.update(ref, {
         status: decision.status,
         endedAt,
         ...(decision.outcome === "expired" ? { expiredAt: endedAt } : {}),
       });
-      if (callerLock.data()?.callId === callId) transaction.delete(db.collection("callLocks").doc(String(invitation.caller.id)));
-      if (calleeLock.data()?.callId === callId) transaction.delete(db.collection("callLocks").doc(String(invitation.calleeId)));
       const inboxStatus = decision.status === "missed" || decision.status === "declined"
         ? decision.status
         : "missed";
@@ -1602,10 +1596,6 @@ export async function finishDeferredCallInvitation(
       if (!data || data.fromId !== invitation.caller.id || data.toId !== invitation.calleeId) {
         return { changed: false, sendMissed: false };
       }
-      const [callerLock, calleeLock] = await Promise.all([
-        transaction.get(db.collection("callLocks").doc(String(invitation.caller.id))),
-        transaction.get(db.collection("callLocks").doc(String(invitation.calleeId))),
-      ]);
       // A timeout/caller-close can race a callee acceptance transaction. The
       // invitation is already answered in that race: record only endedAt,
       // leave status=answered, and never create a false missed-call inbox item.
@@ -1627,8 +1617,6 @@ export async function finishDeferredCallInvitation(
         const inboxRef = missedRef(db, invitation.calleeId, invitation.callId);
         const inboxSnapshot = await transaction.get(inboxRef);
         transaction.update(ref, durableTerminalUpdate(status, new Date()));
-        if (callerLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.caller.id)));
-        if (calleeLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.calleeId)));
         if (!inboxSnapshot.exists) {
           transaction.create(inboxRef, missedCallPayload(invitation, status));
         } else {
@@ -1636,8 +1624,6 @@ export async function finishDeferredCallInvitation(
         }
       } else {
         transaction.update(ref, durableTerminalUpdate(status, new Date()));
-        if (callerLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.caller.id)));
-        if (calleeLock.data()?.callId === invitation.callId) transaction.delete(db.collection("callLocks").doc(String(invitation.calleeId)));
       }
       return { changed: true, sendMissed: status === "declined" || status === "missed" };
     });

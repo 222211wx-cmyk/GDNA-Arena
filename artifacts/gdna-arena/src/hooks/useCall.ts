@@ -217,8 +217,6 @@ export function useCall(user: { id: number; username: string } | null) {
   const preflightClientRef = useRef<IAgoraRTCClient | null>(null);
   const mediaConnectedRef = useRef(false);
   const mediaHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const leaseHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const leaseCallIdRef = useRef<string | null>(null);
   const reducedVideoRef = useRef(false);
   const callDirectionRef = useRef<"outgoing" | "incoming" | null>(null);
   const ringtoneRef = useRef<CallRingtone | null>(null);
@@ -701,24 +699,6 @@ export function useCall(user: { id: number; username: string } | null) {
     };
   }, []);
 
-  const renewConnectedCallLease = useCallback(() => {
-    const callId = leaseCallIdRef.current;
-    if (!callId || currentCallIdRef.current !== callId || !mediaConnectedRef.current ||
-      groupCallActiveRef.current) return;
-    sendWS({ type: "call-heartbeat", callId, background: document.visibilityState === "hidden" });
-  }, [sendWS]);
-
-  useEffect(() => {
-    document.addEventListener("visibilitychange", renewConnectedCallLease);
-    return () => {
-      document.removeEventListener("visibilitychange", renewConnectedCallLease);
-      if (leaseHeartbeatRef.current) clearInterval(leaseHeartbeatRef.current);
-      leaseHeartbeatRef.current = null;
-      leaseCallIdRef.current = null;
-      // Unmount is not a background transition: never extend an ended lease.
-    };
-  }, [renewConnectedCallLease]);
-
   const setActualMediaConnected = useCallback((next: boolean) => {
     mediaConnectedRef.current = next;
     if (mediaHeartbeatRef.current) {
@@ -731,9 +711,6 @@ export function useCall(user: { id: number; username: string } | null) {
     };
     // A false transition must be observable before call state is cleared.
     if (!next) {
-      if (leaseHeartbeatRef.current) clearInterval(leaseHeartbeatRef.current);
-      leaseHeartbeatRef.current = null;
-      leaseCallIdRef.current = null;
       sendState();
       return;
     }
@@ -743,16 +720,7 @@ export function useCall(user: { id: number; username: string } | null) {
     setCallStatus("active");
     sendState();
     mediaHeartbeatRef.current = setInterval(sendState, 5_000);
-    // Opt in only after real connected media, never for legacy server records
-    // merely discovered during registration or for a different call.
-    if (!groupCallActiveRef.current && currentCallIdRef.current) {
-      leaseCallIdRef.current = currentCallIdRef.current;
-      if (!leaseHeartbeatRef.current) {
-        renewConnectedCallLease();
-        leaseHeartbeatRef.current = setInterval(renewConnectedCallLease, 30_000);
-      }
-    }
-  }, [renewConnectedCallLease, sendWS]);
+  }, [sendWS]);
 
   useEffect(() => subscribeCallNetwork(navigator, window, setNetworkState), []);
 

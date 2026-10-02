@@ -1,16 +1,13 @@
-# Firestore call signalling
+# Call signalling
 
-`callInvites` is the authoritative server-written call document. It contains
-both participant ids/names, the caller's hashed HTTP-session and stable device
-binding, answerer ownership, bounded sequenced relay events, SDP state and
-expiry. `callLocks/{userId}` is written/deleted in the same Admin Firestore
-transaction as call creation, answer, cancellation and expiry, so it must not
-be opened to clients.
+PostgreSQL invitation documents retain participant/session/device authorization,
+answer arbitration, replayable signaling and history. There is no persistent
+busy lock, heartbeat lease, or waiting period between calls. Answered calls do
+not expire after 60 seconds. Unanswered invitations expire after 30 seconds.
+Historical answered documents do not become live calls on socket registration.
 
-Deploy `firestore.rules` and `firestore.indexes.json` before enabling the API
-call path. The API requires a configured Firebase Admin service account and
-matching web Firebase configuration; without it it returns
-`CALL_SIGNALING_UNAVAILABLE` and does not fall back to process memory.
+WebSocket presence and the client's current call are in memory. Firebase is
+optional push delivery, not a prerequisite for PostgreSQL call signaling.
 # Web call invitations: Firebase setup
 
 This integration is **web-only**. It uses Firestore for durable call invitations
