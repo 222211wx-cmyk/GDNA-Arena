@@ -30,11 +30,17 @@ manager (never commit their contents):
   wrappers (up to four decoding layers, 128 KiB input). Escaped private-key
   newlines are normalized. Do not paste placeholder values.
   Parse errors never log input or private keys.
-Parse/Admin initialization failures reject call signalling with
-`CALL_SIGNALING_UNAVAILABLE`; they never fall back to in-memory ringing.
+  `GOOGLE_APPLICATION_CREDENTIALS` is the last fallback: a server-side JSON file
+  path (standard Google format), or an inline JSON object/string. Files must be
+  regular files no larger than 128 KiB. A configured but invalid higher-priority
+  source fails explicitly rather than silently switching credentials.
+  Credentials must have `type=service_account`, nonempty `private_key` and
+  `client_email`, and `project_id=helixly-b7653`.
+Parse/Admin initialization failures disable Firebase delivery; PostgreSQL call
+signalling remains independent of Firebase.
 - `FIREBASE_WEB_CONFIG`: public Firebase web config as JSON, containing
   `apiKey`, `authDomain`, `projectId`, `messagingSenderId`, and `appId`.
-- `FIREBASE_VAPID_PUBLIC_KEY`: Web Push VAPID public key (optional; without it,
+- `FIREBASE_VAPID_PUBLIC` (fallback `FIREBASE_VAPID_PUBLIC_KEY`): Web Push VAPID public key (optional; without it,
   Firestore invitation persistence and custom-token sessions remain available,
   but browser push delivery is disabled).
 - `VITE_FIREBASE_VAPID_KEY`: the same public VAPID key for the browser's

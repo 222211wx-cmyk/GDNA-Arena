@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { openSync, fstatSync, readFileSync, closeSync } from "node:fs";
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
@@ -237,8 +238,32 @@ export function hasFirebaseWebEmulatorConfiguration(): boolean {
 function readServiceAccount(): Record<string, unknown> | null {
   serviceAccountProblem = "Firebase service account is not configured";
   if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") return null;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim() ||
+  let raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim() ||
     process.env.FIREBASE_ACCOUNT_SERVICE?.trim();
+  if (!raw && process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) {
+    const location = process.env.GOOGLE_APPLICATION_CREDENTIALS.trim();
+    if (location.startsWith("{") || location.startsWith('"')) {
+      raw = location;
+    } else {
+      // Standard Google configuration is a server-side JSON file path.
+      // Never log the path, file contents, or filesystem exception.
+      let fd: number | undefined;
+      try {
+        fd = openSync(location, "r");
+        const info = fstatSync(fd);
+        if (!info.isFile() || info.size > 131_072) {
+          serviceAccountProblem = "Google credential file must be a JSON file no larger than 128 KiB";
+          return null;
+        }
+        raw = readFileSync(fd, "utf8");
+      } catch {
+        serviceAccountProblem = "Google credential file is unavailable";
+        return null;
+      } finally {
+        if (fd !== undefined) closeSync(fd);
+      }
+    }
+  }
   if (!raw) return null;
   serviceAccountProblem = "Firebase service account is not a valid JSON object";
   try {
@@ -263,6 +288,14 @@ function readServiceAccount(): Record<string, unknown> | null {
     }
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const account = value as Record<string, unknown>;
+    if (account.type !== "service_account") {
+      serviceAccountProblem = "Firebase credential must have type service_account";
+      return null;
+    }
+    if (account.project_id !== "helixly-b7653") {
+      serviceAccountProblem = "Firebase credential must belong to the configured Helixly project";
+      return null;
+    }
     if (!["project_id", "client_email", "private_key"].every(
       field => typeof account[field] === "string" && (account[field] as string).trim().length > 0,
     )) {
@@ -330,7 +363,7 @@ async function loadServices(): Promise<FirebaseServices> {
         // Recovery has its own verification-only named app. It must never
         // become the Firestore/FCM/custom-token application's credential.
         app = getApps().find(candidate => candidate.name === "[DEFAULT]") ??
-          initializeApp({ credential: cert(account) });
+          initializeApp({ credential: cert(account), projectId: "helixly-b7653" });
       } catch {
         console.warn("[FCM] disabled: no valid Firebase credential");
         throw new CallPushError("Firebase Admin rejected the service-account credential or private key");
@@ -355,7 +388,7 @@ export async function getNativeCallMessaging(): Promise<Messaging> {
     throw new CallPushError("Native FCM credential unavailable");
   }
   const app = getApps().find(candidate => candidate.name === "[DEFAULT]") ??
-    initializeApp({ credential: cert(account) });
+    initializeApp({ credential: cert(account), projectId: "helixly-b7653" });
   return getMessaging(app);
 }
 
