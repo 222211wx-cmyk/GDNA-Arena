@@ -24,13 +24,11 @@ Set these server secrets/configuration values through the deployment secret
 manager (never commit their contents):
 
 - `FIREBASE_SERVICE_ACCOUNT`: preferred Firebase service-account JSON.
-  Legacy `FIREBASE_SERVICE_ACCOUNT_JSON` and the existing spelling
-  `FIBERASE_SERVICE_ACCOUNT` are supported aliases, in that order.
-  The shared parser accepts raw/quoted/double-stringified JSON or standard
-  Base64-encoded JSON (optional padding and line wrapping), and normalizes
-  escaped private-key newlines. Input is bounded to 128 KiB; invalid encoding,
-  invalid UTF-8 and excessive nesting are rejected. Base64 is not encryption
-  and cannot fix invalid credentials or missing permissions.
+  `FIREBASE_ACCOUNT_SERVICE` is also supported when the preferred name is
+  absent or empty. The preferred name takes precedence. Both accept a
+  service-account JSON object, including bounded JSON-string or Base64
+  wrappers (up to four decoding layers, 128 KiB input). Escaped private-key
+  newlines are normalized. Do not paste placeholder values.
   Parse errors never log input or private keys.
 Parse/Admin initialization failures reject call signalling with
 `CALL_SIGNALING_UNAVAILABLE`; they never fall back to in-memory ringing.

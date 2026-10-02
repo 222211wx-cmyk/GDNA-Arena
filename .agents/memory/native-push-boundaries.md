@@ -56,3 +56,15 @@ report injection and provider results separately. Never gate an Android EAS
 build on server push credentials or Apple provisioning. Keep mocked APNs
 outcomes distinct from real delivery, and do not re-enable live Apple transport
 without an explicit request.
+
+Secret presence, successful parsing, Firebase initialization, and device
+delivery are separate readiness stages.
+
+**Why:** A stored credential can exist in both scopes while the application's
+readiness endpoint rejects its format. Repeatedly asking for the same secret
+or republishing cannot establish which stage failed.
+
+**How to apply:** Honor the no-new-prompts rule, support the owner's existing
+credential name, and expose only sanitized stage-specific diagnostics. Never
+inspect or print credential contents, or claim that metadata presence proves
+valid server credentials.

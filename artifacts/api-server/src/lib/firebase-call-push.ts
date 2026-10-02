@@ -156,6 +156,7 @@ export class CallPushError extends Error {
 
 let servicesPromise: Promise<FirebaseServices> | undefined;
 let credentialWarningLogged = false;
+let serviceAccountProblem = "Firebase service account is not configured";
 
 /**
  * FIREBASE_VAPID_PUBLIC is the current deployment name. Keep the old
@@ -234,14 +235,44 @@ export function hasFirebaseWebEmulatorConfiguration(): boolean {
 }
 
 function readServiceAccount(): Record<string, unknown> | null {
+  serviceAccountProblem = "Firebase service account is not configured";
   if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") return null;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim();
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT?.trim() ||
+    process.env.FIREBASE_ACCOUNT_SERVICE?.trim();
   if (!raw) return null;
+  serviceAccountProblem = "Firebase service account is not a valid JSON object";
   try {
-    const value: unknown = JSON.parse(raw);
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null;
+    // Accept JSON exports and bounded string/Base64 wrappers without exposing
+    // credential contents in diagnostics. No fallback to application defaults.
+    if (Buffer.byteLength(raw, "utf8") > 131_072) {
+      serviceAccountProblem = "Firebase service account exceeds the supported size";
+      return null;
+    }
+    let value: unknown = raw;
+    for (let depth = 0; depth < 4 && typeof value === "string"; depth++) {
+      const text = value.trim();
+      try {
+        value = JSON.parse(text);
+      } catch {
+        const encoded = text.replace(/\s/g, "");
+        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 === 1) return null;
+        const decoded = Buffer.from(encoded, "base64");
+        if (decoded.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, "")) return null;
+        value = decoded.toString("utf8");
+      }
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const account = value as Record<string, unknown>;
+    if (!["project_id", "client_email", "private_key"].every(
+      field => typeof account[field] === "string" && (account[field] as string).trim().length > 0,
+    )) {
+      serviceAccountProblem = "Firebase service account is missing required server credential fields";
+      return null;
+    }
+    if (typeof account.private_key === "string") {
+      account.private_key = account.private_key.replace(/\\n/g, "\n");
+    }
+    return account;
   } catch {
     // Credentials are optional. Never expose parser diagnostics or credential
     // contents in startup logs.
@@ -265,7 +296,7 @@ function clientConfigurationProblem(): string | null {
 
 function pushConfigurationProblem(): string | null {
   if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") return "FCM is disabled";
-  if (!readServiceAccount()) return "FCM is disabled: no valid Firebase credential";
+  if (!readServiceAccount()) return serviceAccountProblem;
   const clientProblem = clientConfigurationProblem();
   if (clientProblem) return clientProblem;
   if (!firebaseVapidPublicKey()) return "Firebase web push VAPID key is not configured";
@@ -276,7 +307,7 @@ function pushConfigurationProblem(): string | null {
 // browser push. Keep the durable lifecycle available when VAPID is absent.
 function configurationProblem(): string | null {
   if (process.env.FCM_ENABLED?.trim().toLowerCase() === "false") return "FCM is disabled";
-  if (!readServiceAccount()) return "FCM is disabled: no valid Firebase credential";
+  if (!readServiceAccount()) return serviceAccountProblem;
   return clientConfigurationProblem();
 }
 
@@ -292,7 +323,7 @@ async function loadServices(): Promise<FirebaseServices> {
       const account = readServiceAccount();
       if (!account) {
         console.warn("[FCM] disabled: no valid Firebase credential");
-        throw new CallPushError("FCM is disabled: no valid Firebase credential");
+        throw new CallPushError(serviceAccountProblem);
       }
       let app: App;
       try {
@@ -302,7 +333,7 @@ async function loadServices(): Promise<FirebaseServices> {
           initializeApp({ credential: cert(account) });
       } catch {
         console.warn("[FCM] disabled: no valid Firebase credential");
-        throw new CallPushError("FCM is disabled: no valid Firebase credential");
+        throw new CallPushError("Firebase Admin rejected the service-account credential or private key");
       }
       return { db: getFirestore(app), auth: getAuth(app), messaging: getMessaging(app) };
     })().catch(error => {
