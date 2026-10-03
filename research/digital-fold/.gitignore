@@ -4,3 +4,7 @@ measurement-run/**/*.archive
 measurement-run/**/*.restored
 public-measurement-run/**/*.archive
 public-measurement-run/**/*.restored
+expanded-measurement-run/**/*.archive
+expanded-measurement-run/**/*.restored
+# The pinned collection already retains these exact inputs; avoid duplicate media.
+expanded-measurement-run/originals/
