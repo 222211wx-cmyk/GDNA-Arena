@@ -4,7 +4,7 @@ const PRESIGN_API = () => `${import.meta.env.BASE_URL}api/clips/presign`;
 const CONFIRM_API = () => `${import.meta.env.BASE_URL}api/clips/confirm`;
 
 /** Single-PUT ceiling. Never shown to citizens as a number. */
-export const MAX_CLIP_BYTES = 5 * 1024 * 1024 * 1024;
+export const MAX_CLIP_BYTES = 100_000_000;
 export const FILE_TOO_LARGE_MESSAGE = "هذا الملف كبير بزاف — اختر ملفاً أصغر";
 
 export type ClipUploadMetadata = {

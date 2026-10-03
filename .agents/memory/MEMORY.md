@@ -48,3 +48,4 @@
 - [Digital folding research](digital-fold-research.md) — reversible storage experiments stay separate from app fixes; count metadata and compare against ordinary compression.
 - [Sponsored call data](sponsored-call-data.md) — optional recipient data top-up after three failed calls; real quote and payer consent required, ordinary calls stay free.
 - [Owner verification restriction](verification-policy.md) — do not run tests without a changed instruction from the owner.
+- [Security release policy](security-release-policy.md) — owner requires a clean audit before republishing; review overlapping audit-fix overrides.

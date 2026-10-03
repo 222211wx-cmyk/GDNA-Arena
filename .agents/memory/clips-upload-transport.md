@@ -5,6 +5,12 @@ description: Owner reversal of compression and persistent upload queues; histori
 
 New web Clips upload the original file with a single cancellable PUT, without browser compression, persistent upload queues, background resume or transcoding before publication. Do not restore the 480p/800kbps preparation or processing-retry UI.
 
+New Clips must be limited to 100 MB (100,000,000 bytes), including direct and legacy upload paths; historical published media remains protected.
+
+**Why:** On 2026-10-03 the owner explicitly requested the smaller limit to control upload/storage usage.
+
+**How to apply:** Validate before issuing upload capabilities and again against stored metadata before publication. Do not restore the previous multi-GiB limit.
+
 **Why:** On 2026-10-03 the owner explicitly replaced compression and resumability after repeated stalled uploads, requesting direct presign → PUT → confirm and no storage diagnostics in the composer.
 
 **How to apply:** Keep actual byte progress, cancellation and in-memory retry. Closing the page loses transfer state. Single PUT has a smaller provider ceiling than the old 10 GiB multipart path; do not claim the old capacity. Never delete messenger encryption keys or unrelated stored preferences to remove Clips upload persistence.

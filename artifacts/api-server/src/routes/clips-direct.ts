@@ -6,7 +6,7 @@ import rateLimit from "express-rate-limit";
 import { pool } from "@workspace/db";
 import { r2Client, r2Config, r2Reference } from "../lib/r2-storage";
 import { publishClip, ClipUploadError } from "../lib/clip-publish";
-import { resolveClipUploadType, clipDownloadExtension } from "../lib/clip-upload-protocol";
+import { resolveClipUploadType, clipDownloadExtension, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "../lib/clip-upload-protocol";
 import { validateClipDisplayTitle } from "../lib/clip-title";
 import { finalClipReceipt } from "./clips-thumbnail-response";
 import { logger } from "../lib/logger";
@@ -30,8 +30,10 @@ router.post("/clips/presign", async (req, res) => {
     const contentType = resolveClipUploadType(String(req.body?.contentType ?? ""), filename);
     const size = req.body?.size;
     const title = validateClipDisplayTitle(req.body?.title) ?? filename;
-    // Single PUT supports up to 5 GiB; never advertise multipart limits.
-    if (!filename || !contentType || !Number.isSafeInteger(size) || size <= 0 || size > 5 * 1024 ** 3) {
+    if (typeof size === "number" && size > MAX_NEW_CLIP_BYTES) {
+      throw new ClipUploadError(413, NEW_CLIP_TOO_LARGE);
+    }
+    if (!filename || !contentType || !Number.isSafeInteger(size) || size <= 0) {
       throw new ClipUploadError(400, "حجم الملف أو نوعه غير مدعوم");
     }
     const id = randomUUID();
