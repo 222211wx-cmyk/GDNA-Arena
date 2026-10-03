@@ -254,3 +254,17 @@ mtime_ms = 1790995989848
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/85dbd597-8ffa-4f35-8dc8-8a4f3f42d155/27a873b0-ae56-4b9b-a37b-148c755397f3"
 storage_version_token = "1790996058129941"
 content_type = "text/html"
+
+[[outputs]]
+id = "WvEpefiWEqN8Q3cha0fv5"
+uri = "file://reports/clips-unreferenced-over-24h.csv"
+type = "table"
+title = "Unreferenced Clips objects older than 24 hours"
+description = "6 objects; 224,546,721 bytes. Inventory only—these objects were not deleted."
+logical_id = "f54ea0fb-edd1-432d-9dc0-d6be8ae29722"
+content_hash = "sha256:4a9f7c92e158967bf164c6859e791e056326fd792cc9eabac71668b36f6006a1"
+size = 603
+mtime_ms = 1791034206948
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/f54ea0fb-edd1-432d-9dc0-d6be8ae29722/8740b540-2db5-4c18-8110-b45f43c83626"
+storage_version_token = "1791034207969152"
+content_type = "text/csv"
