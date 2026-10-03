@@ -12,7 +12,7 @@ import {
   markActiveClipTempDirectory,
 } from "./clip-temp-cleanup.js";
 
-export const COMPRESS_ABOVE_BYTES = 100 * 1024 * 1024;
+export const COMPRESS_ABOVE_BYTES = 200_000_000;
 export const FFMPEG_NICE_LEVEL = 10;
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 const STORAGE_CHUNK_BYTES = 5 * 1024 * 1024;

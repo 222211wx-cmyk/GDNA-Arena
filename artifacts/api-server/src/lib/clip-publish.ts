@@ -10,7 +10,6 @@ export { verifiedDuration } from "./clip-duration.js";
 export { ClipUploadError, MAX_CLIP_BYTES, CLIP_EXT, validateClipRightsInput } from "./clip-upload-protocol.js";
 const connectDatabase = () => pool.connect();
 export type ClipDatabaseClient = Awaited<ReturnType<typeof connectDatabase>>;
-export const CLIP_COMPRESSION_THRESHOLD = 0;
 
 export interface PublishClipInput {
   /** Direct original-file uploads never enter the transcoding queue. */
@@ -38,7 +37,7 @@ export function validateClipDisplayTitle(value: unknown): string | undefined {
   return title;
 }
 
-/** Verify real media and stored-byte integrity, without a duration threshold. */
+/** Verify real media and stored-byte integrity; accept any positive duration. */
 export async function publishClip(
   input: PublishClipInput,
   lockedClient?: ClipDatabaseClient,

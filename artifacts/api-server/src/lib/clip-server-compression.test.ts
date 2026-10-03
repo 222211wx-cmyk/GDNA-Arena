@@ -104,7 +104,7 @@ test("100 MiB and smaller bypass storage initialization and media processing", a
   assert.equal(touched, false);
 });
 
-test("force transcodes below the legacy threshold and retains an encoded result even when larger", async () => {
+test("force transcodes smaller media and retains an encoded result even when larger", async () => {
   await temporary(async directory => {
     const storage = store();
     let transcoded = false;
@@ -312,7 +312,7 @@ test("the exact durably reserved output name is honored; unsafe or mismatched na
   });
 });
 
-test("preaborted jobs touch no storage or temp files, including threshold bypass", async () => {
+test("preaborted jobs touch no storage or temp files, including forced encoding", async () => {
   const controller = new AbortController();
   const reason = new Error("queue ownership lost");
   controller.abort(reason);

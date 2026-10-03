@@ -1192,7 +1192,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     const dx = event.touches[0].clientX - touchStartX;
     const dy = event.touches[0].clientY - touchStartY;
     if (gestureLock === "none" && (Math.abs(dx) > 12 || Math.abs(dy) > 12)) {
-      // Lock direction once past the threshold. Vertical stays with scroll-snap
+      // Lock direction after sufficient movement. Vertical stays with scroll-snap
       // (track) or the panel's own scroll (panel).
       gestureLock = Math.abs(dx) > Math.abs(dy) * 1.3 ? "horizontal" : "vertical";
     }

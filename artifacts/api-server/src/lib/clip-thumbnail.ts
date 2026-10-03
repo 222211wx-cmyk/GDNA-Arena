@@ -117,7 +117,7 @@ async function runThumbnail(file: File, limits: RuntimeLimits, deadline: number,
     }
 
     // An open-ended request can otherwise advertise an arbitrarily large body.
-    // Give ffmpeg up to the remaining budget; it can seek with another range.
+    // Give ffmpeg the remaining time; it can seek with another range.
     const end = Math.min(range.end, range.start + (limits.inputBytes - inputBytes) - 1);
     const contentLength = end - range.start + 1;
     response.writeHead(rangeHeader ? 206 : 200, {

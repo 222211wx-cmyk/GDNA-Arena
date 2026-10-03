@@ -58,7 +58,7 @@ async function acquireFeedClient(signal?: AbortSignal) {
   const db = requirePool();
   if (signal?.aborted) throw new Error("Clips feed deadline exceeded");
   // Never join an existing checkout queue: the public endpoint degrades instead
-  // of consuming its entire latency budget waiting behind private work.
+  // of spending its entire response window waiting behind private work.
   const maximum = Number((db as typeof db & { options?: { max?: number } }).options?.max) || 10;
   if (db.waitingCount > 0 || (db.idleCount === 0 && db.totalCount >= maximum)) {
     throw new Error("Clips feed database pool is saturated");
