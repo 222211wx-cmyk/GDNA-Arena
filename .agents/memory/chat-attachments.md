@@ -18,3 +18,7 @@ Message attachments upload via a login-gated endpoint and are served from a logi
 **Image-size policy:** The 5 MB limit is image-specific and applies before browser encryption; do not reduce unrelated attachment limits or omit encryption overhead from transport limits.
 **Why:** The requested image sender limits photos, while existing messaging must retain end-to-end encryption and support larger non-image attachments.
 **How to apply:** Preserve the existing encrypted attachment pipeline instead of introducing a plaintext image-upload endpoint. A declared encrypted-image type selects an upload policy, but cannot prove the encrypted content's actual MIME type.
+
+**Bodyless signing rule:** When presigning browser PUTs, do not let SDK optional-checksum defaults hash the absent server-side body.
+**Why:** AWS SDK versions using `WHEN_SUPPORTED` can sign an empty-body checksum even though the actual encrypted bytes arrive later from the browser; valid small files can then fail independently of size and CORS.
+**How to apply:** Scope `WHEN_REQUIRED` to the bodyless signing client (or explicitly bind a real ciphertext checksum). Preserve create-only headers and authorization. Do not change unrelated storage clients. Check installed SDK behavior when upgrading.

@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { beginChatUpload, readChatTicket, completeChatUpload, abortChatUpload, getDirectChatObject } from "../lib/chat-direct-upload";
 import { CLIENT_MESSAGE_ID, messageRequestHash, messageReplay, saveMessageReceipt } from "../lib/message-idempotency";
 import { expectedSenderGuard } from "../lib/message-sender-guard";
+import { logger } from "../lib/logger";
 import { requireMessagingSubscription } from "../middleware/require-messaging-subscription";
 import { eq, desc, sql, and, ne, gt, getTableColumns } from "drizzle-orm";
 import multer from "multer";
@@ -261,7 +262,11 @@ router.post("/messages/upload/direct", async (req, res): Promise<void> => {
     if (req.body?.action !== "complete") { res.status(400).json({ error: "Invalid action" }); return; }
     res.json({ url: await completeChatUpload(ticket) });
   } catch (error) {
-    console.error("Direct chat upload failed", error instanceof Error ? error.name : "Storage error");
+    const stage = req.body?.action === "start" ? "start" : req.body?.action === "complete" ? "complete" : "ticket";
+    const storageStatus = (error as { $metadata?: { httpStatusCode?: unknown } } | null)?.$metadata?.httpStatusCode;
+    // Never log SDK errors, request bodies, tickets, URLs, names or key material.
+    logger.warn({ stage, storageStatus: typeof storageStatus === "number" ? storageStatus : undefined,
+      policyStatus: error instanceof MessageUploadPolicyError ? error.status : undefined }, "Direct chat upload failed");
     res.status(error instanceof MessageUploadPolicyError ? error.status : 503)
       .json({ error: "تعذر رفع الملف. بقيت المحادثة محفوظة — حاول مرة أخرى." });
   }

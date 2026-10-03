@@ -183,7 +183,7 @@ function validAttachment(value: unknown): value is SecureAttachmentMetadata {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
   return typeof item.key === "string" && typeof item.iv === "string" && typeof item.mime === "string" &&
-    typeof item.name === "string" && typeof item.size === "number" && Number.isFinite(item.size) &&
+    typeof item.name === "string" && typeof item.size === "number" && Number.isSafeInteger(item.size) && item.size >= 0 &&
     (item.kind === "image" || item.kind === "video" || item.kind === "audio" || item.kind === "file");
 }
 
@@ -283,6 +283,7 @@ export async function decryptAttachmentBlob(blob: Blob, metadata: SecureAttachme
   try {
     const aes = await webCrypto().subtle.importKey("raw", fromB64url(metadata.key), "AES-GCM", false, ["decrypt"]);
     const plain = await webCrypto().subtle.decrypt({ name: "AES-GCM", iv: fromB64url(metadata.iv) }, aes, await blob.arrayBuffer());
+    if (plain.byteLength !== metadata.size) throw new Error("Attachment size mismatch.");
     return new Blob([plain], { type: metadata.mime });
   } catch {
     throw new Error("Unable to decrypt attachment.");

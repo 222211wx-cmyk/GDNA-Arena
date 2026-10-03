@@ -1,5 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { PutObjectCommand, CreateMultipartUploadCommand, UploadPartCommand, ListPartsCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, CreateMultipartUploadCommand, UploadPartCommand, ListPartsCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2Client, r2Config } from "./r2-storage";
 
@@ -34,10 +34,21 @@ export async function beginChatUpload(user: number, room: number, size: number) 
   // Verify signing configuration before allocating storage.
   signature(name);
   const directTicket: Ticket = { user, room, size, name, upload: "direct-put", expires: Date.now() + 3600_000 };
-  const url = await getSignedUrl(r2Client(), new PutObjectCommand({
-    ...base, ContentType: "application/octet-stream", ContentLength: size, IfNoneMatch: "*",
-  }), { expiresIn: 3600 });
-  return { ticket: encode(directTicket), url };
+  // The body exists only in the browser. SDK WHEN_SUPPORTED otherwise signs
+  // a checksum of an empty body, which cannot match the uploaded ciphertext.
+  // Scope this setting to chat signing; do not alter Clips' shared R2 client.
+  const config = r2Config()!;
+  const signer = new S3Client({
+    region: "auto", endpoint: config.endpoint,
+    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    requestChecksumCalculation: "WHEN_REQUIRED",
+  });
+  try {
+    const url = await getSignedUrl(signer, new PutObjectCommand({
+      ...base, ContentType: "application/octet-stream", ContentLength: size, IfNoneMatch: "*",
+    }), { expiresIn: 3600 });
+    return { ticket: encode(directTicket), url };
+  } finally { signer.destroy(); }
 }
 /** Historical multipart completion remains supported for already-issued tickets. */
 export async function beginLegacyChatUpload(user: number, room: number, size: number) {

@@ -14,7 +14,7 @@
  */
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { directAttachmentUpload } from "./directAttachmentUpload";
+import { AttachmentUploadError, directAttachmentUpload } from "./directAttachmentUpload";
 import { MessageInputBoundary } from "./MessageInputBoundary";
 import { trackEvent } from "@/lib/analytics";
 import { AnimatePresence, motion } from "framer-motion";
@@ -87,6 +87,7 @@ interface PendingFile {
   status: "staged" | "uploading" | "error";
   progress: number; // 0–100 (upload phase only)
   autoSend?: boolean;
+  error?: string;
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -1059,6 +1060,16 @@ function SecureAttachment({ url, metadata, mine }: {
   metadata: SecureAttachmentMetadata;
   mine: boolean;
 }) {
+  // Remount on every input change: never paint a previous file or its failure,
+  // even during the render before an effect cleanup runs.
+  return <SecureAttachmentContent key={JSON.stringify([url, metadata])} url={url} metadata={metadata} mine={mine} />;
+}
+
+function SecureAttachmentContent({ url, metadata, mine }: {
+  url: string;
+  metadata: SecureAttachmentMetadata;
+  mine: boolean;
+}) {
   const { lang } = useLang();
   const st = { ...(SOCIAL_T[lang] ?? SOCIAL_T.en), ...getMessengerCopy(lang) };
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
@@ -1067,9 +1078,11 @@ function SecureAttachment({ url, metadata, mine }: {
   useEffect(() => {
     let disposed = false;
     let createdUrl: string | null = null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
     void (async () => {
       try {
-        const response = await fetch(resolveUrl(url), { credentials: "include" });
+        const response = await fetch(resolveUrl(url), { credentials: "include", signal: controller.signal });
         if (!response.ok) throw new Error("Attachment unavailable");
         const decrypted = await decryptAttachmentBlob(await response.blob(), metadata);
         if (disposed) return;
@@ -1077,13 +1090,17 @@ function SecureAttachment({ url, metadata, mine }: {
         setObjectUrl(createdUrl);
       } catch {
         if (!disposed) setFailed(true);
+      } finally {
+        clearTimeout(timer);
       }
     })();
     return () => {
       disposed = true;
+      clearTimeout(timer);
+      controller.abort();
       if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
-  }, [url, metadata.key, metadata.iv]);
+  }, [url, metadata.key, metadata.iv, metadata.mime, metadata.name, metadata.size, metadata.kind]);
 
   if (failed) {
     return <p className="m-0 text-xs text-destructive">🔐 {st.decrypt_attachment_failed}</p>;
@@ -1092,13 +1109,13 @@ function SecureAttachment({ url, metadata, mine }: {
     return <div className="flex min-h-9 items-center gap-2 text-xs opacity-70"><LoaderCircle size={14} className="animate-spin" />{st.decrypting}</div>;
   }
   if (metadata.kind === "audio") {
-    return <audio controls preload="metadata" src={objectUrl} style={{ width: "min(220px, 100%)", height: 38 }} />;
+    return <audio controls preload="metadata" src={objectUrl} onError={() => setFailed(true)} style={{ width: "min(220px, 100%)", height: 38 }} />;
   }
   if (metadata.kind === "video") {
-    return <video controls src={objectUrl} style={{ maxWidth: 240, maxHeight: 240, borderRadius: 8, display: "block" }} />;
+    return <video controls src={objectUrl} onError={() => setFailed(true)} style={{ maxWidth: 240, maxHeight: 240, borderRadius: 8, display: "block" }} />;
   }
   if (metadata.kind === "image") {
-    return <img src={objectUrl} alt={metadata.name} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, display: "block" }} />;
+    return <img src={objectUrl} alt={metadata.name} onError={() => setFailed(true)} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 8, display: "block" }} />;
   }
   return (
     <a href={objectUrl} download={metadata.name}
@@ -1570,7 +1587,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     const request = ++roomRequestRef.current;
     const owner = user.id;
     try {
-      await ensureDeviceIdentity(user.id);
+      // Reading rooms must not depend on creating/accessing a private identity.
+      // Each encrypted preview handles unavailable keys independently below.
       const r = await fetch(api("/api/messages/rooms"), {
         credentials: "include", cache: "no-store", signal: AbortSignal.timeout(15_000),
       });
@@ -2134,6 +2152,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       encryptedAttachment = await encryptAttachmentBlob(file, originalName);
     } catch {
       setToast(`🔐 ${st.encrypt_attachment_failed}`);
+      updatePending(prev => prev.map(p => p.id === pendingId ? { ...p, error: st.encrypt_attachment_failed } : p));
       return "failed";
     }
     if (!mountedRef.current || activeRoomIdRef.current !== roomId ||
@@ -2151,7 +2170,10 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       );
       r = { ok: true, status: 200, json, aborted: false };
     } catch (error) {
-      r = { ok: false, status: 0, json: { error: error instanceof Error ? error.message : st.upload_failed },
+      const detail = error instanceof AttachmentUploadError ? ` (${error.message})` : "";
+      const message = `${st.upload_failed}${detail}`;
+      updatePending(prev => prev.map(p => p.id === pendingId ? { ...p, error: message } : p));
+      r = { ok: false, status: error instanceof AttachmentUploadError ? error.status : 0, json: { error: message },
         aborted: controller.signal.aborted };
     } finally { directUploadsRef.current.delete(controller); }
     xhrMapRef.current.delete(pendingId);
@@ -3133,8 +3155,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
                     </div>
                   )}
                   {p.status === "error" && (
-                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: "#ef4444", fontSize: 12, fontWeight: 800 }}>
-                      Error
+                    <div role="alert" title={p.error ?? st.upload_failed} className="absolute inset-0 flex items-center justify-center overflow-auto rounded-lg bg-background/90 p-1 text-xs font-semibold text-destructive">
+                      {p.error ?? st.upload_failed}
                     </div>
                   )}
                 </div>
