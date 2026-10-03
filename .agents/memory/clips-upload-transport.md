@@ -26,3 +26,9 @@ Keep the citizen-facing upload experience open; handle storage organization and 
 **Why:** The owner reiterated in Darija that the system should stay open like social platforms and that the server should handle its own management.
 
 **How to apply:** Do not turn server maintenance into new upload restrictions. This does not authorize removing authentication, ownership checks, or byte-integrity verification.
+
+Assess core Clips publishing readiness separately from unfinished storage-maintenance features. Do not repeatedly reopen the earnings interface or invent additional publishing conditions.
+
+**Why:** The owner explicitly objected to repeated publishing blockers around scheduled orphan cleanup and said the earnings interface subject was finished.
+
+**How to apply:** Report actual upload, publication and playback failures with evidence, separately from unfinished enhancements. Do not infer that this objection authorizes unsafe deletion, cancels every earlier requirement, or proves the current release works.
