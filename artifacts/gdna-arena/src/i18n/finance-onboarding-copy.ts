@@ -1,4 +1,5 @@
 import type { Lang } from "@/contexts/LangContext";
+import { LIFE_PATH_TERMS } from "./life-path-terms";
 
 /**
  * Finance copy intentionally describes the in-app ledger and manual review
@@ -11,12 +12,12 @@ const en = {
   displayName: "Display name", country: "Country", termsLabel: "Terms",
   acceptedVersion: "Accepted ({{version}})", notAccepted: "Not accepted",
   simulationAccountDescription: "This beneficiary is registered for the simulated ledger and manual payout review.",
-  splitTitle: "70 / 30 Split Simulation", simulatedBadge: "Simulated — no money moved",
-  splitDescription: "Runs a persisted simulation payment through the backend ledger. Calculates the 70/30 split and records it as a journal entry. No real money is transferred.",
+  splitTitle: "60 / 40 Split Simulation", simulatedBadge: "Simulated — no money moved",
+  splitDescription: "Runs a persisted simulation payment through the backend ledger. Calculates the 60/40 split and records it as a journal entry. No real money is transferred.",
   beneficiaryRequired: "A beneficiary account is required to run simulation payments.",
   grossAmount: "Gross amount", currency: "Currency", description: "Description",
-  simulationPayment: "Simulation payment", beneficiary70: "Beneficiary (70%)",
-  platform30: "Platform (30%)", running: "Running...", postSimulation: "Post simulation payment",
+  simulationPayment: "Simulation payment", beneficiary70: "Citizen (60%)",
+  platform30: "Platform (40%, including server costs)", running: "Running...", postSimulation: "Post simulation payment",
   lastSimulation: "Last simulation result", journalId: "Journal ID", beneficiary: "Beneficiary",
   platform: "Platform", duplicate: "Duplicate", yesIdempotent: "Yes (idempotent)", no: "No",
   refunding: "Refunding...", postRefund: "Post refund (ledger reversal)",
@@ -35,7 +36,7 @@ const en = {
   saveFailed: "Failed to save details", monthlyRequest: "Monthly manual payout request",
   period: "Period {{period}}", addBankToEnable: "Add bank details above to enable monthly requests.",
   alreadyRequested: "A manual payout request already exists for {{period}}. One request per period is allowed.",
-  payoutCalculation: "The payout amount is calculated server-side from your confirmed or simulated 70% ledger allocations minus already-committed requests.",
+  payoutCalculation: "The payout amount is calculated server-side from your recorded ledger allocations minus already-committed requests. Historical allocations are preserved.",
   submitting: "Submitting...", submitMonthly: "Submit monthly request", requestHistory: "Request history",
   loadingRequests: "Loading requests...", requestSubmitted: "Monthly payout request submitted",
   requestSubmittedDescription: "Your manual payout request for {{period}} is now pending admin review.",
@@ -55,7 +56,7 @@ const en = {
   back: "Back", reviewTerms: "Review and accept terms",
   reviewTermsDescription: "Read the net-settlement terms carefully. You must accept them to continue.",
   acceptTerms: "I accept these terms",
-  acceptConfirmation: "— I confirm I have read and understood the net-settlement terms above ({{version}}), including the 70/30 revenue split and simulation clause.",
+  acceptConfirmation: "— I confirm I have read and understood the settlement terms above ({{version}}), including the 60/40 revenue split and simulation clause.",
   acceptContinue: "Accept and continue", offline: "Offline",
   pageTitle: "Payout Account Setup",
   pageDescription: "Register your beneficiary account and review the simulated settlement flow. No real money is moved.",
@@ -65,15 +66,14 @@ const en = {
   existingAccount: "You already have a payout account. Review its status below.",
   differentType: "Need to register a different account type? Continue below.",
   registerNew: "Register a new account", setupComplete: "Setup complete",
-  completeDescription: "Your account is registered. Use the panels below to exercise the 70/30 split logic and manual payout review flow.",
+  completeDescription: "Your account is registered. Use the panels below to exercise the 60/40 split logic and manual payout review flow.",
   goWallet: "Go to wallet", morocco: "Morocco", france: "France", belgium: "Belgium",
   germany: "Germany", unitedKingdom: "United Kingdom", unitedStates: "United States",
   canada: "Canada", unitedArabEmirates: "United Arab Emirates",
   termsDocument: `Net-Settlement Terms — Arena Qaisypro (v{{version}})
 
 1. Revenue split
-   Platform allocation: 30% of each simulated transaction.
-   Beneficiary allocation: 70% of each simulated transaction.
+   ${LIFE_PATH_TERMS.en.paragraphs.join("\n   ")}
 
 2. Simulation mode
    This finance experience is permanently simulation-only. No real money is moved.
@@ -117,8 +117,7 @@ const fr: Dictionary = Object.assign({}, en, {
   termsDocument: `Conditions de règlement net — Arena Qaisypro (v{{version}})
 
 1. Répartition simulée
-   Allocation de la plateforme : 30 % de chaque transaction simulée.
-   Allocation du bénéficiaire : 70 % de chaque transaction simulée.
+   ${LIFE_PATH_TERMS.fr.paragraphs.join("\n   ")}
 
 2. Mode simulation
    Cette expérience financière fonctionne exclusivement en mode simulation. Aucun argent réel n’est déplacé.
@@ -148,8 +147,7 @@ const ar: Dictionary = Object.assign({}, en, {
   termsDocument: `شروط صافي التسوية — Arena Qaisypro (الإصدار {{version}})
 
 1. التقسيم المحاكى
-   مخصص المنصة: 30٪ من كل معاملة محاكاة.
-   مخصص المستفيد: 70٪ من كل معاملة محاكاة.
+   ${LIFE_PATH_TERMS.ar.paragraphs.join("\n   ")}
 
 2. وضع المحاكاة
    تعمل هذه التجربة المالية حصراً في وضع المحاكاة. لا يتم نقل أموال حقيقية.
@@ -179,8 +177,7 @@ const es: Dictionary = Object.assign({}, en, {
   termsDocument: `Términos de liquidación neta — Arena Qaisypro (v{{version}})
 
 1. Reparto simulado
-   Asignación de la plataforma: 30 % de cada transacción simulada.
-   Asignación del beneficiario: 70 % de cada transacción simulada.
+   ${LIFE_PATH_TERMS.es.paragraphs.join("\n   ")}
 
 2. Modo de simulación
    Esta experiencia financiera funciona exclusivamente en modo simulación. No se mueve dinero real.
@@ -210,8 +207,7 @@ const de: Dictionary = Object.assign({}, en, {
   termsDocument: `Nettoabrechnungsbedingungen — Arena Qaisypro (v{{version}})
 
 1. Simulierte Aufteilung
-   Plattformzuweisung: 30 % jeder simulierten Transaktion.
-   Begünstigtenzuweisung: 70 % jeder simulierten Transaktion.
+   ${LIFE_PATH_TERMS.de.paragraphs.join("\n   ")}
 
 2. Simulationsmodus
    Diese Finanzfunktion arbeitet ausschließlich im Simulationsmodus. Es wird kein echtes Geld bewegt.

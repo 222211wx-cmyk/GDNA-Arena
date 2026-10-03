@@ -4,6 +4,7 @@ import { useLegal, COUNTRIES, type CountryProfile } from "@/contexts/LegalContex
 import { useLang } from "@/contexts/LangContext";
 import { task39Text } from "@/i18n/task39";
 import { legalText } from "@/i18n/community-admin-surfaces-copy";
+import { LIFE_PATH_TERMS } from "@/i18n/life-path-terms";
 
 type Tab = "country" | "terms" | "privacy" | "cookies" | "rights";
 
@@ -94,7 +95,8 @@ export default function LegalPage() {
       de: german,
     }[lang];
   };
-  const [tab, setTab] = useState<Tab>("country");
+  const [tab, setTab] = useState<Tab>(() =>
+    new URLSearchParams(window.location.search).get("tab") === "terms" ? "terms" : "country");
   const [search, setSearch] = useState("");
 
   const filtered = COUNTRIES.filter(c =>
@@ -246,10 +248,13 @@ export default function LegalPage() {
                 <LegalClause n={4} title={lt("Content")}>
                   {lt("Content you post remains yours. You grant us a license to display it on the platform. We reserve the right to remove content that violates laws or these Terms.")}
                 </LegalClause>
-                <LegalClause n={5} title={lt("Disclaimer")}>
+                <LegalClause n={5} title={LIFE_PATH_TERMS[lang].title}>
+                  {LIFE_PATH_TERMS[lang].paragraphs.join("\n\n")}
+                </LegalClause>
+                <LegalClause n={6} title={lt("Disclaimer")}>
                   {lt('The platform is provided "as is" without warranties. We are not liable for any losses arising from use of the platform.')}
                 </LegalClause>
-                <LegalClause n={6} title={lt("Governing Law")}>
+                <LegalClause n={7} title={lt("Governing Law")}>
                   {{en:`These Terms are governed by applicable law in ${country.name}: ${country.laws.join(", ")}.`,fr:`Ces conditions sont régies par le droit applicable en ${country.name} : ${country.laws.join(", ")}.`,ar:`تخضع هذه الشروط للقانون المعمول به في ${country.name}: ${country.laws.join("، ")}.`,es:`Estos términos se rigen por la ley aplicable en ${country.name}: ${country.laws.join(", ")}.`,de:`Für diese Nutzungsbedingungen gilt das in ${country.name} anwendbare Recht: ${country.laws.join(", ")}.`}[lang as "en"|"fr"|"ar"|"es"|"de"]}
                 </LegalClause>
               </LegalSection>

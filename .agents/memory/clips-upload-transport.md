@@ -7,7 +7,7 @@ Clips must use browser chunks → our server → S3. Server handles the storage 
 
 **Why:** On 2026-10-03 the owner explicitly replaced the earlier browser-to-S3 single-PUT architecture and repeatedly prohibited adding file-size, duration, or product upload restrictions without explicit permission.
 
-**How to apply:** No application-defined maximum file size, minimum duration, or maximum duration. Treat storage growth as a capacity-planning problem rather than inventing a product cap. Distinguish operational chunk sizing, authentication and byte-integrity checks from product restrictions. Never promise physically infinite provider resources.
+**How to apply:** The owner's final Life-Path specification explicitly reinstated a 60-second minimum. No application-defined maximum file size or maximum duration. Distinguish operational chunk sizing, authentication and byte-integrity checks from product restrictions. Never promise physically infinite provider resources.
 
 Preserve published media and mixed storage identities.
 

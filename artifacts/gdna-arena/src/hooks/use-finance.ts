@@ -2,9 +2,9 @@ import { useState, useCallback } from "react";
 import { apiPath } from "@/lib/network";
 
 // ── Constants aligned to backend (finance-ledger.ts) ────────────────────────────
-export const CURRENT_TERMS_VERSION = "finance-terms-2025-01";
-export const PLATFORM_BPS = 3000; // 30%
-export const BENEFICIARY_BPS = 7000; // 70%
+export const CURRENT_TERMS_VERSION = "finance-life-path-60-40";
+export const PLATFORM_BPS = 4000; // Server costs are included in the platform share.
+export const BENEFICIARY_BPS = 6000;
 
 // ── Type definitions ────────────────────────────────────────────────────────────
 
@@ -293,10 +293,10 @@ export async function postReconcile(): Promise<{ issuesCreated: number }> {
   return (await res.json()) as { issuesCreated: number };
 }
 
-// ── 70/30 net split — mirrors backend splitNet7030 exactly ──────────────────────
+// Current revenue split; legacy function name retained for existing callers.
 export function splitNet7030(netMinor: number): { beneficiaryMinor: number; platformMinor: number } {
   if (!Number.isSafeInteger(netMinor) || netMinor < 0) return { beneficiaryMinor: 0, platformMinor: 0 };
-  const platformMinor = Math.floor((netMinor * PLATFORM_BPS) / 10_000);
+  const platformMinor = Number(BigInt(netMinor) * BigInt(PLATFORM_BPS) / 10_000n);
   return { beneficiaryMinor: netMinor - platformMinor, platformMinor };
 }
 
