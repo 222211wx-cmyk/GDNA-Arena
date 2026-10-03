@@ -21,7 +21,8 @@ describe("horizontal platform utilities", () => {
     expect(screen.getByRole("link", { name: UI_TEXT.settings[lang] }).getAttribute("href"))
       .toBe("/dashboard#account-settings");
     const brand = screen.getByTestId("link-brand-home");
-    expect(brand.textContent).toBe("Helixly.app");
+    expect(brand.textContent).toContain("ARENA");
+    expect(brand.textContent).toContain("QAISYPRO");
     expect(brand.closest("header")?.getAttribute("dir")).toBe(lang === "ar" ? "rtl" : "ltr");
   });
 });

@@ -5,6 +5,12 @@ description: Product-level ownership rules for Arena Qaisypro entry and primary 
 
 ## Current umbrella and delivery policy
 
+Preserve the parent platform's original title and crown/DNA logo, original links, and existing services while adding updates. Independent entrances do not authorize replacing the parent identity.
+
+**Why:** On 2026-10-03 the owner explicitly objected to removal of the parent logo and reiterated that updates must preserve the original platform and links.
+
+**How to apply:** Keep parent branding separate from the identities of individual sections. Do not interpret navigation simplification as permission to rebrand the parent.
+
 When the owner refers to the already-separated WhatsApp-like calls/messages site, they mean the existing Helixly web messenger, not a request to create a new Android product.
 
 **Why:** The owner corrected a mobile-versus-web interpretation and emphasized keeping citizens out of confusing Arena navigation.
