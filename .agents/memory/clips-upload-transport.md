@@ -32,3 +32,9 @@ Assess core Clips publishing readiness separately from unfinished storage-mainte
 **Why:** The owner explicitly objected to repeated publishing blockers around scheduled orphan cleanup and said the earnings interface subject was finished.
 
 **How to apply:** Report actual upload, publication and playback failures with evidence, separately from unfinished enhancements. Do not infer that this objection authorizes unsafe deletion, cancels every earlier requirement, or proves the current release works.
+
+The owner identifies the original destination as Helixly.app/klips, belonging to GDNA Arena, and wants existing users preserved rather than a separate new site.
+
+**Why:** The owner clarified the intended original site after confusion between the storage name and the published app.
+
+**How to apply:** Treat this as the requested destination, not proof of a live deployment or database association. Reverify publishing metadata and the public site before confirming deployment identity.
