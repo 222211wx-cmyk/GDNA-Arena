@@ -23,6 +23,12 @@ The official Helixly platform must continue to include every existing component 
 
 **How to apply:** The owner now requests a full flat vertical platform directory, with Calls and Messages first and Clips («كليبسز», not «ريلز») second, followed by the existing citizen sections. Keep the current platform name above a horizontal tools/settings/language row. This supersedes the limited four-entry presentation; historical navigation supplies section inventory, not old branding or authentication gates.
 
+Do not retain “Reels” / «ريلز» as customer-facing wording or as a search alias for Clips.
+
+**Why:** The owner explicitly repeated that the term was not authorized and requested its removal, including after it had been retained as a search synonym.
+
+**How to apply:** Use «كليبسز» in Arabic and “Clips” in other supported languages. Preserve URLs and internal implementation identifiers rather than doing an unrelated rename.
+
 All platform tabs have equal importance; their order does not grant one priority over another.
 
 **Why:** The owner clarified that Calls and Messages, followed by Clips, reflect the current work sequence only, not preferential status over the other sections.

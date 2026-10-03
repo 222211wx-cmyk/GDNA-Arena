@@ -99,6 +99,6 @@ export function findPlatformSections(query: string, currentOrigin: string): Dire
   const needle = normalize(text);
   return DIRECTORY.filter(section => [
     section.id, section.route, ...Object.values(section.names),
-    ...(section.id === "clips" ? ["ريلز", "Reels", "كليبس", "كليبسز"] : []),
+    ...(section.id === "clips" ? ["كليبس", "كليبسز"] : []),
   ].some(value => normalize(value).includes(needle)));
 }

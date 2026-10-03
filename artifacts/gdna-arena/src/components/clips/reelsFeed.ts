@@ -123,7 +123,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   topbar.append(topLeft, title, topRight);
 
   // Feed track
-  const track = el("div", "reels-track", { "data-testid": "reels-track", tabindex: "0", "aria-label": "Fil des Reels" });
+  const track = el("div", "reels-track", { "data-testid": "reels-track", tabindex: "0", "aria-label": "Fil des Clips" });
 
   // Tools panel (horizontal-swipe editing tools)
   const toolsPanel = el("div", "reels-tools-panel", { role: "dialog", "aria-label": "Outils d'édition", "aria-modal": "false" });
@@ -773,7 +773,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     fullState = el("div", "reels-fullstate", { role: "status", "data-testid": `reels-state-${kind}` });
     if (kind === "loading") {
       fullState.append(el("div", "reels-spinner", { "aria-label": "Chargement" }));
-      const p = el("p", "reels-muted"); p.textContent = "Chargement des Reels…"; fullState.append(p);
+      const p = el("p", "reels-muted"); p.textContent = "Chargement des Clips…"; fullState.append(p);
     } else if (kind === "empty") {
       const p = el("p"); p.textContent = searchQuery ? "Aucun résultat pour cette recherche." : "Aucun Reel pour l'instant. Soyez le premier à publier.";
       const row = el("div", "reels-btn-row");
@@ -788,12 +788,12 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     } else if (kind === "degraded") {
       // Service throttled AND no clips returned: this is a temporary failure to
       // load, not a genuine empty feed. Say so plainly and offer a real retry.
-      const p = el("p"); p.textContent = "Service momentanément ralenti — les Reels n'ont pas pu se charger.";
+      const p = el("p"); p.textContent = "Service momentanément ralenti — les Clips n'ont pas pu se charger.";
       const retry = el("button", "reels-btn", { type: "button" }); retry.textContent = "Réessayer";
       retry.addEventListener("click", () => void loadPage(true));
       fullState.append(p, retry);
     } else {
-      const p = el("p"); p.textContent = "Impossible de charger les Reels. Vérifiez la connexion.";
+      const p = el("p"); p.textContent = "Impossible de charger les Clips. Vérifiez la connexion.";
       const retry = el("button", "reels-btn", { type: "button" }); retry.textContent = "Réessayer";
       retry.addEventListener("click", () => void loadPage(true));
       fullState.append(p, retry);
