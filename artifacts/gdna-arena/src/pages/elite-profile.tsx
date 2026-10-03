@@ -16,7 +16,8 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@workspace/gdn
 import { ElitePortrait } from "@/components/elite/ElitePortrait";
 import { EliteSocialRail } from "@/components/elite/EliteSocialRail";
 import { EliteFanChat } from "@/components/elite/EliteFanChat";
-import { getEliteProfile } from "@/lib/elite-profiles";
+import { getEliteProfile, isGuestOfHonor } from "@/lib/elite-profiles";
+import { EliteVipPage } from "@/components/elite/EliteVipPage";
 
 export default function EliteProfilePage() {
   const params = useParams();
@@ -42,6 +43,8 @@ export default function EliteProfilePage() {
       </div>
     );
   }
+
+  if (isGuestOfHonor(profile)) return <EliteVipPage profile={profile} />;
 
   return (
     <div className="min-h-[100dvh] bg-background">

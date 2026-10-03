@@ -52,7 +52,15 @@ export interface EliteProfile {
   portrait: string;
   /** Gold "Trending #1" featured editorial badge. */
   featured?: boolean;
+  /** Editorial rating out of 10 (displayed as "N/10"). */
+  rating?: number;
+  /** Special editorial status — "GuestOfHonor" gets the dedicated gold VIP page. */
+  status?: "GuestOfHonor";
+  isFeatured?: boolean;
+  highlight?: boolean;
 }
+
+export const isGuestOfHonor = (p: EliteProfile) => p.status === "GuestOfHonor";
 
 const wiki = (file: string) =>
   `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=640`;
@@ -67,7 +75,6 @@ export const ELITE_PROFILES: EliteProfile[] = [
     role: "Footballer — Winger",
     nationality: "Spain",
     category: "Football",
-    featured: true,
     portrait: wiki("Lamine_Yamal_France_v_Spain_7.24.26-142.jpg"),
     bio: [
       "Lamine Yamal is a Spanish professional footballer who plays as a winger for FC Barcelona and the Spain national team. Born in 2007, he emerged from Barcelona's La Masia academy and became one of the most talked-about young players in world football.",
@@ -92,6 +99,10 @@ export const ELITE_PROFILES: EliteProfile[] = [
     role: "Singer-Songwriter",
     nationality: "United Kingdom",
     category: "Music",
+    rating: 10,
+    status: "GuestOfHonor",
+    isFeatured: true,
+    highlight: true,
     portrait: wiki("Adele_2016.jpg"),
     bio: [
       "Adele Laurie Blue Adkins is an English singer-songwriter, one of the best-selling music artists of her generation, known for the albums 19, 21, 25 and 30.",
@@ -324,10 +335,10 @@ export const ELITE_PROFILES: EliteProfile[] = [
   },
 ];
 
-// Homepage carousel order (exactly 11): Lamine first, then the fixed order.
+// Homepage carousel order (exactly 11): Adele (Guest of Honor) first.
 export const ELITE_CAROUSEL_ORDER: string[] = [
-  "lamine-yamal",
   "adele",
+  "lamine-yamal",
   "badr-hari",
   "shahrukh-khan",
   "cristiano-ronaldo",

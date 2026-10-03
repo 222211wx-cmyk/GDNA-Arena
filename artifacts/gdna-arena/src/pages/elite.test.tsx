@@ -22,10 +22,10 @@ describe("Elite profiles data integrity", () => {
     expect(new Set(names).size).toBe(11);
   });
 
-  it("orders the carousel with Lamine first, then the fixed order", () => {
+  it("orders the carousel with Adele first, then the fixed order", () => {
     expect(getEliteCarousel().map((p) => p.slug)).toEqual([
-      "lamine-yamal",
       "adele",
+      "lamine-yamal",
       "badr-hari",
       "shahrukh-khan",
       "cristiano-ronaldo",
@@ -44,10 +44,14 @@ describe("Elite profiles data integrity", () => {
     }
   });
 
-  it("marks only Lamine as the gold Trending #1 featured pick", () => {
-    const featured = ELITE_PROFILES.filter((p) => p.featured);
+  it("marks only Adele as the highlighted Guest of Honor", () => {
+    const featured = ELITE_PROFILES.filter((p) => p.isFeatured);
     expect(featured).toHaveLength(1);
-    expect(featured[0].slug).toBe("lamine-yamal");
+    expect(featured[0]).toMatchObject({
+      slug: "adele", rating: 10, status: "GuestOfHonor",
+      isFeatured: true, highlight: true,
+    });
+    expect(ELITE_PROFILES.some((p) => p.featured)).toBe(false);
   });
 
   it("every carousel slug resolves to a profile (routes are reachable)", () => {

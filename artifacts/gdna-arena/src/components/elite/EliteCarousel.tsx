@@ -12,11 +12,12 @@ import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { ElitePortrait } from "@/components/elite/ElitePortrait";
-import { getEliteCarousel } from "@/lib/elite-profiles";
+import { getEliteCarousel, isGuestOfHonor } from "@/lib/elite-profiles";
+import { GuestOfHonorCard } from "@/components/elite/GuestOfHonorCard";
 
 /**
  * Homepage Elite carousel — exactly 11 profiles in the required editorial order
- * (Lamine first). Built from DS Carousel + Card + Badge.
+ * (Adele, Guest of Honor, first). Built from DS Carousel + Card + Badge.
  */
 export function EliteCarousel() {
   const profiles = getEliteCarousel();
@@ -47,13 +48,18 @@ export function EliteCarousel() {
         </Button>
       </motion.div>
 
-      <Carousel opts={{ align: "start", loop: true }} className="w-full">
+      <Carousel opts={{ align: "center", loop: true }} className="w-full">
         <CarouselContent className="-ml-3">
           {profiles.map((p, i) => (
             <CarouselItem
               key={p.slug}
-              className="basis-4/5 pl-3 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"
+              className={isGuestOfHonor(p)
+                ? "basis-full pl-3 sm:basis-[calc(75%-theme(spacing.3)*0.5)] lg:basis-[calc(50%-theme(spacing.3)*0.5)] xl:basis-[calc(37.5%-theme(spacing.3)*0.5)]"
+                : "basis-[calc((100%+theme(spacing.3)*0.5)/1.5)] pl-3 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"}
             >
+              {isGuestOfHonor(p) ? (
+                <GuestOfHonorCard profile={p} testId={`card-elite-${p.slug}`} />
+              ) : (
               <Link
                 href={`/elite/${p.slug}`}
                 data-testid={`card-elite-${p.slug}`}
@@ -66,7 +72,7 @@ export function EliteCarousel() {
                   transition={{ delay: (i % 4) * 0.06 }}
                   className="h-full"
                 >
-                  <Card className="empire-card group h-full overflow-hidden border-primary/25 bg-card/60">
+                  <Card className="group h-full overflow-hidden border-border bg-card/60">
                     <CardContent className="flex h-full flex-col gap-3 p-3">
                       <div className="relative overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-primary/15 to-background">
                         <ElitePortrait
@@ -95,6 +101,7 @@ export function EliteCarousel() {
                   </Card>
                 </motion.div>
               </Link>
+              )}
             </CarouselItem>
           ))}
         </CarouselContent>

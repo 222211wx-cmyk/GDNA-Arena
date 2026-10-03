@@ -4,7 +4,8 @@ import { Crown, Star, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 import { ElitePortrait } from "@/components/elite/ElitePortrait";
-import { getEliteCarousel } from "@/lib/elite-profiles";
+import { getEliteCarousel, isGuestOfHonor } from "@/lib/elite-profiles";
+import { GuestOfHonorCard } from "@/components/elite/GuestOfHonorCard";
 
 export default function ElitePage() {
   const profiles = getEliteCarousel();
@@ -33,12 +34,18 @@ export default function ElitePage() {
       {/* Grid */}
       <section className="mx-auto max-w-7xl px-4 py-12">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {profiles.map((p, i) => (
+          {profiles.map((p, i) => isGuestOfHonor(p) ? (
+            <div key={p.slug} className="flex justify-center sm:col-span-2 lg:col-span-3 xl:col-span-4">
+              <div className="w-full sm:w-[calc((100%-theme(spacing.5))*0.75)] lg:w-[calc((100%-theme(spacing.5)*2)*0.5)] xl:w-[calc((100%-theme(spacing.5)*3)*0.375)]">
+                <GuestOfHonorCard profile={p} testId={`card-elite-grid-${p.slug}`} />
+              </div>
+            </div>
+          ) : (
             <Link
               key={p.slug}
               href={`/elite/${p.slug}`}
               data-testid={`card-elite-grid-${p.slug}`}
-              className="block h-full"
+              className="mx-auto block h-full w-2/3 sm:w-full"
             >
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
@@ -48,9 +55,7 @@ export default function ElitePage() {
                 className="h-full"
               >
                 <Card
-                  className={`empire-card group h-full overflow-hidden bg-card/60 ${
-                    p.featured ? "border-primary/60" : "border-primary/20"
-                  }`}
+                  className="group h-full overflow-hidden border-border bg-card/60"
                 >
                   <CardContent className="flex h-full flex-col gap-3 p-3">
                     <div className="relative overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-primary/15 to-background">
