@@ -3,6 +3,12 @@ name: Realtime messenger delivery
 description: Durable delivery and call-cleanup rules for the shared AMIS WebSocket.
 ---
 
+Message catch-up after desktop sleep must work independently of call reconnection.
+
+**Why:** The owner expects the same account on a phone and a closed desktop to converge when the desktop returns, while explicitly requiring the established Agora baseline to remain untouched. A socket that still reports OPEN is not proof that the message view is current.
+
+**How to apply:** Recover message lists on foreground/network return without reopening conversations or discarding drafts and uploads. Treat fresh-message recovery separately from encrypted history availability on a newly enrolled device; never promise that refreshing creates missing decryption keys.
+
 Every authenticated WebSocket for a citizen must receive private-room message pushes. Socket cleanup must be identity-aware: an older duplicate tab closing must never unregister a newer connection. Calls are tied to the specific signaling sockets that created them, so only a call-owning socket closing ends that call and releases the peer.
 
 **Why:** Citizens commonly reconnect or open multiple app surfaces. A single client mapping let an old socket’s close event silently remove a newer session’s routing entry, and disconnected callers could otherwise leave their peer busy.

@@ -1338,6 +1338,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const chunksRef   = useRef<Blob[]>([]);
   const mountedRef  = useRef(true);
   const activeRoomIdRef = useRef<number | null>(null);
+  const syncIdentityRef = useRef(user?.id);
+  if (syncIdentityRef.current !== user?.id) {
+    syncIdentityRef.current = user?.id;
+  }
+  const roomRequestRef = useRef(0);
+  const messageRequestRef = useRef(0);
+  const messageRevisionRef = useRef(0);
   const endRef      = useRef<HTMLDivElement>(null);
   const textRef     = useRef<HTMLTextAreaElement>(null);
   const pollRef     = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -1550,9 +1557,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   // ── Load rooms ──────────────────────────────────────────────────────────────
   const loadRooms = useCallback(async (): Promise<DmRoom[]> => {
     if (!user || !isOnline) return [];
+    const request = ++roomRequestRef.current;
+    const owner = user.id;
     try {
       await ensureDeviceIdentity(user.id);
-      const r = await fetch(api("/api/messages/rooms"), { credentials: "include" });
+      const r = await fetch(api("/api/messages/rooms"), {
+        credentials: "include", cache: "no-store", signal: AbortSignal.timeout(15_000),
+      });
       if (!r.ok) return [];
       const j = await r.json();
       // Server returns rooms newest-first; preserve that order — never re-sort client-side.
@@ -1581,7 +1592,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
           };
         }
       }));
-      if (mountedRef.current) setRooms(list);
+      if (!mountedRef.current || syncIdentityRef.current !== owner || request !== roomRequestRef.current) return [];
+      setRooms(list);
       return list;
     } catch {
       // Preserve the last successfully loaded room list while disconnected.
@@ -1629,6 +1641,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   }, []);
 
   const appendMessage = useCallback((message: DmMessage) => {
+    messageRevisionRef.current++;
     setMessages(prev => {
       if (prev.some(existing => existing.id === message.id)) return prev;
       return [...prev, message].sort((a, b) =>
@@ -1701,6 +1714,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       if (!detail?.roomId || !detail.messageId) return;
       if (typeof detail.recipientUserId === "number" && detail.recipientUserId !== user?.id) return;
       if (detail.roomId === activeRoomIdRef.current) {
+        messageRevisionRef.current++;
         setMessages(prev => prev.filter(message => message.id !== detail.messageId));
       }
       void loadRooms();
@@ -1719,22 +1733,50 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     };
   }, [appendMessage, loadRooms, user?.id]);
 
-  // REST is for the initial view, reconnect recovery, and a quiet fallback if a
-  // browser misses an event — not the visible delivery mechanism.
+  // Recover independently of the call socket: an apparently OPEN socket may
+  // be stale after OS sleep. Never reopen the room or clear the draft/uploads.
   useEffect(() => {
-    if (!activeRoom) return;
-    loadMessages(activeRoom.id);
+    if (!user || !isOnline) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      void loadRooms();
+      if (activeRoomIdRef.current !== null) void loadMessages(activeRoomIdRef.current);
+    };
+    const resume = () => {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, 150);
+    };
+    refresh();
+    window.addEventListener("focus", resume);
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("online", resume);
+    window.addEventListener("gdna:realtime-refetch", resume);
+    document.addEventListener("visibilitychange", resume);
     clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => loadMessages(activeRoom.id), 30_000);
-    return () => clearInterval(pollRef.current);
-  }, [activeRoom?.id]);
+    pollRef.current = setInterval(refresh, 15_000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(pollRef.current);
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("pageshow", resume);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("gdna:realtime-refetch", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [activeRoom?.id, user?.id, isOnline, loadRooms]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function loadMessages(roomId: number) {
-    if (!isOnline) return;
+    if (!isOnline || !user) return;
+    const owner = user.id;
+    const request = ++messageRequestRef.current;
+    const revision = messageRevisionRef.current;
     try {
-      const r = await fetch(api(`/api/messages/rooms/${roomId}`), { credentials: "include" });
+      const r = await fetch(api(`/api/messages/rooms/${roomId}`), {
+        credentials: "include", cache: "no-store", signal: AbortSignal.timeout(15_000),
+      });
       if (!r.ok) return;
       const j = await r.json();
       const decrypted = user
@@ -1745,7 +1787,9 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
         : [];
       // Only commit if this room is still the active one (guards stale responses
       // from a previously opened room resolving late) and we're still mounted.
-      if (mountedRef.current && activeRoomIdRef.current === roomId) {
+      if (mountedRef.current && syncIdentityRef.current === owner &&
+          activeRoomIdRef.current === roomId && request === messageRequestRef.current &&
+          revision === messageRevisionRef.current) {
         setMessages(decrypted);
         if (Array.isArray(j.members)) {
           setActiveRoom(prev => prev?.id === roomId ? { ...prev, members: j.members } : prev);
