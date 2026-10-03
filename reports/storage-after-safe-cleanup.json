@@ -1,0 +1,9 @@
+{
+  "testObjectVerifiedBytes": 150000000,
+  "testObjectRemoved": true,
+  "nonTargetObjectsUnchanged": true,
+  "count": 29,
+  "bytes": 695490050,
+  "freedBytes": 224546721,
+  "pendingMultipart": 0
+}

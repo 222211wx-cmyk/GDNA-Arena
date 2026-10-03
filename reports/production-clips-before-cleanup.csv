@@ -1,0 +1,11 @@
+id,object_name,upload_object_name,processing_output_object,thumbnail_object_name
+2,clip_compressed_6944d36c67b44920b5204472fb879fcf.mp4,clip_upload_1_ef37d1e2-3a15-4c6f-8afa-f2a727c51909.mp4,,thumb_retry_2_ffa3e356c11e889b745d9a0ef1cc1a08.jpg
+3,clip_compressed_cf19bb5060f04400a05e8081f6ccb172.mp4,clip_upload_1_7d352faa-c051-4fa3-bc1e-1fd4aaa72723.mp4,,thumb_retry_3_464028b9520cc76bd519944cb0e69359.jpg
+4,r2:clips/derived/clip_d2ce9eb9f96b47108ffef0459731f4ff_720p.mp4,r2:clips/original/1/0cc34fe4-a566-4ebb-92b1-ec915f4994cb.mp4,,r2:clips/derived/thumb_retry_4_2ad38c1ae8484997e1a09a1e253cdf8a.jpg
+5,r2:clips/derived/clip_dc66cb82cc62461d8419b8d5e5f2c4bc_720p.mp4,r2:clips/original/1/21c9c24d-8750-4be3-ba89-d6f81646382e.mp4,,r2:clips/derived/thumb_retry_5_d1486cbe7824062d8dc320a66b4ebe0e.jpg
+6,r2:clips/derived/clip_e99781779f52462fad9039e72fc60654_720p.mp4,r2:clips/original/1/0693bd9b-c1db-4046-8b2c-2cc2c4b3fa9e.mp4,,r2:clips/derived/thumb_retry_6_4db740aa75b7657867d9ccb6f1f5e043.webp
+7,r2:clips/derived/clip_ede9f28eff234abba4b4331e2dc58752_720p.mp4,r2:clips/original/1497/bc519d3c-1f73-42a4-9eee-4aeb5d89e2e5.mp4,,r2:clips/derived/thumb_retry_7_e5a51b19ddbf68ba5c0c028757a2774a.webp
+8,r2:clips/derived/clip_21dc870ab6d743eeaf1276859b2b8beb_720p.mp4,r2:clips/original/1497/12951c09-d000-49d7-b98a-50ac5be2def9.mp4,,r2:clips/derived/thumb_retry_8_81d7acdf3758e21cb9bfb5c86396b2fc.webp
+9,r2:clips/derived/clip_efcea3d0a78247729f9796d4b373856f_720p.mp4,r2:clips/original/4051/4ca702bc-1ed3-42f2-9264-7bf4a74386c4.mp4,,r2:clips/derived/thumb_retry_9_afe382162981840d4157b0528a6c9099.webp
+10,r2:clips/derived/clip_576dd975f0234b36ba9ededc6d5aad6b_720p.mp4,r2:clips/original/1/7827c748-ab8b-48aa-9a07-0935063fec28.mp4,,r2:clips/derived/thumb_retry_10_f92d9fc739ad1764f85afb9bdb29745a.webp
+11,r2:clips/derived/clip_0cc162ee9a4945cd969a0f0b35d13072_720p.mp4,r2:clips/original/3886/a733b82f-6f73-4c3a-a850-86d99066ae78.mp4,,r2:clips/derived/thumb_retry_11_85050149f6bb1929a92f6000da2468a7.webp

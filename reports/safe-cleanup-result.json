@@ -1,0 +1,39 @@
+{
+  "deleted": [
+    {
+      "key": "clips/original/1/46a07a55-1cb5-4770-a6f7-26425a25b138.mp4",
+      "size": 22831831,
+      "date": "2026-10-01T20:58:01.439Z"
+    },
+    {
+      "key": "clips/original/4051/101fecef-fade-416c-87ad-cb512e6cb5e9.mp4",
+      "size": 12103745,
+      "date": "2026-09-23T09:16:06.926Z"
+    },
+    {
+      "key": "clips/original/4051/667e4423-2f9e-4f25-bee6-fa57f33f9e95.mp4",
+      "size": 14484993,
+      "date": "2026-09-25T15:25:14.618Z"
+    },
+    {
+      "key": "clips/original/4053/4066ac18-477a-486e-a108-9999179c4d2e.mp4",
+      "size": 19084179,
+      "date": "2026-10-01T19:31:46.298Z"
+    },
+    {
+      "key": "clips/original/4053/a6c29023-66ab-41d8-8045-9288c0e9d71f.mp4",
+      "size": 12030545,
+      "date": "2026-10-01T20:14:21.441Z"
+    },
+    {
+      "key": "clips/original/5086/711d17e8-493b-4745-a063-3adfa3e5cb51.mp4",
+      "size": 144011428,
+      "date": "2026-09-19T10:28:47.915Z"
+    }
+  ],
+  "freedBytes": 224546721,
+  "beforeBytes": 920036771,
+  "afterBytes": 695490050,
+  "beforeCount": 35,
+  "afterCount": 29
+}

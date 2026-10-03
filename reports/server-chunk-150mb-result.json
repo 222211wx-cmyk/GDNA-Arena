@@ -1,0 +1,30 @@
+{
+  "size": 150000000,
+  "parts": 29,
+  "userId": 7189,
+  "sessionId": "f4e5e2ee-a5a8-4a19-95d6-28eb73042d67",
+  "resumeConfirmed": true,
+  "receipt": {
+    "ok": true,
+    "code": "HELX-401777",
+    "name": "Authorized upload diagnostic",
+    "duration": 1562,
+    "url": "/clip/HELX-401777",
+    "created_at": "2026-10-03T15:28:00.599Z",
+    "processingStatus": "ready",
+    "clip": {
+      "id": 45,
+      "title": "Authorized upload diagnostic",
+      "content_type": "audio/wav",
+      "duration_sec": 1562,
+      "code": "HELX-401777",
+      "created_at": "2026-10-03T15:28:00.599Z",
+      "processing_status": "ready",
+      "name": "Authorized upload diagnostic",
+      "duration": 1562,
+      "processingStatus": "ready",
+      "thumb": null
+    }
+  },
+  "success": true
+}
