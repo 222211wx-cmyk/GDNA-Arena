@@ -15,7 +15,7 @@ The official Helixly platform must continue to include every existing component 
 
 **Why:** The owner explicitly confirmed that division into tabs must preserve the complete official platform, with Clips (Hc) and Messages (Hm) validated first.
 
-**How to apply:** The owner now requests a full flat vertical platform directory, with Calls and Messages first and Reels second, followed by the existing citizen sections. Keep the current platform name above a horizontal tools/settings/language row. This supersedes the limited four-entry presentation; historical navigation supplies section inventory, not old branding or authentication gates.
+**How to apply:** The owner now requests a full flat vertical platform directory, with Calls and Messages first and Clips («كليبسز», not «ريلز») second, followed by the existing citizen sections. Keep the current platform name above a horizontal tools/settings/language row. This supersedes the limited four-entry presentation; historical navigation supplies section inventory, not old branding or authentication gates.
 
 All platform tabs have equal importance; their order does not grant one priority over another.
 
@@ -36,6 +36,12 @@ Extend the existing web/mobile implementation rather than rebuilding or replacin
 **How to apply:** Audit and reuse current integrations first; preserve accounts, conversations and platform components. This choice does not itself confirm background calling works or authorize paid account purchases.
 
 ## Earlier module ownership guidance
+
+Platform changes must update existing services and preserve their organization, not replace them with empty services or rebuild the platform. Contacts do not belong in Settings.
+
+**Why:** On 2026-10-03 the owner reiterated «شعارنا التحديث ماشي البناء» and rejected mixing contacts with settings.
+
+**How to apply:** Reuse existing settings, tools and features; keep section descriptions and search accessible, and preserve navigation in both directions across sections and browsable internal views.
 
 Arena Qaisypro keeps all existing features but presents four independent entry doors:
 - AMIS is admin-only and owns site control, missions, 70/30 finance, wallet, and statistics.
