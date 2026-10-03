@@ -33,7 +33,7 @@ Assess core Clips publishing readiness separately from unfinished storage-mainte
 
 **How to apply:** Report actual upload, publication and playback failures with evidence, separately from unfinished enhancements. Do not infer that this objection authorizes unsafe deletion, cancels every earlier requirement, or proves the current release works.
 
-The owner identifies the original destination as Helixly.app/klips, belonging to GDNA Arena, and wants existing users preserved rather than a separate new site.
+The owner confirmed the original destination as https://helixly.app/clips/, belonging to GDNA Arena, and wants existing users preserved rather than a separate new site.
 
 **Why:** The owner clarified the intended original site after confusion between the storage name and the published app.
 
