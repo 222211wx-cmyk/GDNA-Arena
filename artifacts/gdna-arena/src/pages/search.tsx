@@ -6,6 +6,8 @@ import { getLegendImageUrl } from "@/lib/legend-images";
 import { useLang } from "@/contexts/LangContext";
 import { coreCopy } from "@/i18n/core-auth-copy";
 import { localeForLang } from "@/i18n/locale-surfaces-a-copy";
+import { findPlatformSections, UI_TEXT } from "@/config/platform-directory";
+import { Card } from "@workspace/gdna-ds/components/ui/card";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -322,9 +324,10 @@ export default function SearchPage() {
     else navigate("/search", { replace: true });
   });
 
-  const totalResults = results
+  const sectionResults = findPlatformSections(query, window.location.origin);
+  const totalResults = sectionResults.length + (results
     ? results.legends.length + results.citizens.length + results.posts.length + results.events.length
-    : 0;
+    : 0);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -340,16 +343,24 @@ export default function SearchPage() {
 
     setLoading(true);
     setError("");
+    setResults(null);
 
     const controller = new AbortController();
     fetch(`${BASE()}/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(copy.searchFailed);
+        return r.json();
+      })
       .then((data) => {
+        if (controller.signal.aborted) return;
+        if (!data || !["legends", "citizens", "posts", "events"].every(key => Array.isArray(data[key]))) {
+          throw new Error(copy.searchFailed);
+        }
         setResults(data);
         setLoading(false);
       })
       .catch((err) => {
-        if (err.name !== "AbortError") {
+        if (!controller.signal.aborted && err.name !== "AbortError") {
           setError(copy.searchFailed);
           setLoading(false);
         }
@@ -367,7 +378,7 @@ export default function SearchPage() {
     }
   };
 
-  const isEmpty = results && totalResults === 0;
+  const isEmpty = results !== null && totalResults === 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -388,7 +399,7 @@ export default function SearchPage() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={copy.searchPlaceholder}
-                className="bg-transparent outline-none text-foreground text-base flex-1 placeholder:text-muted-foreground"
+                className="min-w-0 bg-transparent outline-none text-foreground text-base flex-1 placeholder:text-muted-foreground"
               />
               {loading && <Loader2 size={16} className="text-primary animate-spin shrink-0" />}
               <button
@@ -412,6 +423,26 @@ export default function SearchPage() {
 
       {/* Results */}
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+
+        {sectionResults.length > 0 && (
+          <section aria-label={UI_TEXT.sections[lang]}>
+            <SectionHeader icon={<Search size={16} className="text-primary" />}
+              label={UI_TEXT.sections[lang]} count={sectionResults.length} resultLabel={copy.result} />
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {sectionResults.map(({ id, route, names, icon: Icon }) => (
+                <Card key={id}>
+                  <Link href={route} className="flex items-center gap-3 rounded-lg p-4 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <Icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block font-semibold">{names[lang]}</span>
+                      <span dir="ltr" className="block truncate text-sm text-muted-foreground">{route}</span>
+                    </span>
+                  </Link>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
 
         {error && (
           <div className="text-center text-destructive py-12">{error}</div>

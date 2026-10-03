@@ -12,13 +12,13 @@ export type DirectoryEntry = { id: string; route: string; icon: LucideIcon; name
 const n = (ar: string, en: string, fr: string, es: string, de: string): Record<Lang, string> => ({ ar, en, fr, es, de });
 
 /**
- * Flat citizen directory. Order is owner-mandated: Calls & Messages, then Reels.
+ * Flat citizen directory. Order is owner-mandated: Calls & Messages, then Clips.
  * Excluded on purpose: aliases (/clip, /souk, /messagerie...), detail routes (/u/:x, /games/*),
  * admin/finance routes, auth/recovery flows, /dashboard (= Settings), /search (= Tools).
  */
 export const DIRECTORY: DirectoryEntry[] = [
   { id: "messages", route: "/messages", icon: Phone, names: n("المكالمات والرسائل", "Calls & Messages", "Appels et messages", "Llamadas y mensajes", "Anrufe & Nachrichten") },
-  { id: "clips", route: "/clips", icon: Clapperboard, names: n("ريلز", "Reels", "Reels", "Reels", "Reels") },
+  { id: "clips", route: "/clips", icon: Clapperboard, names: n("كليبسز", "Clips", "Clips", "Clips", "Clips") },
   { id: "arena", route: "/games", icon: Gamepad2, names: n("الساحة", "Arena", "Arène", "Arena", "Arena") },
   { id: "shop", route: "/shop", icon: ShoppingBag, names: n("المتجر", "Shop", "Boutique", "Tienda", "Shop") },
   { id: "missions", route: "/growth", icon: Target, names: n("المهام", "Missions", "Missions", "Misiones", "Missionen") },
@@ -71,3 +71,34 @@ export const UI_TEXT = {
 /** Existing account settings live on the authenticated dashboard (redirects to /login if signed out). */
 export const SETTINGS_ROUTE = "/dashboard#account-settings";
 export const SEARCH_ROUTE = "/search";
+
+// Existing public origin used by the section directory. Never infer it from a preview host.
+export const PUBLIC_ORIGIN = "https://helixly.app";
+
+/** Resolve only known section links; pasted external URLs never become navigation targets. */
+export function findPlatformSections(query: string, currentOrigin: string): DirectoryEntry[] {
+  const normalize = (value: string) => value.normalize("NFD")
+    .replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g, "")
+    .replace(/[أإآ]/g, "ا").toLowerCase().trim();
+  const text = query.trim();
+  if (!text) return [];
+  let path: string | undefined;
+  if (/^(https?:\/\/|\/|helixly\.app\/)/i.test(text)) {
+    try {
+      const url = new URL(/^helixly\.app\//i.test(text) ? `https://${text}` : text, currentOrigin);
+      if (![new URL(PUBLIC_ORIGIN).origin, currentOrigin].includes(url.origin)) return [];
+      path = decodeURIComponent(url.pathname).replace(/\/+$/, "") || "/";
+    } catch { return []; }
+  }
+  const aliases: Record<string, string> = {
+    "/clip": "/clips", "/mes": "/messages", "/souk": "/market",
+    "/message-calle": "/messages", "/messages.call": "/messages",
+    "/messagerie": "/messages", "/message calle": "/messages",
+  };
+  if (path) return DIRECTORY.filter(section => section.route === (aliases[path] ?? path));
+  const needle = normalize(text);
+  return DIRECTORY.filter(section => [
+    section.id, section.route, ...Object.values(section.names),
+    ...(section.id === "clips" ? ["ريلز", "Reels", "كليبس", "كليبسز"] : []),
+  ].some(value => normalize(value).includes(needle)));
+}

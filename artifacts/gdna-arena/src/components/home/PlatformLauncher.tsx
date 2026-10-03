@@ -3,13 +3,10 @@ import { ChevronRight, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { trackEvent } from "@/lib/analytics";
 import { useLang } from "@/contexts/LangContext";
-import { DIRECTORY, UI_TEXT } from "@/config/platform-directory";
+import { DIRECTORY, UI_TEXT, PUBLIC_ORIGIN } from "@/config/platform-directory";
 import { Card } from "@workspace/gdna-ds/components/ui/card";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
-
-// Public deployment URL, verified through deployment metadata.
-const PUBLIC_ORIGIN = "https://helixly.app";
 
 export function PlatformLauncher() {
   const { lang } = useLang();
