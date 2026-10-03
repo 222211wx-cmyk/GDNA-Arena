@@ -106,7 +106,7 @@ export function createClipsFeedHandler(deps: {
         if (timer) clearTimeout(timer);
       }
       const page = clipsFeedPage(rows.map(row => ({
-        ...clipWithThumbnail(row), video_url: `/api/clips/stream/${row.id}`,
+        ...clipWithThumbnail(row), video_url: `/api/clips/stream/${row.id}${row.content_type === "video/mp4" ? "/video.mp4" : ""}`,
       })), query.limit);
       res.json(page);
     } catch (error) {

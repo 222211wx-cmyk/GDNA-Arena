@@ -70,7 +70,7 @@ describe("critical Clips navigation", () => {
     await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-grid"]')?.textContent).toContain("Réessayer"));
     vi.mocked(fetch).mockImplementation(async () => Response.json({ clips: [], hasMore: false }));
     document.querySelector<HTMLButtonElement>('[data-testid="reels-grid"] button')!.click();
-    await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-grid"]')?.textContent).toContain("Aucun Reel"));
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="reels-grid"]')?.textContent).toContain("Aucun Clip"));
     expect(document.querySelector("video")).toBeNull();
   });
 
@@ -206,19 +206,28 @@ describe("Reels poster and actions lifecycle", () => {
     controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
   };
 
-  it("keeps the clickable poster through loadeddata and a rejected autoplay until actual playback", async () => {
+  it("uses one native player, loads its typed source, and starts only on a direct click", async () => {
     vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException("blocked", "NotAllowedError"));
     feed();
     await vi.waitFor(() => expect(document.querySelector("video")).not.toBeNull());
     const video = document.querySelector("video")!;
     const poster = document.querySelector<HTMLElement>(".reels-poster")!;
-    expect(document.querySelector(".reels-play-instruction")?.textContent).toBe("Appuyez pour lire le clip");
+    expect(video.controls).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(video.autoplay).toBe(false);
+    expect(video.muted).toBe(false);
+    expect(video.preload).toBe("metadata");
+    expect(video.querySelector("source")?.type).toBe("video/mp4");
+    expect(video.querySelector("source")?.src).toBe("https://storage.example/9.mp4");
+    expect(HTMLMediaElement.prototype.load).toHaveBeenCalled();
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(document.querySelector(".reels-play")).toBeNull();
     video.dispatchEvent(new Event("loadeddata"));
     expect(poster.style.display).not.toBe("none");
-    await vi.waitFor(() => expect(document.querySelector(".reels-play")?.getAttribute("aria-label")).toBe("Lecture"));
-    expect(document.querySelector(".reels-play-instruction")).not.toBeNull();
+    video.click();
+    await Promise.resolve();
     // The poster doesn't consume clicks directed at the media surface.
-    document.querySelector<HTMLElement>(".reels-media-wrap")!.click();
+    video.click();
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
     expect(poster.style.display).not.toBe("none");
     Object.defineProperty(video, "paused", { configurable: true, value: false });
@@ -227,7 +236,7 @@ describe("Reels poster and actions lifecycle", () => {
     video.dispatchEvent(new Event("play"));
     expect(document.querySelector(".reels-play-instruction")).toBeNull();
     video.dispatchEvent(new Event("pause"));
-    expect(document.querySelector(".reels-play-instruction")).not.toBeNull();
+    expect(video.controls).toBe(true);
   });
 
   it("reveals only a rendered frame and restores the poster on deactivation until resumed playback", async () => {
@@ -329,7 +338,7 @@ describe("Reels natural-end progression", () => {
     first.dispatchEvent(new Event("loadeddata"));
     expect(document.querySelector(".reels-media-error")).toBeNull();
     first.dispatchEvent(new Event("play"));
-    expect(document.querySelector(".reels-play")?.getAttribute("aria-label")).toBe("Pause");
+    expect(first.controls).toBe(true);
 
     first.dispatchEvent(new Event("ended"));
     await vi.waitFor(() => expect(document.querySelector('[data-clip-id="1"] video')).not.toBeNull());
@@ -390,8 +399,8 @@ describe("Reels natural-end progression", () => {
     await Promise.resolve();
 
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
-    const control = document.querySelector<HTMLButtonElement>(".reels-play")!;
-    expect(control.getAttribute("aria-label")).toBe("Lecture");
+    const control = document.querySelector<HTMLVideoElement>("video")!;
+    expect(control.controls).toBe(true);
     expect(control.isConnected).toBe(true);
   });
 

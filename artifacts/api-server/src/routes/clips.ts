@@ -556,7 +556,7 @@ router.get("/clips/thumbnail/:id", async (req, res): Promise<void> => {
 });
 
 // ─── GET/HEAD /clips/stream/:id — scoped video streaming with byte ranges ─────
-router.get("/clips/stream/:id", async (req, res): Promise<void> => {
+router.get(["/clips/stream/:id", "/clips/stream/:id/video.mp4"], async (req, res): Promise<void> => {
   try {
     const id = parseClipId(req.params.id);
     if (!id) { res.status(400).end(); return; }

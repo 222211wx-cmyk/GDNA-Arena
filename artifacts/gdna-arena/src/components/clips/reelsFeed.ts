@@ -264,9 +264,6 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     // a play glyph that only overlays while paused. The fullscreen pill stays
     // visible during playback so the viewer can always expand the active Reel.
     const center = el("div", "reels-center", { "data-paused": "true" });
-    const playBtn = el("button", "reels-center-btn reels-play", { type: "button", "aria-label": "Lecture" });
-    // Play glyph (triangle).
-    playBtn.innerHTML = `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span class="reels-play-instruction">Appuyez pour lire le clip</span>`;
     const fsBtn = el("button", "reels-center-btn reels-fs-pill", { type: "button", "data-testid": "reels-fullscreen" });
     const fsIcon = el("span", "reels-fs-pill-icon");
     fsIcon.innerHTML = reelsIcons.fullscreen(false);
@@ -274,7 +271,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     fsLabel.textContent = "Plein écran";
     fsBtn.append(fsIcon, fsLabel);
     fsBtn.setAttribute("aria-label", "Plein écran");
-    center.append(playBtn, fsBtn);
+    center.append(fsBtn);
     slide.append(center);
 
     const actionsHost = el("div");
@@ -295,16 +292,12 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     let actionsPending = false;
     let actionsDisposed = false;
     let frameGeneration = 0;
-    let userPaused = false;
+    let userPaused = true;
     let naturallyEnded = false;
     let endAdvanceStarted = false;
 
     const setPaused = (paused: boolean) => {
       center.setAttribute("data-paused", String(paused));
-      playBtn.setAttribute("aria-label", paused ? "Lecture" : "Pause");
-      playBtn.innerHTML = paused
-        ? `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span class="reels-play-instruction">Appuyez pour lire le clip</span>`
-        : `<svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>`;
     };
 
     const showPoster = () => {
@@ -327,6 +320,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
     const togglePlaybackByUser = () => {
       playbackIntentVersion++;
+      // Visibility/grid navigation detaches the player and clears its source.
+      // Restore it synchronously within this gesture before attempting play().
+      loadPlayback();
       if (!video) {
         userPaused = false;
         naturallyEnded = false;
@@ -349,13 +345,23 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       }
     };
 
+    function attachSource(v: HTMLVideoElement) {
+      const source = document.createElement("source");
+      source.src = clip.video_url;
+      // Preserve non-MP4 uploads rather than mislabelling their container.
+      source.type = clip.content_type || "video/mp4";
+      source.addEventListener("error", () => v.dispatchEvent(new Event("error")));
+      v.replaceChildren(source);
+      v.load();
+    }
+
     function loadPlayback() {
       slides.forEach(other => { if (other.id !== clip.id) other.deactivate(); });
       if (playbackRequested) {
         if (video && !video.isConnected) {
-          video.src = clip.video_url;
           mediaWrap.prepend(video);
           video.addEventListener("loadedmetadata", () => { if (video) video.currentTime = resumeTime; }, { once: true });
+          attachSource(video);
         }
         if (video) mountActions(video);
         return;
@@ -363,15 +369,19 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       playbackRequested = true;
       const v = el("video") as HTMLVideoElement;
       v.playsInline = true;
+      v.controls = true;
+      v.autoplay = false;
+      v.muted = false;
+      Object.assign(v.style, { width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" });
       // Feed progression is ordered; a clip must never silently replay itself.
       v.loop = false;
-      v.preload = "auto";
+      v.preload = "metadata";
       v.setAttribute("webkit-playsinline", "true");
-      v.src = clip.video_url; // lazy: only requested when the slide activates
+      if (poster) v.poster = poster.src;
       video = v;
       let mediaError: HTMLElement | null = null;
       v.addEventListener("error", () => {
-        if (!v.isConnected || !v.hasAttribute("src")) return;
+        if (!v.isConnected || !v.querySelector("source[src]")) return;
         mediaError?.remove();
         mediaError = el("div", "reels-media-error", { role: "alert" });
         const text = el("p");
@@ -380,8 +390,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         retry.textContent = "Réessayer";
         retry.onclick = event => {
           event.stopPropagation();
-          v.src = clip.video_url;
-          v.load();
+          attachSource(v);
           void v.play().catch(() => setPaused(true));
         };
         mediaError.append(text, retry);
@@ -398,6 +407,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         // A manual click is a playback intent too; never allow a second player.
         slides.forEach(other => { if (other.id !== clip.id) other.deactivate(); });
         activeSlideId = clip.id;
+        userPaused = false;
         setPaused(false);
       });
       v.addEventListener("pause", () => { frameGeneration++; setPaused(true); });
@@ -409,6 +419,20 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         void advanceAfterNaturalEnd(clip.id, v);
       });
       mediaWrap.replaceChildren(v);
+      attachSource(v);
+      // Native controls own pause/seek/fullscreen; a click on the image starts
+      // playback directly, without a bubbling wrapper toggling it back off.
+      v.addEventListener("click", event => {
+        event.stopPropagation();
+        // Let the native control strip handle pause/seek/volume itself.
+        if (event.isTrusted && event.offsetY >= v.clientHeight - 48) return;
+        if (v.paused) {
+          userPaused = false;
+          naturallyEnded = false;
+          endAdvanceStarted = false;
+          void v.play().catch(() => setPaused(true));
+        }
+      });
       mountActions(v);
     }
 
@@ -541,12 +565,6 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     }
 
     fsBtn.addEventListener("click", toggleFullscreen);
-    playBtn.addEventListener("click", togglePlaybackByUser);
-    // Tap on media toggles play/pause (does not steal the horizontal gesture).
-    mediaWrap.addEventListener("click", event => {
-      if ((event.target as HTMLElement).closest(".reels-center-btn")) return;
-      togglePlaybackByUser();
-    });
 
     return {
       id: clip.id,
@@ -568,6 +586,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           resumeTime = video.currentTime;
           video.pause();
           video.removeAttribute("src");
+          video.replaceChildren();
           video.load();
           video.remove();
         }

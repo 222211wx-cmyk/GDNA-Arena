@@ -101,7 +101,8 @@ export function reelsShellCss(palette: Palette, space: string): string {
 
   .reels-media-wrap{
     position:relative;z-index:1;
-    width:100%;max-height:100%;
+    width:100%;height:calc(100% - var(--reels-bottom-safe) - ${space} * 20);max-height:100%;
+    align-self:flex-start;
     display:flex;align-items:center;justify-content:center;
   }
   .reels-media-error{
@@ -118,7 +119,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-slide[data-orient="portrait"] video{width:100%;height:100%;object-fit:cover}
 
   .reels-poster{
-    position:absolute;inset:0;z-index:1;
+    position:absolute;inset:0;z-index:0;
     width:100%;height:100%;object-fit:contain;
     background:transparent;pointer-events:none;
   }
@@ -190,9 +191,11 @@ export function reelsShellCss(palette: Palette, space: string): string {
   /* The VideoActions overlay (rail + meta) is positioned relative to the slide,
      lifted above the bottom nav. */
   .reels-slide .video-actions-shell{position:static}
-  .reels-slide .clip-overlay{position:absolute;inset:0;z-index:3}
+  .reels-slide .clip-overlay{position:absolute;inset:0;z-index:3;pointer-events:none}
+  .reels-slide .clip-overlay button,.reels-slide .clip-overlay a,
+  .reels-slide .clip-overlay input,.reels-slide .clip-overlay textarea{pointer-events:auto}
   .reels-slide .clip-rail{bottom:calc(104px + var(--reels-bottom-safe))}
-  .reels-slide .clip-meta{bottom:calc(104px + var(--reels-bottom-safe))}
+  .reels-slide .clip-meta{bottom:calc(104px + var(--reels-bottom-safe));pointer-events:none}
   .reels-slide .action-status{
     position:absolute;left:16px;right:72px;bottom:calc(84px + var(--reels-bottom-safe));
     z-index:4;color:var(--reels-on-media);font-size:.8125rem;text-shadow:0 1px 3px var(--reels-shadow);margin:0;
