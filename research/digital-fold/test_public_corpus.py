@@ -11,9 +11,13 @@ from public_benchmark import SAMPLES, extra_corpus, repetition_controls, verifie
 class PublicCorpusTests(unittest.TestCase):
     def test_pinned_originals_and_complete_media_set(self):
         samples = list(extra_corpus(SAMPLES / "originals"))
-        self.assertEqual(len(samples), 6)
-        self.assertEqual({s[1] for s in samples[:3]},
-                         {"public JPEG", "public audio", "public video"})
+        self.assertEqual(len(samples), len(manifest()["samples"]) + 3)
+        from fold import CHUNK
+        for category in ("public JPEG", "public audio", "public video"):
+            members = [s for s in samples if s[1] == category]
+            self.assertGreaterEqual(len(members), 3)
+            self.assertTrue(any(len(s[2]) > CHUNK for s in members))
+            self.assertEqual(len({s[4]["source_page"] for s in members}), len(members))
         for item in manifest()["samples"]:
             for key in ("creator", "license", "license_url", "source_revision", "download_url"):
                 self.assertTrue(item[key])

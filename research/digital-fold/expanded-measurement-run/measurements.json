@@ -1,0 +1,2831 @@
+{
+  "generated_utc": "2026-10-03T02:51:47.471719+00:00",
+  "python": "3.12.11",
+  "platform": "Linux-6.18.54-x86_64-with-glibc2.40",
+  "zlib": "1.3.1",
+  "zstandard": "*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***",
+  "zstandard_executable": "/nix/store/ddap6dm3fjdm0zmw4m3rls73a0gml3xd-zstd-1.5.7-bin/bin/zstd",
+  "repeats": 3,
+  "chunk_bytes": 1048576,
+  "parameters": {
+    "Fold": "1 MiB chunks, raw/zlib9/shuffle8-zlib9; baseline disabled",
+    "DEFLATE": "zlib wrapper, level 9",
+    "LZMA": "XZ container, preset 6",
+    "Zstandard": "CLI level 3, default frame, if installed"
+  },
+  "timing": "Median file-to-file wall time; no fsync; warm cache; validation outside timing. All individual samples retained. No warmup. Fixed codec order.",
+  "provenance": "Original synthetic corpus plus pinned, licensed public media and non-aligned repetition controls. Source/licensing details per item. No application or APK inputs; benchmark itself is offline.",
+  "corpus": [
+    {
+      "name": "text.txt",
+      "category": "text",
+      "bytes": 1011703,
+      "sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+      "provenance": "Original synthetic UTF-8 English/Arabic records, 9000 numbered rows."
+    },
+    {
+      "name": "structured.bin",
+      "category": "binary",
+      "bytes": 1048576,
+      "sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+      "provenance": "131072 sequential unsigned little-endian 64-bit integers."
+    },
+    {
+      "name": "noise.bin",
+      "category": "binary",
+      "bytes": 1048576,
+      "sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+      "provenance": "SHAKE-256(label=digital-fold-noise-v1), 1 MiB; incompressible control."
+    },
+    {
+      "name": "repeated.bin",
+      "category": "repeated",
+      "bytes": 4194304,
+      "sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+      "provenance": "Four aligned copies of SHAKE-256(label=digital-fold-repeat-v1), each 1 MiB."
+    },
+    {
+      "name": "short-repeat.bin",
+      "category": "repeated",
+      "bytes": 1048576,
+      "sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+      "provenance": "Eight-byte literal ABCD0123 repeated 131072 times; ordinary compression control."
+    },
+    {
+      "name": "noise.png",
+      "category": "compressed media",
+      "bytes": 787252,
+      "sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+      "provenance": "Synthetic 512x512 RGB noise PNG, filter 0, zlib level 9, SHAKE-256 label digital-fold-png-v1."
+    },
+    {
+      "name": "gradient.png",
+      "category": "compressed media",
+      "bytes": 376770,
+      "sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+      "provenance": "Synthetic 512x512 RGB gradient PNG, filter 0, zlib level 9."
+    },
+    {
+      "name": "flower.jpg",
+      "category": "public JPEG",
+      "bytes": 36287,
+      "sha256": "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+      "provenance": "Public Wikimedia Commons JPEG; 500 x 477 pixels; already optimized photographic composition, not a camera-original corpus.",
+      "title": "JPEG example flower.jpg",
+      "creator": "David Crawshaw (photo 2002, composition 2004); optimized by Gnash (2017); Commons upload by Maximaximax",
+      "source_page": "https://commons.wikimedia.org/wiki/File:JPEG_example_flower.jpg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:JPEG_example_flower.jpg&oldid=1198903688",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/JPEG_example_flower.jpg",
+      "license": "CC BY-SA 3.0 (selected from dual licensing)",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "license_evidence": "File page explicitly offers CC BY-SA 3.0 via GFDL migration; embedded JPEG comment credits David Crawshaw.",
+      "changes": "None by this research: original downloaded bytes, no resizing, trimming, stripping metadata or transcoding. Reversible compression only; attribution and license retained.",
+      "probe": {
+        "codec": "mjpeg",
+        "width": 500,
+        "height": 477
+      },
+      "retrieved_utc_date": "2026-10-01"
+    },
+    {
+      "name": "bansuri.ogg",
+      "category": "public audio",
+      "bytes": 368828,
+      "sha256": "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+      "provenance": "Public Wikimedia Commons bansuri music recording, current 2012 upload; Ogg Vorbis mono, 22050 Hz, 53.879592 seconds.",
+      "title": "Sample2.ogg",
+      "creator": "Prithoo (embedded metadata: Prithwin)",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Sample2.ogg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Sample2.ogg&oldid=913104758",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/1/1f/Sample2.ogg",
+      "license": "Public domain, released by copyright holder (PD-self)",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Sample2.ogg#Licensing",
+      "license_evidence": "I, the copyright holder of this work, release this work into the public domain. This applies worldwide. Where not legally possible, permission for any purpose without conditions unless required by law.",
+      "changes": "None by this research: complete original downloaded bytes, not transcoded or trimmed. Local filename changed only.",
+      "probe": {
+        "codec": "vorbis",
+        "sample_rate": 22050,
+        "channels": 1,
+        "duration_seconds": 53.879592
+      },
+      "retrieved_utc_date": "2026-10-01"
+    },
+    {
+      "name": "example.webm",
+      "category": "public video",
+      "bytes": 229792,
+      "sha256": "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+      "provenance": "Public Wikimedia Commons French sign-language example clip (2018); WebM VP9 1280 x 720 with stereo Opus, 3.527 seconds.",
+      "title": "Exemple.webm",
+      "creator": "Jauvert Laura (original video); Edouard-lopez (video editing)",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Exemple.webm",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Exemple.webm&oldid=1197375449",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Exemple.webm",
+      "license": "CC BY 3.0",
+      "license_url": "https://creativecommons.org/licenses/by/3.0/",
+      "license_evidence": "File description and Licensing section explicitly license this file under Creative Commons Attribution 3.0 Unported.",
+      "changes": "None by this research: complete original Commons clip, no new editing, resizing, trimming, metadata stripping or transcoding. Local filename changed only.",
+      "probe": {
+        "video_codec": "vp9",
+        "audio_codec": "opus",
+        "width": 1280,
+        "height": 720,
+        "sample_rate": 48000,
+        "channels": 2,
+        "duration_seconds": 3.527
+      },
+      "retrieved_utc_date": "2026-10-01"
+    },
+    {
+      "name": "Fronalpstock_big.jpg",
+      "category": "public JPEG",
+      "bytes": 14679474,
+      "sha256": "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+      "provenance": "Swiss mountain panorama stitched by its creator from 12 frames; complete 2010 upload, not an unedited camera original. Large detailed landscape.",
+      "title": "Fronalpstock big.jpg",
+      "creator": "Hannes Röst",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Fronalpstock_big.jpg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Fronalpstock_big.jpg&oldid=1252720846",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
+      "license": "CC BY-SA 3.0 (selected from dual licensing)",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "license_evidence": "Copyright holder explicitly offers CC BY-SA 3.0 and permits selecting that license. Snapshot: evidence/Fronalpstock_big.jpg.md",
+      "retrieved_utc_date": "2026-10-03",
+      "changes": "None: complete original Commons upload, no resizing, transcoding, metadata stripping or other edits.",
+      "probe": {
+        "codec": "mjpeg",
+        "width": 10109,
+        "height": 4542
+      }
+    },
+    {
+      "name": "Shaki_waterfall.jpg",
+      "category": "public JPEG",
+      "bytes": 377828,
+      "sha256": "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+      "provenance": "Photograph of Shaki waterfall, Armenia, 2012; textured water/vegetation at intermediate resolution.",
+      "title": "Shaki waterfall.jpg",
+      "creator": "Sisianci",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Shaki_waterfall.jpg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Shaki_waterfall.jpg&oldid=1154061430",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/3/3c/Shaki_waterfall.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+      "license": "CC0 1.0 Universal",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_evidence": "Own-work author explicitly dedicates this file under CC0. Snapshot: evidence/Shaki_waterfall.jpg.md",
+      "retrieved_utc_date": "2026-10-03",
+      "changes": "None: complete original Commons upload, no resizing, transcoding, metadata stripping or other edits.",
+      "probe": {
+        "codec": "mjpeg",
+        "width": 1280,
+        "height": 959
+      }
+    },
+    {
+      "name": "Rain_thunder_and_birds.ogg",
+      "category": "public audio",
+      "bytes": 1979069,
+      "sha256": "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+      "provenance": "Outdoor field recording, rain/thunder/birdsong. Commons source page describes an upstream MP3: this is the unchanged Commons Ogg, not that MP3 or an uncompressed master. Probe also reports a data stream.",
+      "title": "Rain thunder and birds.ogg",
+      "creator": "ezwa; transferred to Commons by Fæ",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Rain_thunder_and_birds.ogg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Rain_thunder_and_birds.ogg&oldid=1002546056",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Rain_thunder_and_birds.ogg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+      "license": "Public domain, released by author ezwa",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Rain_thunder_and_birds.ogg#Licensing",
+      "license_evidence": "PD-author dedication worldwide with permission for any purpose where dedication is not legally possible; PDSounds release also documented. Snapshot: evidence/Rain_thunder_and_birds.ogg.md",
+      "retrieved_utc_date": "2026-10-03",
+      "changes": "None: complete original Commons Ogg upload, no transcoding, trimming or metadata stripping.",
+      "probe": {
+        "codec": "vorbis",
+        "sample_rate": 44100,
+        "channels": 1,
+        "duration_seconds": 134.29551
+      }
+    },
+    {
+      "name": "George_W._Bush_Speech_-_September_11,_2001.ogg",
+      "category": "public audio",
+      "bytes": 1004622,
+      "sha256": "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+      "provenance": "Low-bitrate historical spoken address from The George W. Bush Public Domain Audio Archive. Selected for speech/length contrast, not endorsement. US public-domain basis does not assert worldwide legal status. ffprobe duration differs from Commons structured duration (261.572789 s); byte identity, not page duration, defines the input.",
+      "title": "George W. Bush Speech - September 11, 2001.ogg",
+      "creator": "Executive Office of the President of the United States (per PD-USGov-POTUS notice); speaker George W. Bush; individual recording author unspecified; uploaded by Ondrejk",
+      "source_page": "https://commons.wikimedia.org/wiki/File:George_W._Bush_Speech_-_September_11,_2001.ogg",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:George_W._Bush_Speech_-_September_11,_2001.ogg&oldid=1211683260",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/George_W._Bush_Speech_-_September_11%2C_2001.ogg",
+      "license": "Public domain in the United States (PD-USGov-POTUS)",
+      "license_url": "https://commons.wikimedia.org/wiki/Template:PD-USGov-POTUS",
+      "license_evidence": "File page identifies an official-duty US Executive Office employee work, public domain as a US federal government work; its Author field lacks an individual name. Snapshot: evidence/George_W._Bush_Speech_-_September_11,_2001.ogg.md",
+      "retrieved_utc_date": "2026-10-03",
+      "changes": "None: complete original Commons Ogg upload, no transcoding, trimming or metadata stripping.",
+      "probe": {
+        "codec": "vorbis",
+        "sample_rate": 44100,
+        "channels": 1,
+        "duration_seconds": 262.713469
+      }
+    },
+    {
+      "name": "Piano_close-up.webm",
+      "category": "public video",
+      "bytes": 5410367,
+      "sha256": "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+      "provenance": "Live-action Interlingual Energizers workshop activity, 25 June 2016. Complete Commons clip, VP8/Vorbis 1080p; no claim that copyright permission overrides personality rights.",
+      "title": "Piano close-up.webm",
+      "creator": "Cantoreanu Vlad Vasile",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Piano_close-up.webm",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Piano_close-up.webm&oldid=1155310845",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Piano_close-up.webm?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "license_evidence": "File page explicitly licenses the work CC BY-SA 4.0; also warns that personality rights may restrict some reuses. Snapshot: evidence/Piano_close-up.webm.md",
+      "retrieved_utc_date": "2026-10-03",
+      "changes": "None: complete original Commons upload, no transcoding, trimming, resizing or metadata stripping.",
+      "probe": {
+        "video_codec": "vp8",
+        "audio_codec": "vorbis",
+        "width": 1920,
+        "height": 1080,
+        "sample_rate": 48000,
+        "channels": 2,
+        "duration_seconds": 19.523
+      }
+    },
+    {
+      "name": "Meet_the_Capacity_Exchange.webm",
+      "category": "public video",
+      "bytes": 20693478,
+      "sha256": "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+      "provenance": "Capacity Exchange introduction, 17 March 2025; full 92-second VP9/Opus 1080p video. External timed-text tracks on Commons are not part of the downloaded media file and are not required to reconstruct it.",
+      "title": "Meet the Capacity Exchange.webm",
+      "creator": "Wiki Movimento Brasil",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Meet_the_Capacity_Exchange.webm",
+      "source_revision": "https://commons.wikimedia.org/w/index.php?title=File:Meet_the_Capacity_Exchange.webm&oldid=1132544386",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/5/59/Meet_the_Capacity_Exchange.webm?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "license_evidence": "Own-work copyright holder explicitly licenses CC BY-SA 4.0. Snapshot: evidence/Meet_the_Capacity_Exchange.webm.md",
+      "retrieved_utc_date": "2026-10-03",
+      "changes": "None: complete original Commons upload, no transcoding, trimming, resizing or metadata stripping.",
+      "probe": {
+        "video_codec": "vp9",
+        "audio_codec": "opus",
+        "width": 1920,
+        "height": 1080,
+        "sample_rate": 48000,
+        "channels": 2,
+        "duration_seconds": 92.104
+      }
+    },
+    {
+      "name": "shifted-repeat.bin",
+      "category": "non-aligned repeated control",
+      "bytes": 4194321,
+      "sha256": "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+      "provenance": "17-byte SHAKE-256 prefix + four original 1 MiB blocks. Fixed shift is NOT a complete deduplication defeat: three interior shifted chunks still match (two references).",
+      "control": {
+        "repeat_starts_bytes": [
+          17,
+          1048593,
+          2097169,
+          3145745
+        ],
+        "repeat_starts_mod_chunk": [
+          17,
+          17,
+          17,
+          17
+        ],
+        "expected_fold_references": 2,
+        "repeated_block_sha256": "57f7e7b51480cf333db9c7ccf8ce15d78a4c162658024ba2357428592f3a3bbf",
+        "generator": "SHAKE-256; exact labels and lengths in public_benchmark.py"
+      }
+    },
+    {
+      "name": "gapped-repeat.bin",
+      "category": "non-aligned repeated control",
+      "bytes": 4194579,
+      "sha256": "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+      "provenance": "Four original 1 MiB blocks separated by 1, 17, 257 SHAKE-256 bytes; repeat starts modulo chunk size are 0, 1, 18, 275. No aligned chunk repeats.",
+      "control": {
+        "repeat_starts_bytes": [
+          0,
+          1048577,
+          2097170,
+          3146003
+        ],
+        "repeat_starts_mod_chunk": [
+          0,
+          1,
+          18,
+          275
+        ],
+        "expected_fold_references": 0,
+        "repeated_block_sha256": "57f7e7b51480cf333db9c7ccf8ce15d78a4c162658024ba2357428592f3a3bbf",
+        "generator": "SHAKE-256; exact labels and lengths in public_benchmark.py"
+      }
+    },
+    {
+      "name": "nonaligned-period.bin",
+      "category": "non-aligned repeated control",
+      "bytes": 4194356,
+      "sha256": "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+      "provenance": "Four identical (1 MiB + 13 byte) periods: original 1 MiB block + SHAKE-256(label=digital-fold-period-tail-v1, length=13). Repeat starts modulo chunk size are 0, 13, 26, 39; no aligned chunk repeats.",
+      "control": {
+        "repeat_starts_bytes": [
+          0,
+          1048589,
+          2097178,
+          3145767
+        ],
+        "repeat_starts_mod_chunk": [
+          0,
+          13,
+          26,
+          39
+        ],
+        "expected_fold_references": 0,
+        "repeated_block_sha256": "57f7e7b51480cf333db9c7ccf8ce15d78a4c162658024ba2357428592f3a3bbf",
+        "generator": "SHAKE-256; exact labels and lengths in public_benchmark.py"
+      }
+    }
+  ],
+  "rows": [
+    {
+      "file": "text.txt",
+      "codec": "Fold",
+      "source_bytes": 1011703,
+      "archive_bytes": 26089,
+      "ratio": 38.77891065199893,
+      "encode_seconds": 0.034733077000055346,
+      "decode_seconds": 0.008062356999971598,
+      "encode_samples": [
+        0.034733077000055346,
+        0.033931745000018054,
+        0.03474716300002001
+      ],
+      "decode_samples": [
+        0.01991885799998272,
+        0.008062356999971598,
+        0.004388868999967599
+      ],
+      "exact_match": true,
+      "restored_sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+      "archive_sha256_samples": [
+        "272da90a628a771a88528a5abc0c98346ea36e7145f9ff3dcbe8a9c688aff549",
+        "272da90a628a771a88528a5abc0c98346ea36e7145f9ff3dcbe8a9c688aff549",
+        "272da90a628a771a88528a5abc0c98346ea36e7145f9ff3dcbe8a9c688aff549"
+      ],
+      "restored_sha256_samples": [
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7"
+      ],
+      "fold_chunk_choices": {
+        "shuffle8-deflate": 1
+      }
+    },
+    {
+      "file": "text.txt",
+      "codec": "DEFLATE",
+      "source_bytes": 1011703,
+      "archive_bytes": 31249,
+      "ratio": 32.37553201702455,
+      "encode_seconds": 0.016140591000066706,
+      "decode_seconds": 0.00172610499998882,
+      "encode_samples": [
+        0.01460456399991017,
+        0.016140591000066706,
+        0.016205715000069176
+      ],
+      "decode_samples": [
+        0.0014263289999689732,
+        0.0017353910000110773,
+        0.00172610499998882
+      ],
+      "exact_match": true,
+      "restored_sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+      "archive_sha256_samples": [
+        "2ef8fd44f7a6a835727fd96d814edf5b5f47520bcdf7c897ac575155466c0559",
+        "2ef8fd44f7a6a835727fd96d814edf5b5f47520bcdf7c897ac575155466c0559",
+        "2ef8fd44f7a6a835727fd96d814edf5b5f47520bcdf7c897ac575155466c0559"
+      ],
+      "restored_sha256_samples": [
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "text.txt",
+      "codec": "LZMA",
+      "source_bytes": 1011703,
+      "archive_bytes": 8704,
+      "ratio": 116.23426011029412,
+      "encode_seconds": 0.13723173699986546,
+      "decode_seconds": 0.0016931980001118063,
+      "encode_samples": [
+        0.14533132699989437,
+        0.1359843389998332,
+        0.13723173699986546
+      ],
+      "decode_samples": [
+        0.0019357969999873603,
+        0.0016931980001118063,
+        0.0016668630000822304
+      ],
+      "exact_match": true,
+      "restored_sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+      "archive_sha256_samples": [
+        "b697ca087963ffe1353bf69b489c9b36c00b8f73417d4f849ee2b8b3cc7ec25e",
+        "b697ca087963ffe1353bf69b489c9b36c00b8f73417d4f849ee2b8b3cc7ec25e",
+        "b697ca087963ffe1353bf69b489c9b36c00b8f73417d4f849ee2b8b3cc7ec25e"
+      ],
+      "restored_sha256_samples": [
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "text.txt",
+      "codec": "Zstandard",
+      "source_bytes": 1011703,
+      "archive_bytes": 16163,
+      "ratio": 62.593763533997404,
+      "encode_seconds": 0.008299590999968132,
+      "decode_seconds": 0.006722255000113364,
+      "encode_samples": [
+        0.014521834999868588,
+        0.008299590999968132,
+        0.008003806000033364
+      ],
+      "decode_samples": [
+        0.008874648000073648,
+        0.006722255000113364,
+        0.00634680500002105
+      ],
+      "exact_match": true,
+      "restored_sha256": "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+      "archive_sha256_samples": [
+        "becbd5d6db64d1fbdc4b8f94f2a4967d17dc3a3149f293a3bcfec6debf60b950",
+        "becbd5d6db64d1fbdc4b8f94f2a4967d17dc3a3149f293a3bcfec6debf60b950",
+        "becbd5d6db64d1fbdc4b8f94f2a4967d17dc3a3149f293a3bcfec6debf60b950"
+      ],
+      "restored_sha256_samples": [
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7",
+        "cab893cf7cd42c984cdb9744f4f04a5d4280a19fda8ea26e3ae95fcb78ef75f7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "structured.bin",
+      "codec": "Fold",
+      "source_bytes": 1048576,
+      "archive_bytes": 3290,
+      "ratio": 318.7161094224924,
+      "encode_seconds": 1.1731602059999204,
+      "decode_seconds": 0.004440793999947346,
+      "encode_samples": [
+        1.1731602059999204,
+        1.1399396489998708,
+        1.17368486700002
+      ],
+      "decode_samples": [
+        0.004440793999947346,
+        0.0038605879999522585,
+        0.004460451000113608
+      ],
+      "exact_match": true,
+      "restored_sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+      "archive_sha256_samples": [
+        "87aea70bbfb18e467e4134c42363dcf82cfa4bd720bd6e6180437c5f722885bd",
+        "7872bc068b7326869997e0ca88127450930b81b3525600a43507ce11462342a6",
+        "7872bc068b7326869997e0ca88127450930b81b3525600a43507ce11462342a6"
+      ],
+      "restored_sha256_samples": [
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33"
+      ],
+      "fold_chunk_choices": {
+        "shuffle8-deflate": 1
+      }
+    },
+    {
+      "file": "structured.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 1048576,
+      "archive_bytes": 197695,
+      "ratio": 5.304008700270619,
+      "encode_seconds": 1.128786997999896,
+      "decode_seconds": 0.0036266120000618685,
+      "encode_samples": [
+        1.128786997999896,
+        1.1278227479999714,
+        1.204367247999926
+      ],
+      "decode_samples": [
+        0.0032096179998006846,
+        0.003966377999859105,
+        0.0036266120000618685
+      ],
+      "exact_match": true,
+      "restored_sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+      "archive_sha256_samples": [
+        "8e83eca08d239caeead619c424cc5a4f9fbd36d651e14f4857e9e8e80fb03bab",
+        "8e83eca08d239caeead619c424cc5a4f9fbd36d651e14f4857e9e8e80fb03bab",
+        "8e83eca08d239caeead619c424cc5a4f9fbd36d651e14f4857e9e8e80fb03bab"
+      ],
+      "restored_sha256_samples": [
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "structured.bin",
+      "codec": "LZMA",
+      "source_bytes": 1048576,
+      "archive_bytes": 34332,
+      "ratio": 30.542234649889316,
+      "encode_seconds": 0.25274073399987174,
+      "decode_seconds": 0.009887138999829403,
+      "encode_samples": [
+        0.25274073399987174,
+        0.26283658499983176,
+        0.2455413990001034
+      ],
+      "decode_samples": [
+        0.010373630999993111,
+        0.009744937000050413,
+        0.009887138999829403
+      ],
+      "exact_match": true,
+      "restored_sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+      "archive_sha256_samples": [
+        "152341ebe2bee4ee86bafddf94a4c614d0f96537e442aa278667e0cdda1b5360",
+        "152341ebe2bee4ee86bafddf94a4c614d0f96537e442aa278667e0cdda1b5360",
+        "152341ebe2bee4ee86bafddf94a4c614d0f96537e442aa278667e0cdda1b5360"
+      ],
+      "restored_sha256_samples": [
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "structured.bin",
+      "codec": "Zstandard",
+      "source_bytes": 1048576,
+      "archive_bytes": 170408,
+      "ratio": 6.153326134923243,
+      "encode_seconds": 0.018272666000029858,
+      "decode_seconds": 0.00767988300003708,
+      "encode_samples": [
+        0.015518103000204064,
+        0.019697153999914008,
+        0.018272666000029858
+      ],
+      "decode_samples": [
+        0.008884345000069516,
+        0.00767988300003708,
+        0.007460205000143105
+      ],
+      "exact_match": true,
+      "restored_sha256": "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+      "archive_sha256_samples": [
+        "0409da35d3d22d006656d68a9c31475b3c2f706e646ac0e3091fe4c796928c17",
+        "0409da35d3d22d006656d68a9c31475b3c2f706e646ac0e3091fe4c796928c17",
+        "0409da35d3d22d006656d68a9c31475b3c2f706e646ac0e3091fe4c796928c17"
+      ],
+      "restored_sha256_samples": [
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33",
+        "82d2c958df6a38a76154b28789469c4a29920c47d8f839d5bb74315116324f33"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "noise.bin",
+      "codec": "Fold",
+      "source_bytes": 1048576,
+      "archive_bytes": 1049056,
+      "ratio": 0.9995424457798249,
+      "encode_seconds": 0.056857566999951814,
+      "decode_seconds": 0.0031524480000371113,
+      "encode_samples": [
+        0.056857566999951814,
+        0.056171984999991764,
+        0.06362254099985876
+      ],
+      "decode_samples": [
+        0.002907226999923296,
+        0.0035519170000952727,
+        0.0031524480000371113
+      ],
+      "exact_match": true,
+      "restored_sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+      "archive_sha256_samples": [
+        "f00cc831a8b7856d21add6c256ef4b284bdcaa7bcea96112f5e324b8d13c01aa",
+        "f00cc831a8b7856d21add6c256ef4b284bdcaa7bcea96112f5e324b8d13c01aa",
+        "f00cc831a8b7856d21add6c256ef4b284bdcaa7bcea96112f5e324b8d13c01aa"
+      ],
+      "restored_sha256_samples": [
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b"
+      ],
+      "fold_chunk_choices": {
+        "raw": 1
+      }
+    },
+    {
+      "file": "noise.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 1048576,
+      "archive_bytes": 1048902,
+      "ratio": 0.9996891988002692,
+      "encode_seconds": 0.030362739999873156,
+      "decode_seconds": 0.0015281169999070698,
+      "encode_samples": [
+        0.029758060999938607,
+        0.030362739999873156,
+        0.03317490899985387
+      ],
+      "decode_samples": [
+        0.0017017109998960223,
+        0.0015281169999070698,
+        0.0014235099999950762
+      ],
+      "exact_match": true,
+      "restored_sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+      "archive_sha256_samples": [
+        "a59fcf1a1a0d78ffe1cb84ea3b6cdf2e744ecc5e6a25418a7f25bdb093a67839",
+        "a59fcf1a1a0d78ffe1cb84ea3b6cdf2e744ecc5e6a25418a7f25bdb093a67839",
+        "a59fcf1a1a0d78ffe1cb84ea3b6cdf2e744ecc5e6a25418a7f25bdb093a67839"
+      ],
+      "restored_sha256_samples": [
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "noise.bin",
+      "codec": "LZMA",
+      "source_bytes": 1048576,
+      "archive_bytes": 1048688,
+      "ratio": 0.9998931998840456,
+      "encode_seconds": 0.19176866199995857,
+      "decode_seconds": 0.0013192549999985204,
+      "encode_samples": [
+        0.21707427199999074,
+        0.18863212900009785,
+        0.19176866199995857
+      ],
+      "decode_samples": [
+        0.0018058129999189987,
+        0.0013192549999985204,
+        0.0013153370000509312
+      ],
+      "exact_match": true,
+      "restored_sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+      "archive_sha256_samples": [
+        "80b34dceeea74c631be948e058ac7faa4b979315a0d4b8a9fdbc886754ae04bb",
+        "80b34dceeea74c631be948e058ac7faa4b979315a0d4b8a9fdbc886754ae04bb",
+        "80b34dceeea74c631be948e058ac7faa4b979315a0d4b8a9fdbc886754ae04bb"
+      ],
+      "restored_sha256_samples": [
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "noise.bin",
+      "codec": "Zstandard",
+      "source_bytes": 1048576,
+      "archive_bytes": 1048613,
+      "ratio": 0.9999647152953473,
+      "encode_seconds": 0.011853818999952637,
+      "decode_seconds": 0.007645894999996017,
+      "encode_samples": [
+        0.011853818999952637,
+        0.011047601999962353,
+        0.01226101999986895
+      ],
+      "decode_samples": [
+        0.007156978000011804,
+        0.007645894999996017,
+        0.008368607999955202
+      ],
+      "exact_match": true,
+      "restored_sha256": "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+      "archive_sha256_samples": [
+        "7b3ae4ccccf9fa104e4cb1e130e2640e441a0bdad6bd901cb088406b1d96f05c",
+        "7b3ae4ccccf9fa104e4cb1e130e2640e441a0bdad6bd901cb088406b1d96f05c",
+        "7b3ae4ccccf9fa104e4cb1e130e2640e441a0bdad6bd901cb088406b1d96f05c"
+      ],
+      "restored_sha256_samples": [
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b",
+        "63f4684d7918655507bec35926319e2e7fe7c023fa69338fabe77adf51db201b"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "repeated.bin",
+      "codec": "Fold",
+      "source_bytes": 4194304,
+      "archive_bytes": 1049062,
+      "ratio": 3.998146916006871,
+      "encode_seconds": 0.059984251000059885,
+      "decode_seconds": 0.012627027999997154,
+      "encode_samples": [
+        0.059984251000059885,
+        0.06053298200004065,
+        0.05942401700008304
+      ],
+      "decode_samples": [
+        0.011713189999909446,
+        0.012627027999997154,
+        0.015176311999994141
+      ],
+      "exact_match": true,
+      "restored_sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+      "archive_sha256_samples": [
+        "23c684f49a82d29eceb2a8e9a0effc56bd6e22c75e2868f8a63a50ff7423c829",
+        "23c684f49a82d29eceb2a8e9a0effc56bd6e22c75e2868f8a63a50ff7423c829",
+        "23c684f49a82d29eceb2a8e9a0effc56bd6e22c75e2868f8a63a50ff7423c829"
+      ],
+      "restored_sha256_samples": [
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c"
+      ],
+      "fold_chunk_choices": {
+        "raw": 1,
+        "reference": 3
+      }
+    },
+    {
+      "file": "repeated.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 4194304,
+      "archive_bytes": 4195590,
+      "ratio": 0.9996934876858797,
+      "encode_seconds": 0.11560250599995925,
+      "decode_seconds": 0.00807871699998941,
+      "encode_samples": [
+        0.11560250599995925,
+        0.11863771900016218,
+        0.10821496600010505
+      ],
+      "decode_samples": [
+        0.00807871699998941,
+        0.009322556000142868,
+        0.005841315999987273
+      ],
+      "exact_match": true,
+      "restored_sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+      "archive_sha256_samples": [
+        "ef5bb8df40f3f109efe96d081b0959b25f7aad66b668288dbfcdecaf0e84cfb2",
+        "ef5bb8df40f3f109efe96d081b0959b25f7aad66b668288dbfcdecaf0e84cfb2",
+        "ef5bb8df40f3f109efe96d081b0959b25f7aad66b668288dbfcdecaf0e84cfb2"
+      ],
+      "restored_sha256_samples": [
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "repeated.bin",
+      "codec": "LZMA",
+      "source_bytes": 4194304,
+      "archive_bytes": 1049464,
+      "ratio": 3.9966154151071405,
+      "encode_seconds": 0.32941408800002137,
+      "decode_seconds": 0.007183642999962103,
+      "encode_samples": [
+        0.34022149399993395,
+        0.32941408800002137,
+        0.3223489409999729
+      ],
+      "decode_samples": [
+        0.007221509999908449,
+        0.007183642999962103,
+        0.006985195999959615
+      ],
+      "exact_match": true,
+      "restored_sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+      "archive_sha256_samples": [
+        "407fb47f8fcf91c0ba7669cbd59cac154cd289c1acccfaf137ead87e50f42baf",
+        "407fb47f8fcf91c0ba7669cbd59cac154cd289c1acccfaf137ead87e50f42baf",
+        "407fb47f8fcf91c0ba7669cbd59cac154cd289c1acccfaf137ead87e50f42baf"
+      ],
+      "restored_sha256_samples": [
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "repeated.bin",
+      "codec": "Zstandard",
+      "source_bytes": 4194304,
+      "archive_bytes": 1051625,
+      "ratio": 3.988402710091525,
+      "encode_seconds": 0.013901396999926874,
+      "decode_seconds": 0.010866570999951364,
+      "encode_samples": [
+        0.015515198000002783,
+        0.013218068999776733,
+        0.013901396999926874
+      ],
+      "decode_samples": [
+        0.010894593000102759,
+        0.008869807999872137,
+        0.010866570999951364
+      ],
+      "exact_match": true,
+      "restored_sha256": "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+      "archive_sha256_samples": [
+        "56cd02412df9971f1967fae7277f2a180dcf770240314dfe183b75bf9813139e",
+        "56cd02412df9971f1967fae7277f2a180dcf770240314dfe183b75bf9813139e",
+        "56cd02412df9971f1967fae7277f2a180dcf770240314dfe183b75bf9813139e"
+      ],
+      "restored_sha256_samples": [
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c",
+        "fef8e88a2c17430c2c75d1fbb56e7e207b5cb3ff2801d6b62b124dfe2ba6011c"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "short-repeat.bin",
+      "codec": "Fold",
+      "source_bytes": 1048576,
+      "archive_bytes": 1545,
+      "ratio": 678.6899676375405,
+      "encode_seconds": 0.01047502100004749,
+      "decode_seconds": 0.0037008230001447373,
+      "encode_samples": [
+        0.01047502100004749,
+        0.009514013999933013,
+        0.010850643000139826
+      ],
+      "decode_samples": [
+        0.003927178999902026,
+        0.0037008230001447373,
+        0.0036039479998635215
+      ],
+      "exact_match": true,
+      "restored_sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+      "archive_sha256_samples": [
+        "2ee03fbc29e530d034c1248ce9e691f9e6ef994bb4940389f866b5bf760ab099",
+        "2ee03fbc29e530d034c1248ce9e691f9e6ef994bb4940389f866b5bf760ab099",
+        "2ee03fbc29e530d034c1248ce9e691f9e6ef994bb4940389f866b5bf760ab099"
+      ],
+      "restored_sha256_samples": [
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f"
+      ],
+      "fold_chunk_choices": {
+        "shuffle8-deflate": 1
+      }
+    },
+    {
+      "file": "short-repeat.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 1048576,
+      "archive_bytes": 1557,
+      "ratio": 673.4592164418754,
+      "encode_seconds": 0.004005074000133391,
+      "decode_seconds": 0.001635086999840496,
+      "encode_samples": [
+        0.005371915000068839,
+        0.0037870149999434943,
+        0.004005074000133391
+      ],
+      "decode_samples": [
+        0.0019032990001051076,
+        0.001511563999883947,
+        0.001635086999840496
+      ],
+      "exact_match": true,
+      "restored_sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+      "archive_sha256_samples": [
+        "88bb2644039a9a13c1b5df225e22048966d91cdd31a018ab697a9a3ff32e26aa",
+        "88bb2644039a9a13c1b5df225e22048966d91cdd31a018ab697a9a3ff32e26aa",
+        "88bb2644039a9a13c1b5df225e22048966d91cdd31a018ab697a9a3ff32e26aa"
+      ],
+      "restored_sha256_samples": [
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "short-repeat.bin",
+      "codec": "LZMA",
+      "source_bytes": 1048576,
+      "archive_bytes": 292,
+      "ratio": 3591.013698630137,
+      "encode_seconds": 0.015856892000101652,
+      "decode_seconds": 0.001377412000010736,
+      "encode_samples": [
+        0.02346536800018839,
+        0.015856892000101652,
+        0.01561464899987186
+      ],
+      "decode_samples": [
+        0.0015677500000492728,
+        0.001377412000010736,
+        0.0012855380000473815
+      ],
+      "exact_match": true,
+      "restored_sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+      "archive_sha256_samples": [
+        "6fce0593be1cd49a53947c39801aa069ae5657818982ed8a3c298682f27c39e7",
+        "6fce0593be1cd49a53947c39801aa069ae5657818982ed8a3c298682f27c39e7",
+        "6fce0593be1cd49a53947c39801aa069ae5657818982ed8a3c298682f27c39e7"
+      ],
+      "restored_sha256_samples": [
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "short-repeat.bin",
+      "codec": "Zstandard",
+      "source_bytes": 1048576,
+      "archive_bytes": 116,
+      "ratio": 9039.448275862069,
+      "encode_seconds": 0.008561133000057453,
+      "decode_seconds": 0.006592472999955135,
+      "encode_samples": [
+        0.009153924999964147,
+        0.008561133000057453,
+        0.007433407000007719
+      ],
+      "decode_samples": [
+        0.006403943999885087,
+        0.006665763000000879,
+        0.006592472999955135
+      ],
+      "exact_match": true,
+      "restored_sha256": "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+      "archive_sha256_samples": [
+        "b48d923a59b25a39b536a3bcd334f6ece4a261ea3b72fdb3a70630d7df0ed858",
+        "b48d923a59b25a39b536a3bcd334f6ece4a261ea3b72fdb3a70630d7df0ed858",
+        "b48d923a59b25a39b536a3bcd334f6ece4a261ea3b72fdb3a70630d7df0ed858"
+      ],
+      "restored_sha256_samples": [
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f",
+        "eaad10aa64a9b393aa04127ddc27dc28bfbb2cbaaa4ab4cf14bacb24d4aa907f"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "noise.png",
+      "codec": "Fold",
+      "source_bytes": 787252,
+      "archive_bytes": 787730,
+      "ratio": 0.9993931930991583,
+      "encode_seconds": 0.03974104600001738,
+      "decode_seconds": 0.0022012089998497686,
+      "encode_samples": [
+        0.03974104600001738,
+        0.040200391000098534,
+        0.03963367100004689
+      ],
+      "decode_samples": [
+        0.0021464170001763705,
+        0.0022012089998497686,
+        0.002223186999799509
+      ],
+      "exact_match": true,
+      "restored_sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+      "archive_sha256_samples": [
+        "4761315abf737bb55a678290df32c488188865bdf4ea767b888bf116ee8cddf1",
+        "4761315abf737bb55a678290df32c488188865bdf4ea767b888bf116ee8cddf1",
+        "4761315abf737bb55a678290df32c488188865bdf4ea767b888bf116ee8cddf1"
+      ],
+      "restored_sha256_samples": [
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8"
+      ],
+      "fold_chunk_choices": {
+        "raw": 1
+      }
+    },
+    {
+      "file": "noise.png",
+      "codec": "DEFLATE",
+      "source_bytes": 787252,
+      "archive_bytes": 787503,
+      "ratio": 0.9996812710554753,
+      "encode_seconds": 0.01916940399996747,
+      "decode_seconds": 0.0013663610000094195,
+      "encode_samples": [
+        0.01916940399996747,
+        0.020105950000015582,
+        0.019035808000126053
+      ],
+      "decode_samples": [
+        0.0013663610000094195,
+        0.0010395379999863508,
+        0.0013665460000993335
+      ],
+      "exact_match": true,
+      "restored_sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+      "archive_sha256_samples": [
+        "a74740abdd1fe0455a1da1e2a1d2771c5f55944f1b7bd5f05243bcf6603f1f3f",
+        "a74740abdd1fe0455a1da1e2a1d2771c5f55944f1b7bd5f05243bcf6603f1f3f",
+        "a74740abdd1fe0455a1da1e2a1d2771c5f55944f1b7bd5f05243bcf6603f1f3f"
+      ],
+      "restored_sha256_samples": [
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "noise.png",
+      "codec": "LZMA",
+      "source_bytes": 787252,
+      "archive_bytes": 787348,
+      "ratio": 0.9998780717039988,
+      "encode_seconds": 0.13119126300011885,
+      "decode_seconds": 0.0010940150000351423,
+      "encode_samples": [
+        0.14318785599994044,
+        0.11931088500000442,
+        0.13119126300011885
+      ],
+      "decode_samples": [
+        0.0010940150000351423,
+        0.0010402030000022933,
+        0.001203701999884288
+      ],
+      "exact_match": true,
+      "restored_sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+      "archive_sha256_samples": [
+        "bdc0419003e34b2199b9ed7a6aa78bcf02736f03f9f809b736525508a98d5c20",
+        "bdc0419003e34b2199b9ed7a6aa78bcf02736f03f9f809b736525508a98d5c20",
+        "bdc0419003e34b2199b9ed7a6aa78bcf02736f03f9f809b736525508a98d5c20"
+      ],
+      "restored_sha256_samples": [
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "noise.png",
+      "codec": "Zstandard",
+      "source_bytes": 787252,
+      "archive_bytes": 787286,
+      "ratio": 0.9999568136611092,
+      "encode_seconds": 0.008596914999998262,
+      "decode_seconds": 0.005990798000084396,
+      "encode_samples": [
+        0.008596914999998262,
+        0.01632356899995102,
+        0.007837276999907772
+      ],
+      "decode_samples": [
+        0.007048535999956584,
+        0.005885664999823348,
+        0.005990798000084396
+      ],
+      "exact_match": true,
+      "restored_sha256": "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+      "archive_sha256_samples": [
+        "4958578ef5457318c335849f5d8fab2aadd9935ff3a730461092697088bbe3f1",
+        "4958578ef5457318c335849f5d8fab2aadd9935ff3a730461092697088bbe3f1",
+        "4958578ef5457318c335849f5d8fab2aadd9935ff3a730461092697088bbe3f1"
+      ],
+      "restored_sha256_samples": [
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8",
+        "927071c03c8fb66f3bde2d7d752ed0955d01969eceeb64765b4e1c422c3eeec8"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "gradient.png",
+      "codec": "Fold",
+      "source_bytes": 376770,
+      "archive_bytes": 375089,
+      "ratio": 1.0044816030328803,
+      "encode_seconds": 0.022855837999941286,
+      "decode_seconds": 0.0034061440001096344,
+      "encode_samples": [
+        0.02296727199995985,
+        0.022855837999941286,
+        0.022315924999929848
+      ],
+      "decode_samples": [
+        0.0034388720000606554,
+        0.0034061440001096344,
+        0.0032885450000321725
+      ],
+      "exact_match": true,
+      "restored_sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+      "archive_sha256_samples": [
+        "b76c3c95bcc3ec4f284714f835198fb60b2f89ed11df14345ce1559e075f2d56",
+        "b76c3c95bcc3ec4f284714f835198fb60b2f89ed11df14345ce1559e075f2d56",
+        "b76c3c95bcc3ec4f284714f835198fb60b2f89ed11df14345ce1559e075f2d56"
+      ],
+      "restored_sha256_samples": [
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 1
+      }
+    },
+    {
+      "file": "gradient.png",
+      "codec": "DEFLATE",
+      "source_bytes": 376770,
+      "archive_bytes": 374607,
+      "ratio": 1.0057740512056634,
+      "encode_seconds": 0.017641014999981053,
+      "decode_seconds": 0.0025174489999244543,
+      "encode_samples": [
+        0.010331138000083229,
+        0.019198352999865165,
+        0.017641014999981053
+      ],
+      "decode_samples": [
+        0.002493108000180655,
+        0.004568276000100013,
+        0.0025174489999244543
+      ],
+      "exact_match": true,
+      "restored_sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+      "archive_sha256_samples": [
+        "1298f92969a51dfe84822a428e23fbe3d07e74bb89cf41cd899fe72d6acabf37",
+        "1298f92969a51dfe84822a428e23fbe3d07e74bb89cf41cd899fe72d6acabf37",
+        "1298f92969a51dfe84822a428e23fbe3d07e74bb89cf41cd899fe72d6acabf37"
+      ],
+      "restored_sha256_samples": [
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "gradient.png",
+      "codec": "LZMA",
+      "source_bytes": 376770,
+      "archive_bytes": 364888,
+      "ratio": 1.032563416719651,
+      "encode_seconds": 0.05807079500004875,
+      "decode_seconds": 0.012716921999981423,
+      "encode_samples": [
+        0.07047102599995014,
+        0.05807079500004875,
+        0.0566475470000114
+      ],
+      "decode_samples": [
+        0.012611652000032336,
+        0.014069706000100268,
+        0.012716921999981423
+      ],
+      "exact_match": true,
+      "restored_sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+      "archive_sha256_samples": [
+        "e3c4db6f3cc69c5e929ad8ea4052d11ece74aa3d5c0046557293d8f85bb04670",
+        "e3c4db6f3cc69c5e929ad8ea4052d11ece74aa3d5c0046557293d8f85bb04670",
+        "e3c4db6f3cc69c5e929ad8ea4052d11ece74aa3d5c0046557293d8f85bb04670"
+      ],
+      "restored_sha256_samples": [
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "gradient.png",
+      "codec": "Zstandard",
+      "source_bytes": 376770,
+      "archive_bytes": 374673,
+      "ratio": 1.0055968804797784,
+      "encode_seconds": 0.008071378000067853,
+      "decode_seconds": 0.0059823290000622364,
+      "encode_samples": [
+        0.008071378000067853,
+        0.007376717999932225,
+        0.009603945000208114
+      ],
+      "decode_samples": [
+        0.0059823290000622364,
+        0.00664372899996124,
+        0.005869126000106917
+      ],
+      "exact_match": true,
+      "restored_sha256": "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+      "archive_sha256_samples": [
+        "ec5d091f8c64aa10b49c56028620961a980419c7493a6f497529ec16abdbfae9",
+        "ec5d091f8c64aa10b49c56028620961a980419c7493a6f497529ec16abdbfae9",
+        "ec5d091f8c64aa10b49c56028620961a980419c7493a6f497529ec16abdbfae9"
+      ],
+      "restored_sha256_samples": [
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6",
+        "2d62c4fbf9f2734a8f9e81c79e24b31e748262f1e4d66d5630bb7dc74ca68de6"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "flower.jpg",
+      "codec": "Fold",
+      "source_bytes": 36287,
+      "archive_bytes": 36610,
+      "ratio": 0.991177273968861,
+      "encode_seconds": 0.003319445999977688,
+      "decode_seconds": 0.0007311660001505516,
+      "encode_samples": [
+        0.0021792029999687657,
+        0.003319445999977688,
+        0.006186955999964994
+      ],
+      "decode_samples": [
+        0.0007311660001505516,
+        0.0006900130001668003,
+        0.0007886949999829085
+      ],
+      "exact_match": true,
+      "restored_sha256": "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+      "archive_sha256_samples": [
+        "042a0a81fe6279c74fc0d2ca699c434781c473fb30f8eb5277b66e23f86701b6",
+        "042a0a81fe6279c74fc0d2ca699c434781c473fb30f8eb5277b66e23f86701b6",
+        "042a0a81fe6279c74fc0d2ca699c434781c473fb30f8eb5277b66e23f86701b6"
+      ],
+      "restored_sha256_samples": [
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 1
+      }
+    },
+    {
+      "file": "flower.jpg",
+      "codec": "DEFLATE",
+      "source_bytes": 36287,
+      "archive_bytes": 36130,
+      "ratio": 1.0043454193191255,
+      "encode_seconds": 0.0009815969999635854,
+      "decode_seconds": 0.00034744899994620937,
+      "encode_samples": [
+        0.0009815969999635854,
+        0.0011889589998190786,
+        0.000956674999997631
+      ],
+      "decode_samples": [
+        0.00034744899994620937,
+        0.00039271499986170966,
+        0.00034042300012515625
+      ],
+      "exact_match": true,
+      "restored_sha256": "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+      "archive_sha256_samples": [
+        "641e126e6d08cba177d26df45c2fb5a8dad24e7259b8e8c82f9bae919e8e60c4",
+        "641e126e6d08cba177d26df45c2fb5a8dad24e7259b8e8c82f9bae919e8e60c4",
+        "641e126e6d08cba177d26df45c2fb5a8dad24e7259b8e8c82f9bae919e8e60c4"
+      ],
+      "restored_sha256_samples": [
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "flower.jpg",
+      "codec": "LZMA",
+      "source_bytes": 36287,
+      "archive_bytes": 36348,
+      "ratio": 0.9983217783646968,
+      "encode_seconds": 0.006634100999917791,
+      "decode_seconds": 0.00018136700009563356,
+      "encode_samples": [
+        0.00802256099996157,
+        0.006634100999917791,
+        0.0060981020001236175
+      ],
+      "decode_samples": [
+        0.00011913399998775276,
+        0.00018136700009563356,
+        0.00020529899984467193
+      ],
+      "exact_match": true,
+      "restored_sha256": "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+      "archive_sha256_samples": [
+        "1158b1d1bddff3fcbd844f369ef8c98e86022cddf011f0babc3f79c853cbe544",
+        "1158b1d1bddff3fcbd844f369ef8c98e86022cddf011f0babc3f79c853cbe544",
+        "1158b1d1bddff3fcbd844f369ef8c98e86022cddf011f0babc3f79c853cbe544"
+      ],
+      "restored_sha256_samples": [
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "flower.jpg",
+      "codec": "Zstandard",
+      "source_bytes": 36287,
+      "archive_bytes": 36301,
+      "ratio": 0.9996143356932315,
+      "encode_seconds": 0.005817100999820468,
+      "decode_seconds": 0.005233336999936,
+      "encode_samples": [
+        0.005850176999956602,
+        0.005817100999820468,
+        0.00570020400004978
+      ],
+      "decode_samples": [
+        0.004845764000037889,
+        0.0054823709999709536,
+        0.005233336999936
+      ],
+      "exact_match": true,
+      "restored_sha256": "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+      "archive_sha256_samples": [
+        "97bbe1cf67a6b22ad9e323c28ee8d1cbcde03402a84e53fe2b94d739ac682730",
+        "97bbe1cf67a6b22ad9e323c28ee8d1cbcde03402a84e53fe2b94d739ac682730",
+        "97bbe1cf67a6b22ad9e323c28ee8d1cbcde03402a84e53fe2b94d739ac682730"
+      ],
+      "restored_sha256_samples": [
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d",
+        "c160fa1bc488af7f48984bd627bc5cbc5a20b98eaaf11af92e99a206b376252d"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "bansuri.ogg",
+      "codec": "Fold",
+      "source_bytes": 368828,
+      "archive_bytes": 367149,
+      "ratio": 1.0045730752364843,
+      "encode_seconds": 0.026945672000010745,
+      "decode_seconds": 0.0032684950001566904,
+      "encode_samples": [
+        0.022742287000028227,
+        0.028480549999812865,
+        0.026945672000010745
+      ],
+      "decode_samples": [
+        0.003318613999908848,
+        0.0032684950001566904,
+        0.003256812000017817
+      ],
+      "exact_match": true,
+      "restored_sha256": "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+      "archive_sha256_samples": [
+        "74a604ac35af35539b8a4a561f649ce5f03d04b15b0eda3587e3f70b1b9b6e52",
+        "74a604ac35af35539b8a4a561f649ce5f03d04b15b0eda3587e3f70b1b9b6e52",
+        "74a604ac35af35539b8a4a561f649ce5f03d04b15b0eda3587e3f70b1b9b6e52"
+      ],
+      "restored_sha256_samples": [
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 1
+      }
+    },
+    {
+      "file": "bansuri.ogg",
+      "codec": "DEFLATE",
+      "source_bytes": 368828,
+      "archive_bytes": 366667,
+      "ratio": 1.00589363100579,
+      "encode_seconds": 0.011638493999953425,
+      "decode_seconds": 0.002447601000085342,
+      "encode_samples": [
+        0.011638493999953425,
+        0.011233208999783528,
+        0.015173017000051914
+      ],
+      "decode_samples": [
+        0.002474941999935254,
+        0.0024248259999239963,
+        0.002447601000085342
+      ],
+      "exact_match": true,
+      "restored_sha256": "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+      "archive_sha256_samples": [
+        "0e0aa4817c51cf63d91647f2b74c6ecfc5236e372bf269aa71f8d40ad0fdf2ee",
+        "0e0aa4817c51cf63d91647f2b74c6ecfc5236e372bf269aa71f8d40ad0fdf2ee",
+        "0e0aa4817c51cf63d91647f2b74c6ecfc5236e372bf269aa71f8d40ad0fdf2ee"
+      ],
+      "restored_sha256_samples": [
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "bansuri.ogg",
+      "codec": "LZMA",
+      "source_bytes": 368828,
+      "archive_bytes": 367608,
+      "ratio": 1.0033187525842746,
+      "encode_seconds": 0.054581144999929165,
+      "decode_seconds": 0.008438656000180345,
+      "encode_samples": [
+        0.06369391499993071,
+        0.05391727599999285,
+        0.054581144999929165
+      ],
+      "decode_samples": [
+        0.00842612399992504,
+        0.008456200999944485,
+        0.008438656000180345
+      ],
+      "exact_match": true,
+      "restored_sha256": "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+      "archive_sha256_samples": [
+        "52b6842d4a7e46d50773f4bff434dbb3335a17e165fbc46de3832efebba9cb33",
+        "52b6842d4a7e46d50773f4bff434dbb3335a17e165fbc46de3832efebba9cb33",
+        "52b6842d4a7e46d50773f4bff434dbb3335a17e165fbc46de3832efebba9cb33"
+      ],
+      "restored_sha256_samples": [
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "bansuri.ogg",
+      "codec": "Zstandard",
+      "source_bytes": 368828,
+      "archive_bytes": 368850,
+      "ratio": 0.9999403551579232,
+      "encode_seconds": 0.007590732999915417,
+      "decode_seconds": 0.005885701999886805,
+      "encode_samples": [
+        0.009664724000003844,
+        0.007590732999915417,
+        0.007268009999961578
+      ],
+      "decode_samples": [
+        0.005885701999886805,
+        0.0069892039998649125,
+        0.005482433999986824
+      ],
+      "exact_match": true,
+      "restored_sha256": "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+      "archive_sha256_samples": [
+        "153a1d829658138b30702217902ac08a8849017cdce0ef11c1d949713648ea0b",
+        "153a1d829658138b30702217902ac08a8849017cdce0ef11c1d949713648ea0b",
+        "153a1d829658138b30702217902ac08a8849017cdce0ef11c1d949713648ea0b"
+      ],
+      "restored_sha256_samples": [
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be",
+        "66ba5dd0ea83a7cd6a88be8b96ab3c5f7857103a72530011076c60aad51bc5be"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "example.webm",
+      "codec": "Fold",
+      "source_bytes": 229792,
+      "archive_bytes": 229399,
+      "ratio": 1.0017131722457377,
+      "encode_seconds": 0.013682282999980089,
+      "decode_seconds": 0.0021264250001422624,
+      "encode_samples": [
+        0.013682282999980089,
+        0.013687914999991335,
+        0.013617875999898388
+      ],
+      "decode_samples": [
+        0.002133532000016203,
+        0.0021205040000040754,
+        0.0021264250001422624
+      ],
+      "exact_match": true,
+      "restored_sha256": "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+      "archive_sha256_samples": [
+        "9c1241bf9933447f16ce22414d097ef2592515ba5201c46e0c4873407823835c",
+        "9c1241bf9933447f16ce22414d097ef2592515ba5201c46e0c4873407823835c",
+        "9c1241bf9933447f16ce22414d097ef2592515ba5201c46e0c4873407823835c"
+      ],
+      "restored_sha256_samples": [
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 1
+      }
+    },
+    {
+      "file": "example.webm",
+      "codec": "DEFLATE",
+      "source_bytes": 229792,
+      "archive_bytes": 228917,
+      "ratio": 1.0038223460905045,
+      "encode_seconds": 0.0066570100000262755,
+      "decode_seconds": 0.001355238000087411,
+      "encode_samples": [
+        0.0066570100000262755,
+        0.006588522999891211,
+        0.006753302999868538
+      ],
+      "decode_samples": [
+        0.001355238000087411,
+        0.0013950530001238803,
+        0.0013460590000704542
+      ],
+      "exact_match": true,
+      "restored_sha256": "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+      "archive_sha256_samples": [
+        "833aa0ff7a01f3c912964c43d6c8b6e786544e2d17b767ba9823662e7a331eed",
+        "833aa0ff7a01f3c912964c43d6c8b6e786544e2d17b767ba9823662e7a331eed",
+        "833aa0ff7a01f3c912964c43d6c8b6e786544e2d17b767ba9823662e7a331eed"
+      ],
+      "restored_sha256_samples": [
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "example.webm",
+      "codec": "LZMA",
+      "source_bytes": 229792,
+      "archive_bytes": 229756,
+      "ratio": 1.0001566879646233,
+      "encode_seconds": 0.03666587399993659,
+      "decode_seconds": 0.0023502779999944323,
+      "encode_samples": [
+        0.04712736900000891,
+        0.03666587399993659,
+        0.03414532900001177
+      ],
+      "decode_samples": [
+        0.0024323059999460384,
+        0.0023021729998617957,
+        0.0023502779999944323
+      ],
+      "exact_match": true,
+      "restored_sha256": "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+      "archive_sha256_samples": [
+        "6bc706862c5104077015a14d512c91423d17787b8359298c797c1fc129a971fc",
+        "6bc706862c5104077015a14d512c91423d17787b8359298c797c1fc129a971fc",
+        "6bc706862c5104077015a14d512c91423d17787b8359298c797c1fc129a971fc"
+      ],
+      "restored_sha256_samples": [
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "example.webm",
+      "codec": "Zstandard",
+      "source_bytes": 229792,
+      "archive_bytes": 229811,
+      "ratio": 0.9999173233657223,
+      "encode_seconds": 0.006649917999993704,
+      "decode_seconds": 0.00550276500007385,
+      "encode_samples": [
+        0.0073135869999987335,
+        0.0062656459999743674,
+        0.006649917999993704
+      ],
+      "decode_samples": [
+        0.005485247000024174,
+        0.008797849999837126,
+        0.00550276500007385
+      ],
+      "exact_match": true,
+      "restored_sha256": "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+      "archive_sha256_samples": [
+        "fe1b0bab936d4d4bcbdd11a73fa4df7abf04e69940eeb7e9166bb1d304d5f42e",
+        "fe1b0bab936d4d4bcbdd11a73fa4df7abf04e69940eeb7e9166bb1d304d5f42e",
+        "fe1b0bab936d4d4bcbdd11a73fa4df7abf04e69940eeb7e9166bb1d304d5f42e"
+      ],
+      "restored_sha256_samples": [
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3",
+        "1847c8fe0f67dbf2766d6967f5788ef166144fd0cab2f298363c4d68fb4108f3"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Fronalpstock_big.jpg",
+      "codec": "Fold",
+      "source_bytes": 14679474,
+      "archive_bytes": 14666079,
+      "ratio": 1.0009133320501,
+      "encode_seconds": 0.8363114019998648,
+      "decode_seconds": 0.0705948410000019,
+      "encode_samples": [
+        0.8302212070000223,
+        2.269507492999992,
+        0.8363114019998648
+      ],
+      "decode_samples": [
+        0.0705948410000019,
+        0.07362257099998715,
+        0.052590103999818893
+      ],
+      "exact_match": true,
+      "restored_sha256": "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+      "archive_sha256_samples": [
+        "8b9d229c386a2035c5213b679cb842709194c9cc36ad5418f1a38afe480fa6fe",
+        "b9a2d1e8b28aa8a5858b5c19cc0f01e2effe64808ba0391aeaf19ffb46ae4d8e",
+        "254d75aaad97b5b39e926ec04a9ff947a160959b518559952e802fd1a8e7e835"
+      ],
+      "restored_sha256_samples": [
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 3,
+        "raw": 11
+      }
+    },
+    {
+      "file": "Fronalpstock_big.jpg",
+      "codec": "DEFLATE",
+      "source_bytes": 14679474,
+      "archive_bytes": 14666245,
+      "ratio": 1.0009020032053195,
+      "encode_seconds": 0.42607850600006714,
+      "decode_seconds": 0.05326696799988895,
+      "encode_samples": [
+        0.4369603200000256,
+        0.4148420359999818,
+        0.42607850600006714
+      ],
+      "decode_samples": [
+        0.05039291000002777,
+        0.05326696799988895,
+        0.0545525729999099
+      ],
+      "exact_match": true,
+      "restored_sha256": "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+      "archive_sha256_samples": [
+        "2a8b18979cab46c21612d61a249a89ecfa9339ab9914d17f90efcd72337e2557",
+        "2a8b18979cab46c21612d61a249a89ecfa9339ab9914d17f90efcd72337e2557",
+        "2a8b18979cab46c21612d61a249a89ecfa9339ab9914d17f90efcd72337e2557"
+      ],
+      "restored_sha256_samples": [
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Fronalpstock_big.jpg",
+      "codec": "LZMA",
+      "source_bytes": 14679474,
+      "archive_bytes": 14638152,
+      "ratio": 1.0028228973165465,
+      "encode_seconds": 5.715873137000017,
+      "decode_seconds": 0.12989149500003805,
+      "encode_samples": [
+        5.828355007000027,
+        5.525242459999845,
+        5.715873137000017
+      ],
+      "decode_samples": [
+        0.1255959420000181,
+        0.12992263399996773,
+        0.12989149500003805
+      ],
+      "exact_match": true,
+      "restored_sha256": "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+      "archive_sha256_samples": [
+        "f13c52baabccc7b58fcfaa33f08fcb721b3662a767536b299eb1e280e1d6fbff",
+        "f13c52baabccc7b58fcfaa33f08fcb721b3662a767536b299eb1e280e1d6fbff",
+        "f13c52baabccc7b58fcfaa33f08fcb721b3662a767536b299eb1e280e1d6fbff"
+      ],
+      "restored_sha256_samples": [
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Fronalpstock_big.jpg",
+      "codec": "Zstandard",
+      "source_bytes": 14679474,
+      "archive_bytes": 14672185,
+      "ratio": 1.000496790355356,
+      "encode_seconds": 0.05116901900009907,
+      "decode_seconds": 0.018233401000088634,
+      "encode_samples": [
+        0.05116901900009907,
+        0.046966978999989806,
+        0.05144031300005736
+      ],
+      "decode_samples": [
+        0.020555502000206616,
+        0.018233401000088634,
+        0.016928150000012465
+      ],
+      "exact_match": true,
+      "restored_sha256": "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+      "archive_sha256_samples": [
+        "700620fbf4957773e13fb491b8ff0fa0f64157de640f1a90c567dc558e2fa75d",
+        "700620fbf4957773e13fb491b8ff0fa0f64157de640f1a90c567dc558e2fa75d",
+        "700620fbf4957773e13fb491b8ff0fa0f64157de640f1a90c567dc558e2fa75d"
+      ],
+      "restored_sha256_samples": [
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857",
+        "24eb29eccdf0af691b406d1a3d22c0ef5d761cc454d8a917848c33958f6fc857"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Shaki_waterfall.jpg",
+      "codec": "Fold",
+      "source_bytes": 377828,
+      "archive_bytes": 378306,
+      "ratio": 0.9987364725909713,
+      "encode_seconds": 0.02066522400014037,
+      "decode_seconds": 0.0015073330000632268,
+      "encode_samples": [
+        0.02066522400014037,
+        0.020531067999854713,
+        0.021854813999880207
+      ],
+      "decode_samples": [
+        0.0013979880000078992,
+        0.0015173229999163595,
+        0.0015073330000632268
+      ],
+      "exact_match": true,
+      "restored_sha256": "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+      "archive_sha256_samples": [
+        "a9978f7adfaf00ffecc77e739abec07ce96d32b5253262836f16b829705bd481",
+        "a9978f7adfaf00ffecc77e739abec07ce96d32b5253262836f16b829705bd481",
+        "a9978f7adfaf00ffecc77e739abec07ce96d32b5253262836f16b829705bd481"
+      ],
+      "restored_sha256_samples": [
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910"
+      ],
+      "fold_chunk_choices": {
+        "raw": 1
+      }
+    },
+    {
+      "file": "Shaki_waterfall.jpg",
+      "codec": "DEFLATE",
+      "source_bytes": 377828,
+      "archive_bytes": 377906,
+      "ratio": 0.999793599466534,
+      "encode_seconds": 0.01013792799994917,
+      "decode_seconds": 0.0007216970000172296,
+      "encode_samples": [
+        0.01013792799994917,
+        0.010001175999832412,
+        0.010174538000001121
+      ],
+      "decode_samples": [
+        0.001084560999970563,
+        0.0007216970000172296,
+        0.0007155569999213185
+      ],
+      "exact_match": true,
+      "restored_sha256": "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+      "archive_sha256_samples": [
+        "819cb9358d44a513a79e6c0746768e513152bbfd10658b2ae09a349eeff2b3ac",
+        "819cb9358d44a513a79e6c0746768e513152bbfd10658b2ae09a349eeff2b3ac",
+        "819cb9358d44a513a79e6c0746768e513152bbfd10658b2ae09a349eeff2b3ac"
+      ],
+      "restored_sha256_samples": [
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Shaki_waterfall.jpg",
+      "codec": "LZMA",
+      "source_bytes": 377828,
+      "archive_bytes": 377908,
+      "ratio": 0.9997883082655038,
+      "encode_seconds": 0.05753575100015951,
+      "decode_seconds": 0.0005319990000316466,
+      "encode_samples": [
+        0.08333688799984884,
+        0.05753575100015951,
+        0.056845922000093196
+      ],
+      "decode_samples": [
+        0.0005277600000681559,
+        0.000534044999994876,
+        0.0005319990000316466
+      ],
+      "exact_match": true,
+      "restored_sha256": "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+      "archive_sha256_samples": [
+        "9a17200cbbe13ff23dc8bb61e63cd96f19c0c7b5a9dc513b83ae0b9a473ef478",
+        "9a17200cbbe13ff23dc8bb61e63cd96f19c0c7b5a9dc513b83ae0b9a473ef478",
+        "9a17200cbbe13ff23dc8bb61e63cd96f19c0c7b5a9dc513b83ae0b9a473ef478"
+      ],
+      "restored_sha256_samples": [
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Shaki_waterfall.jpg",
+      "codec": "Zstandard",
+      "source_bytes": 377828,
+      "archive_bytes": 377850,
+      "ratio": 0.9999417758369723,
+      "encode_seconds": 0.008545007000066107,
+      "decode_seconds": 0.006325535000087257,
+      "encode_samples": [
+        0.009910272000070108,
+        0.008545007000066107,
+        0.007807511000009981
+      ],
+      "decode_samples": [
+        0.006325535000087257,
+        0.006309906999831583,
+        0.006663312999990012
+      ],
+      "exact_match": true,
+      "restored_sha256": "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+      "archive_sha256_samples": [
+        "ada0b292a783152787106962af96d43a60854a03c7741132775f1bad95dcc612",
+        "ada0b292a783152787106962af96d43a60854a03c7741132775f1bad95dcc612",
+        "ada0b292a783152787106962af96d43a60854a03c7741132775f1bad95dcc612"
+      ],
+      "restored_sha256_samples": [
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910",
+        "ebd341c5054591f4ba50c1debc796b29a47a4595323c953549417f796be16910"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Rain_thunder_and_birds.ogg",
+      "codec": "Fold",
+      "source_bytes": 1979069,
+      "archive_bytes": 1977198,
+      "ratio": 1.0009462886367475,
+      "encode_seconds": 0.11361416299996563,
+      "decode_seconds": 0.015975982000099975,
+      "encode_samples": [
+        0.11643859400010115,
+        0.11239357099998415,
+        0.11361416299996563
+      ],
+      "decode_samples": [
+        0.016110011999899143,
+        0.015975982000099975,
+        0.015510048000123788
+      ],
+      "exact_match": true,
+      "restored_sha256": "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+      "archive_sha256_samples": [
+        "18fb73f85f346e29e05d9e130ceebc849a3539da16121dba20c1f9af3b20f2ed",
+        "18fb73f85f346e29e05d9e130ceebc849a3539da16121dba20c1f9af3b20f2ed",
+        "18fb73f85f346e29e05d9e130ceebc849a3539da16121dba20c1f9af3b20f2ed"
+      ],
+      "restored_sha256_samples": [
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 2
+      }
+    },
+    {
+      "file": "Rain_thunder_and_birds.ogg",
+      "codec": "DEFLATE",
+      "source_bytes": 1979069,
+      "archive_bytes": 1976521,
+      "ratio": 1.0012891337860816,
+      "encode_seconds": 0.05598314999997456,
+      "decode_seconds": 0.011611857999923814,
+      "encode_samples": [
+        0.056097859000146855,
+        0.05481505199986714,
+        0.05598314999997456
+      ],
+      "decode_samples": [
+        0.011611857999923814,
+        0.01165227599994978,
+        0.01160684899991793
+      ],
+      "exact_match": true,
+      "restored_sha256": "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+      "archive_sha256_samples": [
+        "a5a7d7d2974d81d8cb178bf04020830e2e80fa4be667eb8f1248ebf12ed1e6ae",
+        "a5a7d7d2974d81d8cb178bf04020830e2e80fa4be667eb8f1248ebf12ed1e6ae",
+        "a5a7d7d2974d81d8cb178bf04020830e2e80fa4be667eb8f1248ebf12ed1e6ae"
+      ],
+      "restored_sha256_samples": [
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Rain_thunder_and_birds.ogg",
+      "codec": "LZMA",
+      "source_bytes": 1979069,
+      "archive_bytes": 1978072,
+      "ratio": 1.0005040261426277,
+      "encode_seconds": 0.41136600899994846,
+      "decode_seconds": 0.006349900000031994,
+      "encode_samples": [
+        0.4243951250000464,
+        0.41136600899994846,
+        0.36970935099998314
+      ],
+      "decode_samples": [
+        0.006349900000031994,
+        0.006403043999853253,
+        0.006025873999988107
+      ],
+      "exact_match": true,
+      "restored_sha256": "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+      "archive_sha256_samples": [
+        "ffd34d12e2c77a36b1aa070bb0b9f677f5d778f337e6f3c616144ed9a719d67a",
+        "ffd34d12e2c77a36b1aa070bb0b9f677f5d778f337e6f3c616144ed9a719d67a",
+        "ffd34d12e2c77a36b1aa070bb0b9f677f5d778f337e6f3c616144ed9a719d67a"
+      ],
+      "restored_sha256_samples": [
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Rain_thunder_and_birds.ogg",
+      "codec": "Zstandard",
+      "source_bytes": 1979069,
+      "archive_bytes": 1979130,
+      "ratio": 0.9999691783763572,
+      "encode_seconds": 0.017023553999933938,
+      "decode_seconds": 0.009561994000023333,
+      "encode_samples": [
+        0.018300368999916827,
+        0.014450885999849561,
+        0.017023553999933938
+      ],
+      "decode_samples": [
+        0.009561994000023333,
+        0.008085980000032578,
+        0.01168056999995315
+      ],
+      "exact_match": true,
+      "restored_sha256": "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+      "archive_sha256_samples": [
+        "3557328da61d1f5954a34721bf4011bb6c6685565af2c63f8a363cc2fc5453ef",
+        "3557328da61d1f5954a34721bf4011bb6c6685565af2c63f8a363cc2fc5453ef",
+        "3557328da61d1f5954a34721bf4011bb6c6685565af2c63f8a363cc2fc5453ef"
+      ],
+      "restored_sha256_samples": [
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9",
+        "23694214e45be568e912d0eeff764f28c7669a12bd6c1d0c282094e39d8be3a9"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "George_W._Bush_Speech_-_September_11,_2001.ogg",
+      "codec": "Fold",
+      "source_bytes": 1004622,
+      "archive_bytes": 996139,
+      "ratio": 1.008515879811954,
+      "encode_seconds": 0.06276285000012649,
+      "decode_seconds": 0.008767256000055568,
+      "encode_samples": [
+        0.0631121979999989,
+        0.0606045219999487,
+        0.06276285000012649
+      ],
+      "decode_samples": [
+        0.008767256000055568,
+        0.00831459799996992,
+        0.00888468399989506
+      ],
+      "exact_match": true,
+      "restored_sha256": "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+      "archive_sha256_samples": [
+        "6d3a57efa2f94a3735803d00372b93bf9a8b070777a8d60e548ca08067d38984",
+        "6d3a57efa2f94a3735803d00372b93bf9a8b070777a8d60e548ca08067d38984",
+        "6d3a57efa2f94a3735803d00372b93bf9a8b070777a8d60e548ca08067d38984"
+      ],
+      "restored_sha256_samples": [
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 1
+      }
+    },
+    {
+      "file": "George_W._Bush_Speech_-_September_11,_2001.ogg",
+      "codec": "DEFLATE",
+      "source_bytes": 1004622,
+      "archive_bytes": 995655,
+      "ratio": 1.0090061316419845,
+      "encode_seconds": 0.03134222499988937,
+      "decode_seconds": 0.006912646000046152,
+      "encode_samples": [
+        0.032895804999952816,
+        0.03134222499988937,
+        0.030734897000002093
+      ],
+      "decode_samples": [
+        0.006912646000046152,
+        0.006303327000068748,
+        0.006918498999993972
+      ],
+      "exact_match": true,
+      "restored_sha256": "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+      "archive_sha256_samples": [
+        "32967b165240bbea857e0e510f644a9707ce6b299fee424ec260fcc0feee6113",
+        "32967b165240bbea857e0e510f644a9707ce6b299fee424ec260fcc0feee6113",
+        "32967b165240bbea857e0e510f644a9707ce6b299fee424ec260fcc0feee6113"
+      ],
+      "restored_sha256_samples": [
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "George_W._Bush_Speech_-_September_11,_2001.ogg",
+      "codec": "LZMA",
+      "source_bytes": 1004622,
+      "archive_bytes": 995860,
+      "ratio": 1.0087984254814935,
+      "encode_seconds": 0.19784320299982028,
+      "decode_seconds": 0.03320124800006852,
+      "encode_samples": [
+        0.2299948580000546,
+        0.19784320299982028,
+        0.176577941000005
+      ],
+      "decode_samples": [
+        0.03494625799999085,
+        0.033087470999817015,
+        0.03320124800006852
+      ],
+      "exact_match": true,
+      "restored_sha256": "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+      "archive_sha256_samples": [
+        "693b1558ff1d6159c038422a06658440513df349973420af6afb8f0c376ac1ae",
+        "693b1558ff1d6159c038422a06658440513df349973420af6afb8f0c376ac1ae",
+        "693b1558ff1d6159c038422a06658440513df349973420af6afb8f0c376ac1ae"
+      ],
+      "restored_sha256_samples": [
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "George_W._Bush_Speech_-_September_11,_2001.ogg",
+      "codec": "Zstandard",
+      "source_bytes": 1004622,
+      "archive_bytes": 1004659,
+      "ratio": 0.999963171583592,
+      "encode_seconds": 0.014536102999954892,
+      "decode_seconds": 0.008171036000021559,
+      "encode_samples": [
+        0.014536102999954892,
+        0.012936030999981085,
+        0.016315703999907782
+      ],
+      "decode_samples": [
+        0.0070595130000583595,
+        0.008171036000021559,
+        0.009690816999864182
+      ],
+      "exact_match": true,
+      "restored_sha256": "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+      "archive_sha256_samples": [
+        "c9dedf276d080b7c772c5d1d6ca6c94647f71393e8b9b101bc3c0f9c07b6f421",
+        "c9dedf276d080b7c772c5d1d6ca6c94647f71393e8b9b101bc3c0f9c07b6f421",
+        "c9dedf276d080b7c772c5d1d6ca6c94647f71393e8b9b101bc3c0f9c07b6f421"
+      ],
+      "restored_sha256_samples": [
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59",
+        "08a0244cf00f871a88cf707016ce4a51d431a50da5b98ad6f8387497f4b17a59"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Piano_close-up.webm",
+      "codec": "Fold",
+      "source_bytes": 5410367,
+      "archive_bytes": 5392557,
+      "ratio": 1.0033027003701585,
+      "encode_seconds": 0.3340995099999873,
+      "decode_seconds": 0.03817977299991071,
+      "encode_samples": [
+        0.3392426800000976,
+        0.3340995099999873,
+        0.3209537860000182
+      ],
+      "decode_samples": [
+        0.03817977299991071,
+        0.040354836999995314,
+        0.03768980999984706
+      ],
+      "exact_match": true,
+      "restored_sha256": "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+      "archive_sha256_samples": [
+        "17d761b821cceb97f706923d8d3b6fe188856114b6b67da93efd614852874254",
+        "17d761b821cceb97f706923d8d3b6fe188856114b6b67da93efd614852874254",
+        "17d761b821cceb97f706923d8d3b6fe188856114b6b67da93efd614852874254"
+      ],
+      "restored_sha256_samples": [
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7"
+      ],
+      "fold_chunk_choices": {
+        "deflate": 6
+      }
+    },
+    {
+      "file": "Piano_close-up.webm",
+      "codec": "DEFLATE",
+      "source_bytes": 5410367,
+      "archive_bytes": 5391150,
+      "ratio": 1.003564545597878,
+      "encode_seconds": 0.16307042799985538,
+      "decode_seconds": 0.028559094000002005,
+      "encode_samples": [
+        0.16307042799985538,
+        0.16075999600002433,
+        0.1668460050000249
+      ],
+      "decode_samples": [
+        0.028559094000002005,
+        0.027875317000052746,
+        0.029605431999925713
+      ],
+      "exact_match": true,
+      "restored_sha256": "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+      "archive_sha256_samples": [
+        "0f292ace456f31c59cd1e3dccb62d483cc960566b1569a5619b66516cda8d37e",
+        "0f292ace456f31c59cd1e3dccb62d483cc960566b1569a5619b66516cda8d37e",
+        "0f292ace456f31c59cd1e3dccb62d483cc960566b1569a5619b66516cda8d37e"
+      ],
+      "restored_sha256_samples": [
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Piano_close-up.webm",
+      "codec": "LZMA",
+      "source_bytes": 5410367,
+      "archive_bytes": 5403340,
+      "ratio": 1.0013004919179618,
+      "encode_seconds": 1.4537864590001845,
+      "decode_seconds": 0.04093821299989031,
+      "encode_samples": [
+        1.496527480000168,
+        1.4537864590001845,
+        1.4101795670001138
+      ],
+      "decode_samples": [
+        0.04093821299989031,
+        0.041441756000040186,
+        0.04090235099988604
+      ],
+      "exact_match": true,
+      "restored_sha256": "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+      "archive_sha256_samples": [
+        "606efcc6efcefef6e4d8b0a74f820ba51af2e76d95bfbbc9af5f901a60fff94b",
+        "606efcc6efcefef6e4d8b0a74f820ba51af2e76d95bfbbc9af5f901a60fff94b",
+        "606efcc6efcefef6e4d8b0a74f820ba51af2e76d95bfbbc9af5f901a60fff94b"
+      ],
+      "restored_sha256_samples": [
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Piano_close-up.webm",
+      "codec": "Zstandard",
+      "source_bytes": 5410367,
+      "archive_bytes": 5410507,
+      "ratio": 0.9999741244212419,
+      "encode_seconds": 0.039703278999922986,
+      "decode_seconds": 0.019247546000087823,
+      "encode_samples": [
+        0.02650022399984664,
+        0.07340782699998272,
+        0.039703278999922986
+      ],
+      "decode_samples": [
+        0.010385955999936414,
+        0.09774568099987846,
+        0.019247546000087823
+      ],
+      "exact_match": true,
+      "restored_sha256": "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+      "archive_sha256_samples": [
+        "622771cc2b36a8274e28036230a53715d7d6b21078d4b1a2668a61d2a8707a80",
+        "622771cc2b36a8274e28036230a53715d7d6b21078d4b1a2668a61d2a8707a80",
+        "622771cc2b36a8274e28036230a53715d7d6b21078d4b1a2668a61d2a8707a80"
+      ],
+      "restored_sha256_samples": [
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7",
+        "47ea78b04e328659911fef95e26e710a11ae4d2ac44f60e6b2090201972b8fa7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Meet_the_Capacity_Exchange.webm",
+      "codec": "Fold",
+      "source_bytes": 20693478,
+      "archive_bytes": 20696627,
+      "ratio": 0.999847849603706,
+      "encode_seconds": 1.0866668659998595,
+      "decode_seconds": 0.05961678500011658,
+      "encode_samples": [
+        1.0970971859999281,
+        1.0854247690001557,
+        1.0866668659998595
+      ],
+      "decode_samples": [
+        0.06290115499996318,
+        0.05792603100007909,
+        0.05961678500011658
+      ],
+      "exact_match": true,
+      "restored_sha256": "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+      "archive_sha256_samples": [
+        "a2d2124c92f9da8e59fb80033663293b7dd7e622647aeaf3dc3e07fc2f6b9fec",
+        "d6254b903f2dea8be1356f4b706bf921ede9e765026b200ba7f5e42cb8fbea51",
+        "467b00fc9790c327e23c371aaf0a2ce9fd06291b13ce485f2fcb8e534295ca56"
+      ],
+      "restored_sha256_samples": [
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9"
+      ],
+      "fold_chunk_choices": {
+        "raw": 17,
+        "deflate": 3
+      }
+    },
+    {
+      "file": "Meet_the_Capacity_Exchange.webm",
+      "codec": "DEFLATE",
+      "source_bytes": 20693478,
+      "archive_bytes": 20696473,
+      "ratio": 0.999855289352925,
+      "encode_seconds": 0.5685312650000469,
+      "decode_seconds": 0.06405298399999992,
+      "encode_samples": [
+        0.5685312650000469,
+        0.5550129120001657,
+        0.7845013049998215
+      ],
+      "decode_samples": [
+        0.0627161669999623,
+        0.06405298399999992,
+        0.06505039499984377
+      ],
+      "exact_match": true,
+      "restored_sha256": "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+      "archive_sha256_samples": [
+        "5806ecc9e395cb5eeadda878f5ce3c00c542ca08db34becc9852f3c7828445f9",
+        "5806ecc9e395cb5eeadda878f5ce3c00c542ca08db34becc9852f3c7828445f9",
+        "5806ecc9e395cb5eeadda878f5ce3c00c542ca08db34becc9852f3c7828445f9"
+      ],
+      "restored_sha256_samples": [
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Meet_the_Capacity_Exchange.webm",
+      "codec": "LZMA",
+      "source_bytes": 20693478,
+      "archive_bytes": 20694564,
+      "ratio": 0.9999475224508233,
+      "encode_seconds": 7.315778830999989,
+      "decode_seconds": 0.04869721099998969,
+      "encode_samples": [
+        7.960080912999956,
+        7.247420579999925,
+        7.315778830999989
+      ],
+      "decode_samples": [
+        0.049982206000095175,
+        0.04869721099998969,
+        0.045931939000183775
+      ],
+      "exact_match": true,
+      "restored_sha256": "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+      "archive_sha256_samples": [
+        "5f6a81f34bd6ca2598d7f15b6dbfb9d154892bd41e95dedb23d415cde435d982",
+        "5f6a81f34bd6ca2598d7f15b6dbfb9d154892bd41e95dedb23d415cde435d982",
+        "5f6a81f34bd6ca2598d7f15b6dbfb9d154892bd41e95dedb23d415cde435d982"
+      ],
+      "restored_sha256_samples": [
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "Meet_the_Capacity_Exchange.webm",
+      "codec": "Zstandard",
+      "source_bytes": 20693478,
+      "archive_bytes": 20693966,
+      "ratio": 0.9999764182467489,
+      "encode_seconds": 0.038223710000011124,
+      "decode_seconds": 0.022378750000143555,
+      "encode_samples": [
+        0.04184121499997673,
+        0.038223710000011124,
+        0.03636531699999068
+      ],
+      "decode_samples": [
+        0.022050239999998666,
+        0.022378750000143555,
+        0.03384935700000824
+      ],
+      "exact_match": true,
+      "restored_sha256": "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+      "archive_sha256_samples": [
+        "e074291dedd9d21c823b2366c9ce2eb8c82328e6c786a6ff04928554fd736c32",
+        "e074291dedd9d21c823b2366c9ce2eb8c82328e6c786a6ff04928554fd736c32",
+        "e074291dedd9d21c823b2366c9ce2eb8c82328e6c786a6ff04928554fd736c32"
+      ],
+      "restored_sha256_samples": [
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9",
+        "3d4cac6392a1a6af172ea949095d54c793ea9bfb8232c0604251a36eef7e4ca9"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "shifted-repeat.bin",
+      "codec": "Fold",
+      "source_bytes": 4194321,
+      "archive_bytes": 2098054,
+      "ratio": 1.9991482583384412,
+      "encode_seconds": 0.10855401300000267,
+      "decode_seconds": 0.01138805699997647,
+      "encode_samples": [
+        0.10986294500003169,
+        0.10855401300000267,
+        0.10838974100011001
+      ],
+      "decode_samples": [
+        0.01138805699997647,
+        0.010389256000053138,
+        0.01587871699985044
+      ],
+      "exact_match": true,
+      "restored_sha256": "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+      "archive_sha256_samples": [
+        "80455bbbdb07a7279f247c87f6655cef16b0ff5f50376902dacecd86762f0188",
+        "4b8d8f246919d7c17d54a76719996ac269cc764077979adbf1fdaa371716db77",
+        "838630c7b1a0740d2c1701f59472d9b6302af060e45c91692d35704ffb2a5928"
+      ],
+      "restored_sha256_samples": [
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8"
+      ],
+      "fold_chunk_choices": {
+        "raw": 3,
+        "reference": 2
+      }
+    },
+    {
+      "file": "shifted-repeat.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 4194321,
+      "archive_bytes": 4195607,
+      "ratio": 0.9996934889278238,
+      "encode_seconds": 0.10512834299993301,
+      "decode_seconds": 0.0056061940001654875,
+      "encode_samples": [
+        0.10512834299993301,
+        0.11190269100006844,
+        0.1038184739998087
+      ],
+      "decode_samples": [
+        0.005479000000150336,
+        0.0056061940001654875,
+        0.005976539000130288
+      ],
+      "exact_match": true,
+      "restored_sha256": "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+      "archive_sha256_samples": [
+        "f9562c22883c25487b818a5ce16d0f34f650bbc333baad2f0f783141704ba2d5",
+        "f9562c22883c25487b818a5ce16d0f34f650bbc333baad2f0f783141704ba2d5",
+        "f9562c22883c25487b818a5ce16d0f34f650bbc333baad2f0f783141704ba2d5"
+      ],
+      "restored_sha256_samples": [
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "shifted-repeat.bin",
+      "codec": "LZMA",
+      "source_bytes": 4194321,
+      "archive_bytes": 1049480,
+      "ratio": 3.9965706826237755,
+      "encode_seconds": 0.3028970450000088,
+      "decode_seconds": 0.0049202810000679165,
+      "encode_samples": [
+        0.31484541699978763,
+        0.2805956810000225,
+        0.3028970450000088
+      ],
+      "decode_samples": [
+        0.004857893999997032,
+        0.0049202810000679165,
+        0.00532771899997897
+      ],
+      "exact_match": true,
+      "restored_sha256": "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+      "archive_sha256_samples": [
+        "fd5adfe35c24cac1790b9f0088643e71ba4d860d1bd8d87d55dd8cf215a5fed6",
+        "fd5adfe35c24cac1790b9f0088643e71ba4d860d1bd8d87d55dd8cf215a5fed6",
+        "fd5adfe35c24cac1790b9f0088643e71ba4d860d1bd8d87d55dd8cf215a5fed6"
+      ],
+      "restored_sha256_samples": [
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "shifted-repeat.bin",
+      "codec": "Zstandard",
+      "source_bytes": 4194321,
+      "archive_bytes": 1051762,
+      "ratio": 3.987899353656055,
+      "encode_seconds": 0.013199538999970173,
+      "decode_seconds": 0.008855260000018461,
+      "encode_samples": [
+        0.013859173000128067,
+        0.013199538999970173,
+        0.011955875000012384
+      ],
+      "decode_samples": [
+        0.008855260000018461,
+        0.007965420000118684,
+        0.009157154999911654
+      ],
+      "exact_match": true,
+      "restored_sha256": "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+      "archive_sha256_samples": [
+        "1c91069e2db622ce80fc3e039d598cbfb549fba14b94a0c80f9c5f6029b6f28e",
+        "1c91069e2db622ce80fc3e039d598cbfb549fba14b94a0c80f9c5f6029b6f28e",
+        "1c91069e2db622ce80fc3e039d598cbfb549fba14b94a0c80f9c5f6029b6f28e"
+      ],
+      "restored_sha256_samples": [
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8",
+        "14ab4dbc1562302c30fbe798439d75eaf6ff15c062cf90820bc12993627b47d8"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "gapped-repeat.bin",
+      "codec": "Fold",
+      "source_bytes": 4194579,
+      "archive_bytes": 4195867,
+      "ratio": 0.999693031261477,
+      "encode_seconds": 0.21438457499994001,
+      "decode_seconds": 0.011261770999908549,
+      "encode_samples": [
+        0.22176653399992574,
+        0.21438457499994001,
+        0.21219046199985314
+      ],
+      "decode_samples": [
+        0.01051362699990932,
+        0.01325310700008231,
+        0.011261770999908549
+      ],
+      "exact_match": true,
+      "restored_sha256": "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+      "archive_sha256_samples": [
+        "054edef3d3aec9521433b38b8eb88a5679ed0a6456c39d6ee29a68716d82bb2a",
+        "91a0a0aa98ef2b538047c33e70ff91114204f6a84cd1490d8296c6b347e94022",
+        "3a73e59117138bcd7d15b9efbc16924651d60f3b49d09060b0e3abc9b8c711c3"
+      ],
+      "restored_sha256_samples": [
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7"
+      ],
+      "fold_chunk_choices": {
+        "raw": 5
+      }
+    },
+    {
+      "file": "gapped-repeat.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 4194579,
+      "archive_bytes": 4195865,
+      "ratio": 0.9996935077749165,
+      "encode_seconds": 0.1091601799998898,
+      "decode_seconds": 0.005857458000036786,
+      "encode_samples": [
+        0.1044540269999743,
+        0.10916118999989521,
+        0.1091601799998898
+      ],
+      "decode_samples": [
+        0.006854337000049782,
+        0.0058484440000938775,
+        0.005857458000036786
+      ],
+      "exact_match": true,
+      "restored_sha256": "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+      "archive_sha256_samples": [
+        "fb2e16f3b8979189316ed5083b3a27c56485fe91fa9c90a9b3001bf70569ca2a",
+        "fb2e16f3b8979189316ed5083b3a27c56485fe91fa9c90a9b3001bf70569ca2a",
+        "fb2e16f3b8979189316ed5083b3a27c56485fe91fa9c90a9b3001bf70569ca2a"
+      ],
+      "restored_sha256_samples": [
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "gapped-repeat.bin",
+      "codec": "LZMA",
+      "source_bytes": 4194579,
+      "archive_bytes": 1049760,
+      "ratio": 3.9957504572473708,
+      "encode_seconds": 0.2815766960000019,
+      "decode_seconds": 0.00505014200007281,
+      "encode_samples": [
+        0.355426788999921,
+        0.2815766960000019,
+        0.2767150050001419
+      ],
+      "decode_samples": [
+        0.004967187999909584,
+        0.0050727079999433045,
+        0.00505014200007281
+      ],
+      "exact_match": true,
+      "restored_sha256": "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+      "archive_sha256_samples": [
+        "54cd4c223de671d45000417f644cf219e9882e1b9f190d4d6eaa11ccb0418647",
+        "54cd4c223de671d45000417f644cf219e9882e1b9f190d4d6eaa11ccb0418647",
+        "54cd4c223de671d45000417f644cf219e9882e1b9f190d4d6eaa11ccb0418647"
+      ],
+      "restored_sha256_samples": [
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "gapped-repeat.bin",
+      "codec": "Zstandard",
+      "source_bytes": 4194579,
+      "archive_bytes": 1052020,
+      "ratio": 3.9871665937909926,
+      "encode_seconds": 0.01415529000018978,
+      "decode_seconds": 0.009247687999959453,
+      "encode_samples": [
+        0.014340199999878678,
+        0.013364228999989791,
+        0.01415529000018978
+      ],
+      "decode_samples": [
+        0.009247687999959453,
+        0.008159241999919686,
+        0.010414602000082596
+      ],
+      "exact_match": true,
+      "restored_sha256": "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+      "archive_sha256_samples": [
+        "a8bb694848464af4db4fa8f48879f5951479f335911d15e9ef4d89f05b6550d2",
+        "a8bb694848464af4db4fa8f48879f5951479f335911d15e9ef4d89f05b6550d2",
+        "a8bb694848464af4db4fa8f48879f5951479f335911d15e9ef4d89f05b6550d2"
+      ],
+      "restored_sha256_samples": [
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7",
+        "1d5bf726e9d85608d62e64eb4575eb64e5a78aa0524b92d3e97a7b177e2bf8c7"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "nonaligned-period.bin",
+      "codec": "Fold",
+      "source_bytes": 4194356,
+      "archive_bytes": 4195643,
+      "ratio": 0.9996932532152998,
+      "encode_seconds": 0.2161702860000787,
+      "decode_seconds": 0.010645307999993747,
+      "encode_samples": [
+        0.21832116499990661,
+        0.21036235099995793,
+        0.2161702860000787
+      ],
+      "decode_samples": [
+        0.010474961999989318,
+        0.010645307999993747,
+        0.01099179500010905
+      ],
+      "exact_match": true,
+      "restored_sha256": "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+      "archive_sha256_samples": [
+        "c4c24555de65ed0d71839f3c244fb025916286c76d77e88658880ccec908c441",
+        "6f262125d81e02590a3b9c5c08896f9409b53c7792d44f77dc6de9829e5e5502",
+        "6f262125d81e02590a3b9c5c08896f9409b53c7792d44f77dc6de9829e5e5502"
+      ],
+      "restored_sha256_samples": [
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1"
+      ],
+      "fold_chunk_choices": {
+        "raw": 5
+      }
+    },
+    {
+      "file": "nonaligned-period.bin",
+      "codec": "DEFLATE",
+      "source_bytes": 4194356,
+      "archive_bytes": 4195642,
+      "ratio": 0.9996934914847359,
+      "encode_seconds": 0.10225474000003487,
+      "decode_seconds": 0.00565459499989629,
+      "encode_samples": [
+        0.10194316699994488,
+        0.10225474000003487,
+        0.10285464499997943
+      ],
+      "decode_samples": [
+        0.00565459499989629,
+        0.005828263000012157,
+        0.005458460999989256
+      ],
+      "exact_match": true,
+      "restored_sha256": "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+      "archive_sha256_samples": [
+        "a38ac2838a7de5ac8d6702761c08a2785cd1dabc615f3711a6de811cf690d745",
+        "a38ac2838a7de5ac8d6702761c08a2785cd1dabc615f3711a6de811cf690d745",
+        "a38ac2838a7de5ac8d6702761c08a2785cd1dabc615f3711a6de811cf690d745"
+      ],
+      "restored_sha256_samples": [
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "nonaligned-period.bin",
+      "codec": "LZMA",
+      "source_bytes": 4194356,
+      "archive_bytes": 1049476,
+      "ratio": 3.9966192652333166,
+      "encode_seconds": 0.3163377479997962,
+      "decode_seconds": 0.004969096999957401,
+      "encode_samples": [
+        0.3256173190000027,
+        0.3163377479997962,
+        0.2821257699999933
+      ],
+      "decode_samples": [
+        0.004969096999957401,
+        0.005091742000104205,
+        0.004875261000051978
+      ],
+      "exact_match": true,
+      "restored_sha256": "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+      "archive_sha256_samples": [
+        "ec39d53187533269a64c7340418e5c1c16b3805ab09574b90a8d971472ef269e",
+        "ec39d53187533269a64c7340418e5c1c16b3805ab09574b90a8d971472ef269e",
+        "ec39d53187533269a64c7340418e5c1c16b3805ab09574b90a8d971472ef269e"
+      ],
+      "restored_sha256_samples": [
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1"
+      ],
+      "fold_chunk_choices": null
+    },
+    {
+      "file": "nonaligned-period.bin",
+      "codec": "Zstandard",
+      "source_bytes": 4194356,
+      "archive_bytes": 1051703,
+      "ratio": 3.988156352126028,
+      "encode_seconds": 0.0144615619999513,
+      "decode_seconds": 0.009649996000007377,
+      "encode_samples": [
+        0.0144615619999513,
+        0.016159799999968527,
+        0.01307234899991272
+      ],
+      "decode_samples": [
+        0.009649996000007377,
+        0.010999957999956678,
+        0.008560192000004463
+      ],
+      "exact_match": true,
+      "restored_sha256": "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+      "archive_sha256_samples": [
+        "5c2651b9fcc0275f8e533b57f831bdba78054e762ddee530b336596d28974755",
+        "5c2651b9fcc0275f8e533b57f831bdba78054e762ddee530b336596d28974755",
+        "5c2651b9fcc0275f8e533b57f831bdba78054e762ddee530b336596d28974755"
+      ],
+      "restored_sha256_samples": [
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1",
+        "c21cac232d8dcef606364cef42f9c608a24975579caf15f4307f332a7b4bbed1"
+      ],
+      "fold_chunk_choices": null
+    }
+  ],
+  "public_media": true
+}

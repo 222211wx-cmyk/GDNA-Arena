@@ -240,3 +240,17 @@ mtime_ms = 1790989223577
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/cfafc531-ff7c-4583-87ed-173a72d0b3ad/cadd547e-d6f2-4730-aea4-dce21ea80301"
 storage_version_token = "1790989277007400"
 content_type = "text/csv"
+
+[[outputs]]
+id = "TfUwLCwXQ4QvTRDYfRBm9"
+uri = "file://research/digital-fold/expanded-results.html"
+type = "html"
+title = "نتائج الضغط على المجموعة الموسّعة"
+description = "الأحجام الكاملة وأزمنة الضغط والاسترجاع لكل ملف وطريقة، مع المصادر والتراخيص وحدود القياس."
+logical_id = "85dbd597-8ffa-4f35-8dc8-8a4f3f42d155"
+content_hash = "sha256:0ae470034a2a7b5a928b7d74da62d302b8023dc4c773126595dc7f10d15e02a3"
+size = 32430
+mtime_ms = 1790995989848
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/85dbd597-8ffa-4f35-8dc8-8a4f3f42d155/27a873b0-ae56-4b9b-a37b-148c755397f3"
+storage_version_token = "1790996058129941"
+content_type = "text/html"

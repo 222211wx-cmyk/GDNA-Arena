@@ -76,7 +76,7 @@ def extra_corpus(originals):
         data = verified((originals / item["name"]).read_bytes(), item)
         details = {key: value for key, value in item.items()
                    if key not in ("name", "category", "provenance", "bytes", "sha256")}
-        details["retrieved_utc_date"] = manifest()["retrieved_utc_date"]
+        details["retrieved_utc_date"] = item.get("retrieved_utc_date", manifest()["retrieved_utc_date"])
         yield item["name"], item["category"], data, item["provenance"], details
     yield from repetition_controls()
 

@@ -85,6 +85,13 @@ PNG results do not establish behavior for JPEG, audio, video or APK files.
 
 ## Licensed public-media extension
 
+**Historical run:** this section describes the original three-media collection
+recorded on 2026-10-01. The current manifest is now expanded; invoking
+`public_benchmark.py` today measures the nine media originals described in
+[EXPANDED-RESULTS.md](EXPANDED-RESULTS.md). The historical JSON, HTML and original
+bytes have not been replaced. Its three media records remain the first three
+manifest entries, with their original hashes and retrieval date.
+
 `public-results.html` and `public-measurement-run/measurements.json` record a
 **separate** run over the original seven fixtures, three public media originals,
 and three non-aligned repetition controls. The previous `measurement-run/`,
