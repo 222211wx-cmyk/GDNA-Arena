@@ -82,10 +82,17 @@ localPort = 8080
 externalPort = 8080
 
 [[ports]]
+localPort = 8081
+externalPort = 80
+
+[[ports]]
 localPort = 8082
+externalPort = 3002
+
+[[ports]]
+localPort = 22842
 externalPort = 3000
 
 [[ports]]
-localPort = 19130
-externalPort = 80
-exposeLocalhost = true
+localPort = 23916
+externalPort = 3001
