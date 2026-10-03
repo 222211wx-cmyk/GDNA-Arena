@@ -64,6 +64,7 @@ export interface DmMessage {
   fileUrl?: string;
   type: string;   // text | audio | file
   createdAt: string;
+  expiresAt?: string | null;
   // Task #165 extensions
   replyToId?: number | null;
   replyTo?: { id: number; username: string; content?: string; type: string } | null;

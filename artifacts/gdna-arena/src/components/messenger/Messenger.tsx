@@ -12,7 +12,7 @@
  *    RTL-friendly composer with + inside the input shell revealing camera/gallery/files/mic/emoji
  *  - No GIPHY. Keyboard-stable (dvh + interactive-widget=resizes-content).
  */
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { directAttachmentUpload } from "./directAttachmentUpload";
 import { MessageInputBoundary } from "./MessageInputBoundary";
@@ -1251,6 +1251,16 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   // Citizen card drawer opened from a conversation row (same page, no navigation).
   const [drawerUsername, setDrawerUsername] = useState<string | null>(null);
   const [messages,    setMessages]    = useState<DmMessage[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<string | null>();
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+  const historyRequest = useRef(0);
+  const historyBusy = useRef(false);
+  const historyInitialized = useRef(false);
+  const latestPageIds = useRef<number[]>([]);
+  const messageScroller = useRef<HTMLDivElement>(null);
+  const scrollAnchor = useRef<{ height: number; top: number } | null>(null);
+  const atBottom = useRef(true);
   const [text,        setText]        = useState("");
   const [peerTyping, setPeerTyping] = useState(false);
   const lastTypingSent = useRef(0);
@@ -1766,7 +1776,56 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     };
   }, [activeRoom?.id, user?.id, isOnline, loadRooms]);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useLayoutEffect(() => {
+    const el = messageScroller.current;
+    if (el && scrollAnchor.current) {
+      el.scrollTop = scrollAnchor.current.top + el.scrollHeight - scrollAnchor.current.height;
+      scrollAnchor.current = null;
+    } else if (atBottom.current) endRef.current?.scrollIntoView({ block: "end" });
+  }, [messages]);
+
+  async function loadOlderMessages() {
+    if (!historyCursor || historyBusy.current || !user || !isOnline || !activeRoom) return;
+    const roomId = activeRoom.id;
+    const owner = user.id;
+    const request = ++historyRequest.current;
+    const revision = messageRevisionRef.current;
+    historyBusy.current = true;
+    setLoadingHistory(true);
+    setHistoryError(false);
+    try {
+      const r = await fetch(api(`/api/messages/rooms/${roomId}?before=${encodeURIComponent(historyCursor)}`), {
+        credentials: "include", cache: "no-store", signal: AbortSignal.timeout(15_000),
+      });
+      if (!r.ok) throw new Error("History unavailable");
+      const page = await r.json();
+      const older = await Promise.all((page.messages as DmMessage[]).map(message =>
+        decryptMessageForUser(message, owner, st).catch(() => ({
+          ...message, content: `🔐 ${st.secure_other_device}`, encrypted: true, decryptionFailed: true,
+        }))));
+      if (!mountedRef.current || syncIdentityRef.current !== owner ||
+          activeRoomIdRef.current !== roomId || request !== historyRequest.current) return;
+      if (revision !== messageRevisionRef.current) {
+        setHistoryError(true);
+        return;
+      }
+      const el = messageScroller.current;
+      if (el) scrollAnchor.current = { height: el.scrollHeight, top: el.scrollTop };
+      setMessages(prev => {
+        const unique = new Map([...older, ...prev].map(message => [message.id, message]));
+        return [...unique.values()].filter(m => !m.expiresAt || Date.parse(m.expiresAt) > Date.now())
+          .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id - b.id);
+      });
+      setHistoryCursor(page.pagination.nextCursor);
+    } catch {
+      if (request === historyRequest.current && activeRoomIdRef.current === roomId) setHistoryError(true);
+    } finally {
+      if (request === historyRequest.current) {
+        historyBusy.current = false;
+        setLoadingHistory(false);
+      }
+    }
+  }
 
   async function loadMessages(roomId: number) {
     if (!isOnline || !user) return;
@@ -1790,7 +1849,24 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       if (mountedRef.current && syncIdentityRef.current === owner &&
           activeRoomIdRef.current === roomId && request === messageRequestRef.current &&
           revision === messageRevisionRef.current) {
-        setMessages(decrypted);
+        setMessages(prev => {
+          const first = decrypted[0];
+          const retained = first ? prev.filter(m =>
+            Date.parse(m.createdAt) < Date.parse(first.createdAt) ||
+            (m.createdAt === first.createdAt && m.id < first.id)) : [];
+          return [...new Map([...retained, ...decrypted].map(m => [m.id, m])).values()]
+            .filter(m => !m.expiresAt || Date.parse(m.expiresAt) > Date.now());
+        });
+        // If more than a page arrived while offline, restart traversal at the
+        // new window so the gap remains reachable rather than silently skipped.
+        if (!historyInitialized.current || !decrypted.some(m => latestPageIds.current.includes(m.id))) {
+          ++historyRequest.current;
+          historyBusy.current = false;
+          setLoadingHistory(false);
+          historyInitialized.current = true;
+          setHistoryCursor(j.pagination?.nextCursor ?? null);
+        }
+        latestPageIds.current = decrypted.map(m => m.id);
         if (Array.isArray(j.members)) {
           setActiveRoom(prev => prev?.id === roomId ? { ...prev, members: j.members } : prev);
         }
@@ -1804,6 +1880,16 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     cancelPending();
     setShowSettings(false); setShowContacts(false); setShowEmoji(false); setShowAttachTray(false);
     activeRoomIdRef.current = room.id;
+    ++messageRequestRef.current;
+    ++historyRequest.current;
+    historyBusy.current = false;
+    historyInitialized.current = false;
+    latestPageIds.current = [];
+    scrollAnchor.current = null;
+    atBottom.current = true;
+    setHistoryCursor(undefined);
+    setLoadingHistory(false);
+    setHistoryError(false);
     setMessages([]);
     setActiveRoom(room);
     onActiveRoomChange?.(room.id);
@@ -2882,8 +2968,17 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       )}
 
       {/* ── Messages with date separators ── */}
-      <div style={{ flex: 1, overflowY: "auto", overscrollBehavior: "contain", padding: "12px 12px 4px", display: "flex", flexDirection: "column", gap: 4, WebkitOverflowScrolling: "touch" }}
+      <div ref={messageScroller}
+        onScroll={e => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}
+        style={{ flex: 1, overflowY: "auto", overflowAnchor: "none", overscrollBehavior: "contain", padding: "12px 12px 4px", display: "flex", flexDirection: "column", gap: 4, WebkitOverflowScrolling: "touch" }}
         onClick={() => { setMenuMsgId(null); setShowAttachTray(false); }}>
+        {historyCursor && <Button variant="ghost" disabled={loadingHistory || !isOnline} onClick={() => void loadOlderMessages()}>
+          {lang === "ar" ? (loadingHistory ? "جارٍ التحميل…" : historyError ? "تعذر التحميل — إعادة المحاولة" : "تحميل الرسائل الأقدم")
+            : lang === "fr" ? (loadingHistory ? "Chargement…" : historyError ? "Réessayer" : "Messages plus anciens")
+            : lang === "es" ? (loadingHistory ? "Cargando…" : historyError ? "Reintentar" : "Mensajes anteriores")
+            : lang === "de" ? (loadingHistory ? "Laden…" : historyError ? "Erneut versuchen" : "Ältere Nachrichten laden")
+            : (loadingHistory ? "Loading…" : historyError ? "Retry loading older messages" : "Load older messages")}
+        </Button>}
         {grouped.map(group => (
           <div key={group.label + group.msgs[0]?.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ alignSelf: "center", background: "#1a1a1a", color: "#aaa", fontSize: 11.5, fontWeight: 700, borderRadius: 8, padding: "4px 12px", margin: "8px 0" }}>

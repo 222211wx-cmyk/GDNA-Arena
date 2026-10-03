@@ -35,9 +35,10 @@ type Stored = {
   content: string | null;
   fileUrl?: string | null;
   createdAt: string;
+  expiresAt?: string | null;
 };
 type Visible = Stored & { payload?: SecurePayload; error?: string };
-type Response = { room: { name?: string | null }; messages: Stored[] };
+type Response = { room: { name?: string | null }; messages: Stored[]; pagination: { hasMore: boolean; nextCursor: string | null }; localRevision?: number };
 type SendVariables = { payload: SecurePayload; fileUrl?: string; content?: string; clientMessageId?: string };
 type SendResponse = { message: Stored };
 type MessagingEntitlement = { hasActiveSubscription: boolean; canSendMessages: boolean; freeMessagesRemaining: number };
@@ -60,6 +61,14 @@ const copy = {
   de: { video: 'Verschlüsseltes Video senden', image: 'Verschlüsseltes Bild senden', compress: 'Medien werden vorbereitet und verschlüsselt…', upload: 'Verschlüsselte Datei wird hochgeladen', failed: 'Sicheres Senden fehlgeschlagen', retry: 'Erneut versuchen', decrypt: 'Video kann nicht entschlüsselt werden', loading: 'Video wird entschlüsselt…', permission: 'Erlaube Zugriff auf Fotos und Videos, um verschlüsselte Medien zu senden.' },
 };
 const t = copy[Intl.DateTimeFormat().resolvedOptions().locale.slice(0, 2) as keyof typeof copy] ?? copy.en;
+const historyCopy = {
+  ar: { older: 'تحميل الرسائل الأقدم', loading: 'جارٍ التحميل…', retry: 'تعذر التحميل — إعادة المحاولة' },
+  en: { older: 'Load older messages', loading: 'Loading…', retry: 'Retry loading older messages' },
+  fr: { older: 'Messages plus anciens', loading: 'Chargement…', retry: 'Réessayer' },
+  es: { older: 'Mensajes anteriores', loading: 'Cargando…', retry: 'Reintentar' },
+  de: { older: 'Ältere Nachrichten laden', loading: 'Laden…', retry: 'Erneut versuchen' },
+};
+const historyText = historyCopy[Intl.DateTimeFormat().resolvedOptions().locale.slice(0, 2) as keyof typeof historyCopy] ?? historyCopy.en;
 
 function SecureImage({ fileUrl, metadata }: { fileUrl: string; metadata: EncryptedAttachment }) {
   const colors = useColors();
@@ -113,6 +122,11 @@ function SecureVideo({ fileUrl, metadata }: { fileUrl: string; metadata: Encrypt
 
 export default function Conversation() {
   const id = Number(useLocalSearchParams<{ roomId: string }>().roomId);
+  const { user } = useAuth();
+  return <ConversationHistory key={`${user?.id}:${id}`} id={id} />;
+}
+
+function ConversationHistory({ id }: { id: number }) {
   const colors = useColors();
   const router = useRouter();
   const inset = useSafeAreaInsets();
@@ -139,6 +153,15 @@ export default function Conversation() {
   const [retryUpload, setRetryUpload] = useState<(() => Promise<void>) | null>(null);
   const [retrySend, setRetrySend] = useState<SendVariables | null>(null);
   const [messages, setMessages] = useState<Visible[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<string | null>();
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
+  const historyInitialized = useRef(false);
+  const latestPageIds = useRef<number[]>([]);
+  const historyBusy = useRef(false);
+  const hydrationRequest = useRef(0);
+  const messageRevision = useRef(0);
+  const historyGeneration = useRef(0);
   const active = useRef(true);
   const socket = useRef<WebSocket | null>(null);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -147,10 +170,17 @@ export default function Conversation() {
   const room = useQuery({
     queryKey: ['room', user?.id, id],
     enabled: !!user && Number.isSafeInteger(id) && id > 0,
-    queryFn: () => apiGet<Response>(`/messages/rooms/${id}`),
+    queryFn: async () => {
+      const localRevision = messageRevision.current;
+      const data = await apiGet<Response>(`/messages/rooms/${id}`);
+      return { ...data, localRevision };
+    },
   });
-  const hydrate = useCallback(async (data: Response) => {
+  const hydrate = useCallback(async (data: Response, older = false) => {
     if (!user) return;
+    const request = older ? 0 : ++hydrationRequest.current;
+    const revision = data.localRevision ?? messageRevision.current;
+    const generation = historyGeneration.current;
     const hydrated = await Promise.all(data.messages.map(async message => {
       if (!message.content?.startsWith('e2e:v1:')) return { ...message, error: 'Legacy message' };
       try {
@@ -159,8 +189,46 @@ export default function Conversation() {
         return { ...message, error: 'Message unavailable on this device.' };
       }
     }));
-    if (active.current) setMessages(hydrated);
+    if (!active.current || (older && generation !== historyGeneration.current) ||
+        (!older && request !== hydrationRequest.current)) return;
+    if (revision !== messageRevision.current) {
+      if (older) throw new Error('History changed; retry');
+      return;
+    }
+    setMessages(prev => {
+      const first = hydrated[0];
+      const retained = older ? prev : first ? prev.filter(m =>
+        Date.parse(m.createdAt) < Date.parse(first.createdAt) ||
+        (m.createdAt === first.createdAt && m.id < first.id)) : [];
+      const combined = older ? [...hydrated, ...retained] : [...retained, ...hydrated];
+      return [...new Map(combined.map(m => [m.id, m])).values()]
+        .filter(m => !m.expiresAt || Date.parse(m.expiresAt) > Date.now())
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id - b.id);
+    });
+    if (older || !historyInitialized.current || !hydrated.some(m => latestPageIds.current.includes(m.id))) {
+      if (!older) historyGeneration.current++;
+      historyInitialized.current = true;
+      setHistoryCursor(data.pagination?.nextCursor ?? null);
+    }
+    if (!older) latestPageIds.current = hydrated.map(m => m.id);
   }, [user]);
+  async function loadOlderMessages() {
+    if (!historyCursor || historyBusy.current || !isOnline) return;
+    historyBusy.current = true;
+    const generation = historyGeneration.current;
+    const localRevision = messageRevision.current;
+    setLoadingHistory(true);
+    setHistoryError(false);
+    try {
+      const page = await apiGet<Response>(`/messages/rooms/${id}?before=${encodeURIComponent(historyCursor)}`);
+      if (generation === historyGeneration.current) await hydrate({ ...page, localRevision }, true);
+    } catch {
+      if (active.current) setHistoryError(true);
+    } finally {
+      historyBusy.current = false;
+      if (active.current) setLoadingHistory(false);
+    }
+  }
   useEffect(() => { if (room.data) void hydrate(room.data); }, [room.data, hydrate]);
   useEffect(() => {
     active.current = true;
@@ -238,6 +306,7 @@ export default function Conversation() {
             visible = { ...message, error: 'Message unavailable on this device.' };
           }
           if (active.current) {
+            messageRevision.current++;
             setMessages(previous => previous.some(item => item.id === message.id) ? previous : [...previous, visible]);
           }
           await queryClient.invalidateQueries({ queryKey: ['amis-rooms', user.id] });
@@ -290,6 +359,7 @@ export default function Conversation() {
         const sentText = variables.payload.text;
         setText(current => current.trim() === sentText ? '' : current);
       }
+      messageRevision.current++;
       setMessages(previous => previous.some(item => item.id === result.message.id)
         ? previous
         : [...previous, { ...result.message, payload: variables.payload }]);
@@ -374,6 +444,13 @@ export default function Conversation() {
       </View>
       <FlatList
         inverted
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        ListFooterComponent={historyCursor ? <Button
+          variant="ghost"
+          disabled={loadingHistory || !isOnline}
+          onPress={() => void loadOlderMessages()}
+        >{loadingHistory ? historyText.loading : historyError ? historyText.retry : historyText.older}
+        </Button> : null}
         data={[...messages].reverse()}
         keyExtractor={item => String(item.id)}
         contentContainerStyle={styles.list}

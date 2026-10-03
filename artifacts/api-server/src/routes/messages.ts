@@ -4,7 +4,7 @@ import { beginChatUpload, readChatTicket, completeChatUpload, abortChatUpload, g
 import { CLIENT_MESSAGE_ID, messageRequestHash, messageReplay, saveMessageReceipt } from "../lib/message-idempotency";
 import { expectedSenderGuard } from "../lib/message-sender-guard";
 import { requireMessagingSubscription } from "../middleware/require-messaging-subscription";
-import { eq, desc, sql, and, ne, gt } from "drizzle-orm";
+import { eq, desc, sql, and, ne, gt, getTableColumns } from "drizzle-orm";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
 import path from "path";
@@ -1013,6 +1013,23 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
   }
 
   // Expired messages are removed for every participant before history is read.
+  let before: { room: number; id: number; at: string } | null = null;
+  if (req.query.before !== undefined) {
+    try {
+      if (typeof req.query.before !== "string" || req.query.before.length > 512) throw new Error();
+      const value = JSON.parse(Buffer.from(req.query.before, "base64url").toString("utf8"));
+      if (value.room !== roomId || !Number.isSafeInteger(value.id) || value.id < 1 ||
+          typeof value.at !== "string" ||
+          !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}$/.test(value.at) ||
+          value.at.startsWith("0000") ||
+          !Number.isFinite(Date.parse(value.at.replace(" ", "T") + "Z")) ||
+          new Date(value.at.replace(" ", "T") + "Z").toISOString().slice(0, 19) !==
+            value.at.replace(" ", "T").slice(0, 19)) throw new Error();
+      before = value;
+    } catch {
+      res.status(400).json({ error: "Invalid history cursor" }); return;
+    }
+  }
   await pool.query(
     `DELETE FROM dm_message_reactions
      WHERE message_id IN (
@@ -1027,9 +1044,21 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
     [roomId],
   );
 
-  const msgs = await db.select().from(dmMessages)
-    .where(eq(dmMessages.roomId, roomId))
-    .orderBy(desc(dmMessages.createdAt)).limit(60);
+  const page = await db.select({
+    ...getTableColumns(dmMessages),
+    // Preserve PostgreSQL microseconds: JS Date alone can skip equal-ms rows.
+    cursorAt: sql<string>`to_char(${dmMessages.createdAt}, 'YYYY-MM-DD HH24:MI:SS.US')`,
+  }).from(dmMessages)
+    .where(and(eq(dmMessages.roomId, roomId),
+      sql`(${dmMessages.expiresAt} IS NULL OR ${dmMessages.expiresAt} > now())`,
+      before ? sql`(${dmMessages.createdAt}, ${dmMessages.id}) < (${before.at}::timestamp, ${before.id})` : undefined))
+    .orderBy(desc(dmMessages.createdAt), desc(dmMessages.id)).limit(61);
+  const hasMore = page.length > 60;
+  const msgs = page.slice(0, 60);
+  const oldest = msgs.at(-1);
+  const nextCursor = hasMore && oldest ? Buffer.from(JSON.stringify({
+    room: roomId, id: oldest.id, at: oldest.cursorAt,
+  })).toString("base64url") : null;
 
   const rawMembers = await hideReadCursors(
     await db.select().from(dmRoomMembers).where(eq(dmRoomMembers.roomId, roomId)), userId);
@@ -1039,7 +1068,7 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
   // Advance this member's read cursor to the latest fetched message timestamp.
   // The WHERE guard ensures the cursor is strictly monotonic — concurrent reads
   // cannot move it backward and cause already-read messages to reappear as unread.
-  const latestTs = msgs.length > 0 ? msgs[0]!.createdAt : null;
+  const latestTs = !before && msgs.length > 0 ? msgs[0]!.createdAt : null;
   if (latestTs) {
     const advanced = await db.update(dmRoomMembers)
       .set({ lastReadAt: latestTs })
@@ -1086,7 +1115,7 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
       "SELECT id,username,content,type FROM dm_messages WHERE room_id=$1 AND id=ANY($2)", [roomId, replyIds]);
     result.rows.forEach(row => replies.set(row.id, row));
   }
-  const messages = ordered.map(msg => {
+  const messages = ordered.map(({ cursorAt: _cursorAt, ...msg }) => {
     const reactions = { support: 0, listen: 0, celebrate: 0 };
     let myReaction: string | null = null;
     reactionRows.filter(r => r.message_id === msg.id).forEach(r => {
@@ -1103,6 +1132,7 @@ router.get("/messages/rooms/:id", async (req, res): Promise<void> => {
       blockedByMe: peerState?.blockedByMe ?? false,
     } : null,
     messages,
+    pagination: { hasMore, nextCursor },
     members,
   });
 });
