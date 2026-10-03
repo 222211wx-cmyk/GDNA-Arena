@@ -1,7 +1,7 @@
-/** Owner-requested maximum for NEW uploads; historical stored clips are untouched. */
-export const MAX_CLIP_BYTES = 100_000_000;
+/** Compatibility exports for legacy callers; product size policy is uncapped. */
+export const MAX_CLIP_BYTES = Number.POSITIVE_INFINITY;
 export const MAX_NEW_CLIP_BYTES = MAX_CLIP_BYTES;
-export const NEW_CLIP_TOO_LARGE = "Maximum file size is 100 MB";
+export const NEW_CLIP_TOO_LARGE = "Invalid media size";
 export const CLIP_EXT: Record<string, string> = {
   "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
   "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac",
@@ -114,6 +114,6 @@ export function validateClipRightsInput(
 }
 export function clipDurationSeconds(seconds: number, contentType: string): number {
   if (!Number.isFinite(seconds) || seconds <= 0) throw new ClipUploadError(400, "مدة الملف غير صالحة");
-  if (seconds < 60) throw new ClipUploadError(400, "خاص دقيقة الفوق");
+  // Existing Clips rows store whole seconds; sub-second media is accepted.
   return Math.floor(seconds);
 }

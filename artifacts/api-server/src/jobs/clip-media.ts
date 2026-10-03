@@ -39,7 +39,6 @@ export async function runClipMediaBatch(signal: AbortSignal): Promise<number> {
     const upload = rows[0];
     if (!upload) throw new ClipUploadError(400,"Upload account was removed");
     if (job.attempts > 8) throw new ClipUploadError(400,"Media processing retry limit reached");
-    if (Number(upload.size_bytes)>MAX_NEW_CLIP_BYTES) throw new ClipUploadError(413,"Maximum file size is 10 GiB");
     const [metadata] = await clipFile(upload.object_name).getMetadata();
     if (Number(metadata.size)!==Number(upload.size_bytes)) throw new ClipUploadError(409,"Stored media size does not match");
     try {

@@ -103,13 +103,11 @@ test("Tus metadata decodes UTF-8 and validates all bounds without trusting durat
   assert.throws(() => parseUploadMetadata("title /w=="), ClipUploadError);
   assert.throws(() => parseUploadMetadata("title YQ==,title Yg=="), ClipUploadError);
   assert.equal(parseUploadMetadata(metadataHeader({
-    ...valid, totalSize: MAX_NEW_CLIP_BYTES, durationSec: 0,
+    ...valid, totalSize: 200 * 1024 ** 3, durationSec: 0,
   })).durationSec, 0, "zero duration is accepted only as untrusted metadata");
-  assert.throws(
-    () => parseUploadMetadata(metadataHeader({ ...valid, totalSize: MAX_NEW_CLIP_BYTES + 1 })),
-    (error: unknown) => error instanceof ClipUploadError &&
-      error.status === 413,
-  );
+  assert.equal(parseUploadMetadata(metadataHeader({
+    ...valid, totalSize: 200 * 1024 ** 3,
+  })).totalSize, 200 * 1024 ** 3);
 });
 
 test("500 MiB and 2 GiB declarations succeed; larger new files are rejected", async () => {

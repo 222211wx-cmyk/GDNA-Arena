@@ -1,11 +1,6 @@
 import { trackEvent } from "@/lib/analytics";
 
-const PRESIGN_API = () => `${import.meta.env.BASE_URL}api/clips/presign`;
-const CONFIRM_API = () => `${import.meta.env.BASE_URL}api/clips/confirm`;
-
-/** Single-PUT ceiling. Never shown to citizens as a number. */
-export const MAX_CLIP_BYTES = 100_000_000;
-export const FILE_TOO_LARGE_MESSAGE = "هذا الملف كبير بزاف — اختر ملفاً أصغر";
+const CONTROL_API = () => `${import.meta.env.BASE_URL}api/upload/presign`;
 
 export type ClipUploadMetadata = {
   /** Citizen-facing publication title. */
@@ -14,7 +9,7 @@ export type ClipUploadMetadata = {
   durationSec: number | null;
 };
 
-/** Real byte progress of the single PUT of the original File. */
+/** Progress counts only storage-acknowledged bytes. */
 export type ClipUploadProgress = (percent: number, uploadedBytes: number, totalBytes: number) => void;
 
 export type PublishedClip = {
@@ -50,35 +45,6 @@ async function postJson(url: string, body: Record<string, unknown>, signal: Abor
   return response.json();
 }
 
-/** One XHR PUT of the untouched File. Cancel aborts the request; no retries. */
-export function putFile(url: string, file: File, contentType: string, signal: AbortSignal, onProgress: (loaded: number) => void) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal.aborted) { reject(abortReason(signal)); return; }
-    const xhr = new XMLHttpRequest();
-    const abort = () => xhr.abort();
-    const done = () => signal.removeEventListener("abort", abort);
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentType);
-    // The signed object is immutable: the URL only accepts a create, never an overwrite.
-    xhr.setRequestHeader("If-None-Match", "*");
-    xhr.upload.onprogress = event => {
-      if (event.lengthComputable) onProgress(Math.min(file.size, event.loaded));
-    };
-    xhr.onload = () => {
-      done();
-      if (xhr.status < 200 || xhr.status >= 300) {
-        reject(Object.assign(new Error(`تعذر الرفع (${xhr.status})`), { status: xhr.status }));
-        return;
-      }
-      onProgress(file.size);
-      resolve();
-    };
-    xhr.onerror = () => { done(); reject(new Error("تعذر الرفع — تحقق من الاتصال وحاول مجدداً")); };
-    xhr.onabort = () => { done(); reject(abortReason(signal)); };
-    signal.addEventListener("abort", abort, { once: true });
-    xhr.send(file);
-  });
-}
 
 export async function currentUploadOwner(signal?: AbortSignal): Promise<number> {
   const response = await fetch(`${import.meta.env.BASE_URL}api/auth/me`, { credentials: "include", cache: "no-store", signal });
@@ -89,7 +55,40 @@ export async function currentUploadOwner(signal?: AbortSignal): Promise<number> 
   return me.id;
 }
 
-/** presign → PUT original File → confirm. Returns the server's final receipt. */
+async function retry<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  let delay = 1000;
+  for (;;) {
+    signal.throwIfAborted();
+    try { return await operation(); }
+    catch (error) {
+      signal.throwIfAborted();
+      const status = (error as { status?: number }).status;
+      if (status && status < 500 && status !== 408 && status !== 429) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const stop = () => { clearTimeout(timer); reject(abortReason(signal)); };
+        const timer = setTimeout(() => { signal.removeEventListener("abort", stop); resolve(); }, delay);
+        signal.addEventListener("abort", stop, { once: true });
+      });
+      delay = Math.min(delay * 2, 30_000);
+    }
+  }
+}
+
+// Bounded-memory content identity prevents resuming with different bytes after
+// selecting a file again. Only the identity/request ID is persisted, never media.
+async function fileIdentity(file: File, signal: AbortSignal) {
+  let hash: Uint8Array<ArrayBuffer> = new Uint8Array(32);
+  for (let offset = 0; offset < file.size; offset += 5 * 1024 * 1024) {
+    signal.throwIfAborted();
+    const chunk = await file.slice(offset, offset + 5 * 1024 * 1024).arrayBuffer();
+    const next = new Uint8Array(hash.length + chunk.byteLength);
+    next.set(hash); next.set(new Uint8Array(chunk), hash.length);
+    hash = new Uint8Array(await crypto.subtle.digest("SHA-256", next));
+  }
+  return Array.from(hash, x => x.toString(16).padStart(2, "0")).join("");
+}
+
+/** browser chunks → authenticated server → storage; resume confirmed parts. */
 export async function uploadClip(
   file: File,
   metadata: ClipUploadMetadata,
@@ -98,34 +97,69 @@ export async function uploadClip(
   options: { expectedOwner: number },
 ): Promise<PublishedClip> {
   signal.throwIfAborted();
-  if (file.size > MAX_CLIP_BYTES) throw new Error(FILE_TOO_LARGE_MESSAGE);
   const owner = await currentUploadOwner(signal);
   if (owner !== options.expectedOwner) {
     throw new Error("Le compte a changé — ce fichier ne sera pas publié avec un autre compte");
   }
   const contentType = file.type || "application/octet-stream";
-  const signed = await postJson(PRESIGN_API(), {
+  const identity = await fileIdentity(file, signal);
+  const savedKey = `clips-server-upload:${owner}:${identity}:${encodeURIComponent(metadata.title)}:${encodeURIComponent(file.name)}`;
+  let requestId = localStorage.getItem(savedKey);
+  if (!requestId) { requestId = crypto.randomUUID(); localStorage.setItem(savedKey, requestId); }
+  const control = (body: Record<string, unknown>) =>
+    retry(() => postJson(CONTROL_API(), { ...body, expectedOwnerId: owner }, signal), signal);
+  const session = await control({
+    action: "initiate", requestId,
     filename: file.name,
     title: metadata.title,
     contentType,
     size: file.size,
     durationSec: metadata.durationSec,
     expectedOwnerId: owner,
-  }, signal);
-  if (typeof signed?.url !== "string" || typeof signed?.key !== "string") {
+  });
+  if (typeof session?.sessionId !== "string" || !Number.isSafeInteger(session.partSize) || session.partSize <= 0) {
     throw new Error("تعذر بدء الرفع — حاول مجدداً");
   }
   onProgress(0, 0, file.size);
-  await putFile(signed.url, file, contentType, signal, loaded => {
-    onProgress(file.size ? loaded / file.size * 100 : 100, loaded, file.size);
-  });
+  const inspected = await control({ action: "inspect", sessionId: session.sessionId });
+  const parts = new Map<number, { partNumber: number; etag: string; size: number }>(
+    (inspected.parts ?? []).map((p: { partNumber: number; etag: string; size: number }) => [p.partNumber, p]),
+  );
+  let body = inspected.receipt;
+  if (!body) {
+    for (let partNumber = 1; inspected.state !== "completing" && partNumber <= session.partCount; partNumber++) {
+      const start = (partNumber - 1) * session.partSize;
+      const end = Math.min(file.size, start + session.partSize);
+      if (!parts.has(partNumber)) {
+        let attempted = false;
+        const part = await retry(async () => {
+          if (attempted) {
+            const confirmed = await control({ action: "inspect", sessionId: session.sessionId });
+            const stored = confirmed.parts?.find((p: { partNumber: number; size: number }) =>
+              p.partNumber === partNumber && p.size === end - start);
+            if (stored) return stored;
+          }
+          attempted = true;
+          const response = await fetch(`${import.meta.env.BASE_URL}api/upload/chunk/${session.sessionId}/${partNumber}`, {
+            method: "PUT", credentials: "include", signal,
+            headers: { "Content-Type": "application/octet-stream" }, body: file.slice(start, end),
+          });
+          if (!response.ok) throw Object.assign(new Error(await errorMessage(response)), { status: response.status });
+          return response.json();
+        }, signal);
+        parts.set(partNumber, part);
+      }
+      onProgress(end / file.size * 100, end, file.size);
+    }
+    body = await control({ action: "complete", sessionId: session.sessionId });
+  }
   signal.throwIfAborted();
-  const body = await postJson(CONFIRM_API(), { key: signed.key, expectedOwnerId: owner }, signal);
   const clip = body?.clip && typeof body.clip === "object" ? body.clip : null;
   const code = body?.code ?? clip?.code;
   if (body?.ok === false || !clip || typeof code !== "string" || !/^HELX-\d{6}$/.test(code)) {
     throw new Error("لم يؤكد الخادم نشر الكليب");
   }
   trackEvent("clip_upload_success", { outcome: "published" });
+  localStorage.removeItem(savedKey);
   return { ...clip, code, name: clip.title ?? body.name ?? clip.name ?? metadata.title };
 }

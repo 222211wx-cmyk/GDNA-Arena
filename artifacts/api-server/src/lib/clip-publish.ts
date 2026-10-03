@@ -38,7 +38,7 @@ export function validateClipDisplayTitle(value: unknown): string | undefined {
   return title;
 }
 
-/** No ownership/fingerprint/category checks: verify real media and >=60 seconds. */
+/** Verify real media and stored-byte integrity, without a duration threshold. */
 export async function publishClip(
   input: PublishClipInput,
   lockedClient?: ClipDatabaseClient,
@@ -47,7 +47,6 @@ export async function publishClip(
   const contentType = normalizeClipContentType(input.contentType);
   if (!contentType) throw new ClipUploadError(415, "صيغة الصوت أو الفيديو غير مدعومة");
   if (!Number.isSafeInteger(input.size) || input.size <= 0) throw new ClipUploadError(400, "Invalid media size");
-  if (input.size > MAX_NEW_CLIP_BYTES) throw new ClipUploadError(413, NEW_CLIP_TOO_LARGE);
   const displayTitle = validateClipDisplayTitle(input.displayTitle);
   const [metadata] = await clipFile(input.filename).getMetadata();
   if (Number(metadata.size) !== input.size) throw new ClipUploadError(409, "Stored media size does not match");

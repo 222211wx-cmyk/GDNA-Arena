@@ -149,7 +149,7 @@ export async function ensureClipsTables(): Promise<void> {
         original_name TEXT NOT NULL,
         display_title TEXT,
         content_type TEXT NOT NULL,
-        size_bytes BIGINT NOT NULL CHECK (size_bytes > 0 AND size_bytes <= ${MAX_NEW_CLIP_BYTES}),
+        size_bytes BIGINT NOT NULL CHECK (size_bytes > 0),
         duration_sec DOUBLE PRECISION NOT NULL CHECK (duration_sec >= 0),
         state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','completing','published','aborted')),
         clip_id INTEGER REFERENCES clips(id) ON DELETE SET NULL,

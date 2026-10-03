@@ -3,7 +3,7 @@ name: Empire CLIPS rules
 description: Owner-mandated publishing rules for the Reels-style clips tab
 ---
 
-- Clips duration rule: **minimum 1:00 for both audio and video, NO maximum**; rejection text is “خاص دقيقة الفوق”. **Why:** the final owner specification on 2026-09-18 explicitly includes audio, films and very long media. **How to apply:** enforce the minimum on both client and server; never restore the short-audio exception or a 24h cap.
+- Clips has no product-defined file-size ceiling or minimum/maximum duration. **Why:** on 2026-10-03 the owner explicitly superseded the earlier minimum-minute rule and all size ceilings. **How to apply:** never add new product upload restrictions without explicit permission; preserve authentication, valid-media and byte-integrity verification.
 - Publishing has no production category, rights declaration, original-footage checkbox, or music/fingerprint ownership gate. **Why:** the owner explicitly removed these from Clips in the final simple specification on 2026-09-18; this supersedes earlier first-owner publishing instructions. **How to apply:** preserve historical rights/finance data and authentication/object ownership controls, but do not use rights records to block new clip publication. Other products' rights systems are not part of this change.
 - Successful publishing produces a filename-derived name and server-generated unique HELX-###### code. **Why:** the owner wants “تعطيه اسم وكود” rather than additional classification steps. **How to apply:** persist and return the code; do not show a client-generated placeholder before server confirmation.
 - View earnings continue to feed the PPO revenue pool. **Why:** simplifying publishing did not authorize removing finance history or view accounting.

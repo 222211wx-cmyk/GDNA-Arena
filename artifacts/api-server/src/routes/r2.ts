@@ -8,7 +8,6 @@ import {
   ListPartsCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { pool } from "@workspace/db";
 import {
   r2Client,
@@ -26,6 +25,7 @@ import {
 import { validateClipDisplayTitle } from "../lib/clip-title.js";
 import { finalClipReceipt } from "./clips-thumbnail-response.js";
 import { logger } from "../lib/logger.js";
+import { publishClip } from "../lib/clip-publish.js";
 
 const router: IRouter = Router();
 async function status(sessionId: string, userId: number) {
@@ -50,6 +50,7 @@ router.get("/upload/status/:sessionId", async (req,res) => {
   res.json(result);
 });
 const PART_BYTES = 5 * 1024 * 1024;
+const partBytes = (size: number) => Math.max(PART_BYTES, Math.ceil(size / 9000));
 async function listAllParts(bucket: string, key: string, uploadId: string) {
   const parts: import("@aws-sdk/client-s3").Part[] = [];
   let marker: string | undefined;
@@ -124,7 +125,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
   const sessionId = String(req.body?.sessionId ?? "").toLowerCase();
   const row = await uploadRow(sessionId, userId);
   if (!row) { res.status(404).json({ error: "R2 upload session not found" }); return; }
-  if (row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
+  if (row.expires_at instanceof Date && row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
     res.status(410).json({ error: "R2 upload session expired" }); return;
   }
   const key = row.object_name.slice("r2:".length);
@@ -140,7 +141,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     );
     const current = currentResult.rows[0];
     if (!current) { res.status(404).json({ error: "R2 upload session not found" }); return; }
-    if (current.expires_at.getTime() <= Date.now() && ["active","completing"].includes(current.state) && !await status(current.id,userId)) {
+    if (current.expires_at instanceof Date && current.expires_at.getTime() <= Date.now() && ["active","completing"].includes(current.state) && !await status(current.id,userId)) {
       res.status(410).json({ error: "R2 upload session expired" }); return;
     }
     if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "title")) {
@@ -159,26 +160,19 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     if (current.state !== "active" && current.state !== "completing") {
       res.status(409).json({ error: "R2 upload cannot be completed" }); return;
     }
-    const expectedParts = Math.ceil(Number(current.size_bytes) / PART_BYTES);
-    const rawParts = Array.isArray(req.body?.parts) ? req.body.parts : [];
-    const parts: { PartNumber: number | null; ETag: string | null }[] = rawParts.map((part: any) => ({
-      PartNumber: integer(part?.partNumber),
-      ETag: safeEtag(part?.etag),
-    }));
-    if (parts.length !== expectedParts || parts.some((part, index) =>
-      part.PartNumber !== index + 1 || !part.ETag)) {
-      res.status(400).json({ error: "Every multipart part and ETag is required in order" }); return;
-    }
+    const chunkBytes = partBytes(Number(current.size_bytes));
+    const expectedParts = Math.ceil(Number(current.size_bytes) / chunkBytes);
     const listed = await listAllParts(config.bucket,key,current.multipart_upload_id).catch(error => {
       if ((error as { name?: string }).name === "NoSuchUpload" && current.state === "completing") return null;
       throw error;
     });
+    const parts = (listed?.Parts ?? []).map(part => ({ PartNumber: part.PartNumber, ETag: part.ETag }));
     if (listed) {
       const stored = listed.Parts ?? [];
       const mismatch = stored.length !== expectedParts || stored.some((part, index) => {
         const expectedSize = index === expectedParts - 1
-          ? Number(current.size_bytes) - index * PART_BYTES
-          : PART_BYTES;
+          ? Number(current.size_bytes) - index * chunkBytes
+          : chunkBytes;
         return part.PartNumber !== index + 1 || Number(part.Size) !== expectedSize ||
           part.ETag !== parts[index]?.ETag;
       });
@@ -190,6 +184,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
       `UPDATE r2_clip_uploads SET state='completing',updated_at=NOW() WHERE id=$1`, [current.id],
     );
     try {
+      if (listed)
       await r2Client().send(new CompleteMultipartUploadCommand({
         Bucket: config.bucket,
         Key: key,
@@ -208,13 +203,14 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
         head.Metadata?.session !== current.id) {
       throw new ClipUploadError(409, "Completed R2 object failed ownership or size verification");
     }
-    await client.query("BEGIN");
-    try {
-      await client.query("INSERT INTO clip_media_jobs(session_id) VALUES ($1) ON CONFLICT DO NOTHING", [current.id]);
-      await client.query("UPDATE r2_clip_uploads SET state='completing',updated_at=NOW() WHERE id=$1", [current.id]);
-      await client.query("COMMIT");
-    } catch (error) { await client.query("ROLLBACK"); throw error; }
-    res.status(202).json(await status(current.id,userId));
+    const clip = await publishClip({
+      userId, filename: current.object_name, title: current.original_name,
+      displayTitle: current.display_title ?? undefined, contentType: current.content_type,
+      size: Number(current.size_bytes), sha256: "", deferThumbnail: true, originalReady: true,
+    }, client, async (tx, published) => {
+      await tx.query("UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW() WHERE id=$1", [current.id, published.id]);
+    });
+    res.json(finalClipReceipt(clip));
   } finally {
     if (locked) await client.query(
       "SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${row.id}`],
@@ -240,6 +236,52 @@ router.get("/r2/status", async (req, res) => {
   if (!auth(req, res)) return;
   res.set("Cache-Control", "private, max-age=15");
   res.json(await r2ConnectionStatus());
+});
+
+// The browser sends bytes only to this server. Ownership and the provider
+// operation are serialized with completion and cancellation for this session.
+router.put("/upload/chunk/:sessionId/:partNumber", async (req, res) => {
+  const userId = auth(req, res);
+  if (!userId) return;
+  const config = r2Config();
+  if (!config) { res.status(503).json({ error: "Storage is unavailable" }); return; }
+  const id = String(req.params.sessionId);
+  if (!UUID.test(id)) { res.status(404).end(); return; }
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${id}`]);
+    const loaded = await client.query<UploadRow>(
+      "SELECT * FROM r2_clip_uploads WHERE id=$1 AND user_id=$2", [id, userId],
+    );
+    const row = loaded.rows[0];
+    if (!row || row.state !== "active" || row.multipart_upload_id === "direct-put") {
+      res.status(409).json({ error: "Upload session is not active" }); return;
+    }
+    const number = integer(req.params.partNumber);
+    const chunkBytes = partBytes(Number(row.size_bytes));
+    const count = Math.ceil(Number(row.size_bytes) / chunkBytes);
+    if (!number || number > count) { res.status(400).end(); return; }
+    const expected = number === count ? Number(row.size_bytes) - (count - 1) * chunkBytes : chunkBytes;
+    if (Number(req.headers["content-length"]) !== expected) {
+      res.status(409).json({ error: "Chunk length does not match the upload manifest" }); return;
+    }
+    await client.query("UPDATE r2_clip_uploads SET expires_at='infinity',updated_at=NOW() WHERE id=$1", [id]);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    req.once("aborted", abort);
+    try {
+      const result = await r2Client().send(new UploadPartCommand({
+        Bucket: config.bucket, Key: row.object_name.slice(3),
+        UploadId: row.multipart_upload_id, PartNumber: number,
+        ContentLength: expected, Body: req,
+      }), { abortSignal: controller.signal });
+      res.json({ partNumber: number, etag: result.ETag, size: expected });
+    } finally { req.removeListener("aborted", abort); }
+  } catch (error) { uploadFailure(res, error, userId, "server-chunk"); }
+  finally {
+    await client.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${id}`]).catch(() => {});
+    client.release();
+  }
 });
 
 router.post(["/clips/create","/upload/complete"], async (req, res): Promise<void> => {
@@ -278,7 +320,6 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
           !Number.isFinite(duration) || duration < 0) {
         res.status(400).json({ error: "Invalid R2 upload metadata" }); return;
       }
-      if (size > MAX_NEW_CLIP_BYTES) { res.status(413).json({ error: NEW_CLIP_TOO_LARGE }); return; }
       const existing = await pool.query<UploadRow>(
         `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
                 size_bytes,duration_sec,state,clip_id,expires_at
@@ -286,7 +327,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
       );
       if (existing.rows[0]) {
         const row = existing.rows[0];
-        if (row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
+        if (row.expires_at instanceof Date && row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
           res.status(410).json({ error: "R2 upload session expired" }); return;
         }
         if (Number(row.size_bytes) !== size || row.content_type !== contentType ||
@@ -294,8 +335,8 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
           res.status(409).json({ error: "Upload request identity already belongs to different media" }); return;
         }
         res.json({
-          sessionId: row.id, partSize: PART_BYTES,
-          partCount: Math.ceil(size / PART_BYTES), state: row.state,
+          sessionId: row.id, partSize: partBytes(size),
+          partCount: Math.ceil(size / partBytes(size)), state: row.state,
         });
         return;
       }
@@ -314,7 +355,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
           `INSERT INTO r2_clip_uploads
               (id,user_id,request_id,object_name,multipart_upload_id,original_name,display_title,
                content_type,size_bytes,duration_sec,expires_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()+INTERVAL '${SESSION_TTL_HOURS} hours')`,
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'infinity')`,
           [id, userId, requestId, r2Reference(key), created.UploadId, originalName,
              displayTitle, contentType, size, duration],
         );
@@ -333,8 +374,8 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
               winner.content_type === contentType && winner.original_name === originalName &&
               winner.display_title === displayTitle) {
             res.json({
-              sessionId: winner.id, partSize: PART_BYTES,
-              partCount: Math.ceil(size / PART_BYTES), state: winner.state,
+              sessionId: winner.id, partSize: partBytes(size),
+              partCount: Math.ceil(size / partBytes(size)), state: winner.state,
             });
             return;
           }
@@ -342,7 +383,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
         throw error;
       }
       res.status(201).json({
-        sessionId: id, partSize: PART_BYTES, partCount: Math.ceil(size / PART_BYTES), state: "active",
+        sessionId: id, partSize: partBytes(size), partCount: Math.ceil(size / partBytes(size)), state: "active",
       });
       return;
     }
@@ -355,7 +396,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
     const sessionId = String(req.body?.sessionId ?? "").toLowerCase();
     const row = await uploadRow(sessionId, userId);
     if (!row) { res.status(404).json({ error: "R2 upload session not found" }); return; }
-    if (action !== "abort" && row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
+    if (action !== "abort" && row.expires_at instanceof Date && row.expires_at.getTime() <= Date.now() && ["active","completing"].includes(row.state) && !await status(row.id,userId)) {
       res.status(410).json({ error: "R2 upload session expired" }); return;
     }
     const key = row.object_name.slice("r2:".length);
@@ -363,30 +404,25 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
     if (action === "part") {
       if (row.state !== "active") { res.status(409).json({ error: "R2 upload is not active" }); return; }
       const partNumber = integer(req.body?.partNumber);
-      const partCount = Math.ceil(Number(row.size_bytes) / PART_BYTES);
-      if (!partNumber || partNumber > partCount || partNumber > 10_000) {
+      const chunkBytes = partBytes(Number(row.size_bytes));
+      const partCount = Math.ceil(Number(row.size_bytes) / chunkBytes);
+      if (!partNumber || partNumber > partCount) {
         res.status(400).json({ error: "Invalid multipart part number" }); return;
       }
       const expectedBytes = partNumber === partCount
-        ? Number(row.size_bytes) - (partCount - 1) * PART_BYTES
-        : PART_BYTES;
+        ? Number(row.size_bytes) - (partCount - 1) * chunkBytes
+        : chunkBytes;
       // Rolling owner-authorized activity lease. Paused uploads expire after
       // 48 hours; slow uploads do not expire while parts are still authorized.
       const renewed = await pool.query(
-        `UPDATE r2_clip_uploads SET expires_at=NOW()+INTERVAL '${SESSION_TTL_HOURS} hours',updated_at=NOW()
-         WHERE id=$1 AND user_id=$2 AND state='active' AND expires_at>NOW() RETURNING id`, [row.id, userId],
+        `UPDATE r2_clip_uploads SET expires_at='infinity',updated_at=NOW()
+         WHERE id=$1 AND user_id=$2 AND state='active' RETURNING id`, [row.id, userId],
       );
       if (!renewed.rowCount) { res.status(409).json({ error: "R2 upload is no longer active" }); return; }
-      const url = await getSignedUrl(r2Client(), new UploadPartCommand({
-        Bucket: config.bucket,
-        Key: key,
-        UploadId: row.multipart_upload_id,
-        PartNumber: partNumber,
-        ContentLength: expectedBytes,
-      }), { expiresIn: URL_TTL_SECONDS });
+      const url = `/api/upload/chunk/${row.id}/${partNumber}`;
       res.set("Cache-Control", "no-store").json({
         url, partNumber, expectedBytes,
-        expiresAt: new Date(Date.now() + URL_TTL_SECONDS * 1000).toISOString(),
+        expiresAt: null,
       });
       return;
     }

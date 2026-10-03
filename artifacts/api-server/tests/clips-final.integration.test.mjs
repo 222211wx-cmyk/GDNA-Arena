@@ -19,18 +19,12 @@ test("final publication: server code/name, duplicate content allowed, audio and 
   const f = await clipsFixture(t, database);
   const input = { userId: 7, filename: "uploaded.mp4", title: "movie.part.one.mp4",
     size: 3, sha256: "same-bytes", contentType: "video/mp4" };
-  await assert.rejects(f.a.publishClip({ ...input, size: 2 ** 31 + 1 }),
-    error => error.status === 413 && /2 GiB/.test(error.message));
   f.state.objects.set(input.filename, Buffer.from("abc"));
-  f.state.duration = 59.999;
-  for (const contentType of ["video/mp4", "audio/mpeg"]) {
-    await assert.rejects(f.a.publishClip({ ...input, contentType }), /خاص دقيقة الفوق/);
-  }
-  f.state.duration = 60;
+  f.state.duration = 0.5;
   const first = await f.a.publishClip({ ...input, displayTitle: "  اسم/نسخة.v1  " });
   assert.match(first.code, /^HELX-\d{6}$/);
   assert.equal(first.name, "اسم/نسخة.v1");
-  assert.equal(first.duration, 60);
+  assert.equal(first.duration, 0);
   assert.equal(first.processingStatus, "queued");
   assert.equal((await f.observer.query("SELECT original_name FROM clips WHERE id=$1", [first.id])).rows[0].original_name, "movie.part.one.mp4");
   await assert.rejects(

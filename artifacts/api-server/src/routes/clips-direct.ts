@@ -1,7 +1,4 @@
 import { Router } from "express";
-import { randomUUID } from "node:crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import rateLimit from "express-rate-limit";
 import { pool } from "@workspace/db";
 import { r2Client, r2Config, r2Reference } from "../lib/r2-storage";
@@ -20,39 +17,6 @@ router.use(["/clips/presign", "/clips/confirm"], (req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
 }, rateLimit({ windowMs: 3600_000, limit: 100, keyGenerator: req => String(req.session!.userId) }));
-
-router.post("/clips/presign", async (req, res) => {
-  try {
-    const config = r2Config();
-    if (!config) throw new ClipUploadError(503, "الرفع غير متاح حالياً");
-    const user = req.session!.userId!;
-    const filename = String(req.body?.filename ?? "").slice(0, 1024);
-    const contentType = resolveClipUploadType(String(req.body?.contentType ?? ""), filename);
-    const size = req.body?.size;
-    const title = validateClipDisplayTitle(req.body?.title) ?? filename;
-    if (typeof size === "number" && size > MAX_NEW_CLIP_BYTES) {
-      throw new ClipUploadError(413, NEW_CLIP_TOO_LARGE);
-    }
-    if (!filename || !contentType || !Number.isSafeInteger(size) || size <= 0) {
-      throw new ClipUploadError(400, "حجم الملف أو نوعه غير مدعوم");
-    }
-    const id = randomUUID();
-    const key = `clips/original/${user}/${id}${clipDownloadExtension(contentType)}`;
-    const url = await getSignedUrl(r2Client(), new PutObjectCommand({
-      Bucket: config.bucket, Key: key, ContentType: String(req.body?.contentType || "application/octet-stream"), ContentLength: size,
-      IfNoneMatch: "*",
-    }), { expiresIn: 3600 });
-    await pool.query(`INSERT INTO r2_clip_uploads
-      (id,user_id,request_id,object_name,multipart_upload_id,original_name,display_title,content_type,size_bytes,duration_sec,expires_at)
-      VALUES ($1,$2,$1,$3,'direct-put',$4,$5,$6,$7,0,NOW()+interval '1 hour')`,
-    [id, user, r2Reference(key), filename, title, contentType, size]);
-    res.json({ url, key });
-  } catch (error) {
-    logger.error({ err: error }, "Direct clip presign failed");
-    res.status(error instanceof ClipUploadError ? error.status : 503)
-      .json({ error: error instanceof ClipUploadError ? error.message : "تعذر بدء الرفع" });
-  }
-});
 
 router.post("/clips/confirm", async (req, res) => {
   const key = req.body?.key;

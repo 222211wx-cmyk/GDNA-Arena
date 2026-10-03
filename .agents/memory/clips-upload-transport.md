@@ -1,28 +1,16 @@
 ---
-name: Clips direct original upload policy
-description: Owner reversal of compression and persistent upload queues; historical storage safety
+name: Clips server-managed resumable upload policy
+description: Browser chunks through our server into S3; no product-defined total-size or duration ceilings
 ---
 
-New web Clips upload the original file with a single cancellable PUT, without browser compression, persistent upload queues, background resume or transcoding before publication. Do not restore the 480p/800kbps preparation or processing-retry UI.
+Clips must use browser chunks → our server → S3. Server handles the storage transfer. Preserve original bytes, durable resume identity, and retry after network interruptions.
 
-New Clips must be limited to 100 MB (100,000,000 bytes), including direct and legacy upload paths; historical published media remains protected.
+**Why:** On 2026-10-03 the owner explicitly replaced the earlier browser-to-S3 single-PUT architecture and repeatedly prohibited adding file-size, duration, or product upload restrictions without explicit permission.
 
-**Why:** On 2026-10-03 the owner explicitly requested the smaller limit to control upload/storage usage.
+**How to apply:** No application-defined maximum file size, minimum duration, or maximum duration. Treat storage growth as a capacity-planning problem rather than inventing a product cap. Distinguish operational chunk sizing, authentication and byte-integrity checks from product restrictions. Never promise physically infinite provider resources.
 
-**How to apply:** Validate before issuing upload capabilities and again against stored metadata before publication. Do not restore the previous multi-GiB limit.
+Preserve published media and mixed storage identities.
 
-**Why:** On 2026-10-03 the owner explicitly replaced compression and resumability after repeated stalled uploads, requesting direct presign → PUT → confirm and no storage diagnostics in the composer.
+**Why:** Transport changes do not authorize deletion, movement or reclassification of historical publications.
 
-**How to apply:** Keep actual byte progress, cancellation and in-memory retry. Closing the page loses transfer state. Single PUT has a smaller provider ceiling than the old 10 GiB multipart path; do not claim the old capacity. Never delete messenger encryption keys or unrelated stored preferences to remove Clips upload persistence.
-
-Unknown browser duration must not block publishing; retain authoritative server validation of valid media at least 60 seconds.
-
-**Why:** Mobile browsers cannot always decode metadata from otherwise valid uploads.
-
-**How to apply:** Permit unknown metadata through server validation; keep selected file on failure. Media validation is not transcoding.
-
-Preserve historical files and mixed storage.
-
-**Why:** The owner authorized changing new uploads, not moving, retagging or deleting published media.
-
-**How to apply:** Resolve historical playback, thumbnails and deletion by stored provider identity. Keep authentication, ownership and immutable-object protections on all direct upload capabilities.
+**How to apply:** Keep provider-aware playback and deletion, encryption boundaries, ownership checks, immutable publication identities and careful abandoned-upload reconciliation.

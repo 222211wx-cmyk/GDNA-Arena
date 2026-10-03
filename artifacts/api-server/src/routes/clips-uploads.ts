@@ -27,7 +27,6 @@ export function createClipsUploadsRouter(service: ClipUploads): IRouter {
   router.options("/clips/uploads{/:id}", (_req, res) => {
     res.set({
       "Tus-Version": "1.0.0", "Tus-Extension": "creation,termination,expiration",
-      "Tus-Max-Size": String(MAX_NEW_CLIP_BYTES),
     }).status(204).end();
   });
   router.post("/clip/upload-final", uploadAuth, (req, res, next) => {

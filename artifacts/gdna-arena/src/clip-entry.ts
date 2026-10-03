@@ -5,8 +5,6 @@ import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import { announceAccountChange, fetchSharedClipSession, subscribeAccountChanges, subscribeSessionWake } from "./lib/account-session-events";
 import {
   uploadClip,
-  MAX_CLIP_BYTES,
-  FILE_TOO_LARGE_MESSAGE,
   type ClipUploadMetadata,
 } from "./components/clips/clipUpload";
 import { readClipDuration } from "./components/clips/readClipDuration";
@@ -67,7 +65,7 @@ root.innerHTML = `
     <h2>رفع صوت أو فيديو</h2>
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
-    <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق</p>
+    <p id="selection" class="muted" role="status" aria-live="polite">اختر ملف صوت أو فيديو</p>
     <div id="progress-wrap" hidden>
       <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress>
       <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p>
@@ -315,11 +313,6 @@ form.addEventListener("submit", async event => {
   uploadError.textContent = "";
   displayNameError.textContent = "";
   displayName.setAttribute("aria-invalid", "false");
-  if (file.size > MAX_CLIP_BYTES) {
-    uploadError.textContent = FILE_TOO_LARGE_MESSAGE;
-    submissionPending = false;
-    return;
-  }
   const title = normalizedDisplayName();
   const titleError = displayNameValidationError();
   if (titleError) {
@@ -344,11 +337,6 @@ form.addEventListener("submit", async event => {
     const duration = selectedDuration ?? await awaitPendingDurationProbe(operation.signal);
     operation.signal.throwIfAborted();
     if (cachedFile !== file) return;
-    if (duration !== null && duration < 60) {
-      uploadError.textContent = "خاص دقيقة الفوق";
-      status.textContent = "لم يبدأ الرفع";
-      return;
-    }
     const metadata: ClipUploadMetadata = { title, durationSec: duration };
     const published = await uploadClip(file, metadata, operation.signal, reportUploadProgress, { expectedOwner: owner });
     if (uploadOwner !== owner) return;

@@ -94,8 +94,8 @@ export function createSimpleClipUploadRouter(deps: SimpleClipUploadDependencies)
       deps.cleanup(file.filename).then(() => cb(null), error => cb(error));
     },
   };
-  // Enforce the owner's 2 GiB maximum while streaming, never by buffering.
-  const upload = multer({ storage, limits: { fileSize: MAX_NEW_CLIP_BYTES, files: 1, fields: 6, fieldSize: 1024, parts: 8 } });
+  // Stream original media; field-count checks are not total-file-size policy.
+  const upload = multer({ storage, limits: { files: 1, fields: 6, fieldSize: 1024, parts: 8 } });
   router.post(["/clip/upload", "/clip/upload-simple", "/clip/upload-final"], (req, res) => {
     const userId = (req.session as { userId?: number } | undefined)?.userId;
     if (!userId) { res.status(401).json({ error: "يجب تسجيل الدخول" }); return; }
