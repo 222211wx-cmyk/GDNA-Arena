@@ -9,6 +9,7 @@
  * src/lite/README.md for the wiring contract.
  */
 import "./lite/tokens.css";
+import { mountLightweightBackButton } from "./lib/lightweight-back-button";
 import { el, mount, skeleton } from "./lite/dom";
 import { networkBanner } from "./lite/components";
 import { parseRoute, href, editionOf, type Route } from "./lite/router";
@@ -111,6 +112,7 @@ function defaultLangFor(edition: string, override?: LiteLang): LiteLang {
 }
 
 export function mountLite(root?: Element | null, options: MountOptions = {}): () => void {
+  mountLightweightBackButton();
   const host =
     root ?? document.getElementById("lite-root") ?? document.body;
   if (!host) throw new Error("mountLite: no mount target found.");

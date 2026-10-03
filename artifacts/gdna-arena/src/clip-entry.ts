@@ -1,4 +1,6 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
+import { mountLightweightBackButton } from "./lib/lightweight-back-button";
+mountLightweightBackButton();
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import { announceAccountChange, fetchSharedClipSession, subscribeAccountChanges, subscribeSessionWake } from "./lib/account-session-events";
 import {

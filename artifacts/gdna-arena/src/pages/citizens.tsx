@@ -1,3 +1,4 @@
+import { useBackLayer } from "@/lib/back-navigation";
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { CitizensListSkeleton } from "@/components/Skeleton";
@@ -47,6 +48,7 @@ export default function CitizensPage() {
   const [loading,    setLoading]    = useState(true);
   const [sort,       setSort]       = useState<"xp" | "coins" | "honor">("xp");
   const [query,      setQuery]      = useState("");
+  useBackLayer(!!query, () => setQuery(""));
   const [followIds,  setFollowIds]  = useState<Set<number>>(new Set());
   const [addingId,   setAddingId]   = useState<number | null>(null);
   const [dmId,       setDmId]       = useState<number | null>(null);

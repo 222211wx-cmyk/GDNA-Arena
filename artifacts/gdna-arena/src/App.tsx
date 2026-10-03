@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { Toaster } from "@workspace/gdna-ds/components/ui/toaster";
 import { TooltipProvider } from "@workspace/gdna-ds/components/ui/tooltip";
 import { useEffect } from "react";
+import { BackButton } from "@/components/layout/back-button";
 import { isMessagesEntryPath, MESSAGES_ENTRY_PATH, messagesReturnPath } from "@/lib/messages-entry";
 
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -271,12 +272,13 @@ function Router() {
       {!isChoiceEntry && !isMessagesEntry && <Navbar />}
       {isMessagesEntry && (
         <header className="border-b border-border bg-background">
-          <div className="mx-auto flex max-w-6xl justify-end px-3 py-2">
+          <div className="mx-auto flex max-w-6xl justify-end pl-3 pr-16 py-2">
             <LanguageSwitcher />
           </div>
         </header>
       )}
       <PageWrapper />
+      <BackButton />
       {!isChoiceEntry && !isMessagesEntry && <Footer />}
       <CookieBanner />
       <AgeGate />

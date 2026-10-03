@@ -1,3 +1,4 @@
+import { useBackLayer } from "@/lib/back-navigation";
 /**
  * Messenger — AMIS unified messenger (single source of truth)
  * Variants:
@@ -1264,6 +1265,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   });
   const [rooms,       setRooms]       = useState<DmRoom[]>([]);
   const [roomQuery,   setRoomQuery]   = useState("");
+  useBackLayer(!!roomQuery, () => setRoomQuery(""));
   const [activeRoom,  setActiveRoom]  = useState<DmRoom | null>(null);
   // Citizen card drawer opened from a conversation row (same page, no navigation).
   const [drawerUsername, setDrawerUsername] = useState<string | null>(null);
@@ -1365,6 +1367,16 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const chunksRef   = useRef<Blob[]>([]);
   const mountedRef  = useRef(true);
   const activeRoomIdRef = useRef<number | null>(null);
+  useBackLayer(!!activeRoom, () => {
+    stopVoiceNote(true);
+    activeRoomIdRef.current = null;
+    setActiveRoom(null);
+    onActiveRoomChange?.(null);
+    setShowEmoji(false);
+    setShowAttachTray(false);
+    setReplyTo(null);
+  }, 5);
+  useBackLayer(tab !== "chats", () => setTab("chats"), 1);
   const syncIdentityRef = useRef(user?.id);
   if (syncIdentityRef.current !== user?.id) {
     syncIdentityRef.current = user?.id;

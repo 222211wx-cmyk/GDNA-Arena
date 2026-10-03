@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
+import { navigationDepth, useBackLayer } from "@/lib/back-navigation";
 import { Search, Trophy, Users, FileText, Calendar, Loader2, Star } from "lucide-react";
 import { getLegendImageUrl } from "@/lib/legend-images";
 import { useLang } from "@/contexts/LangContext";
@@ -300,8 +301,9 @@ export default function SearchPage() {
   const { lang } = useLang();
   const copy = coreCopy(lang);
   const locale = localeForLang(lang);
-  const [location] = useLocation();
-  const params = new URLSearchParams(window.location.search);
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const params = new URLSearchParams(search);
   const initialQuery = params.get("q") || "";
 
   const [query, setQuery] = useState(initialQuery);
@@ -310,6 +312,15 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    setQuery(initialQuery);
+    setInputValue(initialQuery);
+  }, [initialQuery]);
+  useBackLayer(!!inputValue || !!query, () => {
+    if (inputValue !== query) { setInputValue(query); return; }
+    if (navigationDepth() > 0) history.back();
+    else navigate("/search", { replace: true });
+  });
 
   const totalResults = results
     ? results.legends.length + results.citizens.length + results.posts.length + results.events.length
@@ -322,6 +333,8 @@ export default function SearchPage() {
   useEffect(() => {
     if (!query || query.length < 2) {
       setResults(null);
+      setLoading(false);
+      setError("");
       return;
     }
 
@@ -350,7 +363,7 @@ export default function SearchPage() {
     const trimmed = inputValue.trim();
     if (trimmed) {
       setQuery(trimmed);
-      window.history.replaceState(null, "", `${BASE()}/search?q=${encodeURIComponent(trimmed)}`);
+      navigate(`/search?q=${encodeURIComponent(trimmed)}`);
     }
   };
 

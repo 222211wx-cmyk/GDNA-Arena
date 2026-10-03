@@ -1,4 +1,5 @@
 import { tokens } from "@workspace/gdna-ds/tokens";
+import { mountLightweightBackButton } from "./lib/lightweight-back-button";
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import { announceAccountChange, fetchSharedClipSession, subscribeAccountChanges, subscribeSessionWake } from "./lib/account-session-events";
 import { mountVideoActions, type VideoActionState } from "./components/clips/VideoActions";
@@ -145,6 +146,7 @@ async function resolveIdentity(): Promise<Identity> {
 let stopPlayerSession: (() => void) | undefined;
 
 export function renderClipPlayer(code: string) {
+  mountLightweightBackButton();
   stopPlayerSession?.();
   const root = document.getElementById("root");
   if (!root) throw new Error("Clip root is missing");

@@ -19,6 +19,7 @@ import NotificationsTab from "../components/social/NotificationsTab";
 import SearchDropdown   from "../components/social/SearchDropdown";
 import { SOCIAL_T, GOLD, GOLD_A } from "../components/social/social-i18n";
 import { localeForLang } from "@/i18n/locale-surfaces-a-copy";
+import { useBackLayer } from "@/lib/back-navigation";
 
 type Tab = "overview" | "feed" | "messages" | "stories" | "live" | "citizens" | "notifications";
 
@@ -33,6 +34,8 @@ export default function SocialPage() {
   const [tab,        setTab]        = useState<Tab>("overview");
   const [searchQ,    setSearchQ]    = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  useBackLayer(searchOpen || !!searchQ, () => { setSearchOpen(false); setSearchQ(""); });
+  useBackLayer(tab !== "overview", () => setTab("overview"), 1);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Submit the header search to the full /search page while retaining the live dropdown.
