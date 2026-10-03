@@ -218,6 +218,7 @@ function PageWrapper() {
           <Route path="/stories" component={StoriesPage} />
           <Route path="/events" component={EventsPage} />
           <Route path={MESSAGES_ENTRY_PATH} component={MessagesPage} />
+          <Route path="/mes" component={MessagesPage} />
           <Route path={`${MESSAGES_ENTRY_PATH}/`} component={MessagesPage} />
           <Route path="/message-calle">
             <Redirect to={`${MESSAGES_ENTRY_PATH}${window.location.search}${window.location.hash}`} replace />

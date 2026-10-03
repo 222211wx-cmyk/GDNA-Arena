@@ -13,6 +13,8 @@ export type ClipDatabaseClient = Awaited<ReturnType<typeof connectDatabase>>;
 export const CLIP_COMPRESSION_THRESHOLD = 0;
 
 export interface PublishClipInput {
+  /** Direct original-file uploads never enter the transcoding queue. */
+  originalReady?: boolean;
   signal?: AbortSignal;
   userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
   /** Explicit publication name. `title` remains the original upload filename. */
@@ -69,7 +71,7 @@ export async function publishClip(
       "SELECT username FROM users WHERE id=$1 AND password_hash IS DISTINCT FROM 'DELETED' FOR SHARE", [input.userId],
     );
     if (!users[0]) throw new ClipUploadError(401, "User no longer exists");
-    const processingStatus = "queued";
+    const processingStatus = input.originalReady ? "ready" : "queued";
     // ON CONFLICT keeps collisions non-fatal within the transaction. No code
     // supplied by a client is trusted. The namespace has one million entries.
     for (let attempt = 0; attempt < 32; attempt++) {

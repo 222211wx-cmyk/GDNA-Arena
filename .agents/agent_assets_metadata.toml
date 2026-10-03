@@ -184,3 +184,59 @@ mtime_ms = 1790889116102
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/988179c6-42e5-4d2a-b916-b45912ff116e/3cee0c74-a059-4526-a3d4-240fd33a1bb4"
 storage_version_token = "1790889148038729"
 content_type = "text/html"
+
+[[outputs]]
+id = "VMtPPJhrBoCTwxbBa2_4L"
+uri = "file://reports/upload-verification-2026-10-03.html"
+type = "html"
+title = "تقرير التحقق من رفع الملفات — 3 أكتوبر 2026"
+description = "نتائج الاختبارات الفعلية للفيديو والصورة والإلغاء، سلامة الملف، وحدود التحقق وحالة النشر."
+logical_id = "c11dbf96-98af-4f07-8bb1-5688e28d0da6"
+content_hash = "sha256:e74040180ea430778484ad67211f1057ab62d20b30101e9ff507bf3bfcf8582f"
+size = 8229
+mtime_ms = 1790988754068
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/c11dbf96-98af-4f07-8bb1-5688e28d0da6/5f983061-a56b-44b3-9792-2a0e7b0e54e3"
+storage_version_token = "1790988766207063"
+content_type = "text/html"
+
+[[outputs]]
+id = "CKneJgHwKheGKlQp273tR"
+uri = "file://reports/messenger-audit/helixly-messenger-complete-audit.html"
+type = "html"
+title = "التقرير الكامل لقسم المكالمات والمراسلات — من البناء إلى الآن"
+description = "تاريخ البناء، الروابط، 32 بنداً، الأعطال والنواقص، Android وAPK، وملحق الكود بالأرقام. يفتح مستقلاً ويحتوي لقطة شاشة الدخول."
+logical_id = "0476a0c3-935d-4d17-ae91-d5255898583f"
+content_hash = "sha256:49553d4e928decc73e24c7e7630de5252fd201c83171dcac4d72858f6a9329c2"
+size = 244754
+mtime_ms = 1790989224381
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/0476a0c3-935d-4d17-ae91-d5255898583f/2726ef5d-04d0-49fd-9eb9-1b7e6269b47b"
+storage_version_token = "1790989275645582"
+content_type = "text/html"
+
+[[outputs]]
+id = "l_-4X2Xkz-PPgmI-J6g3p"
+uri = "file://reports/messenger-audit/file-inventory.csv"
+type = "table"
+title = "جرد الملفات — 172 ملفاً"
+description = "مسار كل ملف وتصنيفه وعدد أسطره وبصمة SHA-256 لتمييز النسخة المفحوصة."
+logical_id = "c8f64b96-24dc-410a-9108-0bff867fd545"
+content_hash = "sha256:9f22cff12252a765108f0b6ddaa640c407ea1b974b0f947a1812ac822972b3eb"
+size = 24683
+mtime_ms = 1790989223492
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/c8f64b96-24dc-410a-9108-0bff867fd545/055762e7-8e25-459d-b5c1-11eae2e35169"
+storage_version_token = "1790989276301766"
+content_type = "text/csv"
+
+[[outputs]]
+id = "_jWp_FGx8RSVpC-o1GIik"
+uri = "file://reports/messenger-audit/history.csv"
+type = "table"
+title = "سجل البناء والتغييرات — 193 Commit"
+description = "السجل الكامل ضمن نطاق التقرير: معرف التغيير وتاريخه وعنوانه، من أقدم تاريخ موجود حتى لقطة المصدر المفحوصة."
+logical_id = "cfafc531-ff7c-4583-87ed-173a72d0b3ad"
+content_hash = "sha256:5865569093fd20386cd02c1479cf15c4fe1786ba3a7b780838f1f1c0fb346dab"
+size = 24252
+mtime_ms = 1790989223577
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/cfafc531-ff7c-4583-87ed-173a72d0b3ad/cadd547e-d6f2-4730-aea4-dce21ea80301"
+storage_version_token = "1790989277007400"
+content_type = "text/csv"

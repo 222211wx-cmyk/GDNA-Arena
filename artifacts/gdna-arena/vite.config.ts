@@ -63,12 +63,7 @@ function pwaServiceWorker() {
     bundle: true, write: false, format: "iife", globalName: "GDNA_LITE_SYNC",
     platform: "browser", target: "es2022", minify: true,
   }).outputFiles[0].text;
-  const uploadWorkerSource = buildSync({
-    entryPoints: [path.resolve(import.meta.dirname, "src/components/clips/uploadWorker.ts")],
-    bundle: true, write: false, format: "iife", platform: "browser", target: "es2022",
-    define: { "import.meta.env.BASE_URL": JSON.stringify(basePath.endsWith("/") ? basePath : `${basePath}/`) },
-  }).outputFiles[0].text;
-  const pushWorkerSource = liteSyncSource + "\n" + readFileSync(path.resolve(import.meta.dirname, "src/service-worker.js"), "utf8") + "\n" + uploadWorkerSource;
+  const pushWorkerSource = liteSyncSource + "\n" + readFileSync(path.resolve(import.meta.dirname, "src/service-worker.js"), "utf8");
   return {
     name: "gdna-safe-pwa-service-worker",
     configureServer(server: { middlewares: { use: (route: string, handler: (_req: unknown, res: { setHeader: (name: string, value: string) => void; end: (body: string) => void }) => void) => void } }) {
@@ -77,7 +72,7 @@ function pwaServiceWorker() {
         res.setHeader("Content-Type", "text/javascript");
         res.setHeader("Service-Worker-Allowed", basePath);
         res.setHeader("Cache-Control", "no-store");
-        // Development uses the same upload/push worker, but deliberately omits
+        // Development uses the same push/call worker, but deliberately omits
         // production caching so Vite/HMR requests can never become stale.
         res.end(`self.addEventListener("install", event => event.waitUntil(self.skipWaiting()));
 self.addEventListener("activate", event => event.waitUntil(self.clients.claim()));
@@ -233,7 +228,6 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
-  // Keep FFmpeg's relative module-worker URL intact in development.
   build: {
     manifest: true,
     rollupOptions: {

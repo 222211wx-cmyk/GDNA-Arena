@@ -1,54 +1,74 @@
 import { Link } from "wouter";
+import { ChevronRight, Copy, Check } from "lucide-react";
+import { useState } from "react";
 import { trackEvent } from "@/lib/analytics";
-import { useLang, type Lang } from "@/contexts/LangContext";
-import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
+import { useLang } from "@/contexts/LangContext";
+import { DIRECTORY, UI_TEXT } from "@/config/platform-directory";
+import { Card } from "@workspace/gdna-ds/components/ui/card";
+import { Button } from "@workspace/gdna-ds/components/ui/button";
+import { Input } from "@workspace/gdna-ds/components/ui/input";
 
-type Module = { id: string; letter: string; route: string; names: Record<Lang, string> };
-
-const MODULES: Module[] = [
-  { id: "clips", letter: "Hc", route: "/clips",
-    names: { ar: "كليبات", en: "Clips", fr: "Clips", es: "Clips", de: "Clips" } },
-  { id: "messages", letter: "Hm", route: "/messages",
-    names: { ar: "الرسائل", en: "Messages", fr: "Messages", es: "Mensajes", de: "Nachrichten" } },
-  { id: "arena", letter: "Ha", route: "/games",
-    names: { ar: "الساحة", en: "Arena", fr: "Arène", es: "Arena", de: "Arena" } },
-  { id: "social", letter: "H", route: "/social",
-    names: { ar: "تعارف", en: "تعارف", fr: "تعارف", es: "تعارف", de: "تعارف" } },
-];
-
-const LABEL: Record<Lang, string> = {
-  ar: "وحدات المنصة", en: "Platform modules", fr: "Modules de la plateforme",
-  es: "Módulos de la plataforma", de: "Plattformmodule",
-};
+// Public deployment URL, verified through deployment metadata.
+const PUBLIC_ORIGIN = "https://helixly.app";
 
 export function PlatformLauncher() {
   const { lang } = useLang();
+  const rtl = lang === "ar";
+  const [copyStatus, setCopyStatus] = useState<{ id: string; ok: boolean } | null>(null);
+  async function copyLink(id: string, route: string) {
+    setCopyStatus(null);
+    try {
+      await navigator.clipboard.writeText(`${PUBLIC_ORIGIN}${route}`);
+      setCopyStatus({ id, ok: true });
+    } catch {
+      setCopyStatus({ id, ok: false });
+    }
+  }
   return (
-    <section aria-labelledby="launcher-title" className="mx-auto max-w-3xl px-4 py-10">
-      <h1 id="launcher-title" dir="ltr" data-testid="text-launcher-title"
-        className="mb-8 text-center text-3xl font-bold text-foreground md:text-4xl">
-        Helixly.app
+    <section id="directory" aria-labelledby="launcher-title" dir={rtl ? "rtl" : "ltr"}
+      className="mx-auto w-full max-w-2xl px-4 py-6">
+      <h1 id="launcher-title" data-testid="text-launcher-title"
+        className="mb-4 text-center text-xl font-bold text-foreground">
+        {UI_TEXT.directory[lang]}
       </h1>
-      <nav aria-label={LABEL[lang]}>
-        <ul className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {MODULES.map(m => (
-            <li key={m.id}>
-              <Link href={m.route} data-testid={`link-module-${m.id}`}
-                onClick={() => trackEvent("homepage_module_click", { module: m.id })}
-                className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <Card className="h-full transition-colors hover:bg-muted">
-                  <CardContent className="flex flex-col items-center gap-3 p-6">
-                    <span aria-hidden="true" dir="ltr"
-                      className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-bold text-primary-foreground">
-                      {m.letter}
-                    </span>
-                    <span className="text-base font-semibold text-foreground">{m.names[lang]}</span>
-                  </CardContent>
-                </Card>
+      <nav aria-label={UI_TEXT.directory[lang]}>
+        <Card>
+        <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-lg">
+          {DIRECTORY.map(({ id, route, icon: Icon, names }) => (
+            <li key={id} className="min-w-0 sm:flex sm:items-center">
+              <Link href={route} data-testid={`link-module-${id}`}
+                onClick={() => trackEvent("homepage_module_click", { module: id })}
+                className="flex min-h-14 min-w-0 flex-1 items-center gap-4 px-4 py-3 text-card-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+                <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="flex-1 text-base font-semibold">{names[lang]}</span>
+                <ChevronRight aria-hidden="true" className={rtl ? "h-4 w-4 rotate-180 text-muted-foreground" : "h-4 w-4 text-muted-foreground"} />
               </Link>
+              <div className="min-w-0 px-4 pb-3 sm:w-72 sm:py-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Input readOnly dir="ltr" value={`${PUBLIC_ORIGIN}${route}`}
+                    aria-label={`${UI_TEXT.sectionLink[lang]} — ${names[lang]}`}
+                    className="min-w-0 flex-1 text-xs"
+                    onFocus={event => event.currentTarget.select()} />
+                  <Button type="button" variant="outline" size="sm"
+                    aria-label={`${UI_TEXT.copy[lang]} — ${names[lang]}`}
+                    data-testid={`copy-module-${id}`}
+                    onClick={() => void copyLink(id, route)}>
+                    {copyStatus?.id === id && copyStatus.ok ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                    {UI_TEXT.copy[lang]}
+                  </Button>
+                </div>
+                {copyStatus?.id === id && (
+                  <p role="status" className="mt-2 text-xs text-muted-foreground">
+                    {copyStatus.ok ? UI_TEXT.copied[lang] : UI_TEXT.copyFailed[lang]}
+                  </p>
+                )}
+              </div>
             </li>
           ))}
         </ul>
+        </Card>
       </nav>
     </section>
   );

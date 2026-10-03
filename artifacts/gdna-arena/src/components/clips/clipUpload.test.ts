@@ -1,198 +1,108 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  MAX_CLIP_BYTES,
-  uploadForeground as uploadClip,
-  UPLOAD_CHUNK_BYTES,
-} from "./clipUpload";
+import { FILE_TOO_LARGE_MESSAGE, MAX_CLIP_BYTES, uploadClip } from "./clipUpload";
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-  delete window.umami;
-});
+afterEach(() => vi.unstubAllGlobals());
 
-function mockR2(receipt = {
-  ok: true,
-  clip: { id: 9, code: "HELX-123456", name: "camera", url: null },
-}, afterXhrProgress?: () => void) {
-  const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+type Sent = { url: string; method: string; body: unknown; headers: Record<string, string> };
+
+function setup({ me = 7, putStatus = 200, hold = false, confirm = { ok: true, clip: { id: 9, code: "HELX-123456", title: "Mon clip" } } } = {}) {
+  const fetches: Array<{ url: string; body: Record<string, unknown> | null }> = [];
+  const puts: Sent[] = [];
+  let xhr: MockXHR | null = null;
   class MockXHR {
     status = 0;
-    timeout = 0;
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
-    ontimeout: (() => void) | null = null;
     onabort: (() => void) | null = null;
-    upload: { onprogress: ((event: ProgressEvent) => void) | null } = { onprogress: null };
-    private url = "";
-    open(_method: string, url: string) { this.url = url; }
+    upload: { onprogress: ((e: ProgressEvent) => void) | null } = { onprogress: null };
+    headers: Record<string, string> = {};
+    method = ""; url = "";
+    constructor() { xhr = this; }
+    open(method: string, url: string) { this.method = method; this.url = url; }
+    setRequestHeader(name: string, value: string) { this.headers[name] = value; }
     send(body: Blob) {
-      calls.push([this.url, { method: "PUT", body }]);
-      this.status = 200;
-      this.upload.onprogress?.({
-        lengthComputable: true,
-        loaded: Math.max(1, Math.floor(body.size / 2)),
-        total: body.size,
-      } as ProgressEvent);
-      afterXhrProgress?.();
+      puts.push({ url: this.url, method: this.method, body, headers: this.headers });
+      this.upload.onprogress?.({ lengthComputable: true, loaded: Math.floor(body.size / 2), total: body.size } as ProgressEvent);
+      if (hold) return;
+      this.status = putStatus;
       queueMicrotask(() => this.onload?.());
     }
     abort() { this.onabort?.(); }
-    getResponseHeader(name: string) {
-      const part = Number(new URL(this.url).searchParams.get("part"));
-      return name.toLowerCase() === "etag" ? `"etag-${part}"` : null;
-    }
   }
   vi.stubGlobal("XMLHttpRequest", MockXHR);
-  vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
-    calls.push([url, init]);
-    const body = JSON.parse(String(init?.body));
-    const response = body.action === "initiate"
-      ? { sessionId: "11111111-1111-4111-8111-111111111111", partSize: UPLOAD_CHUNK_BYTES, partCount: 2, state: "active" }
-      : body.action === "inspect"
-        ? { state: "active", parts: [] }
-        : body.action === "part"
-          ? { url: `https://r2.invalid/upload?part=${body.partNumber}`, partNumber: body.partNumber }
-          : String(url).endsWith("api/upload/complete")
-            ? receipt
-            : receipt;
-    return Response.json(response);
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    fetches.push({ url, body });
+    const json = (data: unknown) => new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
+    if (url.endsWith("api/auth/me")) return json({ id: me, username: "citizen" });
+    if (url.endsWith("api/clips/presign")) return json({ url: "https://signed.example/put", key: "clips/abc" });
+    if (url.endsWith("api/clips/confirm")) return json(confirm);
+    return new Response("{}", { status: 404 });
   }));
-  return calls;
+  return { fetches, puts, xhr: () => xhr };
 }
 
-describe("direct R2 multipart clip upload", () => {
-  it("uses 5 MiB parts, sends no media through the API, and finalizes with name/code", async () => {
-    const track = vi.fn();
-    window.umami = { track };
-    const file = new File([new Uint8Array(17)], "camera.mp4", { type: "video/mp4", lastModified: 123 });
-    Object.defineProperty(file, "size", { value: UPLOAD_CHUNK_BYTES + 17 });
-    const progress: number[] = [];
-    const calls = mockR2(undefined, () => {
-      expect(progress.some(value => value > 0 && value < 99)).toBe(true);
-    });
+const file = () => new File(["0123456789"], "voice.mp4", { type: "video/mp4" });
 
-    const published = await uploadClip(file, {
-      title: file.name,
-      contentType: file.type,
-      durationSec: 67,
-    }, new AbortController().signal, value => progress.push(value));
-
-    const apiBodies = calls
-      .filter(([url]) => !String(url).startsWith("https://r2.invalid/"))
-      .map(([, init]) => JSON.parse(String(init?.body)));
-    expect(apiBodies[0]).toMatchObject({
-      action: "initiate",
-      filename: "camera.mp4",
-      contentType: "video/mp4",
-      durationSec: 67,
-      size: UPLOAD_CHUNK_BYTES + 17,
-      requestId: expect.any(String),
+describe("direct clip transport", () => {
+  it("presigns, PUTs the original File once with real progress, then confirms", async () => {
+    const { fetches, puts } = setup();
+    const original = file();
+    const progress = vi.fn();
+    const result = await uploadClip(original, { title: "Mon clip", durationSec: 61 }, new AbortController().signal, progress, { expectedOwner: 7 });
+    expect(fetches.find(f => f.url.endsWith("presign"))!.body).toEqual({
+      filename: "voice.mp4", title: "Mon clip", contentType: "video/mp4", size: 10, durationSec: 61, expectedOwnerId: 7,
     });
-    expect(apiBodies.filter(body => body.action === "part").map(body => body.partNumber).sort()).toEqual([1, 2]);
-    expect(apiBodies.at(-1)).toMatchObject({
-      sessionId: "11111111-1111-4111-8111-111111111111",
-      parts: [
-        { partNumber: 1, etag: '"etag-1"' },
-        { partNumber: 2, etag: '"etag-2"' },
-      ],
-    });
-    expect(String(calls.filter(([url]) => !String(url).startsWith("https://r2.invalid/")).at(-1)?.[0]))
-      .toContain("api/upload/complete");
-    const puts = calls.filter(([url]) => String(url).startsWith("https://r2.invalid/"));
-    expect(puts).toHaveLength(2);
-    expect(puts.every(([, init]) => init?.method === "PUT")).toBe(true);
-    expect(published.code).toBe("HELX-123456");
-    expect(track).toHaveBeenCalledExactlyOnceWith("clip_upload_success", { outcome: "published" });
-    expect(progress.some(value => value > 0 && value < 99)).toBe(true);
-    expect(progress.at(-1)).toBe(100);
+    expect(puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({ url: "https://signed.example/put", method: "PUT" });
+    expect(puts[0].body).toBe(original);
+    expect(puts[0].headers).toEqual({ "Content-Type": "video/mp4", "If-None-Match": "*" });
+    expect(progress).toHaveBeenCalledWith(50, 5, 10);
+    expect(fetches.find(f => f.url.endsWith("confirm"))!.body).toEqual({ key: "clips/abc", expectedOwnerId: 7 });
+    expect(result).toMatchObject({ code: "HELX-123456", name: "Mon clip" });
   });
 
-  it("rejects over 10 GiB and pre-aborted calls before any request", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    const tooLarge = new File(["x"], "large.mp4", { type: "video/mp4" });
-    Object.defineProperty(tooLarge, "size", { value: MAX_CLIP_BYTES + 1 });
-    await expect(uploadClip(
-      tooLarge,
-      { title: tooLarge.name, contentType: tooLarge.type, durationSec: 61 },
-      new AbortController().signal,
-      vi.fn(),
-    )).rejects.toThrow("10 GiB");
+  it("falls back to application/octet-stream when the browser gives no type", async () => {
+    const { puts, fetches } = setup();
+    await uploadClip(new File(["x"], "a.mkv"), { title: "t", durationSec: null }, new AbortController().signal, () => {}, { expectedOwner: 7 });
+    expect(puts[0].headers["Content-Type"]).toBe("application/octet-stream");
+    expect(fetches.find(f => f.url.endsWith("presign"))!.body!.contentType).toBe("application/octet-stream");
+  });
 
+  it("refuses to upload for a different authenticated account", async () => {
+    const { puts } = setup({ me: 8 });
+    await expect(uploadClip(file(), { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow(/compte/i);
+    expect(puts).toHaveLength(0);
+  });
+
+  it("cancel aborts the XHR and never confirms", async () => {
+    const { fetches, xhr } = setup({ hold: true });
     const controller = new AbortController();
-    controller.abort(new DOMException("cancelled", "AbortError"));
-    await expect(uploadClip(
-      new File(["x"], "cancelled.mp4", { type: "video/mp4" }),
-      { title: "cancelled.mp4", contentType: "video/mp4", durationSec: 61 },
-      controller.signal,
-      vi.fn(),
-    )).rejects.toMatchObject({ name: "AbortError" });
-    expect(fetchMock).not.toHaveBeenCalled();
+    const pending = uploadClip(file(), { title: "t", durationSec: 61 }, controller.signal, () => {}, { expectedOwner: 7 });
+    await vi.waitFor(() => expect(xhr()).not.toBeNull());
+    controller.abort(new DOMException("Cancelled", "AbortError"));
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetches.some(f => f.url.endsWith("confirm"))).toBe(false);
   });
 
-  it("does not resume a session when its display metadata changes", async () => {
-    const file = new File(["media"], "source.mp4", { type: "video/mp4" });
-    const bodies: Record<string, unknown>[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      bodies.push(body);
-      if (body.action === "initiate") {
-        return Response.json({
-          sessionId: crypto.randomUUID(),
-          partSize: UPLOAD_CHUNK_BYTES,
-        });
-      }
-      return Response.json({ error: "stop after initiation" }, { status: 400 });
-    }));
-
-    for (const title of ["العنوان الأول", "العنوان الثاني"]) {
-      await expect(uploadClip(file, {
-        title,
-        originalFilename: file.name,
-        contentType: file.type,
-        durationSec: 61,
-      }, new AbortController().signal, vi.fn())).rejects.toThrow("stop after initiation");
-    }
-
-    expect(bodies.filter(body => body.action === "initiate")).toMatchObject([
-      { filename: "source.mp4", title: "العنوان الأول" },
-      { filename: "source.mp4", title: "العنوان الثاني" },
-    ]);
+  it("fails once on PUT error without retrying", async () => {
+    const { puts, fetches } = setup({ putStatus: 403 });
+    await expect(uploadClip(file(), { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow("403");
+    expect(puts).toHaveLength(1);
+    expect(fetches.some(f => f.url.endsWith("confirm"))).toBe(false);
   });
 
-  it("accepts unknown client duration and surfaces metadata-only finalization errors", async () => {
-    const calls = mockR2();
-    const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementationOnce(async (url, init) => {
-      calls.push([url, init]);
-      return Response.json({
-        sessionId: "11111111-1111-4111-8111-111111111111",
-        partSize: UPLOAD_CHUNK_BYTES,
-      });
-    });
-    fetchMock.mockImplementationOnce(async (url, init) => {
-      calls.push([url, init]);
-      return Response.json({ state: "active", parts: [] });
-    });
-    fetchMock.mockImplementationOnce(async (url, init) => {
-      calls.push([url, init]);
-      const body = JSON.parse(String(init?.body));
-      return Response.json({ url: `https://r2.invalid/upload?part=${body.partNumber}` });
-    });
-    fetchMock.mockImplementationOnce(async (url, init) => {
-      calls.push([url, init]);
-      return Response.json({ error: "Server media duration is below 60 seconds" }, { status: 400 });
-    });
+  it("rejects an unconfirmed receipt", async () => {
+    setup({ confirm: { ok: false } as never });
+    await expect(uploadClip(file(), { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow();
+  });
 
-    await expect(uploadClip(
-      new File(["media"], "unknown.mp4", { type: "video/mp4" }),
-      { contentType: "video/mp4", durationSec: null },
-      new AbortController().signal,
-      vi.fn(),
-    )).rejects.toThrow("Server media duration is below 60 seconds");
-
-    const initiated = JSON.parse(String(calls[0][1]?.body));
-    expect(initiated.durationSec).toBeNull();
-    expect(String(calls.at(-1)?.[0])).toContain("api/upload/complete");
+  it("blocks oversize files with a generic message before any request", async () => {
+    const { fetches } = setup();
+    const big = file();
+    Object.defineProperty(big, "size", { value: MAX_CLIP_BYTES + 1 });
+    await expect(uploadClip(big, { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow(FILE_TOO_LARGE_MESSAGE);
+    expect(fetches).toHaveLength(0);
+    expect(FILE_TOO_LARGE_MESSAGE).not.toMatch(/GiB|\d/);
   });
 });

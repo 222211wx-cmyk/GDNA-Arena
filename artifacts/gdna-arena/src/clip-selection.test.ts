@@ -3,9 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { upload, duration } = vi.hoisted(() => ({ upload: vi.fn(), duration: vi.fn() }));
 vi.mock("./components/clips/clipUpload", () => ({
   uploadClip: upload,
-  MAX_CLIP_BYTES: 10 * 1024 * 1024 * 1024,
+  MAX_CLIP_BYTES: 5 * 1024 * 1024 * 1024,
+  FILE_TOO_LARGE_MESSAGE: "too-large-generic",
 }));
 vi.mock("./components/clips/readClipDuration", () => ({ readClipDuration: duration }));
+vi.mock("./lib/lightweight-call-boundary", () => ({
+  createLightweightCallBoundary: () => ({ setAccount: vi.fn(), dispose: vi.fn() }),
+}));
 const input = () => document.getElementById("file") as HTMLInputElement;
 const submit = () => document.getElementById("submit") as HTMLButtonElement;
 const chooser = () => document.getElementById("choose-file") as HTMLButtonElement;
@@ -28,7 +32,7 @@ beforeEach(async () => {
   upload.mockReset();
   duration.mockReset().mockResolvedValue(61);
   document.body.innerHTML = '<div id="root"></div>';
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ clips: [] }), {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(String(url).endsWith("api/auth/me") ? { id: 7, username: "citizen" } : { clips: [] }), {
     status: 200, headers: { "Content-Type": "application/json" },
   })));
   await import("./clip-entry");
@@ -40,73 +44,15 @@ afterEach(() => {
 });
 
 describe("final simple Clip selection", () => {
-  it("shows an older processing receipt without wiping an unrelated new selection", async () => {
-    const file = media("second.mp4", "video/mp4", 1024);
+  it("retains but blocks a file that is too large with a generic message", async () => {
+    const file = media("too-large.mp4", "video/mp4", 5 * 1024 ** 3 + 1);
     select(file);
-    await vi.waitFor(() => expect(text("duration-status")).toContain(":"));
-    displayName().value = "Second custom title";
-    const beforeDuration = text("duration-status");
-    const { finalizePublication } = await import("./clip-entry");
-    expect(finalizePublication(receipt, "older-processing-job")).toBe(false);
-    expect(text("receipt")).toContain(receipt.code);
-    expect(displayName().value).toBe("Second custom title");
-    expect(text("duration-status")).toBe(beforeDuration);
-    expect(chooser().textContent).toContain("second.mp4");
+    expect(submit().disabled).toBe(false);
+    form().requestSubmit();
+    await vi.waitFor(() => expect(text("upload-error")).toBe("too-large-generic"));
     expect(input().files?.[0]).toBe(file);
     expect(submit().disabled).toBe(false);
-    upload.mockRejectedValueOnce(new Error("Keep selection"));
-    form().requestSubmit();
-    await vi.waitFor(() => expect(upload).toHaveBeenCalledOnce());
-    expect(upload.mock.calls[0][0]).toBe(file);
-    expect(upload.mock.calls[0][1].title).toBe("Second custom title");
-  });
-
-  it("does not clear another queued job identity when an older job finishes", async () => {
-    upload.mockImplementationOnce(async (_file, _metadata, _signal, _progress, options) => {
-      options.onStored({ id: "second-queued-job" });
-      throw new Error("Paused");
-    });
-    select(media("second.mp4", "video/mp4", 1024));
-    form().requestSubmit();
-    await vi.waitFor(() => expect(text("upload-error")).toBe("Paused"));
-    const { finalizePublication } = await import("./clip-entry");
-    expect(finalizePublication(receipt, "older-processing-job")).toBe(false);
-    expect(displayName().disabled).toBe(true);
-    expect(chooser().textContent).toContain("second.mp4");
-    // Matching completion, unlike an unrelated manual resume/poll, owns the reset.
-    expect(finalizePublication(receipt, "second-queued-job")).toBe(true);
-    expect(submit().disabled).toBe(true);
-    expect(displayName().value).toBe("");
-  });
-  it.each([
-    ["recording.mp3", "audio/mpeg", 1024, 60],
-    ["video.mp4", "video/mp4", 500 * 1024 * 1024, 61],
-    ["selfie.mov", "video/quicktime", 2 * 1024 ** 3, 24 * 3600],
-  ])("retains %s up to 2GiB and accepts duration >=60 without an upper bound", async (name, type, size, seconds) => {
-    duration.mockResolvedValueOnce(seconds);
-    const file = media(name, type, size);
-    select(file);
-    expect(chooser().textContent).toContain(`${name} — ${(size / 1024 / 1024).toFixed(2)} MB`);
-    expect(submit().disabled).toBe(false);
-    await vi.waitFor(() => expect(text("duration-status")).toContain(":"));
-    expect(input().files?.[0]).toBe(file);
-    expect(text("duration-status")).toContain(":");
-    expect(text("upload-error")).toBe("");
-    // Only original bytes; no encoding declarations or quality toggles.
-    expect(form().querySelectorAll('input[type="radio"]')).toHaveLength(0);
-    expect(form().querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
     expect(upload).not.toHaveBeenCalled();
-  });
-
-  it("retains but blocks a file over the explicit 10 GiB transport maximum", async () => {
-    const file = media("too-large.mp4", "video/mp4", 10 * 1024 ** 3 + 1);
-    select(file);
-    expect(submit().disabled).toBe(false);
-    form().requestSubmit();
-    await vi.waitFor(() => expect(text("upload-error")).toContain("10 GiB"));
-    expect(input().files?.[0]).toBe(file);
-    expect(submit().disabled).toBe(false);
-    expect(duration).not.toHaveBeenCalled();
   });
 
   it.each(["audio/mpeg", "video/mp4"])("blocks a short %s with the exact requested message", async type => {
@@ -178,9 +124,9 @@ describe("final simple Clip selection", () => {
     expect(input().files?.[0]).toBe(file);
   });
 
-  it("reports real bytes, speed and percent without encoding advice", async () => {
+  it("reports real bytes and percent without encoding advice", async () => {
     upload.mockImplementationOnce(async (_file, _metadata, _signal, onProgress) => {
-      onProgress(25, 256 * 1024, 100 * 1024, "uploading");
+      onProgress(25, 256 * 1024, 1024 * 1024);
       return new Promise(() => {});
     });
     select(media("slow.mp4", "video/mp4", 1024 * 1024));
@@ -188,7 +134,7 @@ describe("final simple Clip selection", () => {
     form().requestSubmit();
     await vi.waitFor(() => expect(submit().textContent).toBe("Téléversement 25%…"));
     expect(text("upload-status")).toContain("25%");
-    expect(text("upload-status")).toContain("100.0 KB/s");
+    expect(text("upload-status")).toContain(new Intl.NumberFormat("ar").format(256 * 1024));
     expect(text("upload-status")).not.toContain("compression recommandée");
   });
 
@@ -283,8 +229,6 @@ describe("final simple Clip selection", () => {
     expect(upload.mock.calls[0][0]).toBe(file);
     expect(upload.mock.calls[0][1]).toEqual({
       title: "عنوان كبير",
-      originalFilename: "large.mp4",
-      contentType: "video/mp4",
       durationSec: 61,
     });
     expect(chooser().textContent).toContain("large.mp4");

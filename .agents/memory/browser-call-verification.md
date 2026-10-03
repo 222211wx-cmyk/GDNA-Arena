@@ -22,3 +22,7 @@ description: Cross-route acceptance coverage and real browser push test constrai
 - Match notifications by the current call ID, not by any notification or an empty global notification list.
   **Why:** unrelated or earlier OS notifications can produce false success or false cleanup failures.
   **How to apply:** check the exact call's incoming card appears and disappears; avoid logging private endpoints or subscription keys.
+
+- Messaging/call audit requests require a report with historical commits, links, source evidence, inventory, and explicit existing/broken/unverified/missing states—not another implementation plan.
+  **Why:** The owner repeated this scope after a prose feature summary lacked the consolidated historical/code evidence they requested.
+  **How to apply:** Keep report-only work free of application changes. Separate current source, published behavior, APK identity and physical-device proof; never label implemented-but-untested native code as nonexistent.

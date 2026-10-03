@@ -42,7 +42,9 @@ export async function abortOneExpiredR2Upload(): Promise<void> {
     );
     if (!current.rows[0]) { await client.query("ROLLBACK"); return; }
     try {
-      await r2Client().send(new AbortMultipartUploadCommand({
+      // Single-PUT sessions have no multipart allocation. Expire their record;
+      // any unconfirmed complete object remains for audited orphan reconciliation.
+      if (upload.multipart_upload_id !== "direct-put") await r2Client().send(new AbortMultipartUploadCommand({
         Bucket: config.bucket,
         Key: r2Key(upload.object_name),
         UploadId: upload.multipart_upload_id,

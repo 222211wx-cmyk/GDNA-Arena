@@ -1,0 +1,173 @@
+﻿path,category,lines,sha256
+artifacts/api-server/src/app.ts,تنفيذ / إعداد,238,990cb332cfd1e0377f0ee8e6f0607c379aaeca72ce9e0273b8f3f0fa6b293702
+artifacts/api-server/src/index.ts,تنفيذ / إعداد,1440,ac35ade234a7b21c1c04fed8ad09cece49659f97807354e1da4c771e4d2e5bc6
+artifacts/api-server/src/lib/agora-call-authorization.test.ts,اختبار,34,655e7a84d2062f419e32abac1ef021eb814ab74da08d470afbd5bddb56b44160
+artifacts/api-server/src/lib/agora-call-authorization.ts,تنفيذ / إعداد,15,9b51fd011f379d5ca8bd15fb411ce2da1907c85cd1973146f93a8635a2c495c7
+artifacts/api-server/src/lib/agora-config.ts,تنفيذ / إعداد,51,aa51a6b4c4a6f603c53aa79b343347b5b349ad1e5640a6da7a0038abb474cd1b
+artifacts/api-server/src/lib/browser-push.test.ts,اختبار,197,a3c696ddd79b816967f9ee2a48d48f49f870463044f79caed9f859b65816b500
+artifacts/api-server/src/lib/browser-push.ts,تنفيذ / إعداد,547,825263a15c3ca4e2d18edb6dd09b4b7da6285db9edb376e41272e211dffd1c63
+artifacts/api-server/src/lib/call-signal-store.ts,تنفيذ / إعداد,458,a72b030425fbb71f175b2ba8d05dea73573909051e7e3cadabf7ba1920fabad2
+artifacts/api-server/src/lib/call-state-db.test.ts,اختبار,299,84aea5af08382eecec928b192fb19286b03c54fc615d709a1d73d465af0d95ad
+artifacts/api-server/src/lib/call-state-db.ts,تنفيذ / إعداد,403,7166004a2b7483430edb85d0075d7dba0eef8c0014b7aec995f19297bd14dc55
+artifacts/api-server/src/lib/chat-direct-upload.ts,تنفيذ / إعداد,90,23bb039bc9230af0ed7ac474ee90e02c1616a70f3f49164c00e8d6d213bf9ba0
+artifacts/api-server/src/lib/chatStorage.ts,تنفيذ / إعداد,169,c3302e5ff79d28649903dd7b3711bf76f444501cc4274766b95e0786b44f22c4
+artifacts/api-server/src/lib/deferred-call-policy.test.ts,اختبار,37,93bf0d462586dcc21eeae40c66182f718c7b6d23733d133d0a788038ccefd730
+artifacts/api-server/src/lib/deferred-call-policy.ts,تنفيذ / إعداد,22,4eb57bdd65d5b528e4b49c042499ea97f668f20724954510b4c84604c80eea2c
+artifacts/api-server/src/lib/expo-push.test.ts,اختبار,57,a08ce561c4262a171f551df715c686c00db2c499ca53d046fcae84bc39383fc4
+artifacts/api-server/src/lib/expo-push.ts,تنفيذ / إعداد,100,b0dc5c1e40ec5e23d98db39dd49c8d08e0683ad8fb1898902ca00fa8d9e6149f
+artifacts/api-server/src/lib/firebase-call-push.test.ts,اختبار,170,510e69ed2427fffd21ed3fcfb41d3d1911f66da61fb69a542c8ac4c8a77afd5d
+artifacts/api-server/src/lib/firebase-call-push.ts,تنفيذ / إعداد,1905,1681b43456413322e7353ce792a975af9dc6b446ae48b3971a2d4fba97729f59
+artifacts/api-server/src/lib/firebase-service-account.d.mts,تنفيذ / إعداد,14,147c0f2279e92560fdb26cd6212444004ef88bc351acb7e36177fa71b3222182
+artifacts/api-server/src/lib/group-call-eligibility.ts,تنفيذ / إعداد,15,8d045e1542c12ac8b2fc8f3332bdafbbd6a45839c0ccc29d54c16a8e1e76c0e5
+artifacts/api-server/src/lib/group-call-store.ts,تنفيذ / إعداد,145,475071cd42b4c24262f395d5ae7795c24ca31502baa2a6ce8f9616447ef23294
+artifacts/api-server/src/lib/message-idempotency.ts,تنفيذ / إعداد,26,d5e3b70288a71a0ba226e56f802d9b1a3bcb705574ea57444ac39debec2bfb77
+artifacts/api-server/src/lib/message-push.test.ts,اختبار,20,5a4cfc46f2a80704abee571c51ab8be640c1da2c64909220293800ccd824a474
+artifacts/api-server/src/lib/message-push.ts,تنفيذ / إعداد,56,62d9b4995718d63cef14c292cba2cf31c56a6eff8088c627a5b807a3ba4b9d4b
+artifacts/api-server/src/lib/message-sender-guard.ts,تنفيذ / إعداد,12,32a53a75cab7b9af7d57e34835e647ad1857c20ab455867748a6367a92d7ac10
+artifacts/api-server/src/lib/message-upload-policy.test.ts,اختبار,23,5b638e82f08f9fcc6f76cc3b5c938e4a433eeffba04be4f7e75c668c9e7e7aef
+artifacts/api-server/src/lib/message-upload-policy.ts,تنفيذ / إعداد,75,f13365ae321e7c2e2ea46ddf13a318a6ba68b4c1aaf340e282f2affa1cef40b6
+artifacts/api-server/src/lib/messaging-quota.ts,تنفيذ / إعداد,21,c343fbdb747bf87082fbac150f906ffd84de43634c22853728362a82a9ac351f
+artifacts/api-server/src/lib/native-call-payload.ts,تنفيذ / إعداد,40,e3ec246fab6372690db06f4d89924e282b975d2b0167f72b3d31d182998601b2
+artifacts/api-server/src/lib/native-call-push.test.ts,اختبار,129,83da15338dedb5122fe5be168278356bb3549773a4c72d1d4bde458e73c93b4c
+artifacts/api-server/src/lib/native-call-push.ts,تنفيذ / إعداد,167,2b37b26eb112a90a42452f99f6ab5820b27eead16f20f26f5c28d50088cf5247
+artifacts/api-server/src/lib/r2-storage.ts,تنفيذ / إعداد,284,fa1c5a0b01b249639651fac30b01479c16384a75fa1196eebe29d3864d69b980
+artifacts/api-server/src/lib/signaling.ts,تنفيذ / إعداد,571,fb961031746b66908cced81ad4f2bddc30dc063d995c72ce78145d8f739fb1e1
+artifacts/api-server/src/lib/turn-config.test.ts,اختبار,64,c61cd597410ee52ca8618705c45c6632e7750065087ba5cf2d0c69628e0c12e1
+artifacts/api-server/src/lib/turn-config.ts,تنفيذ / إعداد,127,a1a46e67d0915901cf7dabe38988d75dafb0fd19fc2dcef7b5de046479a88df9
+artifacts/api-server/src/middleware/require-messaging-subscription.ts,تنفيذ / إعداد,13,7dd9c36a1ae1743b4d5f36032585606b3fb3e14e1dd1953f0ba9afcc46076c7f
+artifacts/api-server/src/routes/browser-push.ts,تنفيذ / إعداد,169,08784a7506f567e4af773397f01437f3664ae3c9fb2e4e6f945bffb0ffd0689c
+artifacts/api-server/src/routes/call-push.ts,تنفيذ / إعداد,437,c51df6a65c1662e6e5ddec504397358811554690955a4774628a09ace540ddb2
+artifacts/api-server/src/routes/chat.ts,تنفيذ / إعداد,23,c1ee0f57e68ee8672f2e057731cdcda440fb37e23b14e819434ea7796c77b72e
+artifacts/api-server/src/routes/citizen-profiles.ts,تنفيذ / إعداد,251,7f43a6bf724f8680cad9d616a7e466c5c18a912fb1e474d87ca3da576d476624
+artifacts/api-server/src/routes/communication-groups.ts,تنفيذ / إعداد,190,d30e43a528fabb4b3580f14ddab612902720b52ca201a06c806da35d1d48521e
+artifacts/api-server/src/routes/index.ts,تنفيذ / إعداد,121,a093dc53d39ca9d783b465cdeec369980bb423bd3cc7558beedf14df6c982706
+artifacts/api-server/src/routes/messages.ts,تنفيذ / إعداد,1611,9ea4e8cb060c732cb552cef2e264aab73296e472334267f6bd7d50ecb3abc656
+artifacts/api-server/src/routes/messaging-subscriptions.test.ts,اختبار,91,202a1fd0390eb764ddc4d1e4450777891450a0f12e0b79aade898214edc69705
+artifacts/api-server/src/routes/messaging-subscriptions.ts,تنفيذ / إعداد,68,c9098b4ce8de7ecb089c8dafe79cc019179a9e61f7ef44e0cb35e6191e7d18c4
+artifacts/api-server/src/routes/rtc.ts,تنفيذ / إعداد,77,b8145de02d016876a11dfd531534a206c1305e907d189adf4aae37be30e8eee2
+artifacts/api-server/src/routes/social-hub.ts,تنفيذ / إعداد,663,988c274cd5185acfb67d2e9d18a75c4051ab65f1606435e4882871cf81496fb4
+artifacts/api-server/src/routes/turn-config.ts,تنفيذ / إعداد,41,5a90332b90883c21fdc92b3aa45169fb66511e80c7822faaf95807f8d85aebbc
+artifacts/api-server/src/server/agora.ts,تنفيذ / إعداد,28,dbf1c6462c2d8c705828ca7dd3a0fe595c37ea04191bdae6f23d0315cc03781f
+artifacts/api-server/src/server/turn.ts,تنفيذ / إعداد,10,db18aed109561693497b4cb4af6f01d0e3a19a1c22aa01fdd4e8f7c1786b1c06
+artifacts/gdna-arena-mobile/app.json,تنفيذ / إعداد,91,93441ed8612aa8dd1fa644058959e2828b4c6491e61746a33cbf384ea0b8b30a
+artifacts/gdna-arena-mobile/app/chat.tsx,تنفيذ / إعداد,277,a32e1ca545d8ea94be52942c231ae352347d23ffca2756776271f8e84dd6562a
+artifacts/gdna-arena-mobile/components/NightCallControls.tsx,تنفيذ / إعداد,43,7bac90077993ae5bfd16dd479c91617ab62ed75175adb5ba2a40f17798e6ae57
+artifacts/gdna-arena-mobile/contexts/CallContext.tsx,تنفيذ / إعداد,45,519dd514afd87725436c57b4f2180d0d16bee0e09ecaf381f166e5616d583d84
+artifacts/gdna-arena-mobile/contexts/CallContext.web.tsx,تنفيذ / إعداد,14,173ddc48c562af219692d848e4d113807368d307d9c9837e9fac3022d9d5b508
+artifacts/gdna-arena-mobile/docs/calls-messaging-handover.md,توثيق,61,47812ecb3e7e572d933a810606372c58a3ef00ef38eeb2e17ce6bb94831e2824
+artifacts/gdna-arena-mobile/docs/messaging-telecom-audit.md,توثيق,210,ca77e4e03520af669faa99df11e44f14a2053a8288ad19be6e9a9a6238ea6032
+artifacts/gdna-arena-mobile/docs/native-call-device-checklist.md,توثيق,140,c062a4516d165e84273615df3733d9ccb5fcf2b765b4908f05fb08cb6bf2c976
+artifacts/gdna-arena-mobile/eas.json,تنفيذ / إعداد,18,9aa7faa25624e18e4425273e81b67420220632aac0b10a98a7179141538e61f2
+artifacts/gdna-arena-mobile/index.js,تنفيذ / إعداد,5,5dce5c4e6b7b209f9a78f1c6a5ee2c1f9af5027cd7365130f1ab1afd33023c21
+artifacts/gdna-arena-mobile/lib/agora-calls.tsx,تنفيذ / إعداد,790,930c2ffee192c4b03e701a91a78f0b9f436b3f9d72f584407ad8c6b5cbd7640f
+artifacts/gdna-arena-mobile/lib/agora-calls.web.tsx,تنفيذ / إعداد,39,9d8b8170f0a130fcb9c18c3c73d7c2522a6397eae17118719de2e51d394bc930
+artifacts/gdna-arena-mobile/lib/call-actions.ts,تنفيذ / إعداد,33,6b52003899bce91f7d28a6d21e4392f02bea7587ec366271cfe37a97c29aa696
+artifacts/gdna-arena-mobile/lib/call-service.d.ts,تنفيذ / إعداد,20,c8c43fdf0c76ab22ae74042137991576c1d891bd38e4522eec42c394ceb1b548
+artifacts/gdna-arena-mobile/lib/call-service.native.ts,تنفيذ / إعداد,494,cf8d12033b112b8941edbb40665872c85cae4ecfd9cbc28492422cae0fdffb77
+artifacts/gdna-arena-mobile/lib/call-service.web.ts,تنفيذ / إعداد,17,5365993ef54dfa2598bac5c016db2e65383ac1627916496cb1a3979b1390bacd
+artifacts/gdna-arena-mobile/lib/native-push.d.ts,تنفيذ / إعداد,6,85ac258e0c03e8cb6282a4ee76df59a1efe18cd694548b397face0ee8da8be68
+artifacts/gdna-arena-mobile/lib/native-push.native.ts,تنفيذ / إعداد,230,88adfb22fc9438bdd469a158967084994aecab35d970d80ee304be6c9e6bd5d9
+artifacts/gdna-arena-mobile/lib/native-push.web.ts,تنفيذ / إعداد,8,0f711502a8923ef978c7a76cc5ba49c432882e213abaff80971f7e567de74870
+artifacts/gdna-arena-mobile/lib/push-installation.ts,تنفيذ / إعداد,36,bcc0022463d78a8abe8e92bf15a069bb79ad7fe5ff4f8d41229b729b423eaf3a
+artifacts/gdna-arena-mobile/lib/push-tap.ts,تنفيذ / إعداد,44,d4e5e2c2b368619ec14d3e0a21870e978c4be00164b46ba3b626f643cacd13ca
+artifacts/gdna-arena-mobile/plugins/CallTelecomModule.kt,تنفيذ / إعداد,235,82b0860aec53f339f59032e2c788febf83a0a4590899381b2dfea2b422c1bdd9
+artifacts/gdna-arena-mobile/plugins/android-firebase.test.cjs,اختبار,69,6e3b80ed67ffd387791bfaf4fe7feee66a5e5386074416f93e94983de115d948
+artifacts/gdna-arena-mobile/plugins/withAndroidFirebase.js,تنفيذ / إعداد,26,1ae1eda8b9a7bd7e8a93533ae3c3a0f41deb189bebd268d7884b2e29fe04f8fa
+artifacts/gdna-arena-mobile/plugins/withVoipPush.js,تنفيذ / إعداد,126,318bfd83882afabe7e8bc89b19f2ae16dc07c5f0563980b94182435f53b154c2
+artifacts/gdna-arena-mobile/scripts/generate-call-sound.cjs,تنفيذ / إعداد,29,78117a5d3e8c48589ebf2bb6898db565c1180eb4bf6259b6ea2df8c9ea7a35ec
+artifacts/gdna-arena-mobile/tests/agora-call-race.test.mjs,اختبار,160,5826722fd7619afbe503289264bba437ae064b748d1643893f55cdc39a59a794
+artifacts/gdna-arena-mobile/tests/agora-calls.test.cjs,اختبار,173,6f40611fc4c827bd5aa3d8bc709cb31c9376f1a736bff323df94846c3976e837
+artifacts/gdna-arena-mobile/tests/native-calls.test.cjs,اختبار,291,1bf3776fef0821849d0a7cdd00c34eb86c2024430e752cbf003a120d47d5a16d
+artifacts/gdna-arena-mobile/tests/push-tap.test.mjs,اختبار,39,bac99ab259b2c78705cc65a01b719abe7d9dc79601fdb9a514e934d36e68fe51
+artifacts/gdna-arena/src/App.tsx,تنفيذ / إعداد,317,c0221a11cf39b9c5801b3a110e9839a1a5e5ff4be93f7a240610bd34b64b6c76
+artifacts/gdna-arena/src/client/hooks/useCall.ts,تنفيذ / إعداد,5,28cd4835d5b9a3cb3e497f01e36d9f465a1370319000fcad63e3ac26d61d796c
+artifacts/gdna-arena/src/client/hooks/useCallRecording.ts,تنفيذ / إعداد,305,094a0b34e41a2bf552eef7935d158827692b2e9d81dbcf12c6e3403af9266c18
+artifacts/gdna-arena/src/client/hooks/useGroupCall.ts,تنفيذ / إعداد,629,9aa4cc09b061a30291eed79bb59083674d911240c1f4a0ea6e34c4231168ee9b
+artifacts/gdna-arena/src/client/lib/communication.ts,تنفيذ / إعداد,262,439f535ee76073a62607db1b4113aacaf4a7e47dd4edbd655f729ac80df0aff6
+artifacts/gdna-arena/src/components/CallOverlay.test.tsx,اختبار,350,ef45d52448a4ce9bdb15822e8674de0e18390c49310236b67dbf94d166d04eee
+artifacts/gdna-arena/src/components/CallOverlay.tsx,تنفيذ / إعداد,707,0b4c30f9f1cad95351cda538cf83944e76ef90a07a08619902732a17d891a663
+artifacts/gdna-arena/src/components/ErrorBoundary.tsx,تنفيذ / إعداد,64,abedc7c26af61bb73ab05bfa01b58b4c829e65e0af84f09b6e4596a3d5202301
+artifacts/gdna-arena/src/components/GlobalCallAlerts.test.tsx,اختبار,39,a29f4a3df6bd76f89267c16dc940cadf6c5d7056601fdc89a3a700e07b9f122c
+artifacts/gdna-arena/src/components/GlobalCallAlerts.tsx,تنفيذ / إعداد,20,526e2b551c16708553e7d14f405556f0e34dd966819b86c2ffb51c322e2f5cfb
+artifacts/gdna-arena/src/components/MessagingSubscriptions.tsx,تنفيذ / إعداد,44,712e6d7f3716c26e0ece924a01e7b8a9508d62d196c09487a1520d1c54d0c859
+artifacts/gdna-arena/src/components/citizen/MessengerCitizenDrawer.tsx,تنفيذ / إعداد,54,799fb18a52fab89d5bd0815dd5d5f16180304cc0160273db6c73fb5f2fa652a2
+artifacts/gdna-arena/src/components/citizen/messenger-profile-drawer.test.ts,اختبار,31,b037d98b980df0dfafe208d8d9361fb4a17a2a13d9f14070ea4a9851e5c1f09f
+artifacts/gdna-arena/src/components/communication/CallRecordingPanel.tsx,تنفيذ / إعداد,69,5d371fc057086263cd1d8cee86254e1edaf8da46e8fbd45d36da0f0dda1ae7c5
+artifacts/gdna-arena/src/components/communication/GroupCallOverlay.tsx,تنفيذ / إعداد,212,be936236890f9e3461046d8bda99bf574dbcecde4b1f4b5f992a903fd985f15e
+artifacts/gdna-arena/src/components/communication/PeerTransferPanel.tsx,تنفيذ / إعداد,149,b5a511de56a8b2503a8a41035af86726e6ebf7d5e68e698ad948d4115c615d12
+artifacts/gdna-arena/src/components/communication/call-recording-consent.test.ts,اختبار,22,7d4c0cfffe0d3d6335f42d7ddbf2979d635dd7ef7e48ecfaab06bf7626cae7f6
+artifacts/gdna-arena/src/components/communication/peer-transfer.test.ts,اختبار,58,9cf3f61b154f99249000ff9dc77ac30e601793ceecc7d374b9126acb1b5dc67a
+artifacts/gdna-arena/src/components/communication/recording-control.ts,تنفيذ / إعداد,52,5b097a157a5f2b3834f3b0eeaaa4963e455629bf08a24c6b53007437190db2ff
+artifacts/gdna-arena/src/components/elite/EliteFanChat.tsx,تنفيذ / إعداد,236,e3abe80e2ddab28afaf1432444ef347cf1237baccd850d63b208d8e4ed4c52ca
+artifacts/gdna-arena/src/components/messenger/BusyCallRecovery.tsx,تنفيذ / إعداد,137,cead7938b73776c7c9c7c51ddc943f466a941180ea136c029f146bfadd3a2e4b
+artifacts/gdna-arena/src/components/messenger/MessageInputBoundary.tsx,تنفيذ / إعداد,16,7f56fbfee11425a2cd19436bc68f49b1ed86a72da2f1e890c31021ee4bbf7561
+artifacts/gdna-arena/src/components/messenger/Messenger.tsx,تنفيذ / إعداد,3351,5ec1573d76570a216867e54bf3ecb9396b01a73e6ad06440f3fe0f6ff5a7f2f7
+artifacts/gdna-arena/src/components/messenger/MessengerAssistant.test.tsx,اختبار,115,2c53b2454b5173b0ddafd0bb03bdcff61c5f10024b05f7c266901e00a775d85c
+artifacts/gdna-arena/src/components/messenger/MessengerAssistant.tsx,تنفيذ / إعداد,189,1aeec1443aaa427a016e4242b495dc63737c38d0b76509dbe49422e50637229c
+artifacts/gdna-arena/src/components/messenger/MissedCallsInbox.test.tsx,اختبار,84,26b60ed832077f404019df06232c0bff38a43a8f4326856a54ddd5189bddc00a
+artifacts/gdna-arena/src/components/messenger/MissedCallsInbox.tsx,تنفيذ / إعداد,307,df1e3df8b89b35bc4e3992b45bb3447d033cda07c8369851c51b2b06223d87bf
+artifacts/gdna-arena/src/components/messenger/NetworkDisplay.tsx,تنفيذ / إعداد,125,d89b1217179cc2046864172931d000e7bb16c6a7db29bc3f20872bc254c3be89
+artifacts/gdna-arena/src/components/messenger/SolidarityRelay.tsx,تنفيذ / إعداد,787,ab2ce01449fc9a74af38472227d86707166a4c9497d51fc538b8805d4a1aa4aa
+artifacts/gdna-arena/src/components/messenger/UnifiedMessenger.tsx,تنفيذ / إعداد,40,a21f86fcf16fc31eac70b2a19420d50973ba08f3c293bdbecaf1ea394ed4df38
+artifacts/gdna-arena/src/components/messenger/attachment-policy.test.ts,اختبار,17,5239d9d3206dd7546adfa75f2d365cb6bdc04ac62e9e38fa80370546b16535ec
+artifacts/gdna-arena/src/components/messenger/attachment-policy.ts,تنفيذ / إعداد,15,ed519314da567a09f7193e952be5ae8439f236ce3e298013da4250d13c98a23f
+artifacts/gdna-arena/src/components/messenger/call-types.ts,تنفيذ / إعداد,27,509890b2cc15c4962938c763283045874c493e48377e4754fb3d29aa6db63551
+artifacts/gdna-arena/src/components/messenger/directAttachmentUpload.test.ts,اختبار,59,1c5d2300d3f5bf2deb2dff34cec937cd0ebd5ba642662cd241d9d5dc6530be13
+artifacts/gdna-arena/src/components/messenger/directAttachmentUpload.ts,تنفيذ / إعداد,32,71c663007db7424a4b4dca495a47a37a46f61111e12d2c78396e5c173f77e776
+artifacts/gdna-arena/src/components/social/CommunicationMatrix.tsx,تنفيذ / إعداد,490,74b6a2000b283aa6dd5cc09079a691ee0a8049598ca767243a68d8134c9a097f
+artifacts/gdna-arena/src/components/social/MessagesTab.tsx,تنفيذ / إعداد,16,82c0b1e6df3b53c59154f0c299d9cadc4b1f7eb41e3772025abfac5ed97bf349
+artifacts/gdna-arena/src/contexts/AuthContext.tsx,تنفيذ / إعداد,341,9c30f8ff1711925d7d676fc39190544f2f77e8c642ccd8cd2c3a7dbc66d30533
+artifacts/gdna-arena/src/contexts/CallContext.tsx,تنفيذ / إعداد,66,47986534538f3892de106990772321a7a9cb58802ae6efed851e29e6242459e1
+artifacts/gdna-arena/src/contexts/GlobalCallBoundary.tsx,تنفيذ / إعداد,24,d69ac1d9dde04ff043522a87a8ba363d9024f81119512086a9296f7db0c8c063
+artifacts/gdna-arena/src/contexts/GroupCallContext.tsx,تنفيذ / إعداد,27,b36ddf788a274bd8901fae3020255268e29732cc3f52bdf4d612374de0f78f87
+artifacts/gdna-arena/src/hooks/use-call-push.ts,تنفيذ / إعداد,313,8b41a64a3e86ad163c588708c3019afdf1c5d6467a25e67e03c8c75b0b6574cd
+artifacts/gdna-arena/src/hooks/useCall.test.tsx,اختبار,376,2096fb03c3e45d8772a936aefe4cd47fedf791efc2f018c8f71716abf58d762a
+artifacts/gdna-arena/src/hooks/useCall.ts,تنفيذ / إعداد,3089,4b818bf00946ce9b7edfe63a7b6fdb5472032e5f3d9bab12c0f88b8bd50aca66
+artifacts/gdna-arena/src/i18n/messenger-complete-copy.ts,تنفيذ / إعداد,369,a4b6614233d135bba4e9aa0beb7c5b495e70f9328d8f15cde1aa8af47dd90ffc
+artifacts/gdna-arena/src/i18n/missed-calls-copy.ts,تنفيذ / إعداد,180,e86a354d205d23a5759fc03f171cfbffab53c4875d87bf5fb91be4acbeecf217
+artifacts/gdna-arena/src/lib/account-session-events.ts,تنفيذ / إعداد,110,b6ad5662857b4c6c4d604a1536090474d27033094e6ef339c77103d62a9fafad
+artifacts/gdna-arena/src/lib/agora-turn.test.ts,اختبار,35,0cc0c6873c89c7d6a0844af73bda670e34a16311d00e55ff4dfb58f8ef4ffaa9
+artifacts/gdna-arena/src/lib/agora-turn.ts,تنفيذ / إعداد,54,e46185a8c37fb67fee97c5ecf8344073047df8735e1ffe88936ff901b33dd793
+artifacts/gdna-arena/src/lib/amis-e2ee.test.ts,اختبار,14,6022a3eee38972b3c48fc268d3a8d6877b07aeab2a91803207ff4408c50ce8e3
+artifacts/gdna-arena/src/lib/amis-e2ee.ts,تنفيذ / إعداد,311,22b01f7f9adb586a7f0b1892f456d69e14d91c9df4a73b2f76fd122191c015a5
+artifacts/gdna-arena/src/lib/browser-call-push-worker.test.ts,اختبار,230,bcc8c1f50dca00543656f89504e9e05f5b2889732d13f282a76a801d90ed8af8
+artifacts/gdna-arena/src/lib/browser-call-push.test.ts,اختبار,48,a43f234c4f530bed2decf73700782787cbb2b316f8819d38fc8e1a306c063ef7
+artifacts/gdna-arena/src/lib/browser-call-push.ts,تنفيذ / إعداد,307,ade275c06a5baadca65bdf064273a79eeb00fdf0bb8a78e9b0dc9bf1539640ea
+artifacts/gdna-arena/src/lib/call-deferred.test.ts,اختبار,105,3ba95fa31c1b31f3629e986fd7d1aeab24ecff33db2e300c919f60540ec2b1f2
+artifacts/gdna-arena/src/lib/call-deferred.ts,تنفيذ / إعداد,51,8f0ef1beda96cc983a839a97ced86c45866f32dde6c8fd471b40059eb8f43654
+artifacts/gdna-arena/src/lib/call-firebase.test.ts,اختبار,94,2df7484e61887c64269b15f403cb4a7fd17b509f69c047a4ec2575ccc86b7054
+artifacts/gdna-arena/src/lib/call-firebase.ts,تنفيذ / إعداد,545,f9c5d73ab4aa3ee9c5f85843779f011269d0a62d30950658c2791c222ddb7e2e
+artifacts/gdna-arena/src/lib/call-network.test.ts,اختبار,23,f65969774ed7dcf9d0e64708dc48d798075d91eda48dcc426233b8fb8c9f60fa
+artifacts/gdna-arena/src/lib/call-network.ts,تنفيذ / إعداد,63,085273ec0e3052084a5e85621070e02d94ca1de6a041f5f10b51998cb8e99924
+artifacts/gdna-arena/src/lib/call-notification-action.test.ts,اختبار,46,f6b12c691403b97a39fcd863e1871a98e136faad6c7e0f7e48e6c1a3e5bcf875
+artifacts/gdna-arena/src/lib/call-notification-action.ts,تنفيذ / إعداد,54,fa4a1b7076ab5c0125f829da8af83faec37c742ff59884835c4bacf9085ebd2e
+artifacts/gdna-arena/src/lib/call-preflight.test.ts,اختبار,95,973c02fe6f779da583f1005c31b54596cd7f3d1a05b15e89de167c9b5e915639
+artifacts/gdna-arena/src/lib/call-preflight.ts,تنفيذ / إعداد,186,a6c9935037ce4877994be175609ce3107da2baf6d017ec40389e72d682760abd
+artifacts/gdna-arena/src/lib/call-ringtone.ts,تنفيذ / إعداد,86,c68c00f240134ddc87df879aa3f037bb28e9796cad06478c3653e0465de274cc
+artifacts/gdna-arena/src/lib/call-rtc-config.test.ts,اختبار,68,725fe1edc44672ede3accad6c98e2d1c3e2357c6d40ea0d59a884ecbf6446a43
+artifacts/gdna-arena/src/lib/call-rtc-config.ts,تنفيذ / إعداد,81,6a2db22c7bd2deee23140933fe8cf6c1d008013d145355435dc306ee4ebf158e
+artifacts/gdna-arena/src/lib/call-signal-dedupe.test.ts,اختبار,31,915b7c33e869095ac6f0a06de55421e9e0d595d1f4b287b340a73b8083407dec
+artifacts/gdna-arena/src/lib/call-signal-dedupe.ts,تنفيذ / إعداد,62,26133b55f78831ec61989c892b76207218791110d58c5ca6c7e787a7c1c48dca
+artifacts/gdna-arena/src/lib/firebase-messaging-sw.test.ts,اختبار,390,096866b5fd3078a39d23bee5c2d9807f86ae63b4c1783116ab3c9b5ccecfd51a
+artifacts/gdna-arena/src/lib/firebase-registration.test.ts,اختبار,27,0c0e5512e783c733c62e48ae5c58c33b2ce9088bf949e38027d1148c281039dc
+artifacts/gdna-arena/src/lib/firebase.js,تنفيذ / إعداد,47,968d2ea147587b73c572e793047ea02897595d7f7805839781d5f68ccf700371
+artifacts/gdna-arena/src/lib/lightweight-call-boundary.ts,تنفيذ / إعداد,133,5df5350de0d0b344b6bcc27f06e83e13dbc22ae2d1d53d88f380cbf0c897cc15
+artifacts/gdna-arena/src/lib/lightweight-call-root.tsx,تنفيذ / إعداد,43,8e7643d1cc8f0791d035af226cc70a0718b2742756e366dba9b4ae0a5ecbae36
+artifacts/gdna-arena/src/lib/lightweight-call-styles.ts,تنفيذ / إعداد,84,2d9b3677ea455ed611f9de823417ab34e2bbbb118b7ebdcb18b65e715a8cd39a
+artifacts/gdna-arena/src/lib/messages-entry.ts,تنفيذ / إعداد,19,18912136762007bac8f8eddf1eda7e3320004dbd45430083d4150b90baa620ea
+artifacts/gdna-arena/src/lib/messaging-subscription-copy.ts,تنفيذ / إعداد,51,dd5c15ce28897787c67fa4852d4487f5c09c64249e7d0c056c19b3515a0f8faf
+artifacts/gdna-arena/src/lite/messaging-subscription.test.ts,اختبار,57,6c7d20f7d3b78f9e6134e29ccc16e58b7c7823f89a36f7b9d5a56117bf1c8125
+artifacts/gdna-arena/src/lite/messaging.ts,تنفيذ / إعداد,229,39bc331af0917961dbf48414874d5b48ca26a3154ee7b274d1f74e4bcaaf8caf
+artifacts/gdna-arena/src/main.tsx,تنفيذ / إعداد,68,afaaab3431b06f9a6be7130b1790b286f934d00afada560a5faa801efcdc8619
+artifacts/gdna-arena/src/pages/chat.tsx,تنفيذ / إعداد,359,8d1126e7ebfd95a2503139efb8ce7100d2147a72ee6f0215f79d077c68601712
+artifacts/gdna-arena/src/pages/messages.tsx,تنفيذ / إعداد,76,6f78cab1d9bf9388bd5926fd55036a6d80669ae09f314d34a6ad78696b3f0769
+artifacts/gdna-arena/src/pages/missed-calls.tsx,تنفيذ / إعداد,75,0d9353af009062a6dbde947d6243399429521c0ac06e7f8baee663f0027d4927
+artifacts/gdna-arena/src/service-worker.js,تنفيذ / إعداد,224,ae3f0d348aab4c2739248c1a279d74496c5026c485011b46d6bc1c59803c5583
+lib/db/src/schema/browser-push.ts,تنفيذ / إعداد,48,2c34c094ac5e1b4273d096c598c1cf2b49c3ca3c65e3d67ac8b9fcb5ade0262b
+lib/db/src/schema/call-state.ts,تنفيذ / إعداد,9,04f4ab3cccad3b15300cbc5b38d654995ac5bda32ab6761dde226b842e63f93b
+lib/db/src/schema/expo-push.ts,تنفيذ / إعداد,23,e21406a044eaa4636d864343673c69cb9b6ec395c4ff8651a866ecdfe3c8577d
+lib/db/src/schema/message-safety-reports.ts,تنفيذ / إعداد,22,dffad640a7b866d16f156303c17991b5c43810caa49a10e0350fe8d5ec1c319d
+lib/db/src/schema/messages.ts,تنفيذ / إعداد,65,0404ded749d047323844138c098efce87ad8e6268b92e272684978f24d613c8b
+lib/db/src/schema/native-call-push.ts,تنفيذ / إعداد,24,62c896d5e59d177c2d5e26a5e9e4f3d03a6c136769cc6438f79c7e505ed7e62e
+lib/db/src/schema/social.ts,تنفيذ / إعداد,57,454bc7962b15a5f42858fc87df9e4a18a11a1ec261d3471b0b9a72a418777bda
+lib/db/src/schema/users.ts,تنفيذ / إعداد,53,40f650acb2144f4242670db315e01e3c40df8d793f6df830902c2286f15afb5e

@@ -1,0 +1,194 @@
+﻿commit,author_time,subject
+185439bbd2df91aeaa9771363294b00f67cedba6,2026-06-25T03:56:53Z,Initial commit
+d4ae7b9c4e2013090e813dd20111dea32ef4b757,2026-07-05T16:34:13Z,Build a complete gaming website with multiple pages and interactive elements
+47cdcfac9a7cf2fdc6d641b5844e7a616ae53efc,2026-07-07T00:35:08Z,Add a dedicated news section for reliable gaming and crypto updates
+a9c663fd5c542e394c169700f0a44cc5586c4449,2026-07-07T00:58:32Z,Add full user authentication and leaderboard features to the gaming website
+b8fed71701129460b551975fbb900b9ec0120502,2026-07-07T01:58:44Z,Add an AI chat feature that responds in Moroccan Darija
+ee3d6935d6a1bfa583e058e254e82901738fc011,2026-07-07T02:16:12Z,Add play-to-earn functionality and wallet features to the gaming website
+069cc607256ada2eadded28424432f2c5dac30e3,2026-07-07T02:35:55Z,Add multi-language support and enhance AI genie capabilities
+86753f2a4e26cf4cd7ade39efa14a22b27d061b2,2026-07-22T01:36:56Z,Add interactive AI terminal component to home page
+bf8e8dff58fefbe8c850db04c5251d6a6294d06e,2026-07-25T17:47:30Z,Update chat API routes and implement GdnAiTerminal features
+3c506a4c26449dc8a0dff818806250f9fa5518a2,2026-07-27T17:14:43Z,Update API client and server definitions
+bf6589b2c00ae9930f8b147be5049b64fc36e924,2026-07-27T22:28:04Z,Remove globalstar artifact and update games page layout
+3225c4f4ba2e40794d82a072911ad41108b0ee10,2026-07-27T22:51:51Z,Refactor navigation component and update language context integration
+b5ffdda942040656517b3d83a5d5b955331bfcd4,2026-07-27T23:08:27Z,Implement language context provider and update navbar configuration
+e4a91ef14f6f1c700e035c2c4d22ba3a8914b745,2026-07-27T23:30:19Z,Update gdna-arena UI components and routes
+cfbeb20152f67c2ebc0e99f40ab28dac254781d2,2026-07-28T00:13:59Z,Refactor figure detail page and update API routes
+afe2360d27a1abfcbc3c71858c658ee693c30f94,2026-07-28T14:15:27Z,Published your App
+e19a384cc50f7ba343614374fa396d153396bdb9,2026-07-29T12:15:00Z,Published your App
+50444238109aca7d8de1781b46b56431107a67f9,2026-08-01T00:32:12Z,Published your App
+1187ba67ba66754fc37273ceee8865d7d3b170e6,2026-08-01T15:06:58Z,Published your App
+2fd7b97c8ca7e596207746f69cbc17bbc3e4d550,2026-08-01T15:36:54Z,Published your App
+4fdde0643996686e05032ce1cdc7e6d13071f306,2026-08-01T15:50:26Z,Published your App
+965820beda551ff57c095b860a73591bcba6ff78,2026-08-02T01:28:47Z,Published your App
+04a9146da2bf3ad6ed97598b5fad838585da3594,2026-08-02T03:12:47Z,Published your App
+14233dbce95af54be49d164038e7793e1ad4f319,2026-08-02T14:20:48Z,Published your App
+80a03c6da265687198701488815345a2fc200018,2026-08-02T14:53:00Z,Published your App
+3d7a428767e0b46b8895a5846d2a12b0d2a3edb1,2026-08-02T15:22:02Z,Published your App
+c5ce7a694f4f0f57f0decfa0e4bbccdfe5ce6c2c,2026-08-02T17:06:20Z,Published your App
+3f3bde4c4ae67defcb9ac7b153248e5dcb1e9d33,2026-08-02T17:50:40Z,Published your App
+0210134d6c07f536861dc1bfa42d83d610975d68,2026-08-03T11:37:59Z,Published your App
+71868f22dfe73a3385acb9ce7aa67d544bd40b3a,2026-08-03T11:59:33Z,Published your App
+f0b349b5ecf21e6f3c84f8785bb482dc5db039f5,2026-08-08T11:36:42Z,Published your App
+a0b21313542df27d1e4b97193a120ccdc1b4b748,2026-08-12T23:40:15Z,Implement messaging and social hub backend enhancements and schema updates
+448488a4eaaa923bfdfc1694947105a68fd0f54c,2026-08-12T23:44:21Z,Implement ameeq route and page functionality
+d29b72d0aa731aaf49848112144108b3b6460d11,2026-08-13T02:21:36Z,Remove unused UI components and update navbar layout in gdna-arena
+43e936f2f1980cef5c00c670d03668f2c978bac0,2026-08-13T02:22:57Z,"Add empire-wide search: GET /api/search?q= endpoint + /search page grouped by Legends, Citizens, Posts, Events"
+fb8db12fb9b2e6da9ec57823482aa5b04afdb11b,2026-08-13T02:24:25Z,"Direct messaging: per-member read cursors, atomic XP cooldown, IDOR gates, navbar unread badge"
+d7f2f6c87e149b1b550e39d0a88fc3ac63d19679,2026-08-13T10:45:54Z,Refactor API routes and cleanup UI components
+f51535ad1c10e0f1355d5350bdc602bcd43264ca,2026-08-13T11:46:24Z,Daily pillar challenge tracker with serialized atomic streaks and XP
+f6e517280b7d5b8d6788432fd7304a0b4135e239,2026-08-13T12:30:53Z,Implement signaling and messaging features in the API server and update the arena UI.
+067469f245c8115271d3fd9498967042c49d1417,2026-08-13T12:48:37Z,Published your App
+5e667531d6ea1a7d753e097f446ed1da36f9aaaf,2026-08-13T14:30:25Z,Implement messaging functionality in API server and UI components
+f1610143de814ae7ac5fcb6699d78f440111b976,2026-08-13T17:07:39Z,Refactor authentication routes and update server and frontend endpoints
+cd3c5a79eecfd224189612fc6fe855259824dddd,2026-08-13T17:17:48Z,"Add MUSIC — PILLAR II page at /music with 7 DB-backed legends, genre filters, DS components, and domain-filtered API"
+33ee8283c9c3ec22ffbf26112083e901d2324ef7,2026-08-13T17:21:15Z,"Add empire-wide skeleton loaders, page fade-in transitions, and count-up stat animations"
+13425d5237a7ccec0757863b5fc597c21604ddc0,2026-08-13T17:22:09Z,Build CINEMA — PILLAR III page with film legends and cinematic DNA
+76aeef6cac40210e46d5cc96bee77f0a277c5023,2026-08-13T17:43:04Z,Add image and YouTube video attachments to Social Hub posts
+2c634eec378f186bb65757b4daf328ee1c2f0a81,2026-08-13T17:43:17Z,GDN-AI Sovereign Mission Engine: daily AI-generated personal missions per citizen
+709f8b784dcdd4e9120427e702de84790136a496,2026-08-13T17:48:52Z,"Real-time notifications: bell badge, XP/coins/like triggers, event-live fan-out job, WS instant delivery"
+3f426ab1d557184fa878559a6066b9a0dbb9201f,2026-08-13T18:12:57Z,Add side-by-side Archon comparison panel on citizen profiles using gdna-ds Button/Card and tokens; fix public archon profile route (req.params) and unblock api-server build
+9dbcfd32ec1ca5fff0ef47d68c2172ff9a7ca856,2026-08-13T18:13:05Z,Restrict API CORS to the app's own dev/prod origins instead of reflecting any origin with credentials
+0133bdcd38fbb8d3c33b9ca378b7cea7193bac0a,2026-08-14T13:32:39Z,Implement empire media API and admin withdrawals page with messaging UI updates
+ce69bdb23ef9d12b400d16a8b8abab2b40a1aa4f,2026-08-14T14:24:05Z,Refactor messages tab component logic
+43b54f2ab2ff4487056fe108e6bbaba172d4e39e,2026-08-14T14:26:36Z,Configure Replit environment and update API server application logic
+41adc5562604bc12fb0a5c4c97a44b73bf1759ba,2026-08-14T14:32:28Z,Update messaging tab UI and minor API and config tweaks
+994eeb00250cda1cf1d8b9ae25580367a8417b8b,2026-08-14T16:08:27Z,Update API routes and implement admin withdrawal page in arena dashboard
+f4a63cf8ccf573abf7fc26f570d89f08e1285059,2026-08-14T16:42:00Z,Implement rights management routes and update admin withdrawal dashboard page.
+feff7db52efadcacbcd129832d01d589ad290647,2026-08-14T17:11:13Z,Update authentication logic and login interface
+a6f34a4d845ed23590f1b4fb74d218428b77d885,2026-08-14T18:02:02Z,Refactor authentication routes and update session persistence configuration.
+cb616229e1846f5ea9013a5b83b9b51198a278f5,2026-08-14T18:19:20Z,Implement authentication logic and session persistence functionality
+78e264bf9f6914a1edca152c60824a4748106989,2026-08-14T18:31:00Z,Refactor and clean up api server code and remove mailer service
+f21ea7423fb126223a15adfcf2d6f97e7fb1abe7,2026-08-14T20:55:53Z,Remove legacy /api/social/feed and /api/social/react endpoints; all consumers use Social Hub v2 API
+ba52deeaf271708ac199f73edd1b8ffae0699b47,2026-08-14T23:15:48Z,Refactor CommHub and implement new message handling logic in the API server
+db8453c6f4ce97514eb1a954fbbd0d64e87f3931,2026-08-14T23:55:39Z,"Add 45s ring timeout for unanswered calls: caller auto-hangs-up with Arabic 'لم يتم الرد' message, callee's incoming banner clears on call-ended"
+a8d546d554fd487bea2f7d7cbc8630a98fd418a0,2026-08-14T23:56:05Z,"Add real mini-game screens for Neon Racer, Crypto Clash, and Arena Strike with outcome-synced API"
+2590a627a7cbee778cb9cd82d9ceb906a374d4f9,2026-08-14T23:56:16Z,"feat(mobile): GDNA Arena Expo companion app — login, games (3 standard + GlobalStar tournament), GlobalStar voting, leaderboard, profile, GDN-AI chat"
+0d76237a2c7295dffecc0d2c82d7457900535e21,2026-08-15T16:55:56Z,Refactor messenger component and update project configuration
+3641a9bf3f8a89c3a7dee71ab3844b490a2f4212,2026-08-15T18:09:11Z,Git commit prior to merge
+1e0fd784f81191a871e91a7b55eb0a08196cd6cb,2026-08-15T18:09:11Z,"Chat attachments now stream directly into Replit App Storage (no memory buffering, no local disk) so they survive production republishes; idempotent boot-time migration rescues legacy disk files; same /api/messages/files URLs, security headers, and rate limit preserved"
+987043c806af9aab98dc04673b666e7e34958cfc,2026-08-15T18:09:17Z,"Show daily Imperial Council reports on the admin dashboard (admin-only), gate the reports API to admins, expose isAdmin via /auth/me"
+2bf046230f0e84e475a2ef525e1e51ad524f3265,2026-08-16T02:08:50Z,Move GDNA calls to Agora RTC with participant-authorized tokens and validated signaling
+eba587a8e50afb773deec7a37f02889f3f052d9d,2026-08-16T02:41:46Z,Update PPO API routes and adjust call overlay component
+fcc8d020507ff915fbb65170d0caf23db0c26cc7,2026-08-16T02:57:34Z,Implement clips API route and update associated configurations
+77e24fe8313ac309afc0f36d69477eef6e86194e,2026-08-20T18:32:51Z,GDNA Update - 2026-08-20 18:33
+48db78f17b3df38c90aea4da842c9435ef7f5985,2026-08-20T18:58:08Z,Implement authentication and game routing updates with registration UI enhancements
+9e48248887cc8097aa83cf14ebe5954c43ca39ed,2026-08-20T19:00:25Z,"Messenger: multi-photo select with pre-send previews, per-file upload progress, and friendly 15/10min limit handling"
+27c02eb2971967136996a4f0f594da39b1acc5a4,2026-08-20T19:33:29Z,Notify citizens in real time when followed
+51562ebd9df80254e6f03060f0370f8728a485d5,2026-08-20T19:34:35Z,Add followed-citizen Social Hub feed
+e30be43acdc24f33f02d3e6ca76498736e177340,2026-08-20T20:10:24Z,GDNA Update - 2026-08-20 20:11
+8b68b4ca5872de5a5deccf80223c2d514ff40c46,2026-08-20T20:26:56Z,Restore API type safety with a required database pool and handler fixes
+f7ad944f2e4387724f22bce18c0b4f2768898995,2026-08-20T20:31:03Z,GDNA Update - 2026-08-20 19:41 UTC
+79f9587582d4f204aad3c27d74182d1d07e3937e,2026-08-20T20:38:06Z,Show privacy-preserving AMIS read receipts
+dd4edb92119bc005446be0bf418fdb51bf751c38,2026-08-20T20:38:08Z,Let citizens delete conversations from AMIS settings
+499ef35c6e2527f16e187b9ea1122285d1cdb802,2026-08-20T20:49:13Z,Add Agora-based pre-dial connection test
+3bdbdad462d09c39b2216ac96f327bf80b6ae794,2026-08-20T20:52:36Z,"Improve AMIS composer media tools, call recovery, and realtime message delivery"
+b9a876e4e16b8ad29dc9286c37aa757f4fc7df25,2026-08-21T03:21:38Z,Implement age gate enforcement and message API functionality
+d58f834d94758c00a8faddbcadb015b50ae1773b,2026-08-21T04:01:32Z,Implement robust authentication signaling and session persistence logic
+3219a78c50802d10d2ab1ee21bf5df657f93d37a,2026-08-21T05:54:55Z,Git commit prior to merge
+88b56e7d1c3fdf8a384840ad2586b567ff20df12,2026-08-24T23:21:33Z,Update messenger and citizen API routes
+5bb1f2d41f8339b12304062888f4219e20e0de18,2026-08-24T23:55:03Z,Implement solidarity relay functionality in the messenger and API server
+237f93fec2d3bf2400cc0e4ff0d6d0f9e9a31d19,2026-08-25T05:47:57Z,Implement communication matrix component and add social i18n support
+c5e67699000fc1f84d7df0bb41305dd1c61c6a2f,2026-08-25T14:48:38Z,Implement signaling improvements and add message handling routes
+8877f8a17eabc0947457fc5fb1cf9ed0a818459c,2026-08-25T16:40:48Z,Update signaling logic and message routes while refining agent memory docs
+006a051212445189f221560a5b52c167e7c48c52,2026-08-26T00:58:21Z,Update Replit configuration and tweak call overlay component
+cf12baab18b1efff94af60b5a8c466b614ea709e,2026-08-26T01:19:37Z,Implement Agora configuration and update RTC call logic
+094d4871134061ed01bf2f077c70f926c3b90f92,2026-08-26T02:17:59Z,Refactor messenger component and update documentation
+147cbdcee0177f599ded61edd78b29c0690f7ccf,2026-08-26T02:42:14Z,Update agora configuration and refactor rtc route handling
+60cdb7fd7a45a6eeb1a5bb2206fec212acd49356,2026-08-26T03:05:31Z,Bring full secure AMIS experience to native mobile
+b4a4e9939e06b2a8c7069b0b1fbd3c408336b650,2026-08-26T11:39:05Z,Refactor mobile application navigation and chat interface components
+f8f718b5a4239de39dbd5c8dcda01de13c81f9e1,2026-08-26T13:44:25Z,Implement new api features and clean up project configuration
+73bad379fe712477cbe9b800c4e2b22c0f82718d,2026-08-26T14:02:45Z,Add beta simulation banner and update arena homepage configuration
+085b7047efe33d658a186d097351aface86966a0,2026-08-26T19:29:40Z,Refactor navbar and login page components in gdna-arena.
+b6c19e12646e4bd65895ee30f3870c2a82f05b5f,2026-08-30T01:00:49Z,Git commit prior to merge
+b56bb3da130a92f9bc3423bfd6899ca5d16271bb,2026-08-30T03:01:30Z,Serve sport legend photos locally across all legend surfaces
+da9d86c06fe304b85b924430c64fb2b8579c4149,2026-08-30T03:27:38Z,Implement new penalty king game route and dashboard functionality
+e1581689dd0531601b9858f807eab487fbfadf74,2026-08-30T03:37:16Z,Remove the global floating chat button
+ff5274a9b828190eacfa8adebf1a7eda0c065db2,2026-08-30T23:59:10Z,Git commit prior to merge
+1f50dc8faf7f4cbdf3ba308b7a78e4708edc7562,2026-08-31T00:48:06Z,Finish token migration and prevent invalid gold alpha CSS
+0bba7499ad07ccb71dbc4e700c3ca551ed3a1559,2026-08-31T01:01:17Z,Update design system assets and application UI components
+8a9d0857793ef586161ff25829606e374381ae77,2026-08-31T03:46:46Z,Update API server logic and add production schema ownership memory file
+153aa287db308a1928e821114e51ed3a08876aea,2026-08-31T13:44:47Z,Complete five-language localization across GDNA Arena web
+e585f618067228b13467df276a98dc4b25febe16,2026-08-31T15:13:46Z,Implement game signaling and penalty king mechanics update
+a7d99df3751670cdde20201211fd13bec797969e,2026-09-01T00:11:36Z,Prevent silent media failures in Agora calls
+551055eadfdee1f13075963e7663d9302be772f1,2026-09-01T00:18:11Z,Persist Social notification read state across reloads
+3a65d3d5139e77919488f1d2ac8a9cab286ea375,2026-09-01T00:40:02Z,Add live call device switching and recovery controls
+8b498d2a56b223f7048869a24434d71fa281c70e,2026-09-01T00:40:49Z,Open the selected MESSAGERI conversation from citizen DM actions
+fc265c999f512802b383f1edd93e41b31211164a,2026-09-01T02:02:31Z,Implement mobile contact picker in messenger component
+7eba9a54aaa12e38622841cb970a552464adfb20,2026-09-01T02:06:51Z,Update messenger component logic and localization copy
+9e692a6788c80395ef98c359c36c30b4fde73bb7,2026-09-01T02:08:25Z,Add call functionality and corresponding tests to CallOverlay component
+3b658fa8790e1abda08fdcb54dc6f5467651fed3,2026-09-01T02:17:17Z,Implement message receipt deletion functionality with supporting tests and signaling updates
+c9d610a3590b54f789a01dc039cd58ebd770b699,2026-09-01T02:20:31Z,Track privacy-safe call device switch and recovery outcomes
+654877d7224884825fdd77572ddffd03044cb2d3,2026-09-01T02:50:58Z,Refactor messenger component and clean up unused code in pages
+ccc77d9b8665d737df5b2333579829ad2b4124d9,2026-09-01T03:00:58Z,Implement offline missed call signaling and add integration test coverage
+ffb173191bce8a788de5a96a5df7f1ce82180394,2026-09-01T03:07:38Z,Clean up replit configuration and refactor useCall hook logic
+ea5468cbf73a5b914191e2fb98e9825dbed3348c,2026-09-01T03:15:06Z,Refactor call overlay and live recording logic
+9322559c48ed5ae2676f4a17e014c0e33ce560f8,2026-09-01T03:36:35Z,Implement live call and recording overlay enhancements
+4e2664106cdd31303e99e6de2969a056a28c4d43,2026-09-01T03:54:40Z,Update environment config and add age gate to legal component
+ac2db7cd24625e72062b8da8176e4583eeff9333,2026-09-02T02:28:05Z,Add agora token authorization integration test and update signaling logic
+5359c8b3871da584b5b6d6a7b12c71d4a6a87c66,2026-09-02T02:44:04Z,Implement messenger component enhancements and update related documentation and translations
+af4ca9ab48e1a8d0e7888efb914d7f14394f291f,2026-09-02T02:52:58Z,Update messenger component and agent documentation
+9a7a4694791425511331cd14487a7b5a82605fdc,2026-09-02T04:34:25Z,Implement royal verification system and update API routes
+f5f41ecccaa99fe1837458245e1c3cb33c89e3ff,2026-09-10T18:44:06Z,Published your App
+7cc9f2cf7a1f2affd1942ac8dd612a8ba6f13446,2026-09-10T19:21:35Z,Refactor signaling logic and update project configuration
+0c93380325ea97cb1dce3bd44dca8b8289e1910e,2026-09-12T23:09:23Z,Implement signaling logic and update documentation and dependencies
+09d1c5f9ede852412f23321eb8e9a48a818c3ac6,2026-09-12T23:56:11Z,Refactor Firebase messaging logic and update project configuration
+3e04e47032a279c03ec96ac71a7d8270b0b20507,2026-09-13T00:33:24Z,Refactor firebase call push logic and add tests
+25c1072032d5a36b573516defdd3e6d65ed22a95,2026-09-13T00:47:13Z,Refactor Firebase service account authentication and cleanup call push logic
+d6f5c297a0180b1048b458894380e8d7f0677256,2026-09-13T01:09:12Z,Implement Firebase messaging and service worker enhancements
+f5353e6b353a766945b8e7eec9debe62450aa5f7,2026-09-13T12:13:16Z,Update memory documentation and refactor API server signaling logic
+ca33fd9126ee42dcb7e2ce6bd58cc61a79aa2f9d,2026-09-13T13:31:04Z,Refactor finance event handling and clean up api server codebase
+82954cedad9b053f58ac718b570102487dfa164b,2026-09-13T16:10:28Z,Implement firebase call push logic and update test coverage
+3b6f5616f859a2caefba7196bf07b495100e313c,2026-09-13T18:48:55Z,Refactor firebase signaling and service account logic
+fd333af926d01bd0773d41f7c0867de59ba5a6ed,2026-09-16T23:37:20Z,Refactor firebase service account implementation and update push probe script
+6be6879c36be5957e0edc4866faedb2ee332d332,2026-09-17T08:47:55Z,Refactor core jobs and routing logic to optimize neural processing
+3afb369489337b265baab0626c1b72f26f53eda4,2026-09-17T10:42:22Z,Implement firebase push notifications and update agent documentation
+d83f6373e02373eb26dedfcc23772dbf9bc18b73,2026-09-17T18:00:18Z,Refactor firebase call push logic and update test coverage
+daffc48eb4dd68a3c5be8a31a4ff75b9d510e0a9,2026-09-17T19:29:09Z,Implement Firebase signaling and state persistence for RTC calls
+7dcf1bd02fa7ed083458c80f515765774fddd719,2026-09-18T00:04:58Z,Implement browser push notification functionality and add supporting tests
+caf8a1924c0e04ca3ec230f67f40f3b01f97557d,2026-09-18T00:29:46Z,Implement chat persistence and message handling features
+2510d24b23346484f13fddb525cabca5daf6e40d,2026-09-18T01:25:28Z,Refactor clip route handling and update arena dependencies
+07ef04d3a4f57bc392386c59ba3aa2e2e0baf6ec,2026-09-18T01:26:07Z,Add bounded persistent clip poster backfill with deletion-safe retries
+f182d9d45545c8f9f40dc60b01ae0da58f233974,2026-09-18T01:46:15Z,Persist clip storage cleanup atomically and retry deletion across outages and restarts
+8400ccd7023243155133d9302d56bd70d3020574,2026-09-18T08:31:07Z,Preserve coherent merged clip router and complete admin preview requeue
+8494d99c27027132ea444363cda019d4afbc38a5,2026-09-18T09:13:44Z,Refactor clip duration logic and update upload protocol
+42b2ccc6d258ea01efff00c4f46f64b283a5c39b,2026-09-18T09:57:04Z,Implement clip upload protocol and monetization logic
+5936b7fbc5cfa8311b1077f0a6dc6724ece56c26,2026-09-18T13:54:03Z,Update clip publishing logic and document agent memory changes
+70f53f058830331854d8a6acfbb085c97a9bd63c,2026-09-18T15:33:37Z,Implement and test clip upload protocol enhancements
+59fde165281f1d96650ef3b97e440d1b4632955d,2026-09-18T17:04:28Z,GDNA Update - 2026-09-18 17:04 UTC
+117e0574b83dbeb40ae5ef5c6a8ab9895f234ef4,2026-09-18T19:38:37Z,GDNA Update - 2026-09-18 19:38 UTC
+4c97c3c67cc02162276e2c3eb04700c2aed28f6f,2026-09-18T20:44:56Z,Add native clip playback with background media controls and signed URL recovery
+db51e073ee4708afbb038d7abd96f620a9d9e65c,2026-09-19T02:20:13Z,GDNA Update - 2026-09-19 03:20
+4536e6eb755cdcc768a7a6790a8891409f8b558f,2026-09-19T04:24:45Z,Refactor global call alerts and update clip player logic
+5f42a6a175e04b0e81462e9d7159fcf4267b74a5,2026-09-19T09:50:01Z,Update messaging logic and cleanup jobs in api-server
+12d9d7532691ae2fdf16ff61feebacc637905153,2026-09-19T10:37:28Z,Update memory documentation and refactor API server jobs and storage cleanup logic
+f71b669d306541a91fb724c1fa265903cfb235d5,2026-09-22T01:38:49Z,Git commit prior to merge
+0b1e6203cec299f9515ebc30e31c7b4d48e490cc,2026-09-22T01:42:11Z,Merged changes from 8brso1zm/main
+1dc18f371c8bb7fb61496170e354744c1d892329,2026-09-23T17:02:02Z,Implement video reel feed functionality and update API routes
+cf2033f5870236aeb575cbcbe8b12180caf0d2eb,2026-09-23T17:16:19Z,Refactor messenger component and update call logic and routing
+c70f0497c0ca1ab8001152dc1844f465f51fe3aa,2026-09-23T22:23:46Z,Update API server logic and environment configuration
+53ef2df13254c784aade3d2952c11ef6338bccf3,2026-09-24T19:14:41Z,Refactor navbar layout and update design system documentation
+5dcf13d92ff492542e776c91e64827f76110ad85,2026-09-25T01:17:29Z,Implement firebase call push integration and update media verification logic
+f2bd0684faa704cd1e7fc75b9347ae03d9130381,2026-09-26T18:01:47Z,Implement call signaling store and update database test suite
+ddc6b0dfd2ffa38df494c3346ae922599521cfe5,2026-09-26T18:33:33Z,Conclude calls and messaging code handover; harden native permission and account lifecycle checks
+d86f6329c2d02b400a2e8853092e0f355889a610,2026-09-26T19:13:55Z,"Prioritize Android preview build, disable unprovisioned iOS VoIP, and harden calls and video uploads"
+a34d71fa45a6d4e94d8f0ce8375ee12ee53cc0d8,2026-09-27T13:48:37Z,Update replit configuration and expand test coverage for auth and clip upload components
+b48b874d60725c953fdb5d68a332336b978e44e2,2026-09-27T15:13:12Z,Deliver signed Telecom preview and ten-message trial; repair merged Expo plugin
+b7208f568ca2e9322034c4d59ea4d09ed2ca167c,2026-09-28T10:34:02Z,"Verify live Expo GitHub repository link, merge source PR and launch GitHub Android build; document external evidence"
+183b1d02636d374d49c55e1d00dc74b460a3a96b,2026-09-28T23:33:24Z,Update mobile app configuration and dependencies
+1a043ff0b4d783184f422629a9dda1d581743eac,2026-09-30T00:24:30Z,Refactor arena application architecture and update message manifest handling
+1eaa019d193cfc7c33c9dea3e31f982bab2fe069,2026-10-01T15:45:53Z,Implement browser push notification and call signaling functionality
+07dd8333d5da8bbb07ca0086b89fc7db591e4a62,2026-10-01T16:26:21Z,Implement lightweight call boundary and update call handling logic
+c3fddccf86fd644d2c6d91d23b3fef95edaece89,2026-10-01T17:24:43Z,Implement messaging quota logic and update schema ownership documentation
+d2109f392dfb4ed9e6963913edb00e575232b123,2026-10-01T18:17:38Z,Refactor signaling and call state management logic
+e53fd84a48888af59b5546e5be5f6f686ca15155,2026-10-01T19:50:07Z,Refactor authentication and update push notification logic
+d06a056565e9c2155565bb749ec42da1e4400571,2026-10-01T20:26:56Z,Add single-use offline account recovery with web/mobile management and durable credential revocation
+49f30e4f68b5d14a42a1c5db6a434b87e5759e6b,2026-10-01T20:49:13Z,Implement account recovery logic and update authentication flows
+781b4986c835adc7a3e318e9c0eccd7af32596a4,2026-10-01T21:50:31Z,Refactor call signaling and messaging entitlement logic
+2b4a6a83cd4e4e393d88313c020fdbffcfb2a6b8,2026-10-01T22:43:07Z,Refactor useCall hook logic
+f1e6b2569817b929568ef928fe59263a2d69f774,2026-10-02T01:21:40Z,Implement firebase push notification boundaries and update documentation
+0a088db64a961bd476297b564046471fbd17fbfe,2026-10-02T11:26:32Z,Published your App
+17b69bc730f00b3eab8facaa84177553cbac3877,2026-10-02T13:58:14Z,Refactor signaling logic and update memory documentation
+313bbacd935cede486015b1b451891a9615564ad,2026-10-02T14:11:52Z,Refactor call signal store and update documentation
+c8c08972df264aff6e22753e2a65b514a4ac08a9,2026-10-02T16:56:25Z,Implement direct file attachment upload functionality
+7d8e3c10d0d8b6d1f730c2c0c3e688a29691611d,2026-10-03T00:52:55Z,Simplify Clips and encrypted chat uploads to direct immutable R2 PUT with verified CORS and audit report

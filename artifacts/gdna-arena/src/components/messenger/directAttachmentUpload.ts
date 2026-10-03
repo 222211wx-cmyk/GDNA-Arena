@@ -1,34 +1,32 @@
 export async function directAttachmentUpload(
   endpoint: string, blob: Blob, signal: AbortSignal, progress: (value: number) => void,
 ): Promise<{ url: string }> {
-  async function metadata(body: unknown, requestSignal?: AbortSignal) {
+  async function metadata(body: unknown) {
     const response = await fetch(endpoint, { method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: requestSignal });
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "تعذر رفع الملف — حاول مرة أخرى");
     return data;
   }
-  let ticket: string | undefined;
-  try {
-    const upload = await metadata({ action: "start", size: blob.size }, signal);
-    ticket = upload.ticket;
-    if (!ticket || !Array.isArray(upload.urls) || upload.chunkSize !== 5 * 1024 * 1024) throw new Error("Invalid upload response");
-    for (let i = 0; i < upload.urls.length; i++) {
-      const chunk = blob.slice(i * upload.chunkSize, (i + 1) * upload.chunkSize);
-      let done = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const response = await fetch(upload.urls[i], { method: "PUT", body: chunk, signal, credentials: "omit" });
-          if (!response.ok) throw new Error("تعذر رفع الملف إلى التخزين");
-          done = true; break;
-        } catch (error) { if (signal.aborted || attempt === 2) throw error; }
-      }
-      if (!done) throw new Error("Upload failed");
-      progress(Math.round(Math.min(blob.size, (i + 1) * upload.chunkSize) / blob.size * 100));
-    }
-    return await metadata({ action: "complete", ticket }, signal);
-  } catch (error) {
-    if (ticket) void metadata({ action: "abort", ticket }).catch(() => {});
-    throw error;
-  }
+  const upload = await metadata({ action: "start", size: blob.size });
+  if (typeof upload.url !== "string" || typeof upload.ticket !== "string") throw new Error("Invalid upload response");
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const finish = (error?: Error) => {
+      signal.removeEventListener("abort", abort);
+      error ? reject(error) : resolve();
+    };
+    xhr.open("PUT", upload.url);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("If-None-Match", "*");
+    xhr.upload.onprogress = event => { if (event.lengthComputable) progress(Math.floor(event.loaded / event.total * 100)); };
+    xhr.onload = () => finish(xhr.status >= 200 && xhr.status < 300 ? undefined : new Error("تعذر رفع الملف"));
+    xhr.onerror = () => finish(new Error("تعذر الاتصال لرفع الملف؛ حاول مرة أخرى"));
+    xhr.onabort = () => finish(new DOMException("Cancelled", "AbortError"));
+    if (signal.aborted) { finish(new DOMException("Cancelled", "AbortError")); return; }
+    signal.addEventListener("abort", abort, { once: true });
+    xhr.send(blob);
+  });
+  return metadata({ action: "complete", ticket: upload.ticket });
 }

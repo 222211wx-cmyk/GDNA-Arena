@@ -687,6 +687,21 @@ export default function Dashboard() {
     if (!loading && !user) setLocation("/login");
   }, [user, loading, setLocation]);
 
+  useEffect(() => {
+    if (!user || loading) return;
+    const scrollToSettings = () => {
+      if (window.location.hash === "#account-settings") {
+        document.getElementById("account-settings")?.scrollIntoView({ block: "start" });
+      }
+    };
+    const frame = requestAnimationFrame(scrollToSettings);
+    window.addEventListener("hashchange", scrollToSettings);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", scrollToSettings);
+    };
+  }, [user?.id, loading]);
+
   if (loading) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center" lang={lang === "de" ? "de-DE" : lang}>
@@ -953,6 +968,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Settings — change password directly (no email codes) */}
+      <div id="account-settings" className="scroll-mt-32" />
       <RecoveryPhoneSettings key={user.id} />
       <RecoveryCodeSettings key={`code-${user.id}`} showPageLink />
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>

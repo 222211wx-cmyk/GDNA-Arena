@@ -1,4 +1,11 @@
 /* Standard Web Push handlers appended to the canonical PWA worker. */
+// One-time retirement of the old Clips queue only. Never touch chat keys/outbox.
+self.addEventListener("activate", event => {
+  event.waitUntil(new Promise(resolve => {
+    const deletion = indexedDB.deleteDatabase("helixly-clips-uploads-v1");
+    deletion.onsuccess = deletion.onerror = deletion.onblocked = () => resolve();
+  }));
+});
 // Worker replays ciphertext only; no plaintext, decryption keys, or API caches.
 self.addEventListener("sync", event => {
   if (event.tag !== "gdna-lite-outbox") return;

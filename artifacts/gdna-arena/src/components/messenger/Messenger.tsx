@@ -1649,7 +1649,9 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       if (typeof detail.recipientUserId === "number" && detail.recipientUserId !== user?.id) return;
       if (detail.roomId === activeRoomIdRef.current) {
         if (user) {
-          void decryptMessageForUser(detail.message, user.id, st).then(message => {
+          void decryptMessageForUser(detail.message, user.id, st).catch(() => ({
+            ...detail.message!, content: `🔐 ${st.secure_other_device}`, encrypted: true, decryptionFailed: true,
+          })).then(message => {
             if (mountedRef.current && detail.roomId === activeRoomIdRef.current) appendMessage(message);
           });
         }
@@ -1736,7 +1738,10 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
       if (!r.ok) return;
       const j = await r.json();
       const decrypted = user
-        ? await Promise.all(((j.messages ?? []) as DmMessage[]).map(message => decryptMessageForUser(message, user.id, st)))
+        ? await Promise.all(((j.messages ?? []) as DmMessage[]).filter(message => message && typeof message === "object").map(message =>
+          decryptMessageForUser(message, user.id, st).catch(() => ({
+            ...message, content: `🔐 ${st.secure_other_device}`, encrypted: true, decryptionFailed: true,
+          }))))
         : [];
       // Only commit if this room is still the active one (guards stale responses
       // from a previously opened room resolving late) and we're still mounted.

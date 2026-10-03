@@ -1,5 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { CreateMultipartUploadCommand, UploadPartCommand, ListPartsCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, CreateMultipartUploadCommand, UploadPartCommand, ListPartsCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2Client, r2Config } from "./r2-storage";
 
@@ -33,6 +33,16 @@ export async function beginChatUpload(user: number, room: number, size: number) 
   const base = params(name);
   // Verify signing configuration before allocating storage.
   signature(name);
+  const directTicket: Ticket = { user, room, size, name, upload: "direct-put", expires: Date.now() + 3600_000 };
+  const url = await getSignedUrl(r2Client(), new PutObjectCommand({
+    ...base, ContentType: "application/octet-stream", ContentLength: size, IfNoneMatch: "*",
+  }), { expiresIn: 3600 });
+  return { ticket: encode(directTicket), url };
+}
+/** Historical multipart completion remains supported for already-issued tickets. */
+export async function beginLegacyChatUpload(user: number, room: number, size: number) {
+  const name = `r2chat-${randomUUID()}.enc`;
+  const base = params(name);
   const created = await r2Client().send(new CreateMultipartUploadCommand({ ...base, ContentType: "application/octet-stream" }));
   if (!created.UploadId) throw new Error("Upload initialization failed");
   const ticket: Ticket = { user, room, size, name, upload: created.UploadId, expires: Date.now() + 3600_000 };
@@ -44,10 +54,17 @@ export async function beginChatUpload(user: number, room: number, size: number) 
   } catch (error) { await abortChatUpload(ticket).catch(() => {}); throw error; }
 }
 export async function abortChatUpload(ticket: Ticket) {
+  // Do not delete a completed direct object: a lost response may already be in a message.
+  if (ticket.upload === "direct-put") return;
   await r2Client().send(new AbortMultipartUploadCommand({ ...params(ticket.name), UploadId: ticket.upload }));
 }
 export async function completeChatUpload(ticket: Ticket) {
   const base = params(ticket.name);
+  if (ticket.upload === "direct-put") {
+    const head = await r2Client().send(new HeadObjectCommand(base));
+    if (head.ContentLength !== ticket.size || head.ContentType !== "application/octet-stream") throw new Error("Incomplete upload");
+    return `/api/messages/files/${ticket.name}`;
+  }
   let parts;
   try {
     const listed = await r2Client().send(new ListPartsCommand({ ...base, UploadId: ticket.upload }));

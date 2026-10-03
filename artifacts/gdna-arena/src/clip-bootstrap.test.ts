@@ -64,29 +64,18 @@ describe("ultra-light clip bootstrap", () => {
     expect(clip).toContain('dataset.clipReady = "true"');
   });
 
-  it("uploads directly to R2, persists original bytes for resume, and locks metadata", () => {
+  it("uploads the original File directly with no compression, queue or storage UI", () => {
     const transport = source("./components/clips/clipUpload.ts");
     const clip = source("./clip-entry.ts");
-    // Direct-to-R2 invariant: each sliced part is sent by XHR PUT to the
-    // presigned URL itself (XHR enables byte progress), never a proxied/Tus path.
-    expect(transport).toContain("api/upload/presign");
+    expect(transport).toContain("api/clips/presign");
+    expect(transport).toContain("api/clips/confirm");
     expect(transport).toContain('xhr.open("PUT", url)');
-    expect(transport).toContain("xhr.send(bytes)");
-    expect(transport).toContain("putR2Part(signed.url, file.slice(start, end), signal, onProgress)");
-    expect(transport).not.toMatch(/tus-js-client|new tus\.Upload|storeFingerprintForResuming/i);
-    // Foreground-only fallback uses the exact File; durable resume uses stored
-    // original bytes, not metadata fingerprints.
-    expect(transport).toContain("new WeakMap<File, string>()");
-    expect(transport).toContain("enqueueFile(file, metadata, owner, true)");
-    expect(transport).toContain("storePreparedFile(record, original, file, controller.signal)");
-    expect(transport).toContain("navigator.locks.request(lockName(id)");
-    expect(transport).not.toContain("localStorage");
-    expect(transport).not.toContain("contentHash");
-    // Fixed 5MiB parts and the explicit 10GiB transport ceiling.
-    expect(transport).toContain("UPLOAD_CHUNK_BYTES = 5 * 1024 * 1024");
-    expect(transport).toContain("MAX_CLIP_BYTES = 10 * 1024 * 1024 * 1024");
-    // Metadata controls stay locked for the duration of an upload.
+    expect(transport).toContain("xhr.send(file)");
+    expect(transport).not.toMatch(/prepareClip|uploadQueue|indexedDB|localStorage|navigator\.locks|RETRY_DELAYS/);
+    expect(clip).not.toMatch(/storage-badge|pending-uploads|Cloudflare|R2|GiB|quota|Préparation|Traitement serveur|>Pause</);
+    expect(clip).toContain(">Annuler</button>");
     expect(clip).toContain("mutableControls.forEach(control => { control.disabled = true; })");
     expect(clip).toContain("mutableControls.forEach(control => { control.disabled = false; })");
+    expect(source("../vite.config.ts")).not.toContain("uploadWorker");
   });
 });

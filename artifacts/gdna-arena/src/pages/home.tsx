@@ -853,8 +853,8 @@ export default function Home() {
       </section>
 
       {/* ── BOTTOM SECTION: Legends + Recent Activity ──────────────── */}
-      <section className="px-4 pb-20 max-w-7xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-8">
+      <section className="px-4 pb-20 max-w-7xl mx-auto overflow-x-clip">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 [&>div]:min-w-0 [&_h2]:break-words">
           {/* TOP 3 LEGENDS */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}

@@ -15,7 +15,13 @@ The official Helixly platform must continue to include every existing component 
 
 **Why:** The owner explicitly confirmed that division into tabs must preserve the complete official platform, with Clips (Hc) and Messages (Hm) validated first.
 
-**How to apply:** Focus implementation and verification on those first two sections before starting work on the remaining tabs, then proceed one tab at a time. The newer homepage entries (Clips, Messages, Arena, Social) supersede the older four-door presentation described below; do not restore the older entry layout based on this historical note.
+**How to apply:** The owner now requests a full flat vertical platform directory, with Calls and Messages first and Reels second, followed by the existing citizen sections. Keep the current platform name above a horizontal tools/settings/language row. This supersedes the limited four-entry presentation; historical navigation supplies section inventory, not old branding or authentication gates.
+
+All platform tabs have equal importance; their order does not grant one priority over another.
+
+**Why:** The owner clarified that Calls and Messages, followed by Clips, reflect the current work sequence only, not preferential status over the other sections.
+
+**How to apply:** Preserve equal visual treatment and access for all sections. Do not describe the first two tabs as more important or use the current work sequence to hide, demote, or remove others.
 
 Complete and expose each section independently only as it becomes ready, while keeping that same section and all its ideas/content in the parent platform. Its direct entrance must share ongoing updates rather than become a separately maintained copy.
 

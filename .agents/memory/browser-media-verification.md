@@ -5,6 +5,12 @@ description: Output verification, large-upload control-plane checks, and honest 
 
 Check the actual encoded output when changing media processing; upload success and a playable container are not sufficient evidence.
 
+Before treating a headless MP4 playback error as an application regression, test the identical local fixture and exact codec support in that browser.
+
+**Why:** Workspace headless Chromium rejected both a published H.264 file and its unchanged local Blob with `DEMUXER_ERROR_NO_SUPPORTED_STREAMS`; full-file hashes and range responses proved intact transfer, not playback support.
+
+**How to apply:** Record `canPlayType`, the media error, local-fixture behavior and full content integrity separately. Do not claim real-device playback merely because transport passes.
+
 A black player screenshot alone does not establish a broken stream; inspect the actual poster and a later decoded frame before attributing it to rendering.
 
 **Why:** Live Clips returned a fully black thumbnail while the same H.264/AAC video contained valid visible footage later. Browser autoplay restrictions can leave that black initial state waiting for a gesture.

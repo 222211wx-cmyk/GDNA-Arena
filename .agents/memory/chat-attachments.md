@@ -11,8 +11,8 @@ Message attachments upload via a login-gated endpoint and are served from a logi
 - Frontend must wrap relative `/api/...` attachment URLs through the `api()` base-path helper when rendering (artifact path routing).
 - Preserve historical App Storage attachments alongside newer R2 attachments; never migrate or delete historical media merely to change the upload transport.
 
-**Direct-upload policy:** Messages uploads use server-authorized R2 presigned multipart URLs with 5 MiB parts, and browser-encrypted bytes go directly to storage.
-**Why:** The owner explicitly requested this transport after reporting a 4.2 MB MP4 failure. This supersedes the earlier App Storage-only rule for new web message uploads, not for historical attachments.
+**Direct-upload policy:** Messages uploads use a server-authorized single R2 presigned PUT, and browser-encrypted bytes go directly to storage. Keep historical multipart tickets readable during transition.
+**Why:** The owner explicitly requested a simple direct PUT after reporting a small image failure. This supersedes multipart for new web message uploads, not encryption or historical attachments.
 **How to apply:** Keep encryption, room authorization, ciphertext-size limits and private reads/deletion intact. Network/storage failures must leave the conversation and selected files available for retry, without reload or navigation. Do not claim a successful real-device upload based solely on compilation or CORS checks.
 
 **Image-size policy:** The 5 MB limit is image-specific and applies before browser encryption; do not reduce unrelated attachment limits or omit encryption overhead from transport limits.

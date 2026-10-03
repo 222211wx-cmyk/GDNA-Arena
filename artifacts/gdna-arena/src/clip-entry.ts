@@ -2,18 +2,12 @@ import { tokens } from "@workspace/gdna-ds/tokens";
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import { announceAccountChange, fetchSharedClipSession, subscribeAccountChanges, subscribeSessionWake } from "./lib/account-session-events";
 import {
-  MAX_CLIP_BYTES,
   uploadClip,
-  runQueuedUpload,
-  discardQueuedUpload,
-  pauseQueuedUpload,
-  markQueuedPaused,
-  currentUploadOwner,
+  MAX_CLIP_BYTES,
+  FILE_TOO_LARGE_MESSAGE,
   type ClipUploadMetadata,
-  type ClipUploadProgress,
 } from "./components/clips/clipUpload";
 import { readClipDuration } from "./components/clips/readClipDuration";
-import { listQueue } from "./components/clips/uploadQueue";
 
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
 import { reelsShellCss } from "./components/clips/reelsStyles";
@@ -46,14 +40,6 @@ style.textContent = `
   .copy-link-fallback{inline-size:min(100%,28rem)}
   .clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}article{overflow:visible}
   a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important}
-  .storage-badge{display:flex;align-items:center;gap:calc(${space} * 2);font-size:.8125rem;flex-wrap:wrap;margin:0}
-  .storage-dot{inline-size:.5rem;block-size:.5rem;border-radius:9999px;background:${palette.mutedForeground};flex:none}
-  .storage-text{font-weight:600;color:${palette.mutedForeground}}
-  .storage-bucket{font-size:.75rem}
-  .storage-badge[data-state=connected] .storage-dot{background:${palette.chart3}}
-  .storage-badge[data-state=connected] .storage-text{color:${palette.chart3}}
-  .storage-badge[data-state=error] .storage-dot{background:${palette.destructive}}
-  .storage-badge[data-state=error] .storage-text{color:${palette.destructive}}
   ${reelsShellCss(palette as unknown as Record<string, string>, space)}
   /* The upload composer lives inside the reels shell; drop the standalone
      centered <main> layout so the form fills the composer sheet width. */
@@ -77,16 +63,10 @@ root.innerHTML = `
   <div id="auth" class="muted" aria-live="polite">جارٍ التحقق من تسجيل الدخول…</div>
   <form id="upload" data-testid="clip-upload" hidden>
     <h2>رفع صوت أو فيديو</h2>
-    <div id="storage-badge" data-testid="clip-storage-badge" class="storage-badge" role="status" aria-live="polite" dir="ltr">
-      <span id="storage-dot" class="storage-dot" aria-hidden="true"></span>
-      <span id="storage-text" class="storage-text"></span>
-      <span id="storage-bucket" class="storage-bucket muted" dir="ltr"></span>
-    </div>
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden>
     <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button>
-     <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق — الحد الأقصى للملف 10 GiB (10 737 418 240 octets)</p>
+    <p id="selection" class="muted" role="status" aria-live="polite">من دقيقة الفوق</p>
     <div id="progress-wrap" hidden>
-      <p id="preparation-status" role="status" aria-live="polite"></p>
       <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress>
       <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p>
     </div>
@@ -96,11 +76,9 @@ root.innerHTML = `
       <span id="display-name-error" class="error" role="alert" aria-live="polite"></span>
     </label>
     <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
-     <p class="muted" dir="ltr">Jusqu’à 10 GiB. Le quota local peut être inférieur : sans stockage local, transfert au premier plan uniquement, reprise après fermeture indisponible. Arrière-plan selon le navigateur, sans garantie après fermeture forcée du mobile. Après réception serveur, vous pouvez partir pendant le traitement.</p>
-    <div id="pending-uploads" dir="ltr" aria-live="polite"></div>
     <div>
       <button id="submit" data-testid="clip-submit" type="submit" disabled>نشر</button>
-      <button id="cancel" class="secondary" type="button" hidden>Pause</button>
+      <button id="cancel" class="secondary" type="button" hidden>Annuler</button>
     </div>
     <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p>
     <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div>
@@ -130,9 +108,6 @@ const uploadError = element<HTMLParagraphElement>("upload-error");
 const reelsRoot = element<HTMLDivElement>("reels-root");
 const composer = element<HTMLDivElement>("composer");
 const composerClose = element<HTMLButtonElement>("composer-close");
-const storageBadge = element<HTMLDivElement>("storage-badge");
-const storageText = element<HTMLSpanElement>("storage-text");
-const storageBucket = element<HTMLSpanElement>("storage-bucket");
 const mutableControls = Array.from(form.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, #choose-file"));
 let cachedFile: File | null = null;
 let selectedDuration: number | null = null;
@@ -142,133 +117,10 @@ let uploadController: AbortController | null = null;
 let selectedFileKey: string | null = null;
 let submissionPending = false;
 let uploadOwner: number | null = null;
-let activeQueueId: string | null = null;
-let selectedQueueId: string | null = null;
-const pendingUploads = element<HTMLDivElement>("pending-uploads");
-let pollingJobs = false;
-let foregroundOnly = false;
 let accountReloading = false;
-
-async function pollPendingJobs() {
-  if (pollingJobs || uploadOwner === null || document.visibilityState === "hidden") return;
-  pollingJobs = true;
-  const owner = uploadOwner;
-  try {
-    for (const record of await listQueue(owner)) {
-      if (!record.serverOwned || record.status === "failed" || uploadController) continue;
-      const published = await runQueuedUpload(record.id, owner, new AbortController().signal, () => {});
-      if (uploadOwner !== owner) return;
-      if (published) { finalizePublication(published, record.id); mountReelsFeed(); }
-    }
-    await refreshPendingUploads();
-  } catch (error) {
-    uploadError.textContent = error instanceof Error ? error.message : "Vérification du traitement indisponible";
-    await refreshPendingUploads();
-  } finally { pollingJobs = false; }
-}
-setInterval(() => { void pollPendingJobs(); }, 5_000);
-window.addEventListener("pageshow", () => { void pollPendingJobs(); });
-document.addEventListener("visibilitychange", () => { void pollPendingJobs(); });
-
-async function refreshPendingUploads(verifiedOwner?: number) {
-  if (uploadOwner === null) return;
-  try {
-    const owner = verifiedOwner ?? await currentUploadOwner();
-    if (accountReloading) return;
-    if (owner !== uploadOwner) {
-      acceptAccount(owner);
-      return;
-    }
-    const records = await listQueue(owner);
-    pendingUploads.replaceChildren();
-    for (const record of records) {
-      const row = document.createElement("div");
-      const label = document.createElement("p");
-      const labels = { pending: "En attente", uploading: "À reprendre / en transfert", paused: "En pause", processing: "100% transféré — Traitement serveur; vous pouvez quitter", published: "Publié", error: "À reprendre", failed: "Traitement échoué — supprimer le suivi puis resélectionner pour réessayer" };
-      label.textContent = `${record.metadata.title ?? record.name} — ${labels[record.status]} — ${Math.floor(record.uploaded / record.size * 100)}%${record.error ? ` — ${record.error}` : ""}`;
-      const resume = document.createElement("button");
-      resume.type = "button"; resume.textContent = record.serverOwned ? "Vérifier le traitement" : "Reprendre";
-      resume.dataset.testid = `resume-upload-${record.id}`;
-      resume.disabled = Boolean(uploadController);
-      resume.onclick = async () => {
-        if (uploadController || uploadOwner === null) return;
-        const controller = new AbortController();
-        uploadController = controller; activeQueueId = record.id;
-        cancel.hidden = false; progressWrap.hidden = false;
-        status.textContent = "Vérification de la reprise — attente si un autre onglet transfère déjà ce fichier…";
-        updateSubmitState();
-        try {
-          const published = await runQueuedUpload(record.id, uploadOwner, controller.signal,
-            (percent, bytes, speed, state, message) => reportUploadProgress(record.size, percent, bytes, speed, state, message));
-          if (published) {
-            const clearedSelection = finalizePublication(published, record.id);
-            if (clearedSelection) reloadFeedAfterPublish();
-            else mountReelsFeed();
-          }
-        } catch (error) { uploadError.textContent = error instanceof Error ? error.message : "Transfert interrompu"; }
-        finally {
-          uploadController = null; activeQueueId = null; cancel.hidden = true;
-          updateSubmitState(); void refreshPendingUploads();
-        }
-      };
-      const pause = document.createElement("button");
-      pause.type = "button"; pause.textContent = "Pause"; pause.className = "secondary";
-      pause.hidden = Boolean(record.serverOwned);
-      pause.dataset.testid = `pause-upload-${record.id}`;
-      pause.onclick = () => {
-        pauseQueuedUpload(record.id);
-        navigator.serviceWorker?.controller?.postMessage({ type: "CLIP_UPLOAD_PAUSE", id: record.id });
-        void markQueuedPaused(record.id, record.owner).then(() => refreshPendingUploads()).catch(error => {
-          uploadError.textContent = error instanceof Error ? error.message : "Pause impossible";
-        });
-      };
-      const discard = document.createElement("button");
-      discard.type = "button"; discard.textContent = record.serverOwned ? "Supprimer le suivi local" : "Abandonner"; discard.className = "secondary";
-      discard.dataset.testid = `discard-upload-${record.id}`;
-      discard.onclick = async () => {
-        if (uploadOwner === null || !confirm(record.serverOwned ? "Supprimer le suivi local ? Le traitement serveur ne sera pas annulé." : "Abandonner et supprimer ce transfert ?")) return;
-        discard.disabled = true;
-      try {
-        await discardQueuedUpload(record.id, uploadOwner);
-        if (selectedQueueId === record.id) { selectedQueueId = null; displayName.disabled = false; }
-        await refreshPendingUploads();
-      }
-        catch (error) { uploadError.textContent = error instanceof Error ? error.message : "Abandon impossible"; discard.disabled = false; }
-      };
-      row.append(label, resume, pause, discard); pendingUploads.append(row);
-    }
-  } catch (error) {
-    receipt.hidden = true;
-    pendingUploads.textContent = `Reprise locale indisponible : ${error instanceof Error ? error.message : "stockage inaccessible"}`;
-  }
-}
-
-// Hand off only on departure. While this page is alive XHR gives real byte-level
-// progress; the same Web Lock prevents the worker from racing it.
-window.addEventListener("pagehide", () => {
-  if (accountReloading) return;
-  if (!activeQueueId || !("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.controller?.postMessage({ type: "CLIP_UPLOAD_START", id: activeQueueId });
-  void navigator.serviceWorker.getRegistration().then(registration => {
-    const sync = (registration as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } } | undefined)?.sync;
-    return sync?.register("helixly-clips-upload");
-  }).catch(() => { /* Stored queue remains available on reopening. */ });
-});
-if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", event => {
-  const data = event.data;
-  if (data?.owner !== uploadOwner) return;
-  if (data.type === "CLIP_UPLOAD_DONE") { void refreshPendingUploads(); mountReelsFeed(); }
-  if (data.type === "CLIP_UPLOAD_ERROR") { uploadError.textContent = data.error; void refreshPendingUploads(); }
-  if (data.type === "CLIP_UPLOAD_PROGRESS") {
-    status.textContent = data.state === "processing" ? "Traitement serveur…" : `${Math.floor(data.percent)}% — ${data.state === "stalled" ? "En attente de R2" : "Arrière-plan : octets confirmés par R2"}`;
-    progressWrap.hidden = false; progress.value = data.percent;
-  }
-});
 if (window.isSecureContext && "serviceWorker" in navigator) {
-  // Same URL and scope as app-entry: updates the canonical push/call worker.
-  void navigator.serviceWorker.register(`${BASE}sw.js`, { scope: BASE, updateViaCache: "none" }).catch(() => {
-    pendingUploads.textContent = "Arrière-plan indisponible. Le transfert fonctionne dans cet onglet; les fichiers enregistrés restent reprenables.";
-  });
+  // Same URL and scope as app-entry: keeps the canonical push/call worker current.
+  void navigator.serviceWorker.register(`${BASE}sw.js`, { scope: BASE, updateViaCache: "none" }).catch(() => {});
 }
 const DURATION_CLICK_WAIT_MS = 8_000;
 
@@ -312,12 +164,6 @@ function formatBytes(bytes: number) {
   return new Intl.NumberFormat("ar").format(bytes) + " بايت";
 }
 
-function formatSpeed(bytesPerSecond: number) {
-  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return "جارٍ حساب السرعة";
-  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`;
-  return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
-}
-
 function formatDuration(seconds: number) {
   const whole = Math.floor(seconds);
   return `${Math.floor(whole / 3600).toString().padStart(2, "0")}:${Math.floor(whole / 60 % 60).toString().padStart(2, "0")}:${(whole % 60).toString().padStart(2, "0")}`;
@@ -325,27 +171,20 @@ function formatDuration(seconds: number) {
 
 type PublishedClip = { name: string; code: string };
 
-export function finalizePublication(published: PublishedClip, finishedQueueId?: string) {
-  // A server job can finish while the composer holds a different file or paused
-  // upload. Its receipt must not reset that independent selection or its identity.
-  const clearSelection = finishedQueueId === undefined ||
-    selectedQueueId === finishedQueueId || (!cachedFile && !selectedQueueId);
-  if (clearSelection) {
-    progress.value = 100;
-    status.textContent = "تم نشر الملف — publication confirmée";
-    selectedQueueId = null;
-    cachedFile = null;
-    selectedDuration = null;
-    input.value = "";
-    displayName.value = "";
-    displayNameRow.hidden = true;
-    displayNameError.textContent = "";
-    selectedFileKey = null;
-    chooseFile.textContent = "Choisir un fichier — فيديو / أوديو";
-    durationStatus.textContent = "";
-    selection.textContent = "تم نشر الملف";
-    updateSubmitState();
-  }
+export function finalizePublication(published: PublishedClip) {
+  progress.value = 100;
+  status.textContent = "تم نشر الملف — publication confirmée";
+  cachedFile = null;
+  selectedDuration = null;
+  input.value = "";
+  displayName.value = "";
+  displayNameRow.hidden = true;
+  displayNameError.textContent = "";
+  selectedFileKey = null;
+  chooseFile.textContent = "Choisir un fichier — فيديو / أوديو";
+  durationStatus.textContent = "";
+  selection.textContent = "تم نشر الملف";
+  updateSubmitState();
   receipt.replaceChildren();
   const name = document.createElement("p");
   name.textContent = published.name;
@@ -358,7 +197,6 @@ export function finalizePublication(published: PublishedClip, finishedQueueId?: 
   link.textContent = "فتح الملف";
   receipt.append(link);
   receipt.hidden = false;
-  return clearSelection;
 }
 
 chooseFile.addEventListener("click", () => input.click());
@@ -377,10 +215,8 @@ input.addEventListener("change", async () => {
   selectedFileKey = nextFileKey;
   displayNameRow.hidden = false;
   cachedFile = selected;
-  selectedQueueId = null;
   displayName.disabled = false;
-  selectedDuration = null;
-  chooseFile.textContent = `${selected.name} — ${(selected.size / 1024 / 1024).toFixed(2)} MB`;
+  chooseFile.textContent = selected.name;
   selection.textContent = "✓ Fichier sélectionné";
   updateSubmitState();
   uploadError.textContent = "";
@@ -391,11 +227,6 @@ input.addEventListener("change", async () => {
   status.textContent = `0% — 0 من ${formatBytes(selected.size)}`;
   receipt.hidden = true;
   receipt.replaceChildren();
-  if (selected.size > MAX_CLIP_BYTES) {
-    durationStatus.textContent = "";
-    cancel.hidden = true;
-    return;
-  }
   durationStatus.textContent = "المدة: جارٍ القراءة…";
   cancel.hidden = false;
   const probe = readClipDuration(selected, probing.signal).then(duration => {
@@ -467,49 +298,23 @@ async function awaitPendingDurationProbe(signal: AbortSignal) {
   }
 }
 
-function reportUploadProgress(
-  total: number,
-  percent: number,
-  uploadedBytes: number | undefined,
-  speedBytesPerSecond: number,
-  uploadState: Parameters<ClipUploadProgress>[3],
-  message?: string,
-) {
-  if (uploadState === "preparing") {
-    element<HTMLParagraphElement>("preparation-status").textContent = message ?? "Préparation de la vidéo…";
-    progress.value = percent;
-    status.textContent = "Préparation avant transfert — Pause pour interrompre. Aucune garantie d’envoi en une minute : débit réseau et durée du média déterminent le temps total.";
-    submit.textContent = `Préparation ${Math.floor(percent)}%…`;
-    return;
-  }
-  // The transfer may be much smaller than the source after preparation.
-  if (uploadedBytes && percent > 0) total = Math.round(uploadedBytes * 100 / percent);
-  const uploaded = uploadedBytes ?? Math.min(total, Math.round(total * percent / 100));
+function reportUploadProgress(percent: number, uploaded: number, total: number) {
   const displayPercent = Math.floor(percent);
   progress.value = percent;
   submit.textContent = `Téléversement ${displayPercent}%…`;
-  if (uploadState === "processing") {
-    status.textContent = "100% transféré — vérification et traitement serveur… Vous pouvez quitter après réception serveur; la publication reste à confirmer.";
-    submit.textContent = "Traitement serveur…";
-    cancel.hidden = true;
-    return;
-  }
-  status.textContent = uploadState === "offline"
-    ? `${formatBytes(uploaded)} من ${formatBytes(total)} — متوقف مؤقتاً؛ يكمل الى تقطع عند رجوع الاتصال`
-    : `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}% — ${uploadState === "stalled" ? "En attente du réseau / accusé R2" : formatSpeed(speedBytesPerSecond)}`;
+  status.textContent = `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}%`;
 }
 
 form.addEventListener("submit", async event => {
   event.preventDefault();
   const file = cachedFile;
-   if (!file || uploadOwner === null || accountReloading || uploadController || submissionPending) return;
+  if (!file || uploadOwner === null || accountReloading || uploadController || submissionPending) return;
   submissionPending = true;
-  foregroundOnly = false;
   uploadError.textContent = "";
   displayNameError.textContent = "";
   displayName.setAttribute("aria-invalid", "false");
   if (file.size > MAX_CLIP_BYTES) {
-    uploadError.textContent = "الحد الأقصى للملف هو 10 GiB (10 737 418 240 octets)";
+    uploadError.textContent = FILE_TOO_LARGE_MESSAGE;
     submissionPending = false;
     return;
   }
@@ -522,6 +327,7 @@ form.addEventListener("submit", async event => {
     submissionPending = false;
     return;
   }
+  const owner = uploadOwner;
   const operation = new AbortController();
   uploadController = operation;
   mutableControls.forEach(control => { control.disabled = true; });
@@ -532,7 +338,6 @@ form.addEventListener("submit", async event => {
   progressWrap.hidden = false;
   progress.value = 0;
   status.textContent = `0% — 0 من ${formatBytes(file.size)} — جارٍ التحقق من المدة…`;
-  uploadError.textContent = "";
   try {
     const duration = selectedDuration ?? await awaitPendingDurationProbe(operation.signal);
     operation.signal.throwIfAborted();
@@ -542,55 +347,26 @@ form.addEventListener("submit", async event => {
       status.textContent = "لم يبدأ الرفع";
       return;
     }
-    const metadata: ClipUploadMetadata = {
-      title,
-      originalFilename: file.name,
-      contentType: file.type || "application/octet-stream",
-      // No guessed duration: the server probes media if browser metadata is unavailable.
-      durationSec: duration,
-    };
-    status.textContent = `Enregistrement local du fichier — ${formatBytes(file.size)}`;
-    const onProgress: ClipUploadProgress = (
-      percent,
-      uploadedBytes,
-      speedBytesPerSecond,
-      uploadState,
-      message,
-    ): void => {
-      reportUploadProgress(file.size, percent, uploadedBytes, speedBytesPerSecond, uploadState, message);
-    };
-    if (selectedQueueId) activeQueueId = selectedQueueId;
-    const published = selectedQueueId && uploadOwner !== null
-      ? await runQueuedUpload(selectedQueueId, uploadOwner, operation.signal, onProgress)
-      : await uploadClip(file, metadata, operation.signal, onProgress, {
-      expectedOwner: uploadOwner,
-      onStored: record => { activeQueueId = record.id; selectedQueueId = record.id; void refreshPendingUploads(); },
-      onForegroundOnly: message => { foregroundOnly = true; uploadError.textContent = message; },
-    });
-    if (!published) {
-      cachedFile = null; input.value = ""; selectedQueueId = null;
-      status.textContent = "100% reçu par le serveur — traitement en cours. Vous pouvez quitter; le suivi reprend au retour.";
-      return;
-    }
+    const metadata: ClipUploadMetadata = { title, durationSec: duration };
+    const published = await uploadClip(file, metadata, operation.signal, reportUploadProgress, { expectedOwner: owner });
+    if (uploadOwner !== owner) return;
     finalizePublication({ ...published, name: title });
     reloadFeedAfterPublish();
   } catch (error) {
     const cancelled = operation.signal.aborted;
-    uploadError.textContent = cancelled ? (foregroundOnly ? "Transfert interrompu — non enregistré localement; reprise après fermeture indisponible." : "En pause — Reprendre pour continuer") :
-      error instanceof Error ? error.message : "تعذر الرفع — حاول مجدداً";
+    uploadError.textContent = cancelled ? "تم إلغاء الرفع — Annulé"
+      : error instanceof Error ? error.message : "تعذر الرفع — حاول مجدداً";
     status.textContent = cancelled ? "توقف الرفع" : "لم يكتمل الرفع";
   } finally {
     submissionPending = false;
     uploadController = null;
-    activeQueueId = null;
-    void refreshPendingUploads();
     mutableControls.forEach(control => { control.disabled = false; });
-    displayName.disabled = Boolean(selectedQueueId);
     updateSubmitState();
     submit.textContent = "نشر";
     cancel.hidden = true;
   }
 });
+
 
 // ── Reels feed + upload composer wiring ──────────────────────────────────────
 // The fullscreen Reels feed is the primary surface. The camera button (and the
@@ -638,61 +414,6 @@ function reloadFeedAfterPublish() {
   mountReelsFeed();
 }
 
-type R2Status = {
-  provider: string;
-  configured: boolean;
-  connected: boolean;
-  bucket: string | null;
-  error?: string;
-};
-
-let storageController: AbortController | null = null;
-
-/**
- * Show real app-storage (Cloudflare R2) connectivity to the uploader. Only a
- * verified connected=true renders the green "Connected" state; every other
- * outcome (checking, not configured, reachable-but-not-connected, timeout,
- * network/HTTP error) stays neutral or shows a plain error — never a false
- * green. User-facing copy is Arabic with the English provider name; technical
- * details are not surfaced. This never blocks the upload form or the feed.
- */
-async function loadStorageStatus() {
-  storageController?.abort();
-  const controller = new AbortController();
-  storageController = controller;
-  const timer = window.setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
-  storageBadge.dataset.state = "checking";
-  storageText.textContent = "جارٍ التحقق من التخزين — Cloudflare R2";
-  storageBucket.textContent = "";
-  try {
-    const response = await fetch(`${BASE}api/r2/status`, {
-      credentials: "include", cache: "no-store", signal: controller.signal,
-    });
-    if (!response.ok) throw new Error();
-    const data = (await response.json().catch(() => null)) as R2Status | null;
-    if (!data || data.connected !== true) {
-      // Reachable but not verified-connected, or unusable payload — no false green.
-      storageBadge.dataset.state = "unknown";
-      storageText.textContent = data && data.configured === false
-        ? "التخزين غير مهيأ بعد — Cloudflare R2"
-        : "تعذر تأكيد اتصال التخزين — Cloudflare R2";
-      storageBucket.textContent = "";
-      return;
-    }
-    storageBadge.dataset.state = "connected";
-    storageText.textContent = "التخزين متصل — Cloudflare R2 — Connected";
-    storageBucket.textContent = typeof data.bucket === "string" ? data.bucket : "";
-  } catch {
-    if (controller.signal.aborted && storageController !== controller) return;
-    storageBadge.dataset.state = "error";
-    storageText.textContent = "تعذر التحقق من التخزين — Cloudflare R2";
-    storageBucket.textContent = "";
-  } finally {
-    clearTimeout(timer);
-    if (storageController === controller) storageController = null;
-  }
-}
-
 let authFlight: Promise<void> | null = null;
 let authGeneration = 0;
 let verifiedAccount: number | null | undefined;
@@ -701,15 +422,9 @@ function reloadForAccountChange() {
   if (accountReloading) return;
   accountReloading = true;
   ++authGeneration;
-  // Account-bound selections cannot safely follow a new cookie owner. Durable
-  // uploads stay in their owner-scoped queue; do not hand off a stale active job.
+  // Account-bound selections cannot safely follow a new cookie owner.
   uploadController?.abort();
   durationController?.abort();
-  if (activeQueueId) {
-    pauseQueuedUpload(activeQueueId);
-    navigator.serviceWorker?.controller?.postMessage({ type: "CLIP_UPLOAD_PAUSE", id: activeQueueId });
-  }
-  activeQueueId = null;
   uploadOwner = null;
   form.hidden = true;
   calls.setAccount(null);
@@ -733,11 +448,9 @@ function clearComposerIdentity() {
   uploadOwner = null;
   cachedFile = null;
   selectedDuration = null;
-  selectedQueueId = null;
   selectedFileKey = null;
   input.value = "";
   displayName.value = "";
-  pendingUploads.replaceChildren();
   receipt.replaceChildren();
   receipt.hidden = true;
   form.hidden = true;
@@ -769,10 +482,6 @@ async function verifyAuth() {
     {
       calls.setAccount(me.id);
       uploadOwner = me.id;
-      void refreshPendingUploads(me.id);
-      // The R2 status endpoint is authenticated; only probe it once we know the
-      // viewer is signed in. It never blocks the form (rendered right below).
-      void loadStorageStatus();
     }
     auth.textContent = "يمكنك رفع ملفك الآن";
     form.hidden = false;
