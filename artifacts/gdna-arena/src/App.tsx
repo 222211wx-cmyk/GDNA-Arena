@@ -269,16 +269,18 @@ function Router() {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground selection:bg-primary/30 selection:text-white">
       <ArenaDocumentTitle />
+      <div className="sticky top-0 z-50">
+      <BackButton />
       {!isChoiceEntry && !isMessagesEntry && <Navbar />}
       {isMessagesEntry && (
         <header className="border-b border-border bg-background">
-          <div className="mx-auto flex max-w-6xl justify-end pl-3 pr-16 py-2">
+          <div className="mx-auto flex max-w-6xl justify-end px-3 py-2">
             <LanguageSwitcher />
           </div>
         </header>
       )}
+      </div>
       <PageWrapper />
-      <BackButton />
       {!isChoiceEntry && !isMessagesEntry && <Footer />}
       <CookieBanner />
       <AgeGate />

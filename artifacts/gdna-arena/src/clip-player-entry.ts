@@ -41,7 +41,7 @@ function addStyles() {
   style.textContent = `
     :root{color-scheme:dark;font-family:${tokens.fontFamily.sans.join(",")};background:${palette.background};color:${palette.foreground}}
     *{box-sizing:border-box}body{margin:0;background:${palette.background};color:${palette.foreground}}
-    .direct-clip-shell{position:fixed;inset:0;display:flex;flex-direction:column;background:${palette.background};overflow:hidden}
+    .direct-clip-shell{position:fixed;inset:var(--arena-navigation-height, 0px) 0 0;display:flex;flex-direction:column;background:${palette.background};overflow:hidden}
     .direct-clip-shell.clip-css-fullscreen{z-index:2147483647}
     .direct-topbar{height:64px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:env(safe-area-inset-top,0px) calc(${space} * 3) 0;border-bottom:1px solid ${palette.border};flex:none}
     .direct-topbar h1{font-size:1.15rem;text-align:center;white-space:nowrap}

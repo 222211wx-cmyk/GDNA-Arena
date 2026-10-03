@@ -1265,7 +1265,7 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   });
   const [rooms,       setRooms]       = useState<DmRoom[]>([]);
   const [roomQuery,   setRoomQuery]   = useState("");
-  useBackLayer(!!roomQuery, () => setRoomQuery(""));
+  useBackLayer(!!roomQuery, () => setRoomQuery(""), 10, () => setRoomQuery(roomQuery));
   const [activeRoom,  setActiveRoom]  = useState<DmRoom | null>(null);
   // Citizen card drawer opened from a conversation row (same page, no navigation).
   const [drawerUsername, setDrawerUsername] = useState<string | null>(null);
@@ -1311,6 +1311,8 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
   const [recording,   setRecording]   = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showContacts, setShowContacts] = useState<false | "dm" | "call">(false);
+  useBackLayer(showSettings, () => setShowSettings(false), 30, () => setShowSettings(true));
+  useBackLayer(!!showContacts, () => setShowContacts(false), 30, () => setShowContacts(showContacts));
   const [toast,       setToast]       = useState("");
   const [uploading,   setUploading]   = useState(false);
   const [showEmoji,   setShowEmoji]   = useState(false);
@@ -1375,8 +1377,13 @@ function IdentityBoundMessenger({ variant, user, initialRoomId, onActiveRoomChan
     setShowEmoji(false);
     setShowAttachTray(false);
     setReplyTo(null);
-  }, 5);
-  useBackLayer(tab !== "chats", () => setTab("chats"), 1);
+  }, 5, () => {
+    if (syncIdentityRef.current !== user?.id) return;
+    setActiveRoom(activeRoom);
+    activeRoomIdRef.current = activeRoom?.id ?? null;
+    onActiveRoomChange?.(activeRoom?.id ?? null);
+  });
+  useBackLayer(tab !== "chats", () => setTab("chats"), 1, () => setTab(tab));
   const syncIdentityRef = useRef(user?.id);
   if (syncIdentityRef.current !== user?.id) {
     syncIdentityRef.current = user?.id;

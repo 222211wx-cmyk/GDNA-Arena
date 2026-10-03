@@ -318,8 +318,8 @@ export default function SearchPage() {
     setQuery(initialQuery);
     setInputValue(initialQuery);
   }, [initialQuery]);
-  useBackLayer(!!inputValue || !!query, () => {
-    if (inputValue !== query) { setInputValue(query); return; }
+  useBackLayer(inputValue !== query, () => setInputValue(query), 20, () => setInputValue(inputValue));
+  useBackLayer(!!query, () => {
     if (navigationDepth() > 0) history.back();
     else navigate("/search", { replace: true });
   });

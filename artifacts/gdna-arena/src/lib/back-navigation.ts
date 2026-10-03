@@ -1,22 +1,20 @@
 import { useEffect, useRef } from "react";
+import { registerNavigationLayer, clearForwardSteps } from "./navigation-layers";
+export { closeBackLayer, navigateForward } from "./navigation-layers";
 
-const layers = new Map<symbol, { priority: number; back: () => void }>();
-export function useBackLayer(active: boolean, back: () => void, priority = 10) {
-  const action = useRef(back);
-  action.current = back;
+export function useBackLayer(active: boolean, back: () => void, priority = 10, forward?: () => void) {
+  const action = useRef({ active, back, forward });
+  action.current = { active, back, forward };
   useEffect(() => {
-    if (!active) return;
-    const key = Symbol();
-    layers.set(key, { priority, back: () => action.current() });
-    return () => { layers.delete(key); };
-  }, [active, priority]);
-}
-
-export function closeBackLayer() {
-  const layer = [...layers.values()].sort((a, b) => b.priority - a.priority)[0];
-  if (!layer) return false;
-  layer.back();
-  return true;
+    return registerNavigationLayer({
+      priority, active: () => action.current.active,
+      back: () => {
+        const restore = action.current.forward;
+        action.current.back();
+        return restore;
+      },
+    });
+  }, [priority]);
 }
 
 const KEY = "__arenaNavigationDepth";
@@ -36,6 +34,7 @@ export function trackAppHistory() {
   }
   replace.call(history, { ...history.state, [KEY]: initialDepth }, "");
   const trackedPush: History["pushState"] = function (state, unused, url) {
+    clearForwardSteps();
     push.call(history, { ...state, [KEY]: navigationDepth() + 1 }, unused, url);
   };
   const trackedReplace: History["replaceState"] = function (state, unused, url) {
@@ -43,7 +42,9 @@ export function trackAppHistory() {
   };
   history.pushState = trackedPush;
   history.replaceState = trackedReplace;
+  window.addEventListener("popstate", clearForwardSteps);
   return () => {
+    window.removeEventListener("popstate", clearForwardSteps);
     if (history.pushState === trackedPush) history.pushState = push;
     if (history.replaceState === trackedReplace) history.replaceState = replace;
   };

@@ -1,4 +1,4 @@
-- [Global back navigation](global-back-navigation.md) — persistent back action covers sections and in-section searches, including lightweight web shells.
+- [Global back navigation](global-back-navigation.md) — back/forward across sections and searches; reserve layout space and never cover existing controls.
 - [GlobalStar Platform](globalstar-platform.md) — voting/ranking platform at /globalstar/; router paths must be relative, AI moderation live via OpenAI.
 - [Archon System](archon-system.md) — encrypted self-development system at /growth; 7 dimensions, 3-phase flow (boot→initiation→encoding→profile); DB tables archon_sessions + archon_directives; API at /api/archon/assess|profile|mission.
 - [GlobalStar Tournament](globalstar-tournament.md) — GlobalStar is a 4th game on /games, NOT a separate artifact; tournament API at POST /api/games/globalstar/tournament; rewards: 1st=200, 2-3=100, 4-10=50, 11-100=10 coins; voting hall still at /games/globalstar/ranking.

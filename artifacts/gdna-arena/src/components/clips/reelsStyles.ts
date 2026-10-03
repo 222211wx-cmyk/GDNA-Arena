@@ -8,7 +8,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   return `
   /* ── Root feed shell: fullscreen vertical, iOS safe areas ─────────────── */
   .reels-shell{
-    position:fixed;inset:0;
+    position:fixed;inset:var(--arena-navigation-height, 0px) 0 0;
     background:${palette.background};
     color:${palette.foreground};
     direction:ltr;
@@ -35,19 +35,19 @@ export function reelsShellCss(palette: Palette, space: string): string {
   /* ── Top bar ──────────────────────────────────────────────────────────── */
   .reels-topbar{
     position:absolute;left:0;right:0;top:0;z-index:41;
-    display:flex;align-items:center;justify-content:space-between;
+    display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;
     gap:calc(${space} * 2);
     padding:calc(var(--reels-top-safe) + ${space} * 3) calc(${space} * 3) calc(${space} * 3);
     background:linear-gradient(to bottom, var(--reels-scrim-strong), transparent);
     pointer-events:none;
   }
-  .reels-topbar-left,.reels-topbar-right{min-width:96px}
+  .reels-topbar-left,.reels-topbar-right{min-width:0}
   .reels-topbar-right{justify-content:flex-end}
-  .reels-topbar > .reels-title{position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap}
+  .reels-topbar > .reels-title{position:static;min-width:0;text-align:center;font-size:clamp(.875rem,4vw,1.4rem);white-space:nowrap}
   .reels-topbar > *{pointer-events:auto}
   .reels-topbar-left{display:flex;align-items:center;gap:calc(${space} * 3)}
   .reels-title{font-size:1.4rem;font-weight:900;letter-spacing:-.01em;color:var(--reels-on-media);margin:0}
-  .reels-topbar-right{display:flex;align-items:center;gap:calc(${space} * 4)}
+  .reels-topbar-right{display:flex;align-items:center;gap:${space}}
   .reels-icon-btn{
     display:inline-flex;align-items:center;justify-content:center;
     width:44px;height:44px;padding:0;margin:0;border:0;border-radius:9999px;

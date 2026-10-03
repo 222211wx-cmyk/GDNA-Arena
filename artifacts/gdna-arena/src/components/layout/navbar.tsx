@@ -29,7 +29,7 @@ export function Navbar() {
 
   return (
     <header dir={lang === "ar" ? "rtl" : "ltr"} className="sticky top-0 z-50 border-b border-border bg-background text-foreground">
-      <div className="mx-auto flex max-w-2xl flex-col gap-2 pl-3 pr-16 py-2">
+      <div className="mx-auto flex max-w-2xl flex-col gap-2 px-3 py-2">
         <div className="text-center">
           <Link href="/" dir="ltr" data-testid="link-brand-home" aria-label={UI_TEXT.home[lang]}
             className="inline-flex items-center gap-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md">

@@ -48,7 +48,7 @@ export default function CitizensPage() {
   const [loading,    setLoading]    = useState(true);
   const [sort,       setSort]       = useState<"xp" | "coins" | "honor">("xp");
   const [query,      setQuery]      = useState("");
-  useBackLayer(!!query, () => setQuery(""));
+  useBackLayer(!!query, () => setQuery(""), 10, () => setQuery(query));
   const [followIds,  setFollowIds]  = useState<Set<number>>(new Set());
   const [addingId,   setAddingId]   = useState<number | null>(null);
   const [dmId,       setDmId]       = useState<number | null>(null);

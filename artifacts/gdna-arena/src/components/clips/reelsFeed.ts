@@ -6,6 +6,7 @@
 // media pauses; playback URLs and posters load lazily; the feed paginates.
 
 import { reelsIcons } from "./reelsIcons";
+import { registerNavigationLayer } from "../../lib/navigation-layers";
 import { icons } from "./clipIcons";
 import { mountInboxBadge } from "./inboxBadge";
 import {
@@ -775,7 +776,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       fullState.append(el("div", "reels-spinner", { "aria-label": "Chargement" }));
       const p = el("p", "reels-muted"); p.textContent = "Chargement des Clips…"; fullState.append(p);
     } else if (kind === "empty") {
-      const p = el("p"); p.textContent = searchQuery ? "Aucun résultat pour cette recherche." : "Aucun Reel pour l'instant. Soyez le premier à publier.";
+      const p = el("p"); p.textContent = searchQuery ? "Aucun résultat pour cette recherche." : "Aucun Clip pour l'instant. Soyez le premier à publier.";
       const row = el("div", "reels-btn-row");
       const upload = el("button", "reels-btn", { type: "button" }); upload.textContent = "Publier un clip";
       upload.addEventListener("click", options.onOpenComposer);
@@ -850,7 +851,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     const grid = el("div", "reels-grid");
     if (gridClips.length === 0) {
       const empty = el("p", "reels-fullstate reels-muted");
-      empty.textContent = "Aucun Reel à afficher.";
+      empty.textContent = "Aucun Clip à afficher.";
       view.append(empty);
     } else {
       for (const clip of gridClips) {
@@ -1124,7 +1125,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     // Grid toggle also available here.
     gridToggleBtn = makeTool("Grille (3 colonnes)", () => { setTools(false); toggleGrid(); }) as HTMLButtonElement;
     gridToggleBtn.setAttribute("aria-pressed", "false");
-    const fsTool = makeTool("Plein écran du Reel actif", () => {
+    const fsTool = makeTool("Plein écran du Clip actif", () => {
       const active = slides.find(s => s.id === activeSlideId);
       if (active) toggleFullscreen();
       setTools(false);
@@ -1291,6 +1292,17 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   document.body.dataset.clipReady = "true";
 
+  const removeNavigation = registerNavigationLayer({
+    priority: 10,
+    active: () => Boolean(searchOverlay || notifOverlay || gridOpen),
+    back: () => {
+      if (searchOverlay) { closeSearch(); return openSearch; }
+      if (notifOverlay) { closeNotifications(); return openNotifications; }
+      toggleGrid(false);
+      return () => toggleGrid(true);
+    },
+  });
+
   return {
     pause() {
       playbackIntentVersion++;
@@ -1304,6 +1316,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       }
     },
     destroy() {
+      removeNavigation();
       playbackIntentVersion++;
       destroyed = true;
       disposeInbox?.();
