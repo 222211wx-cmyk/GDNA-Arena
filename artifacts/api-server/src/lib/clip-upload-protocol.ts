@@ -114,6 +114,6 @@ export function validateClipRightsInput(
 }
 export function clipDurationSeconds(seconds: number, contentType: string): number {
   if (!Number.isFinite(seconds) || seconds <= 0) throw new ClipUploadError(400, "مدة الملف غير صالحة");
-  // Existing Clips rows store whole seconds; sub-second media is accepted.
+  if (seconds < 60) throw new ClipUploadError(400, "المدة الدنيا دقيقة واحدة — بلا حد أقصى للمدة");
   return Math.floor(seconds);
 }

@@ -40,6 +40,9 @@ export const clipsTable = pgTable("clips", {
   processingAttempts: integer("processing_attempts").notNull().default(0),
   processingRetryAt: timestamp("processing_retry_at", { withTimezone: true }).notNull().defaultNow(),
   processingOutputObject: text("processing_output_object"),
+  processingSecondaryObject: text("processing_secondary_object"),
+  secondaryObjectName: text("secondary_object_name"),
+  optimizationPending: boolean("optimization_pending").notNull().default(false),
   objectName: text("object_name").notNull(),
   thumbnailObjectName: text("thumbnail_object_name"),
   contentType: text("content_type").notNull(),
@@ -47,6 +50,8 @@ export const clipsTable = pgTable("clips", {
   durationSec: integer("duration_sec").notNull(),
   views: integer("views").notNull().default(0),
   earnings: numeric("earnings", { precision: 14, scale: 4 }).notNull().default("0"),
+  grossRevenue: numeric("gross_revenue", { precision: 14, scale: 4 }).notNull().default("0"),
+  platformRevenue: numeric("platform_revenue", { precision: 14, scale: 4 }).notNull().default("0"),
   isFrozen: boolean("is_frozen").notNull().default(false),
   isOriginalFootage: boolean("is_original_footage").notNull().default(true),
   thumbnailRetryAttempts: integer("thumbnail_retry_attempts").notNull().default(0),
@@ -117,7 +122,7 @@ export const r2ClipUploadsTable = pgTable("r2_clip_uploads", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   requestIdentity: unique("r2_clip_uploads_user_id_request_id_key").on(table.userId, table.requestId),
-  sizeCheck: check("r2_clip_uploads_size_bytes_check",sql`${table.sizeBytes}>0 AND ${table.sizeBytes}<=10737418240`),
+  sizeCheck: check("r2_clip_uploads_size_bytes_check",sql`${table.sizeBytes}>0`),
   expiry: index("r2_clip_uploads_expiry_idx")
     .on(table.expiresAt)
     .where(sql`${table.state} IN ('active', 'completing')`),

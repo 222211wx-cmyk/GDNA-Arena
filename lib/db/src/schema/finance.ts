@@ -38,8 +38,8 @@ export const journalEntriesTable = pgTable("journal_entries", {
 }, (t) => ({ journalIndex: index("journal_entries_journal_idx").on(t.journalId), walletIndex: index("journal_entries_wallet_idx").on(t.walletId) }));
 
 export const splitPoliciesTable = pgTable("split_policies", {
-  id: id(), version: integer("version").notNull(), platformBps: integer("platform_bps").notNull().default(3000),
-  beneficiaryBps: integer("beneficiary_bps").notNull().default(7000), active: boolean("active").notNull().default(true), createdAt: created(),
+  id: id(), version: integer("version").notNull(), platformBps: integer("platform_bps").notNull().default(4000),
+  beneficiaryBps: integer("beneficiary_bps").notNull().default(6000), active: boolean("active").notNull().default(true), createdAt: created(),
 }, (t) => ({ versionUnique: uniqueIndex("split_policies_version_uniq").on(t.version) }));
 
 export const beneficiariesTable = pgTable("beneficiaries", {

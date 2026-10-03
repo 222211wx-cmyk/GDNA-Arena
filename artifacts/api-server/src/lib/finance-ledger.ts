@@ -3,12 +3,12 @@ import { pool } from "@workspace/db";
 
 export type Posting = { walletId: string; amountMinor: number; currency: string };
 type TransactionClient = { query: <T = any>(sql: string, values?: unknown[]) => Promise<{ rows: T[] }> };
-export const CURRENT_TERMS_VERSION = "finance-terms-2025-01";
+export const CURRENT_TERMS_VERSION = "finance-life-path-60-40";
 
 export function splitNet7030(netMinor: number): { beneficiaryMinor: number; platformMinor: number } {
   if (!Number.isSafeInteger(netMinor) || netMinor < 0) throw new Error("netMinor must be a non-negative integer");
   // Floor the platform share; residual always belongs to the beneficiary, deterministically.
-  const platformMinor = Math.floor((netMinor * 3000) / 10_000);
+  const platformMinor = Number(BigInt(netMinor) * 40n / 100n);
   return { beneficiaryMinor: netMinor - platformMinor, platformMinor };
 }
 export function remainingManualPayable(allocations: Array<{ amountMinor:number; refundedMinor:number }>, reservedMinor:number): number {

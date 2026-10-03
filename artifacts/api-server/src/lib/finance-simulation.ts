@@ -20,7 +20,7 @@ export function simulationRefundNeeded(status:string,amountMinor:number,refunded
   return status==="simulated" && refundedMinor<amountMinor;
 }
 export async function simulatePayment(input:{userId:number;beneficiaryId:string;amountMinor:number;currency:string;idempotencyKey:string;description:string}) {
-  await pool.query("INSERT INTO split_policies (id,version,platform_bps,beneficiary_bps,active) VALUES ($1,1,3000,7000,true) ON CONFLICT (version) DO NOTHING",[crypto.randomUUID()]);
+  await pool.query("INSERT INTO split_policies (id,version,platform_bps,beneficiary_bps,active) VALUES ($1,2,4000,6000,true) ON CONFLICT (version) DO NOTHING",[crypto.randomUUID()]);
   const owned=await pool.query("SELECT b.id,w.id wallet_id FROM beneficiaries b JOIN wallets w ON w.entity_id=b.entity_id AND w.asset='fiat' AND w.currency=$3 WHERE b.id=$1 AND b.owner_user_id=$2",[input.beneficiaryId,input.userId,input.currency]);
   if(!owned.rows[0]) throw new Error("Owned beneficiary fiat wallet not found");
   const prior=await pool.query("SELECT id FROM journals WHERE idempotency_key=$1",[input.idempotencyKey]);
@@ -32,7 +32,7 @@ export async function simulatePayment(input:{userId:number;beneficiaryId:string;
     {walletId:sys.revenue,amountMinor:split.platformMinor,currency:input.currency},
   ],metadata:{simulation:true,description:input.description}});
   await pool.query(`INSERT INTO payment_allocations (id,payment_ref,beneficiary_id,policy_id,amount_minor,currency,status)
-    SELECT $1,$2,$3,id,$4,$5,'simulated' FROM split_policies ORDER BY version DESC LIMIT 1
+    SELECT $1,$2,$3,id,$4,$5,'simulated' FROM split_policies WHERE version=2
     ON CONFLICT (payment_ref,beneficiary_id) DO NOTHING`,[crypto.randomUUID(),`simulation:${input.idempotencyKey}`,input.beneficiaryId,split.beneficiaryMinor,input.currency]);
   return {journalId:posted.id,duplicate:posted.duplicate,...split};
 }
