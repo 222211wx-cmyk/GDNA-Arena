@@ -427,10 +427,15 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         // Let the native control strip handle pause/seek/volume itself.
         if (event.isTrusted && event.offsetY >= v.clientHeight - 48) return;
         if (v.paused) {
+          playbackIntentVersion++;
           userPaused = false;
           naturallyEnded = false;
           endAdvanceStarted = false;
           void v.play().catch(() => setPaused(true));
+        } else {
+          playbackIntentVersion++;
+          userPaused = true;
+          v.pause();
         }
       });
       mountActions(v);

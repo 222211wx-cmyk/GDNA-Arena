@@ -233,6 +233,10 @@ describe("Reels poster and actions lifecycle", () => {
     Object.defineProperty(video, "paused", { configurable: true, value: false });
     video.dispatchEvent(new Event("playing"));
     expect(poster.style.display).toBe("none");
+    vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
+    video.click();
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1);
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
     video.dispatchEvent(new Event("play"));
     expect(document.querySelector(".reels-play-instruction")).toBeNull();
     video.dispatchEvent(new Event("pause"));

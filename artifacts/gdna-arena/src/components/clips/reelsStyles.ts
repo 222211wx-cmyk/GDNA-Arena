@@ -111,6 +111,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
     background:${palette.background};color:${palette.foreground};
   }
   .reels-slide video{
+    pointer-events:auto !important;position:relative;z-index:1;
     display:block;width:100%;height:auto;
     max-height:100%;object-fit:contain;background:transparent;
   }
