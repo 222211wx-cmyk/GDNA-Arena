@@ -3,7 +3,7 @@
 ## Observed evidence (2026-10-03)
 
 - Deployment metadata reports a successful public autoscale build at
-  `https://helixly.app`. This describes the existing deployment, not this repair.
+  `/`. This describes the existing deployment, not this repair.
 - The public HTML references `assets/app-DRrnGNhV.js`, which references
   `assets/app-entry-Yn-qXMq9.js`. The downloaded portion of the latter still
   validates `urls` and `chunkSize === 5 * 1024 * 1024` in its upload helper.
@@ -15,7 +15,7 @@
   `body || ""`. Signing a bodyless PutObject command with this policy can attach
   an empty-body checksum to a later browser upload. Chat signing now explicitly
   uses `WHEN_REQUIRED` on its own client. Clips' client is unchanged.
-- A read-only storage OPTIONS request for origin `https://helixly.app`, method
+- A read-only storage OPTIONS request for origin `/`, method
   PUT and headers `content-type,if-none-match` returned 204 and allowed those
   exact values. No bucket policy or CORS configuration was changed. This does
   not prove authenticated PUT success, other origins, or actual device traffic.

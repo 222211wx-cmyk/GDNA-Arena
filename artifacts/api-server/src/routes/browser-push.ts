@@ -35,12 +35,7 @@ function allowedBrowserOrigin(req: Request): boolean {
   } catch {
     return false;
   }
-  const allowed = new Set([
-    "https://helixly.app",
-    "https://www.helixly.app",
-    "https://arena-qaisypro.com",
-    "https://www.arena-qaisypro.com",
-  ]);
+  const allowed = new Set<string>();
   const host = req.get("host");
   if (host) allowed.add(`${req.protocol}://${host}`);
   if (process.env.REPLIT_DEV_DOMAIN) allowed.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);

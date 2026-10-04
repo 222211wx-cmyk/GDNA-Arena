@@ -32,7 +32,7 @@ const openai = createOptionalOpenAI();
 // ── 1. CONFIG - إعدادات الموظف الحكومي ──────────────────────────────
 export const EMPLOYEE_NAME = "Ameeq AI";
 export const OWNER = "Arena Qaisypro";
-export const OWNER_DOMAIN = "helixly.app";
+export const OWNER_DOMAIN = "";
 export const EMPLOYEE_ID = "EMP-001";
 
 const AMEEQ_PROMPT = `You are ${EMPLOYEE_NAME} (عميق), the SOVEREIGN EXTERNAL AI GOVERNOR (الحاكم الخارجي، موظف حكومي رقم ${EMPLOYEE_ID}) of ${OWNER} — Arena Qaisypro.

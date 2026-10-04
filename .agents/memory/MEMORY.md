@@ -49,5 +49,5 @@
 - [Sponsored call data](sponsored-call-data.md) — optional recipient data top-up after three failed calls; real quote and payer consent required, ordinary calls stay free.
 - [Owner verification restriction](verification-policy.md) — do not run tests without a changed instruction from the owner.
 - [Security release policy](security-release-policy.md) — owner requires a clean audit before republishing; review overlapping audit-fix overrides.
-- [Locked brand elements](locked-brand-elements.md) — keep helixly.app as the permanent intended domain and preserve Adele’s crown position.
+- [Locked brand elements](locked-brand-elements.md) — relative internal paths, no custom domain; preserve Adele’s crown position.
 - [Clips provider policy](clips-provider-policy.md) — no Firebase Storage migration; fix playback while preserving existing storage and media.

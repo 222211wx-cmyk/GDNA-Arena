@@ -3,88 +3,88 @@
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
 
   <url>
-    <loc>https://helixly.app/</loc>
+    <loc>/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://helixly.app/"/>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://helixly.app/"/>
-    <xhtml:link rel="alternate" hreflang="fr" href="https://helixly.app/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="/"/>
   </url>
 
   <url>
-    <loc>https://helixly.app/games</loc>
+    <loc>/games</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/games/globalstar</loc>
+    <loc>/games/globalstar</loc>
     <changefreq>hourly</changefreq>
     <priority>0.9</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/leaderboard</loc>
+    <loc>/leaderboard</loc>
     <changefreq>hourly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/hub</loc>
+    <loc>/hub</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/chronicle</loc>
+    <loc>/chronicle</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/empire</loc>
+    <loc>/empire</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/growth</loc>
+    <loc>/growth</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/news</loc>
+    <loc>/news</loc>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/chat</loc>
+    <loc>/chat</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/legal</loc>
+    <loc>/legal</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/legal/privacy</loc>
+    <loc>/legal/privacy</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/legal/cookies</loc>
+    <loc>/legal/cookies</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
 
   <url>
-    <loc>https://helixly.app/legal/gdpr</loc>
+    <loc>/legal/gdpr</loc>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>

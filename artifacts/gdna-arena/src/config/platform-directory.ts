@@ -72,8 +72,8 @@ export const UI_TEXT = {
 export const SETTINGS_ROUTE = "/dashboard#account-settings";
 export const SEARCH_ROUTE = "/search";
 
-// Existing public origin used by the section directory. Never infer it from a preview host.
-export const PUBLIC_ORIGIN = "https://helixly.app";
+// Internal section links stay relative to the app rather than a fixed hostname.
+export const PUBLIC_ORIGIN = "";
 
 /** Resolve only known section links; pasted external URLs never become navigation targets. */
 export function findPlatformSections(query: string, currentOrigin: string): DirectoryEntry[] {
@@ -83,10 +83,10 @@ export function findPlatformSections(query: string, currentOrigin: string): Dire
   const text = query.trim();
   if (!text) return [];
   let path: string | undefined;
-  if (/^(https?:\/\/|\/|helixly\.app\/)/i.test(text)) {
+  if (/^(https?:\/\/|\/)/i.test(text)) {
     try {
-      const url = new URL(/^helixly\.app\//i.test(text) ? `https://${text}` : text, currentOrigin);
-      if (![new URL(PUBLIC_ORIGIN).origin, currentOrigin].includes(url.origin)) return [];
+      const url = new URL(text, currentOrigin);
+      if (url.origin !== currentOrigin) return [];
       path = decodeURIComponent(url.pathname).replace(/\/+$/, "") || "/";
     } catch { return []; }
   }

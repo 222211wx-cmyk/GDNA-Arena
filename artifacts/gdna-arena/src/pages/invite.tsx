@@ -5,8 +5,8 @@ import { useLang } from "@/contexts/LangContext";
 import { localeFor as sharedLocaleFor, surfaceText } from "@/i18n/community-admin-surfaces-copy";
 
 // ─── رابط الموقع ──────────────────────────────────────────────────────────────
-const SITE_URL = "https://helixly.app";
-const SITE_SHORT = "helixly.app";
+const SITE_URL = import.meta.env.BASE_URL;
+const SITE_SHORT = "GDNA Arena";
 const localeFor = (lang: Parameters<typeof sharedLocaleFor>[0]) =>
   lang === "de" ? "de-DE" : sharedLocaleFor(lang);
 

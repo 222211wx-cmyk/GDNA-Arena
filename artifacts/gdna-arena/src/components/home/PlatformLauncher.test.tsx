@@ -18,7 +18,7 @@ describe("platform directory", () => {
     render(<PlatformLauncher />);
     expect(screen.getAllByRole("textbox")).toHaveLength(DIRECTORY.length);
     fireEvent.click(screen.getByTestId("copy-module-messages"));
-    expect(writeText).toHaveBeenCalledWith("https://helixly.app/messages");
+    expect(writeText).toHaveBeenCalledWith("/messages");
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Link copied"));
   });
 
@@ -30,7 +30,7 @@ describe("platform directory", () => {
     fireEvent.click(screen.getByTestId("copy-module-clips"));
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Could not copy"));
     expect((screen.getByRole("textbox", { name: "Section link — Reels" }) as HTMLInputElement).value)
-      .toBe("https://helixly.app/clips");
+      .toBe("/clips");
   });
 
   it("lists Calls & Messages first and Reels second", () => {

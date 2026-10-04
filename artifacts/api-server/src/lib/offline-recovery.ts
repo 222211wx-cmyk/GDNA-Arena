@@ -108,8 +108,8 @@ export async function revokeOfflineRecoveryDevices(client: PoolClient, userId: n
 }
 
 export function offlineRecoveryMutationGuard(req: Request, res: Response, next: NextFunction): void {
-  const origins = new Set(["https://helixly.app", "https://www.helixly.app",
-    "https://arena-qaisypro.com", "https://www.arena-qaisypro.com"]);
+  const origins = new Set<string>();
+  if (req.get("host")) origins.add(`${req.protocol}://${req.get("host")}`);
   for (const domain of [
     process.env.REPLIT_DEV_DOMAIN, process.env.REPLIT_EXPO_DEV_DOMAIN,
     ...(process.env.REPLIT_DOMAINS ?? "").split(","),

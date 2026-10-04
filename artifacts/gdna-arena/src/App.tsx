@@ -118,8 +118,8 @@ function ArenaDocumentTitle() {
       ['meta[property="og:description"]', "content", description],
       ['meta[name="twitter:title"]', "content", title],
       ['meta[name="twitter:description"]', "content", description],
-      ['link[rel="canonical"]', "href", "https://helixly.app/messages"],
-      ['meta[property="og:url"]', "content", "https://helixly.app/messages"],
+      ['link[rel="canonical"]', "href", "/messages"],
+      ['meta[property="og:url"]', "content", "/messages"],
     ] as const;
     if (messenger) {
       const previousTitle = document.title;

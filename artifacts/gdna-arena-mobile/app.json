@@ -47,12 +47,7 @@
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": "https://helixly.app/"
-        }
-      ],
+      "expo-router",
       "expo-font",
       [
         "expo-splash-screen",

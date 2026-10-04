@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A Node.js/Express play-to-earn crypto gaming platform. Users register, compete in mini-games, earn coins/XP, claim daily rewards, chat with an AI assistant (GDN-AI, powered by GPT-4o), exchange messages with other users, and upload audio/video content to a monetised media platform (GlobalStar). Deployed publicly at `helixly.app` on Replit autoscale. Stack: Express 5, PostgreSQL + Drizzle ORM, express-session (server-side), React + Vite frontend.
+A Node.js/Express play-to-earn crypto gaming platform. Users register, compete in mini-games, earn coins/XP, claim daily rewards, chat with an AI assistant (GDN-AI, powered by GPT-4o), exchange messages with other users, and upload audio/video content to a monetised media platform (GlobalStar). Deployed publicly at `the current app` on Replit autoscale. Stack: Express 5, PostgreSQL + Drizzle ORM, express-session (server-side), React + Vite frontend.
 
 ## Assets
 

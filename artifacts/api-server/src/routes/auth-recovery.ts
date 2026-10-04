@@ -38,10 +38,8 @@ router.get(`${BASE}/config`, rateLimit({
 });
 
 function allowedMutationOrigin(req: Request): boolean {
-  const allowed = new Set([
-    "https://helixly.app", "https://www.helixly.app",
-    "https://arena-qaisypro.com", "https://www.arena-qaisypro.com",
-  ]);
+  const allowed = new Set<string>();
+  if (req.get("host")) allowed.add(`${req.protocol}://${req.get("host")}`);
   if (process.env.REPLIT_DEV_DOMAIN) allowed.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
   if (process.env.REPLIT_EXPO_DEV_DOMAIN) allowed.add(`https://${process.env.REPLIT_EXPO_DEV_DOMAIN}`);
   for (const domain of (process.env.REPLIT_DOMAINS ?? "").split(",")) {

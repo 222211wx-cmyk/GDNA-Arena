@@ -1,6 +1,6 @@
 {
   "checkedAtUtc": "2026-10-03T01:00:21.915280+00:00",
-  "source": "https://helixly.app/api/call-push/config",
+  "source": "/api/call-push/config",
   "httpStatus": 200,
   "enabled": true,
   "pushEnabled": true,

@@ -18,8 +18,8 @@ jobs:
     env:
       CI: 'true'
       NODE_OPTIONS: --max-old-space-size=4096
-      EXPO_PUBLIC_API_ORIGIN: https://helixly.app
-      EXPO_PUBLIC_DOMAIN: helixly.app
+      EXPO_PUBLIC_API_ORIGIN: ${{ vars.EXPO_PUBLIC_API_ORIGIN }}
+      EXPO_PUBLIC_DOMAIN: ${{ vars.EXPO_PUBLIC_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
         with:

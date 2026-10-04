@@ -21,7 +21,7 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ARENA" />
-    <meta property="og:url" content="https://helixly.app/" />
+    <meta property="og:url" content="/" />
     <meta property="og:title" content="ARENA — Play. Compete. Rise." />
     <meta property="og:description" content="The sovereign play-to-earn gaming and voting platform. Compete in 3 arenas, earn virtual coins, and be guided by GDN-AI — the neural intelligence of the arena." />
     <meta property="og:image" content="%BASE_URL%opengraph.jpg" />
@@ -36,7 +36,12 @@
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
 
     <!-- Canonical -->
-    <link rel="canonical" href="https://helixly.app/" />
+    <script>
+      const canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      canonical.setAttribute("href", "%BASE_URL%");
+      document.head.appendChild(canonical);
+    </script>
 
     <!-- Schema.org JSON-LD -->
     <script type="application/ld+json">
@@ -45,23 +50,23 @@
       "@graph": [
         {
           "@type": "WebSite",
-          "@id": "https://helixly.app/#website",
-          "url": "https://helixly.app/",
+          "@id": "/#website",
+          "url": "/",
           "name": "ARENA",
           "description": "The sovereign play-to-earn gaming and global voting platform powered by GDN-AI",
           "inLanguage": ["en","ar","fr"],
           "potentialAction": {
             "@type": "SearchAction",
-            "target": "https://helixly.app/leaderboard",
+            "target": "/leaderboard",
             "query-input": "required name=search_term_string"
           }
         },
         {
           "@type": "VideoGame",
-          "@id": "https://helixly.app/#game",
+          "@id": "/#game",
           "name": "ARENA",
           "description": "Play-to-earn gaming platform: Neon Racer, Crypto Clash, Arena Strike. Earn virtual coins and climb the leaderboard.",
-          "url": "https://helixly.app/",
+          "url": "/",
           "applicationCategory": "Game",
           "operatingSystem": "Web Browser",
           "offers": {
@@ -76,10 +81,10 @@
         },
         {
           "@type": "Organization",
-          "@id": "https://helixly.app/#org",
+          "@id": "/#org",
           "name": "ARENA",
-          "url": "https://helixly.app/",
-          "logo": "https://helixly.app/icon-512.png",
+          "url": "/",
+          "logo": "/icon-512.png",
           "sameAs": []
         }
       ]

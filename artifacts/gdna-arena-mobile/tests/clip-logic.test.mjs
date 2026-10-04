@@ -11,13 +11,13 @@ import {
 
 test('accepts canonical codes and HTTPS clip share links', () => {
   assert.equal(parseClipCode(' helx-123456 '), 'HELX-123456');
-  assert.equal(parseClipCode('https://helixly.app/clip/HELX-654321'), 'HELX-654321');
+  assert.equal(parseClipCode('https://example.test/clip/HELX-654321'), 'HELX-654321');
   assert.equal(parseClipCode('https://example.test/base/clip/helx-000001?share=1'), 'HELX-000001');
 });
 
 test('rejects malformed codes, insecure links, and misleading paths', () => {
   assert.equal(parseClipCode('HELX-12345'), null);
-  assert.equal(parseClipCode('http://helixly.app/clip/HELX-123456'), null);
+  assert.equal(parseClipCode('http://example.test/clip/HELX-123456'), null);
   assert.equal(parseClipCode('https://user@example.test/clip/HELX-123456'), null);
   assert.equal(parseClipCode('https://example.test/notclip/HELX-123456'), null);
 });

@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://helixly.app/sitemap.xml
+Sitemap: /sitemap.xml
 
 # Arena Qaisypro — Sovereign Digital Platform
 # Play-to-earn gaming · GlobalStar voting · GDN-AI intelligence

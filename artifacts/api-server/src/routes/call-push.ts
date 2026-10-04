@@ -148,10 +148,6 @@ function requestOriginAllowed(req: Request): boolean {
   if (!origin && !referer) return true;
 
   const allowedOrigins = new Set<string>([
-    "https://helixly.app",
-    "https://www.helixly.app",
-    "https://arena-qaisypro.com",
-    "https://www.arena-qaisypro.com",
   ]);
   if (process.env.REPLIT_DEV_DOMAIN) allowedOrigins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
   if (process.env.REPLIT_EXPO_DEV_DOMAIN) allowedOrigins.add(`https://${process.env.REPLIT_EXPO_DEV_DOMAIN}`);
