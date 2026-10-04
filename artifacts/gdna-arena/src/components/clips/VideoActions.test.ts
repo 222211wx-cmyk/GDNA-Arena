@@ -245,7 +245,7 @@ describe("VideoActions", () => {
     });
     fireEvent.click(document.querySelector('[aria-label="Copy link"]')!);
     await vi.waitFor(() => expect(document.querySelector('[aria-label="Share link"]')).not.toBeNull());
-    expect((document.querySelector('[aria-label="Share link"]') as HTMLInputElement).value).toContain("/clip/HELX-123456");
+    expect((document.querySelector('[aria-label="Share link"]') as HTMLInputElement).value).toContain("/clips/42");
     expect(document.querySelector(".action-status")?.textContent).not.toContain("Link copied");
   });
 });

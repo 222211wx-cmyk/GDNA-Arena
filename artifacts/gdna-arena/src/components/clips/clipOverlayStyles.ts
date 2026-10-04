@@ -30,7 +30,7 @@ export function clipOverlayCss(palette: Palette, space: string): string {
   .clip-media-frame:has(video) video,
   #player-media:has(video) video{width:100%;height:auto;min-height:360px;max-height:72vh;object-fit:contain;background:${palette.background};margin:auto}
 
-  .clip-overlay{position:absolute;inset:0;pointer-events:none;z-index:3;direction:ltr}
+  .clip-overlay{position:absolute;inset:0;pointer-events:none;z-index:13;direction:ltr}
   /* Audio: static block (not an overlay) rendered below the native controls. */
   .clip-overlay-static{position:static;pointer-events:auto;direction:ltr;display:grid;gap:calc(${space} * 3);margin-top:calc(${space} * 3)}
 

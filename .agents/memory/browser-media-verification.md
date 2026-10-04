@@ -9,6 +9,12 @@ When native video controls coexist with a custom image-area click toggle, cancel
 
 **How to apply:** Verify actual pointer input and advancing playback time, not only calls to play(). Distinguish desktop/mobile viewport checks from physical-device or production-media verification.
 
+Keep Clips interaction overlays above the video within its stacking context; decorations must pass clicks through, while action buttons remain interactive.
+
+**Why:** Raising the video layer restored image clicks but hid existing social controls. The owner confirmed click-to-play worked and explicitly required preserving it while restoring all social actions.
+
+**How to apply:** Check Like, Comment, Share, and return navigation alongside playback whenever changing player layers; a video-only check is insufficient.
+
 Check the actual encoded output when changing media processing; upload success and a playable container are not sufficient evidence.
 
 Before treating a headless MP4 playback error as an application regression, test the identical local fixture and exact codec support in that browser.

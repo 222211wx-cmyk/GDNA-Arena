@@ -372,11 +372,16 @@ function openComposer() {
   (chooseFile ?? composerClose).focus();
 }
 function closeComposer() {
+  if (window.location.pathname.replace(/\/$/, "").endsWith("/publish")) {
+    window.location.assign(`${BASE}clips`);
+    return;
+  }
   composer.hidden = true;
   reels?.resume();
   lastFocusBeforeComposer?.focus();
 }
 composerClose.addEventListener("click", closeComposer);
+composerClose.textContent = "Retour";
 composer.addEventListener("keydown", event => { if (event.key === "Escape") closeComposer(); });
 
 function mountReelsFeed() {
@@ -510,4 +515,5 @@ document.body.dataset.clipReady = "true";
 // identity for engagement scoping). Resolve auth in parallel to enable the
 // upload composer form.
 mountReelsFeed();
+if (window.location.pathname.replace(/\/$/, "").endsWith("/publish")) openComposer();
 void loadAuth();

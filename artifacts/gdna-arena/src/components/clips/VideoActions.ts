@@ -82,6 +82,12 @@ function railButton(label: string, iconHtml: string): HTMLButtonElement {
   iconWrap.className = "clip-rail-icon";
   iconWrap.innerHTML = iconHtml;
   control.append(iconWrap);
+  if (["Like", "Unlike", "Comments", "Partage"].includes(label)) {
+    const caption = document.createElement("span");
+    caption.className = "clip-rail-label";
+    caption.textContent = label === "Comments" ? "Comment" : label === "Unlike" ? "Like" : label;
+    control.append(caption);
+  }
   return control;
 }
 
@@ -386,15 +392,13 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
     }
   };
 
-  const shareUrl = current.code
-    ? new URL(`${BASE}clip/${current.code}`, window.location.origin).href
-    : `${window.location.origin}${BASE}clip#clip-${current.id}`;
+  const shareUrl = new URL(`${BASE}clips/${current.id}`, window.location.origin).href;
 
   // ── Share ────────────────────────────────────────────────────────────
   // The persisted share count is recorded ONLY after a successful native share
   // or link copy — never on cancellation. The endpoint is idempotent per
   // citizen, so retries do not inflate the count.
-  const share = railButton("Share", icons.share());
+  const share = railButton("Partage", icons.share());
   let shareCount = Number(current.shareCount ?? 0);
   setCount(share, shareCount);
   const recordShare = async () => {
@@ -414,13 +418,7 @@ export async function mountVideoActions(options: MountOptions): Promise<VideoAct
   };
   share.addEventListener("click", async () => {
     try {
-      if (navigator.share) {
-        // navigator.share resolves only on a completed share, rejects (AbortError)
-        // on cancellation — so we count only after it resolves.
-        await navigator.share({ title: current.title, url: shareUrl });
-        await recordShare();
-        showMessage(status, "Partagé");
-      } else if (await copyLink(shareUrl)) {
+      if (await copyLink(shareUrl)) {
         await recordShare();
         showMessage(status, "Lien copié");
       } else {

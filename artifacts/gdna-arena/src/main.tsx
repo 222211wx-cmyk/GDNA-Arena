@@ -3,8 +3,8 @@ import { getAutoLiteReferral, getNetworkState, shouldAutoRedirectToLite } from "
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const rawRoute = window.location.pathname.slice(base.length) || "/";
 const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
-const clipCode = route.match(/^\/clip\/(HELX-\d{6})$/)?.[1];
-const isClipRoute = route === "/clip" || route === "/clips";
+const clipCode = route.match(/^\/clip\/(HELX-\d{6})$/)?.[1] ?? route.match(/^\/clips\/([1-9]\d*)$/)?.[1];
+const isClipRoute = route === "/clip" || route === "/clips" || route === "/publish";
 const isPartnerLiteRoute = route === "/partners/operators" || route === "/partners/dashboard";
 const autoLiteReferral = getAutoLiteReferral(window.location.search);
 

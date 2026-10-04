@@ -268,3 +268,17 @@ mtime_ms = 1791034206948
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/f54ea0fb-edd1-432d-9dc0-d6be8ae29722/8740b540-2db5-4c18-8110-b45f43c83626"
 storage_version_token = "1791034207969152"
 content_type = "text/csv"
+
+[[outputs]]
+id = "3E_gpzLHz8OsTAQMdqhlQ"
+uri = "file://reports/clips-restored-controls.jpg"
+type = "image"
+title = "Clips — restored controls"
+description = "Actual Clips UI with a temporary local preview clip: Like, Comment, Partage, Retour and native video controls. Preview data was removed after capture."
+logical_id = "4c7838f8-4a10-4041-876c-1b2d18e4b364"
+content_hash = "sha256:0d555c6f553bb670f137d00238541ec570808bf13c09f1503d76a42be371eb2c"
+size = 31951
+mtime_ms = 1791152140727
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/4c7838f8-4a10-4041-876c-1b2d18e4b364/50c46596-4deb-4fa1-85f9-42fa109676a1"
+storage_version_token = "1791152198329479"
+content_type = "image/jpeg"

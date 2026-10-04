@@ -192,7 +192,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   /* The VideoActions overlay (rail + meta) is positioned relative to the slide,
      lifted above the bottom nav. */
   .reels-slide .video-actions-shell{position:static}
-  .reels-slide .clip-overlay{position:absolute;inset:0;z-index:3;pointer-events:none}
+  .reels-slide .clip-overlay{position:absolute;inset:0;z-index:13;pointer-events:none}
   .reels-slide .clip-overlay button,.reels-slide .clip-overlay a,
   .reels-slide .clip-overlay input,.reels-slide .clip-overlay textarea{pointer-events:auto}
   .reels-slide .clip-rail{bottom:calc(104px + var(--reels-bottom-safe))}

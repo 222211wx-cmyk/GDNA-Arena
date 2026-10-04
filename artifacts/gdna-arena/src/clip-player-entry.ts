@@ -67,6 +67,13 @@ function addStyles() {
 }
 
 async function fetchClip(code: string, signal: AbortSignal): Promise<ClipByCode> {
+  if (/^[1-9]\d*$/.test(code)) {
+    const response = await fetch(`${BASE}api/clips/${code}/engagement`, { credentials: "include", signal });
+    if (!response.ok) throw new Error("Clip introuvable");
+    const data = await response.json();
+    if (!data.engagement?.code) throw new Error("Lien du clip indisponible");
+    code = data.engagement.code;
+  }
   const response = await fetch(`${BASE}api/clip/by-code/${encodeURIComponent(code)}`, {
     credentials: "include",
     cache: "no-store",
@@ -201,7 +208,7 @@ export function renderClipPlayer(code: string) {
         </div>
       </header>
       <main dir="rtl">
-       <a class="direct-icon direct-close" href="${BASE}clips?view=grid" aria-label="Fermer le lecteur et afficher la grille">${reelsIcons.close()}</a>
+       <a class="direct-close" href="${BASE}clips" aria-label="Retour">Retour</a>
       <section>
         <p id="player-code" dir="ltr">${code}</p>
         <h1 id="player-name">جارٍ تحميل الكليب…</h1>

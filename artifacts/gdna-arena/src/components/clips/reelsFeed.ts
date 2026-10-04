@@ -237,6 +237,8 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     const slide = el("div", "reels-slide", { "data-clip-id": String(clip.id), "data-testid": "reels-slide" });
     slide.tabIndex = -1;
     const closeViewer = iconButton("Fermer le lecteur et afficher la grille", reelsIcons.close(), "reels-icon-btn reels-viewer-close");
+    closeViewer.textContent = "Retour";
+    closeViewer.setAttribute("aria-label", "Retour");
     closeViewer.addEventListener("click", () => toggleGrid(true));
     slide.append(closeViewer);
 
