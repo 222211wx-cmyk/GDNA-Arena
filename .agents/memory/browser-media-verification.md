@@ -3,6 +3,12 @@ name: Browser media verification
 description: Output verification, large-upload control-plane checks, and honest upload-speed measurements
 ---
 
+When native video controls coexist with a custom image-area click toggle, cancel the image click's default action while leaving the native control strip alone.
+
+**Why:** A real Chromium check showed native default handling undoing the custom play action; mocked media tests did not catch it.
+
+**How to apply:** Verify actual pointer input and advancing playback time, not only calls to play(). Distinguish desktop/mobile viewport checks from physical-device or production-media verification.
+
 Check the actual encoded output when changing media processing; upload success and a playable container are not sufficient evidence.
 
 Before treating a headless MP4 playback error as an application regression, test the identical local fixture and exact codec support in that browser.

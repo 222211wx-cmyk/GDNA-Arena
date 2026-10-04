@@ -243,6 +243,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     // Background from the clip's own poster (never unrelated imagery).
     if (clip.thumb) {
       const bg = el("div", "reels-bg");
+      bg.style.pointerEvents = "none";
       bg.style.backgroundImage = `url("${BASE.replace(/\/$/, "")}${clip.thumb}")`;
       slide.append(bg);
     } else {
@@ -256,6 +257,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     let poster: HTMLImageElement | null = null;
     if (clip.thumb) {
       poster = el("img", "reels-poster", { alt: "", loading: "lazy" }) as HTMLImageElement;
+      poster.style.pointerEvents = "none";
       poster.src = `${BASE.replace(/\/$/, "")}${clip.thumb}`;
       slide.append(poster);
     }
@@ -264,7 +266,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     // a play glyph that only overlays while paused. The fullscreen pill stays
     // visible during playback so the viewer can always expand the active Reel.
     const center = el("div", "reels-center", { "data-paused": "true" });
+    center.style.pointerEvents = "none";
     const fsBtn = el("button", "reels-center-btn reels-fs-pill", { type: "button", "data-testid": "reels-fullscreen" });
+    fsBtn.style.pointerEvents = "auto";
     const fsIcon = el("span", "reels-fs-pill-icon");
     fsIcon.innerHTML = reelsIcons.fullscreen(false);
     const fsLabel = el("span", "reels-fs-pill-label");
@@ -372,7 +376,10 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       v.controls = true;
       v.autoplay = false;
       v.muted = false;
-      Object.assign(v.style, { width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" });
+      Object.assign(v.style, {
+        width: "100%", height: "100%", objectFit: "cover", cursor: "pointer",
+        position: "relative", zIndex: "10", pointerEvents: "auto",
+      });
       // Feed progression is ordered; a clip must never silently replay itself.
       v.loop = false;
       v.preload = "metadata";
@@ -426,6 +433,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         event.stopPropagation();
         // Let the native control strip handle pause/seek/volume itself.
         if (event.isTrusted && event.offsetY >= v.clientHeight - 48) return;
+        // Chromium may also toggle playback as the video click's default
+        // action. Cancel it so this handler does not immediately undo play().
+        event.preventDefault();
         if (v.paused) {
           playbackIntentVersion++;
           userPaused = false;

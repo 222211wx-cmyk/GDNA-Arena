@@ -220,11 +220,18 @@ describe("Reels poster and actions lifecycle", () => {
     expect(video.querySelector("source")?.type).toBe("video/mp4");
     expect(video.querySelector("source")?.src).toBe("https://storage.example/9.mp4");
     expect(HTMLMediaElement.prototype.load).toHaveBeenCalled();
+    expect(video.style.pointerEvents).toBe("auto");
+    expect(video.style.zIndex).toBe("10");
+    expect(poster.style.pointerEvents).toBe("none");
+    expect(document.querySelector<HTMLElement>(".reels-center")?.style.pointerEvents).toBe("none");
+    expect(document.querySelector<HTMLElement>(".reels-fs-pill")?.style.pointerEvents).toBe("auto");
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     expect(document.querySelector(".reels-play")).toBeNull();
     video.dispatchEvent(new Event("loadeddata"));
     expect(poster.style.display).not.toBe("none");
-    video.click();
+    const playbackClick = new MouseEvent("click", { bubbles: true, cancelable: true });
+    video.dispatchEvent(playbackClick);
+    expect(playbackClick.defaultPrevented).toBe(true);
     await Promise.resolve();
     // The poster doesn't consume clicks directed at the media surface.
     video.click();
