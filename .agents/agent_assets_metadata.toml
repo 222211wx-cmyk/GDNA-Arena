@@ -282,3 +282,31 @@ mtime_ms = 1791152140727
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/4c7838f8-4a10-4041-876c-1b2d18e4b364/50c46596-4deb-4fa1-85f9-42fa109676a1"
 storage_version_token = "1791152198329479"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "nL4yZ7kZ6f6DCzuRVZTd0"
+uri = "file://reports/clip-click-diagnosis.png"
+type = "image"
+title = "Live Clips: card remains empty after click"
+description = "Production browser capture of the reproduced failure on clip 13. This is not a Network-tab screenshot and the card was not identified as HACK YOUR BEHAVIOR."
+logical_id = "4125bd02-fc7d-45e6-9673-58f9719a1b6d"
+content_hash = "sha256:ea576feb053afa1d69187213a471045011f9fbcbee3f3d015529d82b0a580cde"
+size = 195755
+mtime_ms = 1791166211033
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/4125bd02-fc7d-45e6-9673-58f9719a1b6d/9d00ac91-65b5-437e-8715-829ac8d2da20"
+storage_version_token = "1791166240498639"
+content_type = "image/png"
+
+[[outputs]]
+id = "3GJHCm9PUMqkQEAD8z19U"
+uri = "file://reports/clip-network-diagnosis.json"
+type = "unspecified"
+title = "Actual browser network capture"
+description = "Chrome network response events before and after clicking the first public Clips card; no stream response or failure appeared after that click."
+logical_id = "1f06b84f-73d2-45fb-870d-40afa6557cd3"
+content_hash = "sha256:e0b4a1b6cdd40931405da5b7edc683e0bafc0ca887b5cc164db0730f9e046449"
+size = 922
+mtime_ms = 1791166211036
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:5d6de8e1-bac9-4586-86fa-81df946acd0b/1f06b84f-73d2-45fb-870d-40afa6557cd3/a8d01617-0fbe-4cf2-b4a8-d117ddc10184"
+storage_version_token = "1791166241380065"
+content_type = "application/octet-stream"

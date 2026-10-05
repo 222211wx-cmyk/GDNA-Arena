@@ -1,0 +1,42 @@
+[
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/feed?limit=5"
+  },
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/thumbnail/13"
+  },
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/thumbnail/12"
+  },
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/thumbnail/11"
+  },
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/thumbnail/9"
+  },
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/thumbnail/8"
+  },
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/13/engagement"
+  },
+  {
+    "phase": "load",
+    "status": 200,
+    "url": "https://gdna-arena.replit.app/api/clips/12/engagement"
+  }
+]
