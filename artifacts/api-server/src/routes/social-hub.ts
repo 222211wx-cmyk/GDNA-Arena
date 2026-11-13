@@ -1,0 +1,663 @@
+/**
+ * Social Hub API — v2
+ * Handles: feed posts, likes, comments, follow/unfollow, citizen search, global search
+ */
+import { Router, type IRouter } from "express";
+import { eq, desc, sql, and, or, ilike, ne, inArray } from "drizzle-orm";
+import {
+  db, pulsePosts, pulsePostLikes, usersTable, postComments, userFollows,
+  platformStories, postReactions, savedPosts, callHistory, notifications,
+} from "@workspace/db";
+import { pool as _pool } from "@workspace/db";
+import { validateContent } from "../lib/moderate";
+import { isValidAttachmentUrl } from "./messages";
+import { pushNotification } from "./notifications";
+import { deletePulsePostForOwner } from "../lib/delete-pulse-post";
+
+const pool = _pool!;
+const router: IRouter = Router();
+
+// ── Rank helper (kept local to avoid cross-import) ────────────────────────────
+function getRank(xp: number) {
+  if (xp <   200) return { label: "Recruit",           icon: "🌱", color: "#6b7280" };
+  if (xp <   500) return { label: "Foot Soldier I",    icon: "🪖", color: "#92400e" };
+  if (xp <  1000) return { label: "Foot Soldier II",   icon: "🪖", color: "#b45309" };
+  if (xp <  2000) return { label: "Knight I",          icon: "⚔️", color: "#9ca3af" };
+  if (xp <  3500) return { label: "Knight II",         icon: "⚔️", color: "#d1d5db" };
+  if (xp <  5000) return { label: "Commander I",       icon: "🛡️", color: "#C9A84C" };
+  if (xp <  7500) return { label: "Commander II",      icon: "🛡️", color: "#f59e0b" };
+  if (xp < 12000) return { label: "Imperial Champion", icon: "👑", color: "#00D4FF" };
+  if (xp < 20000) return { label: "Grand Marshal",     icon: "🏛️", color: "#a78bfa" };
+  return                 { label: "EMPEROR",            icon: "⚡", color: "#22c55e" };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// FEED
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/feed
+router.get("/social/v2/feed", async (req, res): Promise<void> => {
+  const limit = Math.min(Number(req.query.limit ?? 30), 100);
+  const domain = typeof req.query.domain === "string" && req.query.domain !== "all"
+    ? req.query.domain : null;
+
+  const posts = domain
+    ? await db.select().from(pulsePosts)
+        .where(and(eq(pulsePosts.isVisible, true), eq(pulsePosts.domain, domain)))
+        .orderBy(desc(pulsePosts.createdAt)).limit(limit)
+    : await db.select().from(pulsePosts)
+        .where(eq(pulsePosts.isVisible, true))
+        .orderBy(desc(pulsePosts.createdAt)).limit(limit);
+
+  // Attach comment counts
+  const enriched = await Promise.all(posts.map(async (p) => {
+    const [{ cnt }] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(postComments).where(eq(postComments.postId, p.id));
+    return { ...p, commentCount: cnt ?? 0 };
+  }));
+
+  res.json({ posts: enriched });
+});
+
+// GET /api/social/v2/feed/following
+// Returns visible posts authored by citizens the current user follows.
+router.get("/social/v2/feed/following", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  const requestedLimit = Number(req.query.limit ?? 30);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100)
+    : 30;
+
+  const followedRows = await db
+    .select({ followingId: userFollows.followingId })
+    .from(userFollows)
+    .where(eq(userFollows.followerId, userId));
+  const followedIds = followedRows.map(({ followingId }) => followingId);
+
+  if (followedIds.length === 0) {
+    res.json({ posts: [] });
+    return;
+  }
+
+  const posts = await db.select().from(pulsePosts)
+    .where(and(
+      eq(pulsePosts.isVisible, true),
+      inArray(pulsePosts.userId, followedIds),
+    ))
+    .orderBy(desc(pulsePosts.createdAt))
+    .limit(limit);
+
+  const enriched = await Promise.all(posts.map(async (post) => {
+    const [{ cnt }] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(postComments)
+      .where(eq(postComments.postId, post.id));
+    return { ...post, commentCount: cnt ?? 0 };
+  }));
+
+  res.json({ posts: enriched });
+});
+
+// ── YouTube URL helper ─────────────────────────────────────────────────────────
+function getYouTubeId(url: string): string | null {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]{11})/);
+  return m ? m[1] : null;
+}
+
+function detectMediaType(url: string): "image" | "video" | null {
+  if (!url) return null;
+  if (getYouTubeId(url)) return "video";
+  return "image";
+}
+
+// POST /api/social/v2/post — create post
+router.post("/social/v2/post", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  const { content, domain = "general", type = "post", imageUrl, mediaUrl } = req.body as {
+    content: string; domain?: string; type?: string; imageUrl?: string; mediaUrl?: string;
+  };
+
+  // Accept either imageUrl (legacy) or mediaUrl (new unified field)
+  const rawMediaUrl = (mediaUrl ?? imageUrl ?? "").trim();
+
+  if (!content?.trim() || content.length > 500) {
+    res.status(400).json({ error: "Content required (max 500 chars)" }); return;
+  }
+
+  if (rawMediaUrl) {
+    const isYouTube = !!getYouTubeId(rawMediaUrl);
+    if (!isYouTube && !isValidAttachmentUrl(rawMediaUrl)) {
+      res.status(400).json({ error: "Invalid media URL — must be https, a YouTube link, or under 2000 chars" }); return;
+    }
+  }
+
+  const check = await validateContent(content, { allowTrivial: false });
+  if (!check.ok) { res.status(400).json({ error: check.reason }); return; }
+
+  const [me] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+  // +20 XP per post
+  await db.update(usersTable)
+    .set({ xp: sql`${usersTable.xp} + 20` })
+    .where(eq(usersTable.id, userId));
+
+  const [post] = await db.insert(pulsePosts).values({
+    userId, username: me.username, content: content.trim(), domain, type,
+    imageUrl: rawMediaUrl || null,
+  }).returning();
+
+  res.status(201).json({ post: { ...post, commentCount: 0 } });
+});
+
+// DELETE /api/social/v2/post/:id — shared canonical Pulse/Social post deletion
+router.delete("/social/v2/post/:id", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const postId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(postId) || postId < 1) {
+    res.status(400).json({ error: "Invalid ID" }); return;
+  }
+
+  const result = await deletePulsePostForOwner(postId, userId);
+  if (result === "not_found") { res.status(404).json({ error: "Post not found" }); return; }
+  if (result === "forbidden") { res.status(403).json({ error: "Only the post owner can delete it" }); return; }
+  res.json({ deleted: true, postId });
+});
+
+// POST /api/social/v2/post/:id/like
+router.post("/social/v2/post/:id/like", async (req, res): Promise<void> => {
+  const postId = parseInt(req.params.id);
+  if (isNaN(postId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  const voterIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    ?? req.socket.remoteAddress ?? "unknown";
+
+  const [existing] = await db.select().from(pulsePostLikes)
+    .where(and(eq(pulsePostLikes.postId, postId), eq(pulsePostLikes.voterIp, voterIp))).limit(1);
+  if (existing) { res.json({ alreadyLiked: true, likes: null }); return; }
+
+  await db.insert(pulsePostLikes).values({ postId, voterIp });
+  const [updated] = await db.update(pulsePosts)
+    .set({ likes: sql`${pulsePosts.likes} + 1` })
+    .where(eq(pulsePosts.id, postId))
+    .returning({ likes: pulsePosts.likes });
+
+  res.json({ likes: updated?.likes ?? 0 });
+});
+
+// GET /api/social/v2/post/:id/comments
+router.get("/social/v2/post/:id/comments", async (req, res): Promise<void> => {
+  const postId = parseInt(req.params.id);
+  const comments = await db.select().from(postComments)
+    .where(eq(postComments.postId, postId))
+    .orderBy(desc(postComments.createdAt)).limit(50);
+  res.json({ comments: comments.reverse() });
+});
+
+// POST /api/social/v2/post/:id/comment
+router.post("/social/v2/post/:id/comment", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  const postId = parseInt(req.params.id);
+  const { content } = req.body as { content: string };
+
+  if (!content?.trim() || content.length > 300) {
+    res.status(400).json({ error: "Comment content required (max 300 chars)" }); return;
+  }
+
+  const check = await validateContent(content, { allowTrivial: false });
+  if (!check.ok) { res.status(400).json({ error: check.reason }); return; }
+
+  const [me] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (!me) { res.status(404).json({ error: "User not found" }); return; }
+
+  const [comment] = await db.insert(postComments).values({
+    postId, userId, username: me.username, content: content.trim(),
+  }).returning();
+
+  res.status(201).json({ comment });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// FOLLOW SYSTEM
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/my-following
+router.get("/social/v2/my-following", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ following: [] }); return; }
+  const rows = await db.select({ followingId: userFollows.followingId })
+    .from(userFollows).where(eq(userFollows.followerId, userId));
+  res.json({ following: rows.map(r => r.followingId) });
+});
+
+// POST /api/social/v2/follow/:username
+router.post("/social/v2/follow/:username", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  const { username } = req.params;
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
+  if (!target) { res.status(404).json({ error: "Citizen not found" }); return; }
+  if (target.id === userId) { res.status(400).json({ error: "Cannot follow yourself" }); return; }
+
+  try {
+    await db.insert(userFollows).values({ followerId: userId, followingId: target.id });
+    const [follower] = await db.select({ username: usersTable.username })
+      .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (follower) {
+      await pushNotification({
+        userId: target.id,
+        type: "follow",
+        title: "New follower",
+        body: `${follower.username} started following you`,
+        icon: "👤",
+        linkPath: `/citizen/${encodeURIComponent(follower.username)}`,
+      });
+    }
+    res.json({ following: true });
+  } catch {
+    res.json({ following: true, alreadyFollowing: true });
+  }
+});
+
+// DELETE /api/social/v2/follow/:username
+router.delete("/social/v2/follow/:username", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  const { username } = req.params;
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
+  if (!target) { res.status(404).json({ error: "Citizen not found" }); return; }
+
+  await db.delete(userFollows)
+    .where(and(eq(userFollows.followerId, userId), eq(userFollows.followingId, target.id)));
+  res.json({ following: false });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// CITIZENS SEARCH
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/citizens?q=
+router.get("/social/v2/citizens", async (req, res): Promise<void> => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const limit = Math.min(Number(req.query.limit ?? 20), 50);
+
+  const rows = q
+    ? await db.select({
+        id: usersTable.id, username: usersTable.username,
+        xp: usersTable.xp, balance: usersTable.balance,
+      }).from(usersTable)
+        .where(ilike(usersTable.username, `%${q}%`))
+        .orderBy(desc(usersTable.xp)).limit(limit)
+    : await db.select({
+        id: usersTable.id, username: usersTable.username,
+        xp: usersTable.xp, balance: usersTable.balance,
+      }).from(usersTable)
+        .orderBy(desc(usersTable.xp)).limit(limit);
+
+  const citizens = rows.map((u) => ({
+    ...u,
+    xp: Number(u.xp ?? 0),
+    balance: Number(u.balance ?? 0),
+    rank: getRank(Number(u.xp ?? 0)),
+  }));
+
+  res.json({ citizens });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GLOBAL SEARCH
+// ────────────────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────────────────
+// REACTIONS
+// ────────────────────────────────────────────────────────────────────────────
+
+const VALID_REACTIONS = ["❤️", "😂", "😮", "😡", "👏"];
+
+// POST /api/social/v2/post/:id/react
+router.post("/social/v2/post/:id/react", async (req, res): Promise<void> => {
+  const postId = parseInt(req.params.id);
+  if (isNaN(postId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  const { reaction } = req.body as { reaction: string };
+  if (!VALID_REACTIONS.includes(reaction)) { res.status(400).json({ error: "Invalid reaction" }); return; }
+
+  const voterIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    ?? req.socket.remoteAddress ?? "unknown";
+  const userId = req.session?.userId;
+  let username = "Anonymous";
+  if (userId) {
+    const [me] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    if (me) username = me.username;
+  }
+
+  // Upsert: each IP can change their reaction but not double-react
+  await pool.query(
+    `INSERT INTO post_reactions (post_id, user_id, username, voter_ip, reaction)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (post_id, voter_ip) DO UPDATE SET reaction = $5, created_at = now()`,
+    [postId, userId ?? null, username, voterIp, reaction]
+  );
+
+  const { rows } = await pool.query(
+    `SELECT reaction, COUNT(*)::int as cnt FROM post_reactions WHERE post_id = $1 GROUP BY reaction`,
+    [postId]
+  );
+  const counts: Record<string, number> = {};
+  rows.forEach((r: any) => { counts[r.reaction] = r.cnt; });
+
+  // Update likes counter to total reactions
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  await db.update(pulsePosts).set({ likes: total }).where(eq(pulsePosts.id, postId));
+
+  res.json({ reactions: counts, yourReaction: reaction });
+});
+
+// GET /api/social/v2/post/:id/reactions
+router.get("/social/v2/post/:id/reactions", async (req, res): Promise<void> => {
+  const postId = parseInt(req.params.id);
+  const voterIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    ?? req.socket.remoteAddress ?? "unknown";
+  const { rows } = await pool.query(
+    `SELECT reaction, COUNT(*)::int as cnt FROM post_reactions WHERE post_id = $1 GROUP BY reaction`,
+    [postId]
+  );
+  const counts: Record<string, number> = {};
+  rows.forEach((r: any) => { counts[r.reaction] = r.cnt; });
+  const [myRow] = await pool.query(
+    `SELECT reaction FROM post_reactions WHERE post_id = $1 AND voter_ip = $2 LIMIT 1`,
+    [postId, voterIp]
+  ).then(r => r.rows);
+  res.json({ reactions: counts, yourReaction: myRow?.reaction ?? null });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// TRENDING
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/trending
+router.get("/social/v2/trending", async (req, res): Promise<void> => {
+  const topPosts = await db.select({
+    id: pulsePosts.id, username: pulsePosts.username, content: pulsePosts.content,
+    likes: pulsePosts.likes, domain: pulsePosts.domain, createdAt: pulsePosts.createdAt,
+  }).from(pulsePosts)
+    .where(and(eq(pulsePosts.isVisible, true), sql`${pulsePosts.createdAt} > now() - interval '72 hours'`))
+    .orderBy(desc(pulsePosts.likes))
+    .limit(5);
+
+  const recentContent = await db.select({ content: pulsePosts.content })
+    .from(pulsePosts).where(eq(pulsePosts.isVisible, true))
+    .orderBy(desc(pulsePosts.createdAt)).limit(100);
+
+  const tagMap: Record<string, number> = {};
+  recentContent.forEach(p => {
+    (p.content.match(/#\w+/g) ?? []).forEach(tag => { tagMap[tag] = (tagMap[tag] ?? 0) + 1; });
+  });
+  const hashtags = Object.entries(tagMap).sort((a, b) => b[1] - a[1]).slice(0, 8)
+    .map(([tag, count]) => ({ tag, count }));
+
+  res.json({ topPosts, hashtags });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/notifications
+router.get("/social/v2/notifications", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ notifications: [], unreadCount: 0 }); return; }
+
+  const myPosts = await db.select({ id: pulsePosts.id, content: pulsePosts.content })
+    .from(pulsePosts).where(eq(pulsePosts.userId, userId)).limit(50);
+  const myPostIds = myPosts.map(p => p.id);
+
+  const notifs: {
+    sourceRef: string;
+    type: string;
+    username: string;
+    content: string;
+    postSnippet?: string;
+    createdAt: string;
+  }[] = [];
+
+  if (myPostIds.length > 0) {
+    const comments = await pool.query(
+      `SELECT id, username, content, post_id, created_at FROM post_comments WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
+      [myPostIds]
+    );
+    comments.rows.forEach((c: any) => {
+      const post = myPosts.find(p => p.id === c.post_id);
+      notifs.push({ sourceRef: `social-comment:${c.id}`, type: "comment", username: c.username, content: c.content, postSnippet: post?.content?.slice(0, 50), createdAt: c.created_at });
+    });
+
+    const reactions = await pool.query(
+      `SELECT id, username, reaction, post_id, created_at FROM post_reactions WHERE post_id = ANY($1::int[]) ORDER BY created_at DESC LIMIT 15`,
+      [myPostIds]
+    );
+    reactions.rows.forEach((r: any) => {
+      const post = myPosts.find(p => p.id === r.post_id);
+      notifs.push({ sourceRef: `social-reaction:${r.id}`, type: "reaction", username: r.username, content: r.reaction, postSnippet: post?.content?.slice(0, 50), createdAt: r.created_at });
+    });
+  }
+
+  const follows = await pool.query(
+    `SELECT uf.follower_id, uf.created_at, u.username FROM user_follows uf
+     JOIN users u ON u.id = uf.follower_id
+     WHERE uf.following_id = $1 ORDER BY uf.created_at DESC LIMIT 15`,
+    [userId]
+  );
+  follows.rows.forEach((f: any) => {
+    notifs.push({ sourceRef: `social-follow:${f.follower_id}`, type: "follow", username: f.username, content: "started following you", createdAt: f.created_at });
+  });
+
+  notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const visible = notifs.slice(0, 30);
+
+  if (visible.length > 0) {
+    await Promise.all(visible.map((notification) => pool.query(
+      `INSERT INTO notifications (user_id, type, title, body, icon, source_ref, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (user_id, source_ref) WHERE source_ref IS NOT NULL DO NOTHING`,
+      [
+        userId,
+        notification.type,
+        notification.username,
+        notification.content,
+        notification.type === "comment" ? "💬" : notification.type === "reaction" ? "😊" : "👤",
+        notification.sourceRef,
+        notification.createdAt,
+      ],
+    )));
+  }
+
+  const sourceRefs = visible.map(notification => notification.sourceRef);
+  const persisted = sourceRefs.length > 0
+    ? await db.select({
+        id: notifications.id,
+        sourceRef: notifications.sourceRef,
+        isRead: notifications.isRead,
+      }).from(notifications).where(and(
+        eq(notifications.userId, userId),
+        inArray(notifications.sourceRef, sourceRefs),
+      ))
+    : [];
+  const stateBySource = new Map(persisted.map(row => [row.sourceRef, row]));
+  const result = visible.map(notification => ({
+    ...notification,
+    id: stateBySource.get(notification.sourceRef)?.id,
+    isRead: stateBySource.get(notification.sourceRef)?.isRead ?? false,
+  }));
+
+  res.json({
+    notifications: result,
+    unreadCount: result.filter(notification => !notification.isRead).length,
+  });
+});
+
+// POST /api/social/v2/notifications/read-all
+router.post("/social/v2/notifications/read-all", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+
+  await db.update(notifications).set({ isRead: true }).where(and(
+    eq(notifications.userId, userId),
+    sql`${notifications.sourceRef} LIKE 'social-%'`,
+  ));
+  res.json({ ok: true, unreadCount: 0 });
+});
+
+// POST /api/social/v2/notifications/:id/read
+router.post("/social/v2/notifications/:id/read", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = Number.parseInt(rawId, 10);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Invalid notification ID" });
+    return;
+  }
+
+  const [updated] = await db.update(notifications).set({ isRead: true }).where(and(
+    eq(notifications.id, id),
+    eq(notifications.userId, userId),
+    sql`${notifications.sourceRef} LIKE 'social-%'`,
+  )).returning({ id: notifications.id });
+  if (!updated) {
+    res.status(404).json({ error: "Notification not found" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// SAVED POSTS (bookmarks)
+// ────────────────────────────────────────────────────────────────────────────
+
+// POST /api/social/v2/post/:id/save
+router.post("/social/v2/post/:id/save", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const postId = parseInt(req.params.id);
+  if (isNaN(postId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    await db.insert(savedPosts).values({ userId, postId });
+    res.json({ saved: true });
+  } catch {
+    res.json({ saved: true, alreadySaved: true });
+  }
+});
+
+// DELETE /api/social/v2/post/:id/save
+router.delete("/social/v2/post/:id/save", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const postId = parseInt(req.params.id);
+  await db.delete(savedPosts)
+    .where(and(eq(savedPosts.userId, userId), eq(savedPosts.postId, postId)));
+  res.json({ saved: false });
+});
+
+// GET /api/social/v2/my-saved
+router.get("/social/v2/my-saved", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ savedIds: [] }); return; }
+  const rows = await db.select({ postId: savedPosts.postId })
+    .from(savedPosts).where(eq(savedPosts.userId, userId));
+  res.json({ savedIds: rows.map(r => r.postId) });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// CALL HISTORY
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /api/social/v2/call-history
+router.get("/social/v2/call-history", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ records: [] }); return; }
+  const { rows } = await pool.query(
+    `SELECT * FROM call_history
+     WHERE caller_id = $1 OR callee_id = $1
+     ORDER BY started_at DESC LIMIT 30`,
+    [userId]
+  );
+  const records = rows.map((r: any) => ({
+    id: r.id, callerId: r.caller_id, callerUsername: r.caller_username,
+    calleeId: r.callee_id, calleeUsername: r.callee_username,
+    callType: r.call_type, status: r.status,
+    durationSec: r.duration_sec, startedAt: r.started_at,
+  }));
+  res.json({ records });
+});
+
+// POST /api/social/v2/call-history
+router.post("/social/v2/call-history", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Login required" }); return; }
+  const { calleeUsername, callType = "audio", status = "missed", durationSec = 0 } = req.body as {
+    calleeUsername: string; callType?: string; status?: string; durationSec?: number;
+  };
+  const [me] = await db.select({ username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  const callerUsername = me?.username ?? "Unknown";
+  const [callee] = await db.select({ id: usersTable.id })
+    .from(usersTable).where(eq(usersTable.username, calleeUsername)).limit(1);
+  await db.insert(callHistory).values({
+    callerId: userId, callerUsername,
+    calleeId: callee?.id ?? null, calleeUsername,
+    callType, status, durationSec,
+  });
+  res.status(201).json({ ok: true });
+});
+
+// GET /api/social/v2/following  — returns full user objects with online status
+router.get("/social/v2/following", async (req, res): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) { res.json({ following: [] }); return; }
+  const { rows } = await pool.query(
+    `SELECT u.id, u.username, u.xp, u.balance, u.last_seen_at
+     FROM user_follows uf
+     JOIN users u ON u.id = uf.following_id
+     WHERE uf.follower_id = $1
+     ORDER BY u.last_seen_at DESC NULLS LAST, u.username ASC`,
+    [userId]
+  );
+  res.json({ following: rows.map((r: any) => ({ ...r, lastSeenAt: r.last_seen_at })) });
+});
+
+// GET /api/social/v2/search?q=
+router.get("/social/v2/search", async (req, res): Promise<void> => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (!q || q.length < 2) { res.json({ posts: [], citizens: [], stories: [] }); return; }
+
+  const [posts, citizens, stories] = await Promise.all([
+    db.select({ id: pulsePosts.id, username: pulsePosts.username, content: pulsePosts.content, createdAt: pulsePosts.createdAt })
+      .from(pulsePosts)
+      .where(and(eq(pulsePosts.isVisible, true), ilike(pulsePosts.content, `%${q}%`)))
+      .orderBy(desc(pulsePosts.createdAt)).limit(10),
+
+    db.select({ id: usersTable.id, username: usersTable.username, xp: usersTable.xp })
+      .from(usersTable)
+      .where(ilike(usersTable.username, `%${q}%`))
+      .orderBy(desc(usersTable.xp)).limit(8),
+
+    db.select({ id: platformStories.id, username: platformStories.username, content: platformStories.content, createdAt: platformStories.createdAt })
+      .from(platformStories)
+      .where(and(eq(platformStories.isVisible, true), ilike(platformStories.content, `%${q}%`)))
+      .orderBy(desc(platformStories.createdAt)).limit(5),
+  ]);
+
+  res.json({ posts, citizens: citizens.map(c => ({ ...c, rank: getRank(Number(c.xp ?? 0)) })), stories });
+});
+
+export default router;
