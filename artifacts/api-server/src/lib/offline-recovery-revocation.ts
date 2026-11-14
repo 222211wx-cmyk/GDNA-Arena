@@ -17,7 +17,7 @@ export async function completeOfflineRecoveryRevocation(userId: number): Promise
       "SELECT credential_epoch FROM auth_offline_recovery_revocations WHERE user_id=$1 FOR UPDATE", [userId],
     );
     if (!pending.rowCount) { await client.query("COMMIT"); return true; }
-    const { revokeAllCallPushSessions } = await import("./firebase-call-push");
+    const { revokeAllCallPushSessions } = await import("./push-disabled");
     const completed = await revokeAllCallPushSessions(userId, {
       requireProviderConfirmation: true,
       credentialEpoch: pending.rows[0].credential_epoch,

@@ -1,5 +1,5 @@
 import { pool } from "./db";
-import { sendNewMessagePush } from "./firebase-call-push.js";
+import { sendNewMessagePush } from "./push-disabled";
 
 const MAX_MESSAGE_PUSH_RECIPIENTS = 500;
 

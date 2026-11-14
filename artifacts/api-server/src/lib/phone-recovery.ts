@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
 import bcrypt from "bcrypt";
-import { getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
 import type { PoolClient } from "pg";
 import { pool } from "./db";
-import { asPublicConfig, hasFirebaseWebEmulatorConfiguration, type PublicFirebaseConfig } from "./firebase-call-push";
+export interface PublicFirebaseConfig { projectId: string; authDomain: string; [key: string]: unknown }
 
 const MAX_PROOF_AGE_SECONDS = 300;
 const CLOCK_SKEW_SECONDS = 30;
@@ -31,17 +29,9 @@ function digest(value: unknown): string {
 /** The project pin comes ONLY from server-owned configuration, never the JWT
  * or request. No Admin/service-account credential is needed for verification.
  * configured describes local configuration, not console provider/billing readiness. */
+/** Firebase phone recovery is removed; recovery is always unavailable. */
 export function recoveryFirebaseConfig(): PublicFirebaseConfig | null {
-  if (process.env.FIREBASE_AUTH_EMULATOR_HOST || process.env.FIREBASE_EMULATOR_HUB ||
-    process.env.FIREBASE_EMULATOR_HUB_HOST || hasFirebaseWebEmulatorConfiguration()) return null;
-  const config = asPublicConfig();
-  if (!config || !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(config.projectId) ||
-    config.projectId.startsWith("demo-")) return null;
-  // Reject URLs, ports, IPs, localhost and local-only domains. Firebase accepts
-  // real custom auth domains too; don't force a fabricated firebaseapp.com URL.
-  if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/i.test(config.authDomain) ||
-    /(?:^|\.)(?:localhost|local|internal|test|invalid)$/i.test(config.authDomain)) return null;
-  return config;
+  return null;
 }
 
 export function assertFreshPhoneProof(proof: VerifiedPhoneProof): void {
@@ -51,49 +41,8 @@ export function assertFreshPhoneProof(proof: VerifiedPhoneProof): void {
   }
 }
 
-export async function verifyPhoneProof(token: string): Promise<VerifiedPhoneProof> {
-  const config = recoveryFirebaseConfig();
-  if (!config) throw new PhoneRecoveryError(503, RECOVERY_UNAVAILABLE);
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3 || !parts[2]) throw new PhoneRecoveryError(400);
-    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as Record<string, unknown>;
-    if (header.alg !== "RS256" || typeof header.kid !== "string" || !header.kid) {
-      throw new PhoneRecoveryError(400);
-    }
-    const appName = `gdna-phone-recovery-verifier-${config.projectId}`;
-    const app = getApps().find(candidate => candidate.name === appName) ??
-      initializeApp({ projectId: config.projectId }, appName);
-    if (app.options.projectId !== config.projectId) throw new PhoneRecoveryError(503, RECOVERY_UNAVAILABLE);
-    // false is intentional: signature/issuer/audience verification works with
-    // public Google certificates; revocation lookup would require a credential.
-    const decoded = await getAuth(app).verifyIdToken(token, false);
-    const now = Math.floor(Date.now() / 1000);
-    if (decoded.aud !== config.projectId || decoded.iss !== `https://securetoken.google.com/${config.projectId}` ||
-      decoded.firebase?.sign_in_provider !== "phone" || decoded.firebase?.tenant ||
-      typeof decoded.sub !== "string" || !decoded.sub || decoded.uid !== decoded.sub ||
-      typeof decoded.phone_number !== "string" || !/^\+[1-9][0-9]{1,14}$/.test(decoded.phone_number) ||
-      !Number.isSafeInteger(decoded.auth_time) || decoded.auth_time <= 0 ||
-      !Number.isSafeInteger(decoded.iat) || decoded.iat > now + CLOCK_SKEW_SECONDS ||
-      decoded.auth_time > decoded.iat) throw new PhoneRecoveryError(400);
-    const proof = {
-      phone: decoded.phone_number,
-      projectId: config.projectId,
-      authTime: decoded.auth_time,
-      // Refreshing an ID token changes iat/signature, NOT the auth event.
-      eventDigest: digest([config.projectId, decoded.sub, decoded.auth_time]),
-    };
-    assertFreshPhoneProof(proof);
-    return proof;
-  } catch (error) {
-    if (error instanceof PhoneRecoveryError) throw error;
-    const code = (error as { code?: unknown })?.code;
-    if (code === "auth/internal-error" || code === "app/network-error" || code === "app/network-timeout") {
-      throw new PhoneRecoveryError(503, RECOVERY_UNAVAILABLE);
-    }
-    // Never expose Firebase exceptions: they can contain token fragments.
-    throw new PhoneRecoveryError(400);
-  }
+export async function verifyPhoneProof(_token: string): Promise<VerifiedPhoneProof> {
+  throw new PhoneRecoveryError(503, RECOVERY_UNAVAILABLE);
 }
 
 /** Shared PostgreSQL counters count successes too; retries on any replica or

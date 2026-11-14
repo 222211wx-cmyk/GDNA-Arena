@@ -3,7 +3,6 @@ import rateLimit from "express-rate-limit";
 import {
   CallPushError,
   createCallPushSession,
-  getAuthoritativeCallFirestore,
   isValidCallId,
   getCallPushStatus,
   listMissedCalls,
@@ -12,7 +11,7 @@ import {
   removeCallPushDevice,
   setCallPushFocus,
   parseFcmSendRequest,
-} from "../lib/firebase-call-push";
+} from "../lib/push-disabled";
 import { broadcastToUser, declineCallForUser } from "../lib/signaling";
 import { getAuthoritativeCall, getBusyCallCandidate, recoverBusyCall, heartbeatAuthoritativeCall, terminateAuthoritativeCall } from "../lib/call-signal-store";
 import { registerFcmDevice, sendDerivedFcm } from "../lib/fcm";
@@ -84,13 +83,9 @@ router.get(["/expo-push/calls/:id", "/call-push/calls/:id"], callPushLimiter, as
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   if (!isValidCallId(req.params.id)) { res.status(400).json({ error: "Invalid call ID" }); return; }
   try {
-    const state = await getAuthoritativeCallFirestore();
-    const record = await state.collection("callInvites").doc(req.params.id).get();
-    const call = record.data();
-    const expires = call?.expiresAt;
-    const expiresAt = expires instanceof Date ? expires.getTime() : 0;
+    console.log("push disabled");
     res.setHeader("Cache-Control", "no-store, private");
-    res.json({ active: !!call && call.toId === userId && call.status === "ringing" && expiresAt > Date.now() });
+    res.json({ active: false });
   } catch {
     res.status(503).json({ error: "Call status unavailable" });
   }

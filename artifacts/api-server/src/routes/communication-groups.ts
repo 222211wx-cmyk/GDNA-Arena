@@ -5,7 +5,7 @@ import {
   answerGroupCall, createGroupCall, getGroupCall, rejectOrLeaveGroupCall,
   isStoredGroupCallParticipant, type GroupCallRecord, type GroupParticipant,
 } from "../lib/group-call-store";
-import { callSessionBinding, sendAuthoritativeGroupCallPush } from "../lib/firebase-call-push";
+import { callSessionBinding, sendAuthoritativeGroupCallPush } from "../lib/push-disabled";
 import { currentGroupCallMember } from "../lib/group-call-eligibility";
 
 const router: IRouter = Router();
@@ -129,18 +129,9 @@ router.get("/communication/groups/incoming", limiter, async (req, res): Promise<
   const member = userId(req);
   if (!member) { res.status(401).json({ error: "Not authenticated" }); return; }
   try {
-    const { getAuthoritativeCallFirestore } = await import("../lib/firebase-call-push");
-    const db = await getAuthoritativeCallFirestore();
-    // Keep this to a single array-contains filter so initial delivery does not
-    // depend on a deployment-specific composite Firestore index.
-    const snapshot = await db.collection("groupCallInvites").where("participantIds", "array-contains", member).limit(50).get();
-    const calls = await Promise.all(snapshot.docs.map(async doc => {
-      const call = await getGroupCall(doc.id);
-      return call && call.status === "active" && await currentGroupCallMember(call.roomId, member) && call.participants.some(item => item.userId === member && item.status === "invited")
-        ? present(call, member) : null;
-    }));
+    console.log("push disabled");
     res.setHeader("Cache-Control", "no-store, private");
-    res.json({ calls: calls.filter(Boolean) });
+    res.json({ calls: [] });
   } catch {
     res.status(503).json({ error: "Authoritative group call service is unavailable", code: "CALL_SIGNALING_UNAVAILABLE" });
   }

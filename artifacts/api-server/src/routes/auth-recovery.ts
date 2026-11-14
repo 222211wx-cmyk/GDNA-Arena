@@ -18,7 +18,7 @@ import {
 import { completeOfflineRecoveryRevocation } from "../lib/offline-recovery-revocation";
 import { authorizeNewSession, SessionRevokedError } from "../lib/session-security";
 import { configureSessionLifetime } from "../lib/session-policy";
-import { revokeCallPushSession } from "../lib/firebase-call-push";
+import { revokeCallPushSession } from "../lib/push-disabled";
 
 const router: IRouter = Router();
 const BASE = "/auth/recovery";

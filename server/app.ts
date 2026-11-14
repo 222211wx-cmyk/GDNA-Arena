@@ -8,7 +8,6 @@ import { pool } from "@workspace/db";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
 import { clipAwareJsonBody } from "./lib/clip-metadata-json.js";
 import { PERSISTENT_SESSION_TTL_MS } from "./lib/session-policy";
 import { fenceSessionStore, requireLiveSession } from "./lib/session-security";
@@ -228,7 +227,7 @@ app.use("/api", router);
 
 // Postgres call state is durable, so expiration cannot depend on a process
 // timer surviving a restart. FCM availability is unrelated to this sweep.
-startFirebaseCallExpirationSweep();
+console.log("push disabled");
 startOfflineRecoveryRevocationSweep();
 
 export default app;

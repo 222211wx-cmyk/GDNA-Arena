@@ -3,7 +3,7 @@ import { connect } from "node:http2";
 import { pool } from "./db";
 import { validInstallation } from "./expo-push";
 import { logger } from "./logger";
-import { getNativeCallMessaging } from "./firebase-call-push";
+import { getNativeCallMessaging } from "./push-disabled";
 import { getCallStateDb } from "./call-state-db";
 import { isApnsVoipMock } from "./apns-voip-mode";
 import { lockLiveSession } from "./session-security";

@@ -8,7 +8,7 @@ import { pool } from "./lib/db";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
+import { startFirebaseCallExpirationSweep } from "./lib/push-disabled";
 import { clipAwareJsonBody } from "./lib/clips-metadata-json.js";
 import { PERSISTENT_SESSION_TTL_MS } from "./lib/session-policy";
 import { fenceSessionStore, requireLiveSession } from "./lib/session-security";

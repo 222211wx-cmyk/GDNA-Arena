@@ -12,7 +12,7 @@ import { deleteAccountClips } from "../lib/clip-account-delete.js";
 import { deleteAccountCitizenSocial } from "../lib/citizen-media-cleanup.js";
 import { ClipUploadError } from "../lib/clips-upload-protocol.js";
 import { configureSessionLifetime, sessionLifetime, SHORT_SESSION_TTL_MS } from "../lib/session-policy";
-import { revokeCallPushSession } from "../lib/firebase-call-push";
+import { revokeCallPushSession } from "../lib/push-disabled";
 import { PhoneRecoveryError, requireRecoveryUser, revokeRecoveryPushBindings } from "../lib/phone-recovery";
 import { authorizeNewSession, lockLiveSession, SessionRevokedError } from "../lib/session-security";
 import { sessionCredentialEpoch } from "../lib/session-policy";
