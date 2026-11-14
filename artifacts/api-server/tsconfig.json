@@ -14,5 +14,9 @@
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/lib/db/drizzle.config.ts",
+    "src/lib/db/scripts"
   ]
 }
