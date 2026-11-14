@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { openSync, fstatSync, readFileSync, closeSync } from "node:fs";
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getFirestore, type Firestore, type DocumentData, type DocumentReference } from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
 import { pool as pgPool } from "./db";
 import {
@@ -500,12 +500,12 @@ function dateValue(value: unknown, fallback = new Date()): Date {
   return fallback;
 }
 
-function callRef(db: Firestore, callId: string): FirebaseFirestore.DocumentReference;
+function callRef(db: Firestore, callId: string): DocumentReference;
 function callRef(db: CallDatabase, callId: string): CallStateDocumentReference;
 function callRef(db: Firestore | CallDatabase, callId: string):
-  FirebaseFirestore.DocumentReference | CallStateDocumentReference {
+  DocumentReference | CallStateDocumentReference {
   return (db as { collection(name: string): { doc(id: string): unknown } })
-    .collection("callInvites").doc(callId) as FirebaseFirestore.DocumentReference | CallStateDocumentReference;
+    .collection("callInvites").doc(callId) as DocumentReference | CallStateDocumentReference;
 }
 
 function missedRef(db: CallDatabase, userId: number, callId: string): CallStateDocumentReference {
@@ -613,11 +613,11 @@ async function deviceTokens(
   db: Firestore,
   userId: number,
   includeFocused: boolean,
-): Promise<{ token: string; ref: FirebaseFirestore.DocumentReference }[]> {
+): Promise<{ token: string; ref: DocumentReference }[]> {
   const snapshot = await db.collection("users").doc(String(userId))
     .collection("devices").limit(DEVICE_BATCH_SIZE).get();
   const cutoff = Date.now() - FOCUS_FRESH_MS;
-  const candidates: { token: string; ref: FirebaseFirestore.DocumentReference; sessionTag: string }[] =
+  const candidates: { token: string; ref: DocumentReference; sessionTag: string }[] =
     snapshot.docs.flatMap(doc => {
       const value = doc.data();
       if (value.configurationId !== pushConfigurationId()) return [];
@@ -1899,7 +1899,7 @@ export function startFirebaseCallExpirationSweep(): void {
   timer.unref?.();
 }
 
-function firebaseEpochAllowed(data: FirebaseFirestore.DocumentData | undefined, epoch: number): boolean {
+function firebaseEpochAllowed(data: DocumentData | undefined, epoch: number): boolean {
   const minimum = data?.minimumCredentialEpoch;
   return minimum === undefined || (Number.isSafeInteger(minimum) && minimum >= 0 && epoch >= minimum);
 }
