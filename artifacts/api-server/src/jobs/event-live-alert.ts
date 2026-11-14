@@ -14,7 +14,7 @@
 //    eligible-user set never causes OFFSET to skip rows.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { broadcastToUser } from "../lib/signaling";
 
 const BATCH_SIZE = 200;

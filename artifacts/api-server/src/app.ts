@@ -4,12 +4,12 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { pool } from "@workspace/db";
+import { pool } from "./lib/db";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { startFirebaseCallExpirationSweep } from "./lib/firebase-call-push";
-import { clipAwareJsonBody } from "./lib/clip-metadata-json.js";
+import { clipAwareJsonBody } from "./lib/clips-metadata-json.js";
 import { PERSISTENT_SESSION_TTL_MS } from "./lib/session-policy";
 import { fenceSessionStore, requireLiveSession } from "./lib/session-security";
 import { startOfflineRecoveryRevocationSweep } from "./lib/offline-recovery-revocation";
@@ -242,7 +242,7 @@ app.use("/api", (req, _res, next) => {
   const userId = (req.session as any)?.userId;
   if (userId) {
     // fire-and-forget — don't await so it never slows down requests
-    import("@workspace/db")
+    import("./lib/db")
       .then(({ pool }) => {
         pool?.query(`UPDATE "users" SET "last_seen_at" = NOW() WHERE id = $1`, [userId]).catch(() => {});
       })

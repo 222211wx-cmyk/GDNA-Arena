@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 
 export type Posting = { walletId: string; amountMinor: number; currency: string };
 type TransactionClient = { query: <T = any>(sql: string, values?: unknown[]) => Promise<{ rows: T[] }> };

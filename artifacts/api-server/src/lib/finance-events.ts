@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { splitNet7030 } from "./finance-ledger";
 
 type System = Record<"clearing" | "revenue" | "fees" | "taxes" | "refunds" | "agora" | "server", string>;

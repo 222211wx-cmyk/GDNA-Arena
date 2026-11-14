@@ -3,7 +3,7 @@
 // Each level grants perks: a badge, exclusive GIF access, and an earnings
 // multiplier applied on top of the admin-configured base rates.
 
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 
 export interface EmpireLevel {
   level: number;

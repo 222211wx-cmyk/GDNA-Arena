@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { RequestHandler } from "express";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { r2Client, r2Config } from "./r2-storage";
 import { compactCitizen, LITE_CITIZEN_COLUMNS, LITE_VISIBILITY } from "./lite-projection";
 

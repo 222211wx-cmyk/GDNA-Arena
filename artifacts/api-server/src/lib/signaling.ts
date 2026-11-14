@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage, Server } from "http";
 import type { RequestHandler } from "express";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { requireReadyCallMediaProvider } from "./turn-config";
 import {
   appendAuthoritativeSignal, answerAuthoritativeCall, createAuthoritativeCall,
@@ -275,7 +275,7 @@ export async function isCallParticipant(callId: string, userId: number): Promise
 export async function declineCallForUser(callId: string, userId: number): Promise<DeferredCallDeclineResult> {
   try {
     const db = getCallStateDb();
-    const result = await db.runTransaction<DeferredCallDeclineResult>(async transaction => {
+    const result = await db.runTransaction(async transaction => {
       const ref = db.collection("callInvites").doc(callId);
       const snapshot = await transaction.get(ref);
       const data = snapshot.data();

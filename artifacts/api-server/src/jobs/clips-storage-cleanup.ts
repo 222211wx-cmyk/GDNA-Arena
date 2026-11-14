@@ -1,5 +1,5 @@
-import { pool } from "@workspace/db";
-import { clipFile } from "../lib/clip-storage.js";
+import { pool } from "../lib/db";
+import { clipFile } from "../lib/clips-storage.js";
 import { logger } from "../lib/logger";
 import { AbortMultipartUploadCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { r2Client, r2Config, r2Key } from "../lib/r2-storage.js";

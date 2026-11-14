@@ -7,7 +7,7 @@
  */
 
 import { Router, type IRouter } from "express";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 
 const router: IRouter = Router();
 

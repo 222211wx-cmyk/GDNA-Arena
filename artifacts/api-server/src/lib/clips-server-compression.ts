@@ -10,7 +10,7 @@ import {
   DEFAULT_CLIP_TEMP_ROOT,
   ensureClipTempRoot,
   markActiveClipTempDirectory,
-} from "./clip-temp-cleanup.js";
+} from "./clips-temp-cleanup.js";
 
 export const COMPRESS_ABOVE_BYTES = 200_000_000;
 export const FFMPEG_NICE_LEVEL = 10;
@@ -267,6 +267,6 @@ export async function compressStoredClip(input: ClipCompressionInput): Promise<S
   input.signal?.throwIfAborted();
   // Bypass even storage initialization for ordinary uploads.
   if (!input.force && input.size <= COMPRESS_ABOVE_BYTES) return null;
-  const { clipFile } = await import("./clip-storage.js");
+  const { clipFile } = await import("./clips-storage.js");
   return createStoredClipCompressor({ file: clipFile })(input);
 }

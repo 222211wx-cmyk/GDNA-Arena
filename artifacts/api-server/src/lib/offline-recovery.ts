@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import bcrypt from "bcrypt";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import type { PoolClient } from "pg";
 import type { NextFunction, Request, Response } from "express";
 

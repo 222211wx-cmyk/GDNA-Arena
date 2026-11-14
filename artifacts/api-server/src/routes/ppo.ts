@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
-import { pool as _pool } from "@workspace/db";
-import { withPpoTransaction } from "../lib/ppo-transaction";
+import { pool as _pool } from "../lib/db";
+import { withPpoTransaction } from "../lib/ppà-transaction";
 import { allocatePpoWalletCoins } from "../lib/ppo-wallet-allocation";
 
 // pool is typed Pool | null (unconfigured DB) — PPO routes require a database.
@@ -258,7 +258,7 @@ router.post("/ppo/distribute", async (req, res): Promise<void> => {
         `INSERT INTO ppo_distributions (period, total_profit, created_by) VALUES ($1,$2,$3) RETURNING *`,
         [period, walletPool, (req.session as any)?.userId ?? null]);
       const dist = dRows[0];
-      const items = [];
+      const items : any[] = [];
       for (let k = 0; k < sorted.length; k++) {
         const b = sorted[k]; const walletAmount = walletAmounts[k];
         const amount = walletAmount;

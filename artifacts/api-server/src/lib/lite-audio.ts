@@ -4,7 +4,7 @@ import { createWriteStream } from "node:fs";
 import { join } from "node:path";
 import { Transform, type Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { ensureClipTempRoot, markActiveClipTempDirectory, CLIP_TEMP_PREFIX } from "./clip-temp-cleanup";
+import { ensureClipTempRoot, markActiveClipTempDirectory, CLIP_TEMP_PREFIX } from "./clips-temp-cleanup";
 import { LITE_MEDIA_MAX_BYTES } from "./lite-media-storage";
 
 export const AUDIO_MAX_DURATION = 600;

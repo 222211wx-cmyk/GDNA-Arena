@@ -6,7 +6,7 @@
  *  Zero manual intervention required. Forever.
  * ═══════════════════════════════════════════════════════════════
  */
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { ingestMemory, getNeuralStatus } from "../lib/neural-core.js";
 import { createOptionalOpenAI } from "../lib/openai-client.js";
 import { logger } from "../lib/logger.js";

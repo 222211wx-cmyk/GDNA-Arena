@@ -1,12 +1,12 @@
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { clipFile, publishClip, type ClipDatabaseClient } from "./clip-publish.js";
-import { ClipUploadError } from "./clip-upload-protocol.js";
+import { clipFile, publishClip, type ClipDatabaseClient } from "./clips-publish.js";
+import { ClipUploadError } from "./clips-upload-protocol.js";
 import { clipWithThumbnail } from "../routes/clips-thumbnail-response.js";
-import type { UploadPublisher, UploadStore, Versioned } from "./clip-uploads.js";
-import { createClipManifestWriter } from "./clip-manifest-write.js";
+import type { UploadPublisher, UploadStore, Versioned } from "./clps-uploads.js";
+import { createClipManifestWriter } from "./clips-manifest-write.js";
 
 const writeManifest = createClipManifestWriter({
   async save(name, json, generation) {

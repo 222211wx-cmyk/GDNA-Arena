@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { File } from "@google-cloud/storage";
-import { clipFile } from "./clip-storage";
+import { clipFile } from "./clips-storage";
 import { isR2Reference } from "./r2-storage";
 
 export const LITE_MEDIA_MAX_BYTES = 3 * 1024 * 1024;

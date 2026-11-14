@@ -4,7 +4,7 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
-import { pool as pgPool } from "@workspace/db";
+import { pool as pgPool } from "./db";
 import {
   getCallStateDb,
   callFailureDiagnosticCode,
@@ -1485,7 +1485,7 @@ export async function declineDeferredCallInvitation(
 ): Promise<DeferredCallDeclineResult> {
   const db = await getAuthoritativeCallFirestore();
   try {
-    const result = await db.runTransaction<DeferredCallDeclineResult>(async transaction => {
+    const result = await db.runTransaction(async transaction => {
       const ref = callRef(db, callId);
       const snapshot = await transaction.get(ref);
       const data = snapshot.data();

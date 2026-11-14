@@ -3,7 +3,7 @@
 //  بث فوري لكل الشخصيات البارزة بمجرد تشغيل النظام
 // ══════════════════════════════════════════════════════════════════
 
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 
 // ── رسائل الترحيب القوية — تُختار عشوائياً لكل مواطن ──────────────
 const WELCOME_MESSAGES: Array<{ title: string; body: string; icon: string }> = [

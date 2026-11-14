@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { pool } from "@workspace/db";
-import { compressStoredClip, ClipCompressionCleanupError } from "../lib/clip-server-compression.js";
+import { pool } from "../lib/db";
+import { compressStoredClip, ClipCompressionCleanupError } from "../lib/clips-server-compression.js";
 import { logger } from "../lib/logger.js";
-import { retryThumbnailName } from "../lib/clip-storage-names.js";
-import { providerSibling } from "../lib/clip-storage.js";
+import { retryThumbnailName } from "../lib/clips-storage-names.js";
+import { providerSibling } from "../lib/clips-storage.js";
 
 const GLOBAL_LOCK_NAMESPACE = 19183722;
 const GLOBAL_LOCK_KEY = 1;

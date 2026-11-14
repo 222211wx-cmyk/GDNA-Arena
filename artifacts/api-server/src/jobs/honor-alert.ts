@@ -1,7 +1,7 @@
 // GDNA HONOR ALERT SYSTEM v1.0
 // Detects trending citizens every 60s and sends empire honor notifications
 
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 
 async function pushHonorNotification(userId: number, username: string) {
   await pool.query(

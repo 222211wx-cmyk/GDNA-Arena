@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql, and } from "drizzle-orm";
-import { db, pulsePosts, pulseEvents, pulsePostLikes, usersTable, transactionsTable } from "@workspace/db";
+import { db, pulsePosts, pulseEvents, pulsePostLikes, usersTable, transactionsTable } from "../lib/db";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { pushNotification } from "./notifications";
 import { getRate } from "./rights";

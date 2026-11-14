@@ -5,7 +5,7 @@ import { finalClipReceipt } from "./clips-thumbnail-response.js";
 import type { File, CreateWriteStreamOptions } from "@google-cloud/storage";
 import {
   CLIP_EXT, ClipUploadError, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, resolveClipUploadType,
-} from "../lib/clip-upload-protocol.js";
+} from "../lib/clips-upload-protocol.js";
 
 export const SIMPLE_CLIP_MAX_BYTES = MAX_NEW_CLIP_BYTES;
 export const SIMPLE_CLIP_CHUNK_BYTES = 5 * 1024 * 1024;

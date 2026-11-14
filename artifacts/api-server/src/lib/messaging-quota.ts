@@ -1,4 +1,4 @@
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 
 /** Historical trial size, retained only to interpret legacy usage records. */
 export const FREE_MESSAGE_LIMIT = 10;

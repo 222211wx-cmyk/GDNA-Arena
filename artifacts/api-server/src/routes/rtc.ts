@@ -7,7 +7,7 @@
 
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
-import { authorizeAgoraJoin, getAgoraConfigStatus, issueAgoraCredentials } from "../server/agora";
+import { authorizeAgoraJoin, getAgoraConfigStatus, issueAgoraCredentials } from "../lib/agora";
 
 const router: IRouter = Router();
 

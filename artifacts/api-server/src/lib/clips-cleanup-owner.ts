@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import type { StorageOwner } from "./clip-cleanup-approval.js";
+import type { StorageOwner } from "./clips-cleanup-approval.js";
 
 export async function readStorageOwner(client: PoolClient): Promise<StorageOwner> {
   const guard = await client.query(

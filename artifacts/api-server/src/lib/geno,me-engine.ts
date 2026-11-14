@@ -17,7 +17,7 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { createOptionalOpenAI } from "./openai-client.js";
 
 // ── DNA alphabet (base-64, URL-safe) ─────────────────────────

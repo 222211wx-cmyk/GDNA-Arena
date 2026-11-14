@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { FINANCE_SIMULATION_MODE } from "./finance-simulation";
 
 export const ROYAL_RESERVE_SECONDS = 7_200;

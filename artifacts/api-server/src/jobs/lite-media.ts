@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { pool } from "@workspace/db";
-import { clipFile } from "../lib/clip-storage";
+import { pool } from "../lib/db";
+import { clipFile } from "../lib/clips-storage";
 import { isR2Reference, providerSibling } from "../lib/r2-storage";
 import { generateLiteAudio, PermanentAudioError } from "../lib/lite-audio";
 import { encodeLiteAvatar } from "../lib/lite-avatar";
 import { readMediaBounded, storeVerifiedMedia, type MediaResolver } from "../lib/lite-media-storage";
-import { clipCompressionLock } from "./clip-compression";
+import { clipCompressionLock } from "./clips-compression";
 import { logger } from "../lib/logger";
 
 /** Invoked serially by the existing media-worker, never by a public HTTP request.

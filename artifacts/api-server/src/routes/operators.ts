@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Router, type Request, type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
-import { OPERATOR_PACKS, OPERATOR_DISCLAIMER, OPERATOR_PRIVACY, parseOperatorReferral, parseOperatorMeasurement, parsePartnerContact } from "../../../../lib/operator-partnership";
+import { OPERATOR_PACKS, OPERATOR_DISCLAIMER, OPERATOR_PRIVACY, parseOperatorReferral, parseOperatorMeasurement, parsePartnerContact } from "../lib/operator-partnership";
 import { requireAdmin } from "../lib/finance-ledger";
 import { gdnaAuth } from "./gdna";
 import { cleanOperatorRetention, recordOperatorEvent, citizenScience, partnerStats, recordPartnerContact, OperatorError, operatorSessionHash } from "../lib/operator-store";

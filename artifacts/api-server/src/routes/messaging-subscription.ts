@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { pool } from "@workspace/db";
-import { UpdateMessagingSubscriptionBody } from "@workspace/api-zod";
+import { pool } from "../lib/db";
+import { UpdateMessagingSubscriptionBody } from "../lib/api-zod";
 import { requireAdmin } from "../middleware/require-admin";
 import { FREE_MESSAGE_LIMIT, getMessagingQuota } from "../lib/messaging-quota";
 

@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { LITE_VISIBILITY } from "../lib/lite-projection";
 import { LITE_VIDEO_FIELD, liteMediaMetadata } from "../lib/lite-media-policy";
 import { readVerifiedMedia } from "../lib/lite-media-storage";

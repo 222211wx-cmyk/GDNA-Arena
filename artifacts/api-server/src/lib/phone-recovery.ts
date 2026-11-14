@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import type { PoolClient } from "pg";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { asPublicConfig, hasFirebaseWebEmulatorConfiguration, type PublicFirebaseConfig } from "./firebase-call-push";
 
 const MAX_PROOF_AGE_SECONDS = 300;

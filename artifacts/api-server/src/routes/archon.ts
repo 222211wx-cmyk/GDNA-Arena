@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, pool } from "@workspace/db";
-import { archonSessionsTable, archonDirectivesTable } from "@workspace/db/schema";
-import { usersTable } from "@workspace/db/schema";
+import { db, pool } from "../lib/db";
+import { archonSessionsTable, archonDirectivesTable } from "../lib/db-schema";
+import { usersTable } from "../lib/db-schema";
 import { eq, desc } from "drizzle-orm";
 import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 

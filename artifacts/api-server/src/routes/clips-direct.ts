@@ -1,10 +1,10 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { r2Client, r2Config, r2Reference } from "../lib/r2-storage";
-import { publishClip, ClipUploadError } from "../lib/clip-publish";
-import { resolveClipUploadType, clipDownloadExtension, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "../lib/clip-upload-protocol";
-import { validateClipDisplayTitle } from "../lib/clip-title";
+import { publishClip, ClipUploadError } from "../lib/clips-publish";
+import { resolveClipUploadType, clipDownloadExtension, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "../lib/clips-upload-protocol";
+import { validateClipDisplayTitle } from "../lib/clips-title";
 import { finalClipReceipt } from "./clips-thumbnail-response";
 import { logger } from "../lib/logger";
 

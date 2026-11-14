@@ -1,13 +1,13 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import bcrypt from "bcrypt";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import {
   BindRecoveryPhoneBody, BindRecoveryPhoneResponse, GetRecoveryConfigResponse,
   GetRecoveryPhoneResponse, RemoveRecoveryPhoneBody, RemoveRecoveryPhoneResponse,
   ResetRecoveryPasswordBody, ResetRecoveryPasswordResponse,
   AccessRecoveryAccountBody, AccessRecoveryAccountResponse,
-} from "@workspace/api-zod";
+} from "../lib/api-zod";
 import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import {
   PhoneRecoveryError, RECOVERY_UNAVAILABLE, assertFreshPhoneProof, consumeRecoveryProof,

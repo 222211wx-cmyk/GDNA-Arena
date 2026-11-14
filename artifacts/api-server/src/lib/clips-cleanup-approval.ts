@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { reconcileClipStorage, type InventoryObject } from "./clip-storage-reconciliation.js";
+import { reconcileClipStorage, type InventoryObject } from "./clips-storage-reconciliation.js";
 
 export type ExactObject = Required<InventoryObject>;
 export interface StorageOwner {

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import { TurnConfigurationError } from "../lib/turn-config";
-import { getRtcIceServers, getTurnCredentials } from "../server/turn";
+import { getRtcIceServers, getTurnCredentials } from "../lib/turn";
 
 const router: IRouter = Router();
 const iceConfigLimiter = rateLimit({

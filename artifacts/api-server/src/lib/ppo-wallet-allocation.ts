@@ -24,3 +24,7 @@ export async function withPpoTransaction<T>(pool: QueryPool, work: (client: Quer
     client.release();
   }
 }
+
+// STUB: original export missing from this repository.
+import { makeStub } from "./_stub";
+export const allocatePpoWalletCoins: any = makeStub();

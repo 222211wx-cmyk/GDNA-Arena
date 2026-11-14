@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { getRate } from "./rights";
 import { getLevel, multiplierForUsername } from "../lib/levels.js";
 import { moderateText } from "../lib/moderate";

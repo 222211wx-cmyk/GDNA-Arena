@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from "pg";
-import { assertFreshApproval, sameObject, verifyCleanupApproval, type ExactObject, type StorageOwner } from "./clip-cleanup-approval.js";
-import { readStorageOwner } from "./clip-cleanup-owner.js";
-import { reconcileClipStorage } from "./clip-storage-reconciliation.js";
+import { assertFreshApproval, sameObject, verifyCleanupApproval, type ExactObject, type StorageOwner } from "./clips-cleanup-approval.js";
+import { readStorageOwner } from "./clips-cleanup-owner.js";
+import { reconcileClipStorage } from "./clips-storage-reconciliation.js";
 
 /** The adapter is deliberately incapable of listing or deleting a whole bucket. */
 export interface ApprovedCleanupStorage {

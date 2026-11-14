@@ -1,7 +1,7 @@
 import type { File } from "@google-cloud/storage";
 import { objectStorageClient } from "./chatStorage.js";
 import { isR2Reference, r2File } from "./r2-storage.js";
-export { retryThumbnailName } from "./clip-storage-names.js";
+export { retryThumbnailName } from "./clips-storage-names.js";
 export { providerSibling } from "./r2-storage.js";
 
 export function clipFile(name: string): File {

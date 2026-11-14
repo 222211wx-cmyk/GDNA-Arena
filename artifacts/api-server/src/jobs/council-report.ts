@@ -7,7 +7,7 @@
 //  directions, and directives toward global digital leadership.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client.js";
 
 const REPORT_INTERVAL_MS = 24 * 60 * 60 * 1000; // one session per day

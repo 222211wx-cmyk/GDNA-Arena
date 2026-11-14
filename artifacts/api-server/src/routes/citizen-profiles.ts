@@ -3,9 +3,9 @@ import multer from "multer";
 import rateLimit from "express-rate-limit";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { pool, db, citizenProfilesTable, citizenListingsTable } from "@workspace/db";
+import { pool, db, citizenProfilesTable, citizenListingsTable } from "../lib/db";
 import { eq, sql } from "drizzle-orm";
-import { CitizenSaveProfileBody, CitizenCreateListingBody, CitizenAssistantBody } from "@workspace/api-zod";
+import { CitizenSaveProfileBody, CitizenCreateListingBody, CitizenAssistantBody } from "../lib/api-zod";
 import { ageFromBirthDate } from "../lib/age";
 import { citizenBlocked, citizenIdentity, citizenProjection } from "../lib/citizen-projection";
 import { CITIZEN_CITIES, CITIZEN_INTERESTS, CITIZEN_FIELDS, citizenCompatibility, citizenImageType, assistantConsentAllowed, canSeeCitizen } from "../lib/citizen-policy";
@@ -63,7 +63,7 @@ const discover: RequestHandler = async (req, res) => {
   const own = viewer ? await citizenProjection(viewer, viewer) : null;
   if (match && (!own || own.age === null || own.age < 18)) { res.status(viewer ? 403 : 401).json({ error: "Adult account required for matchmaking" }); return; }
   const ids = (await pool.query("SELECT u.id FROM users u LEFT JOIN citizen_profiles p ON p.user_id=u.id WHERE u.password_hash <> 'DELETED' ORDER BY (p.user_id IS NOT NULL) DESC,u.id DESC LIMIT 300")).rows;
-  const profiles = [];
+  const profiles : any[] = [];
   for (const row of ids) {
     const p = await citizenProjection(row.id, viewer);
     if (!p || !canSeeCitizen(p.visibility, p.isSelf, p.isFriend)) continue;
@@ -174,7 +174,7 @@ router.get("/citizen-listings", async (req, res) => {
   res.setHeader("Cache-Control", "private, no-store");
   if ((req.query.type !== undefined && !["market","service"].includes(String(req.query.type))) || !validCity(req.query.city)) { res.status(400).json({ error: "Invalid listing filter" }); return; }
   const rows = await db.select().from(citizenListingsTable).limit(200);
-  const listings = [];
+  const listings : any[] = [];
   for (const row of rows) {
     const item = await listingProjection(row, req.session?.userId);
     if (item && (!req.query.type || item.type === req.query.type) && (!req.query.city || item.city === req.query.city)) listings.push(item);

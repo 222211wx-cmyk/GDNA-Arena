@@ -6,7 +6,7 @@
  *  Every action on the platform feeds this core. It never forgets.
  * ═══════════════════════════════════════════════════════════════
  */
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import {
   AI_UNAVAILABLE_MESSAGE,
   createOptionalOpenAI,

@@ -4,7 +4,7 @@
  * GET  /api/legal/consent — retrieve current user's consent record
  */
 import { Router } from "express";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 
 const router = Router();
 

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { Router, type IRouter } from "express";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 
 const router: IRouter = Router();
 const limiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false });

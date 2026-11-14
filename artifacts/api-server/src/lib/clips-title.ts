@@ -1,4 +1,4 @@
-import { ClipUploadError } from "./clip-upload-protocol.js";
+import { ClipUploadError } from "./clips-upload-protocol.js";
 export function validateClipDisplayTitle(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string") throw new ClipUploadError(400, "Clip display title must be text");

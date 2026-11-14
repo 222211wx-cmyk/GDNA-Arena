@@ -3,8 +3,8 @@
  * /api/genome/*
  */
 import { Router } from "express";
-import { pool } from "@workspace/db";
-import { encodeCitizenDNA, encodeEmpireGenome } from "../lib/genome-engine.js";
+import { pool } from "../lib/db";
+import { encodeCitizenDNA, encodeEmpireGenome } from "../lib/geno,me-engine.js";
 
 const router = Router();
 

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { pool as _pool } from "@workspace/db";
+import { pool as _pool } from "../lib/db";
 import { pushNotification } from "./notifications";
 
 const router: IRouter = Router();

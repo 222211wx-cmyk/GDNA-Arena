@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, sql, and, gt } from "drizzle-orm";
-import { db, platformStories, storyLikes, usersTable, transactionsTable } from "@workspace/db";
+import { db, platformStories, storyLikes, usersTable, transactionsTable } from "../lib/db";
 import { moderateText, hasBlockedKeyword, isDomainAllowed } from "../lib/moderate";
 
 const router: IRouter = Router();

@@ -7,7 +7,7 @@ import {
   gsPlayersTable,
   transactionsTable,
   usersTable,
-} from "@workspace/db";
+} from "../lib/db";
 import { pushNotification } from "./notifications";
 import { isAdultForGames } from "../lib/age";
 
