@@ -14,6 +14,7 @@ import { PERSISTENT_SESSION_TTL_MS } from "./lib/session-policy";
 import { fenceSessionStore, requireLiveSession } from "./lib/session-security";
 import { startOfflineRecoveryRevocationSweep } from "./lib/offline-recovery-revocation";
 const app: Express = express();
+app.get("/health", (_req, res) => { res.status(200).json({ status: "ok" }); });
 // Behind the Railway / Replit router/proxy — needed for correct client IPs (rate
 // limiting) and secure cookies in production.
 app.set("trust proxy", 1);
