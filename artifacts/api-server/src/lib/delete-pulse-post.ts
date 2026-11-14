@@ -1,4 +1,4 @@
-import { pool as sharedPool } from "@workspace/db";
+import { pool as sharedPool } from "./db";
 
 export type DeletePulsePostResult = "deleted" | "not_found" | "forbidden";
 

@@ -1,4 +1,4 @@
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 
 /** Current PostgreSQL membership is checked in addition to the immutable
  * invitation roster. Leaving a room immediately revokes group-call actions. */

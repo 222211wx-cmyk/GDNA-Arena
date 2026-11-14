@@ -1,15 +1,15 @@
 import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import {
   configureGdnaCore,
   GDNA_CORE,
   GDNA_AGENTS,
   type Section,
-} from "../../../../lib/gdna-core";
+} from "./gdna-core";
 import { hasBlockedKeyword } from "./moderate";
 import { citizenProjection } from "./citizen-projection";
-import { MAX_CLIP_BYTES } from "./clip-upload-protocol";
+import { MAX_CLIP_BYTES } from "./clips-upload-protocol";
 
 export { GDNA_CORE, GDNA_AGENTS };
 const VERSION = "gdna-v2-public-marketplace-encyclopedia";
@@ -193,7 +193,7 @@ export async function retrieveGdnaContext(
         [user],
       )
     ).rows;
-    const listings = [];
+    const listings : any[] = [];
     for (const row of rows) {
       const seller = await citizenProjection(row.user_id, user);
       if (!seller || seller.visibility !== "everyone") continue;
@@ -234,7 +234,7 @@ export async function retrieveGdnaContext(
         [user, own?.interests ?? []],
       )
     ).rows;
-    const matches = [];
+    const matches : any[] = [];
     for (const candidate of candidates) {
       const projected = await citizenProjection(candidate.user_id, user);
       const shared =

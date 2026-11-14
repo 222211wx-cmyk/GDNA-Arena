@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import bcrypt from "bcrypt";
-import { pool } from "@workspace/db";
-import { GenerateRecoveryCodeBody, RemoveRecoveryCodeBody, RedeemRecoveryCodeBody } from "@workspace/api-zod";
+import { pool } from "../lib/db";
+import { GenerateRecoveryCodeBody, RemoveRecoveryCodeBody, RedeemRecoveryCodeBody } from "../lib/api-zod";
 import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import { completeOfflineRecoveryRevocation } from "../lib/offline-recovery-revocation";
 import {

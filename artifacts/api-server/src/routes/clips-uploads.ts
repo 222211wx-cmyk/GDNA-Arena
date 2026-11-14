@@ -1,7 +1,7 @@
 import { Router, json, type IRouter, type Request, type Response, type NextFunction } from "express";
 import rateLimit from "express-rate-limit";
-import { ClipUploads, CHUNK_BYTES, parseUploadMetadata, unsignedInteger } from "../lib/clip-uploads.js";
-import { ClipUploadError, MAX_NEW_CLIP_BYTES } from "../lib/clip-upload-protocol.js";
+import { ClipUploads, CHUNK_BYTES, parseUploadMetadata, unsignedInteger } from "../lib/clps-uploads.js";
+import { ClipUploadError, MAX_NEW_CLIP_BYTES } from "../lib/clips-upload-protocol.js";
 import { logger } from "../lib/logger.js";
 import { finalClipReceipt } from "./clips-thumbnail-response.js";
 

@@ -1,4 +1,4 @@
-import type { ClipReference, InventoryObject } from "./clip-storage-reconciliation.js";
+import type { ClipReference, InventoryObject } from "./clips-storage-reconciliation.js";
 
 export interface InventoryPage {
   objects: InventoryObject[];

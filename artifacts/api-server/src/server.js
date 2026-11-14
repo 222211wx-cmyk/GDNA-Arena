@@ -3,7 +3,7 @@
  * The standalone core requested for the Empire's six autonomous challenge bots.
  * It is imported by the API entrypoint, so START runs automatically on Republish.
  */
-import fortressConfig from "./bots.config.json" with { type: "json" };
+import fortressConfig from "./bots-config.json" with { type: "json" };
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { postJournal, reverseJournal, splitNet7030 } from "./finance-ledger";
 import { systemWallets } from "./finance-events";
 

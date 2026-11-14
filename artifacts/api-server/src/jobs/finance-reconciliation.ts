@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { logger } from "../lib/logger";
 export async function reconcileFinance(): Promise<number> {
   const checks = [

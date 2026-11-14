@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { CURRENT_TERMS_VERSION, requireAdmin, splitNet7030 } from "../lib/finance-ledger";
 import { reconcileFinance } from "../jobs/finance-reconciliation";
 import { FINANCE_SIMULATION_MODE, simulatePayment, simulateRefund } from "../lib/finance-simulation";

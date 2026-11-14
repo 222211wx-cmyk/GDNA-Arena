@@ -1,9 +1,9 @@
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import { estimateAvoidedBytes, observedRequestSuccessScore, SCIENCE_METHODOLOGY } from "../../../../lib/gdna-data-science";
-import type { parseOperatorMeasurement, parseOperatorReferral, parsePartnerContact } from "../../../../lib/operator-partnership";
-import { OPERATOR_SOURCES, operatorAggregateThreshold } from "../../../../lib/operator-partnership";
+import { estimateAvoidedBytes, observedRequestSuccessScore, SCIENCE_METHODOLOGY } from "./gdna-data-science";
+import type { parseOperatorMeasurement, parseOperatorReferral, parsePartnerContact } from "./operator-partnership";
+import { OPERATOR_SOURCES, operatorAggregateThreshold } from "./operator-partnership";
 import { LITE_VISIBILITY } from "./lite-projection";
 import { LITE_VIDEO_FIELD } from "./lite-media-policy";
 

@@ -7,8 +7,8 @@ import { eq, desc, sql, and, or, ilike, ne, inArray } from "drizzle-orm";
 import {
   db, pulsePosts, pulsePostLikes, usersTable, postComments, userFollows,
   platformStories, postReactions, savedPosts, callHistory, notifications,
-} from "@workspace/db";
-import { pool as _pool } from "@workspace/db";
+} from "../lib/db";
+import { pool as _pool } from "../lib/db";
 import { validateContent } from "../lib/moderate";
 import { isValidAttachmentUrl } from "./messages";
 import { pushNotification } from "./notifications";
@@ -491,8 +491,8 @@ router.get("/social/v2/notifications", async (req, res): Promise<void> => {
         eq(notifications.userId, userId),
         inArray(notifications.sourceRef, sourceRefs),
       ))
-    : [];
-  const stateBySource = new Map(persisted.map(row => [row.sourceRef, row]));
+    : [] as any[];
+  const stateBySource = new Map<any, any>(persisted.map((row: any) => [row.sourceRef, row]));
   const result = visible.map(notification => ({
     ...notification,
     id: stateBySource.get(notification.sourceRef)?.id,

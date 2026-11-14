@@ -1,4 +1,4 @@
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { logger } from "./logger";
 import type { PoolClient } from "pg";
 

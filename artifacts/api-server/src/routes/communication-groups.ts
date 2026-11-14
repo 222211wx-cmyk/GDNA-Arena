@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
 import rateLimit from "express-rate-limit";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import {
   answerGroupCall, createGroupCall, getGroupCall, rejectOrLeaveGroupCall,
   isStoredGroupCallParticipant, type GroupCallRecord, type GroupParticipant,

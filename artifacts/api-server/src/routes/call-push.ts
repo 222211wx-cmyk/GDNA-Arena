@@ -15,7 +15,7 @@ import {
 } from "../lib/firebase-call-push";
 import { broadcastToUser, declineCallForUser } from "../lib/signaling";
 import { getAuthoritativeCall, getBusyCallCandidate, recoverBusyCall, heartbeatAuthoritativeCall, terminateAuthoritativeCall } from "../lib/call-signal-store";
-import { registerFcmDevice, sendDerivedFcm } from "../server/fcm";
+import { registerFcmDevice, sendDerivedFcm } from "../lib/fcm";
 import { registerExpoInstallation, removeExpoInstallation } from "../lib/expo-push";
 import { registerNativeCallInstallation, removeNativeCallInstallation } from "../lib/native-call-push";
 import { SessionRevokedError } from "../lib/session-security";

@@ -1,19 +1,19 @@
 import { Router, type IRouter } from "express";
 import { enqueueLiteMediaDeletion } from "../lib/lite-media-cleanup.js";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { logger } from "../lib/logger";
 import { createClipsFeedHandler } from "./clips-feed.js";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
-import { createClipPlaybackRouter, publicAvatarUrl } from "./clip-playback.js";
-import { signClipPlayback } from "../lib/clip-playback.js";
-import { clipByteRange } from "../lib/clip-byte-range.js";
-import { runClipStorageCleanupBatch } from "../jobs/clip-storage-cleanup.js";
+import { createClipPlaybackRouter, publicAvatarUrl } from "./clips-playback.js";
+import { signClipPlayback } from "../lib/clips-playback.js";
+import { clipByteRange } from "../lib/clips-byte-range.js";
+import { runClipStorageCleanupBatch } from "../jobs/clips-storage-cleanup.js";
 const clipCompressionLock = (id: number) => `clip-compression:${id}`;
 import {
   clipDownloadExtension, MAX_NEW_CLIP_BYTES,
-} from "../lib/clip-upload-protocol.js";
+} from "../lib/clips-upload-protocol.js";
 import { validateContent } from "../lib/moderate.js";
-import { retiredClipUploadsRouter } from "./clip-upload-retired.js";
+import { retiredClipUploadsRouter } from "./clips-upload-retired.js";
 
 // ─── CLIPS — كليبسز (Reels-style stories and original declarations) ──────────
 // Publishing rules:
@@ -22,8 +22,8 @@ import { retiredClipUploadsRouter } from "./clip-upload-retired.js";
 //  • SHA-256 detects exact bytes only. Original declarations additionally protect
 //    registered full-duration visuals; they are declarations, not legal findings.
 //  • Views earn coins via monetization_settings (content_type 'clip').
-import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
-import { CLIP_THUMBNAIL_MAX_ATTEMPTS } from "../jobs/clip-thumbnail-retry.js";
+import { clipFile, retryThumbnailName } from "../lib/clips-storage.js";
+import { CLIP_THUMBNAIL_MAX_ATTEMPTS } from "../jobs/clips-thumbnail-retry.js";
 
 const router: IRouter = Router();
 router.use(createClipPlaybackRouter({

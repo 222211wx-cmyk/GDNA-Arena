@@ -105,7 +105,7 @@ router.post("/governor/consult", async (req, res): Promise<void> => {
 router.get("/governor/council-reports", async (req, res): Promise<void> => {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
-  const { pool } = await import("@workspace/db");
+  const { pool } = await import("../lib/db");
   if (!pool) { res.json({ reports: [] }); return; }
   try {
     const { rows: adminRows } = await pool.query(

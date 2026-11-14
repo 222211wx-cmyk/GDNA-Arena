@@ -5,7 +5,7 @@
  *  status ACTIF + personalised recommendations for every domain.
  * ═══════════════════════════════════════════════════════════
  */
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 
 export interface SmartDomain {
   id: string;

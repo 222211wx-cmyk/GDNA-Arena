@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, gsMediaTable } from "@workspace/db";
+import { db, gsMediaTable } from "../lib/db";
 import { eq, and, asc } from "drizzle-orm";
 
 const router: IRouter = Router();

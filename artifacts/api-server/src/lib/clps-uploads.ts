@@ -2,7 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
   ClipUploadError, clipDownloadExtension, resolveClipUploadType, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE, type ClipPublishPurpose,
-} from "./clip-upload-protocol.js";
+} from "./clips-upload-protocol.js";
 
 export const CHUNK_BYTES = 5 * 1024 * 1024;
 export const UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;

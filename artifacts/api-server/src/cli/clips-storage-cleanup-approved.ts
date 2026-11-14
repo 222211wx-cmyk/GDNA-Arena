@@ -58,8 +58,8 @@ async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_NOT_CONFIGURED");
   // Status mode returns before any storage/executor module is imported.
   const [{ clipFile }, { runApprovedClipCleanup }, { approvedCleanupStorage }] = await Promise.all([
-    import("../lib/clip-storage.js"),
-    import("../lib/clip-approved-cleanup.js"),
+    import("../lib/clips-storage.js"),
+    import("../lib/clips-approved-cleanup.js"),
     import("../lib/clip-approved-cleanup-gcs.js"),
   ]);
   const root = clipFile("");

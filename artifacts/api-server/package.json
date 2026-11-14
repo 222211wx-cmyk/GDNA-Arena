@@ -17,7 +17,7 @@
     "test:ppo": "rm -rf .ppo-test-dist && tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .ppo-test-dist src/lib/ppo-transaction.ts src/lib/ppo-wallet-allocation.ts src/lib/ppo-payout.test.ts && node --test .ppo-test-dist/ppo-payout.test.js && rm -rf .ppo-test-dist",
     "test:firebase-probe": "node scripts/firebase-call-push-probe.mjs",
     "test:clip-media": "sh -c 'trap \"rm -rf .clip-media-test-dist\" EXIT; tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck --outDir .clip-media-test-dist src/lib/clip-duration.test.ts src/lib/clip-thumbnail.test.ts && node --test .clip-media-test-dist/*.test.js'",
-    "typecheck": "tsc -b ../../lib/db ../../lib/api-zod && tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "clips:reconcile": "node scripts/clip-storage-reconcile.mjs",
     "clips:cleanup-approved": "node scripts/clip-storage-cleanup-approved.mjs",
     "test:clip-approved-cleanup": "node --test tests/clips-approved-cleanup.test.mjs tests/clips-approved-cleanup.integration.test.mjs",
@@ -36,8 +36,6 @@
     "@types/connect-pg-simple": "^7.0.3",
     "@types/multer": "^2.2.0",
     "@types/ws": "^8.18.1",
-    "@workspace/api-zod": "workspace:*",
-    "@workspace/db": "workspace:*",
     "agora-token": "^2.0.5",
     "bcrypt": "^6.0.0",
     "connect-pg-simple": "^10.0.0",
@@ -55,7 +53,8 @@
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
     "web-push": "^3.6.7",
-    "ws": "^8.21.1"
+    "ws": "^8.21.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

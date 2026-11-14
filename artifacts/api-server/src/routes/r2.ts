@@ -8,7 +8,7 @@ import {
   ListPartsCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import {
   r2Client,
   r2Config,
@@ -21,11 +21,11 @@ import {
   clipDownloadExtension,
   resolveClipUploadType,
   ClipUploadError,
-} from "../lib/clip-upload-protocol.js";
-import { validateClipDisplayTitle } from "../lib/clip-title.js";
+} from "../lib/clips-upload-protocol.js";
+import { validateClipDisplayTitle } from "../lib/clips-title.js";
 import { finalClipReceipt } from "./clips-thumbnail-response.js";
 import { logger } from "../lib/logger.js";
-import { publishClip } from "../lib/clip-publish.js";
+import { publishClip } from "../lib/clips-publish.js";
 
 const router: IRouter = Router();
 async function status(sessionId: string, userId: number) {

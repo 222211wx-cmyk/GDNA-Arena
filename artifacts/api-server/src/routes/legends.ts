@@ -4,7 +4,7 @@ import {
   db, legendsTable, legendDebatesTable, legendWatchesTable,
   legendStoriesTable, legendArenaEventsTable,
   usersTable, transactionsTable,
-} from "@workspace/db";
+} from "../lib/db";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { pushNotification } from "./notifications";
 

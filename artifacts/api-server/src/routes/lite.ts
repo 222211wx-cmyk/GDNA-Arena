@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { compactCitizen, litePage, LITE_CITIZEN_COLUMNS, LITE_VISIBILITY } from "../lib/lite-projection";
 import { liteAvatar } from "../lib/lite-avatar";
 import liteMediaRouter from "./lite-media";

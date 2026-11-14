@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 
 // ─── نظام الحقوق وتحقيق الدخل — Rights & Monetization ───────────────────────
 // Every original work is fingerprinted at upload time (first owner wins).

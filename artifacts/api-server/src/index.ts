@@ -1,7 +1,7 @@
 import http from "http";
 import app, { sessionMiddleware, sessionStoreReady } from "./app";
 import { logger } from "./lib/logger";
-import { pool } from "@workspace/db";
+import { pool } from "./lib/db";
 import { attachSignalingServer } from "./lib/signaling.js";
 import { smartFortress } from "./server.js";
 import { startHonorAlertJob } from "./jobs/honor-alert.js";
@@ -9,7 +9,7 @@ import { startWelcomeBroadcastJob, runWelcomeBroadcast } from "./jobs/welcome-br
 import { startImperialDecreeJob, runImperialDecree } from "./jobs/imperial-decree.js";
 import { ensureNeuralTables } from "./lib/neural-core.js";
 import { startNeuralLearningJob } from "./jobs/neural-learning.js";
-import { ensureGenomeTables } from "./lib/genome-engine.js";
+import { ensureGenomeTables } from "./lib/geno,me-engine.js";
 import { startGenomeEvolutionJob } from "./jobs/genome-evolution.js";
 import { startCouncilReportJob } from "./jobs/council-report.js";
 import { ensureMissionsTables, startSovereignMissionsJob } from "./jobs/sovereign-missions.js";

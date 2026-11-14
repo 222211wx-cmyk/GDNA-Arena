@@ -1,4 +1,4 @@
-import { retryThumbnailName } from "./clip-storage-names.js";
+import { retryThumbnailName } from "./clips-storage-names.js";
 
 const DAY_MS = 86_400_000;
 export const MIN_ORPHAN_AGE_DAYS = 30;

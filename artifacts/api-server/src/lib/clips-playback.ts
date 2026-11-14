@@ -271,3 +271,7 @@ export function matchesOriginalVideo(
   }
   return totalDistance <= 20;
 }
+
+// STUB: original export missing from this repository.
+import { makeStub } from "./_stub";
+export const signClipPlayback: any = makeStub();

@@ -9,7 +9,7 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import { pushNotification } from "../routes/notifications.js";
 import { createOptionalOpenAI } from "../lib/openai-client.js";
 

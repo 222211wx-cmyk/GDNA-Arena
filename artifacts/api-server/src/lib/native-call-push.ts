@@ -1,6 +1,6 @@
 import { sign } from "node:crypto";
 import { connect } from "node:http2";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { validInstallation } from "./expo-push";
 import { logger } from "./logger";
 import { getNativeCallMessaging } from "./firebase-call-push";

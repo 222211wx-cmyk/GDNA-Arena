@@ -1,12 +1,12 @@
 import { Router, type IRouter, type Request } from "express";
 import rateLimit from "express-rate-limit";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import {
   GetExhaustedClipThumbnailsQueryParams,
   GetExhaustedClipThumbnailsResponse,
   RequeueClipThumbnailParams,
   RequeueClipThumbnailResponse,
-} from "@workspace/api-zod";
+} from "../lib/api-zod";
 const CLIP_THUMBNAIL_LOCK_KEY = 1;
 const CLIP_THUMBNAIL_LOCK_NAMESPACE = 19183721;
 const CLIP_THUMBNAIL_MAX_ATTEMPTS = 8;

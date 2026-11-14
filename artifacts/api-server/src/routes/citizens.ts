@@ -2,8 +2,8 @@ import { Router, type IRouter } from "express";
 import { eq, desc, sql, ne, and } from "drizzle-orm";
 import {
   db, usersTable, pulsePosts, legendDebatesTable, legendWatchesTable, userFollows,
-} from "@workspace/db";
-import { pool as _pool } from "@workspace/db";
+} from "../lib/db";
+import { pool as _pool } from "../lib/db";
 import { pushNotification } from "./notifications";
 const pool = _pool!;
 

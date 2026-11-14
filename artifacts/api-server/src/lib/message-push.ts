@@ -1,4 +1,4 @@
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { sendNewMessagePush } from "./firebase-call-push.js";
 
 const MAX_MESSAGE_PUSH_RECIPIENTS = 500;

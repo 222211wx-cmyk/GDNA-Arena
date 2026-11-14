@@ -6,8 +6,8 @@
  * ═══════════════════════════════════════════════════════════════
  */
 import { Router, type IRouter } from "express";
-import { db, pool } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
+import { db, pool } from "../lib/db";
+import { usersTable } from "../lib/db-schema";
 import { eq } from "drizzle-orm";
 import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 

@@ -1,8 +1,8 @@
 import { Router, type RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
-import { pool } from "@workspace/db";
-import { AskGdnaBody } from "@workspace/api-zod";
-import { parseAsk } from "../../../../lib/gdna-core";
+import { pool } from "../lib/db";
+import { AskGdnaBody } from "../lib/api-zod";
+import { parseAsk } from "../lib/gdna-core";
 import { GDNA_CORE, GDNA_AGENTS, gdnaAvailable, gdnaUsage, gdnaMemory, deleteGdnaMemory, platform, recordCapabilityVersion } from "../lib/gdna";
 
 export const gdnaAuth: RequestHandler = async (req, res, next) => {

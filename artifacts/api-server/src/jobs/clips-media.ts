@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { pool } from "@workspace/db";
-import { publishClip } from "../lib/clip-publish.js";
-import { verifiedDuration } from "../lib/clip-duration.js";
-import { clipFile, providerSibling } from "../lib/clip-storage.js";
-import { clipDurationSeconds, ClipUploadError, MAX_NEW_CLIP_BYTES } from "../lib/clip-upload-protocol.js";
-import { compressStoredClip } from "../lib/clip-server-compression.js";
+import { pool } from "../lib/db";
+import { publishClip } from "../lib/clips-publish.js";
+import { verifiedDuration } from "../lib/clips-duration.js";
+import { clipFile, providerSibling } from "../lib/clips-storage.js";
+import { clipDurationSeconds, ClipUploadError, MAX_NEW_CLIP_BYTES } from "../lib/clips-upload-protocol.js";
+import { compressStoredClip } from "../lib/clips-server-compression.js";
 import { logger } from "../lib/logger.js";
 
 export async function runClipMediaBatch(signal: AbortSignal): Promise<number> {

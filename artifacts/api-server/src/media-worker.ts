@@ -1,12 +1,12 @@
 import http from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
-import { pool } from "@workspace/db";
+import { pool } from "./lib/db";
 import { logger } from "./lib/logger.js";
-import { runClipMediaBatch } from "./jobs/clip-media.js";
-import { runClipCompressionBatch } from "./jobs/clip-compression.js";
-import { runClipThumbnailRetryBatch } from "./jobs/clip-thumbnail-retry.js";
-import { runClipStorageCleanupBatch, abortOneExpiredR2Upload } from "./jobs/clip-storage-cleanup.js";
-import { startClipTempCleanupWorker } from "./lib/clip-temp-cleanup.js";
+import { runClipMediaBatch } from "./jobs/clips-media.js";
+import { runClipCompressionBatch } from "./jobs/clips-compression.js";
+import { runClipThumbnailRetryBatch } from "./jobs/clips-thumbnail-retry.js";
+import { runClipStorageCleanupBatch, abortOneExpiredR2Upload } from "./jobs/clips-storage-cleanup.js";
+import { startClipTempCleanupWorker } from "./lib/clips-temp-cleanup.js";
 import { runLiteMediaBatch } from "./jobs/lite-media.js";
 
 const port = Number(process.env.PORT);

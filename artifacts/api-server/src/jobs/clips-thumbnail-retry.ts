@@ -1,8 +1,8 @@
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { pool } from "@workspace/db";
-import { clipFile, retryThumbnailName } from "../lib/clip-storage.js";
-import { generateClipThumbnail } from "../lib/clip-thumbnail.js";
+import { pool } from "../lib/db";
+import { clipFile, retryThumbnailName } from "../lib/clips-storage.js";
+import { generateClipThumbnail } from "../lib/clips-thumbnail.js";
 import { logger } from "../lib/logger";
 
 export const CLIP_THUMBNAIL_RETRY_INTERVAL_MS = 5 * 60_000;

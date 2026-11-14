@@ -1,7 +1,7 @@
 import type { RequestHandler } from "express";
 import type { SessionData, Store } from "express-session";
 import type { PoolClient } from "pg";
-import { pool } from "@workspace/db";
+import { pool } from "./db";
 import { sessionCredentialEpoch } from "./session-policy";
 
 export class SessionRevokedError extends Error {

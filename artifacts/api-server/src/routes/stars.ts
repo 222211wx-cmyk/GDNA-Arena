@@ -7,7 +7,7 @@ import { requireMessagingSubscription } from "../middleware/require-messaging-su
 
 import { Router, type IRouter } from "express";
 import bcrypt from "bcrypt";
-import { db, pool, dmRooms, dmRoomMembers, dmMessages, usersTable } from "@workspace/db";
+import { db, pool, dmRooms, dmRoomMembers, dmMessages, usersTable } from "../lib/db";
 import { eq } from "drizzle-orm";
 import { notifyMessageRecipients } from "../lib/message-push";
 import { citizenProjection } from "../lib/citizen-projection";

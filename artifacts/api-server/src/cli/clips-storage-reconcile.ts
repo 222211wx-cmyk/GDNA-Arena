@@ -1,10 +1,10 @@
 import { writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { Pool } from "pg";
-import { clipFile } from "../lib/clip-storage.js";
-import { collectClipInventory, readClipReferences } from "../lib/clip-storage-inventory.js";
-import { MIN_ORPHAN_AGE_DAYS, reconcileClipStorage } from "../lib/clip-storage-reconciliation.js";
-import { reportOwnership } from "../lib/clip-cleanup-owner.js";
+import { clipFile } from "../lib/clips-storage.js";
+import { collectClipInventory, readClipReferences } from "../lib/clips-storage-inventory.js";
+import { MIN_ORPHAN_AGE_DAYS, reconcileClipStorage } from "../lib/clips-storage-reconciliation.js";
+import { reportOwnership } from "../lib/clips-cleanup-owner.js";
 
 async function main() {
   const { values } = parseArgs({

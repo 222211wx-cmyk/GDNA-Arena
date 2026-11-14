@@ -1,13 +1,13 @@
 import { randomInt } from "node:crypto";
-import { pool } from "@workspace/db";
-import { clipFile } from "./clip-storage.js";
+import { pool } from "./db";
+import { clipFile } from "./clips-storage.js";
 import { clipWithThumbnail } from "../routes/clips-thumbnail-response.js";
-import { ClipUploadError, normalizeClipContentType, clipDurationSeconds, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "./clip-upload-protocol.js";
-import { verifiedDuration, ClipProbeBusyError } from "./clip-duration.js";
+import { ClipUploadError, normalizeClipContentType, clipDurationSeconds, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "./clips-upload-protocol.js";
+import { verifiedDuration, ClipProbeBusyError } from "./clips-duration.js";
 
-export { clipFile } from "./clip-storage.js";
-export { verifiedDuration } from "./clip-duration.js";
-export { ClipUploadError, MAX_CLIP_BYTES, CLIP_EXT, validateClipRightsInput } from "./clip-upload-protocol.js";
+export { clipFile } from "./clips-storage.js";
+export { verifiedDuration } from "./clips-duration.js";
+export { ClipUploadError, MAX_CLIP_BYTES, CLIP_EXT, validateClipRightsInput } from "./clips-upload-protocol.js";
 const connectDatabase = () => pool.connect();
 export type ClipDatabaseClient = Awaited<ReturnType<typeof connectDatabase>>;
 

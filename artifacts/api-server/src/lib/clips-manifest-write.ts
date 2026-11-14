@@ -1,6 +1,6 @@
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
-import { ClipUploadError } from "./clip-upload-protocol.js";
+import { ClipUploadError } from "./clips-upload-protocol.js";
 
 export const MANIFEST_MUTATION_INTERVAL_MS = 1200;
 export const MANIFEST_WRITE_MAX_ATTEMPTS = 6;

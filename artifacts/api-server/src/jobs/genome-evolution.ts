@@ -12,12 +12,12 @@
  *  No human intervention required. Ever.
  * ═══════════════════════════════════════════════════════════════
  */
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 import {
   encodeCitizenDNA,
   encodeEmpireGenome,
   geneticCrossover,
-} from "../lib/genome-engine.js";
+} from "../lib/geno,me-engine.js";
 import { ingestMemory } from "../lib/neural-core.js";
 import { createOptionalOpenAI } from "../lib/openai-client.js";
 

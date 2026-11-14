@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { pool } from "@workspace/db";
+import { pool } from "../lib/db";
 
 /**
  * Guards admin-only endpoints: caller must be logged in AND flagged
