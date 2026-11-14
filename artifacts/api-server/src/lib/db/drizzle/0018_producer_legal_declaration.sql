@@ -1,0 +1,14 @@
+DELETE FROM royal_verifications;
+ALTER TABLE royal_verifications ALTER COLUMN legal_name DROP NOT NULL;
+ALTER TABLE royal_verifications ALTER COLUMN bank_holder_name DROP NOT NULL;
+ALTER TABLE royal_verifications ALTER COLUMN bank_name DROP NOT NULL;
+ALTER TABLE royal_verifications ALTER COLUMN encrypted_bank_payload DROP NOT NULL;
+ALTER TABLE royal_verifications ALTER COLUMN masked_account DROP NOT NULL;
+ALTER TABLE royal_verifications ALTER COLUMN id_object_name DROP NOT NULL;
+ALTER TABLE royal_verifications ALTER COLUMN id_mime_type DROP NOT NULL;
+ALTER TABLE royal_verifications ADD COLUMN IF NOT EXISTS producer_name TEXT;
+ALTER TABLE royal_verifications ADD COLUMN IF NOT EXISTS country TEXT;
+ALTER TABLE royal_verifications ADD COLUMN IF NOT EXISTS declaration_accepted BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE royal_verifications ADD COLUMN IF NOT EXISTS warning_accepted_at TIMESTAMPTZ;
+ALTER TABLE royal_verifications DROP CONSTRAINT IF EXISTS royal_verifications_status_check;
+ALTER TABLE royal_verifications ADD CONSTRAINT royal_verifications_status_check CHECK (status IN ('pending','verified','rejected','declared'));

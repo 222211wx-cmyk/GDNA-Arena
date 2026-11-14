@@ -1,0 +1,2 @@
+ALTER TABLE "manual_payout_requests" ADD COLUMN "reserved_minor" bigint DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "manual_payout_requests" ADD COLUMN "reserved_at" timestamp with time zone DEFAULT now() NOT NULL;

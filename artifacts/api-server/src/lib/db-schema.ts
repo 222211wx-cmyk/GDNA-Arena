@@ -1,2 +1,2 @@
-// STUB replacing @workspace/db/schema.
-export * from "./db";
+// Real schema, from ./db/src/schema.
+export * from "./db/src/schema/index";

@@ -1,0 +1,209 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787254640275,
+      "tag": "0000_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787254749341,
+      "tag": "0001_ensure-pulse-posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787257798730,
+      "tag": "0002_remove-obsolete-email-verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787286665554,
+      "tag": "0003_link-globalstar-player-owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787286928684,
+      "tag": "0004_validate-citizen-dna-owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787286989885,
+      "tag": "0005_enforce-future-citizen-dna-owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787287029745,
+      "tag": "0006_anonymize-orphaned-citizen-dna",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787667214561,
+      "tag": "0007_add-amis-e2ee-keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787667789234,
+      "tag": "0008_make-amis-e2ee-keys-per-device",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787747234349,
+      "tag": "0009_lively_silhouette",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787747898211,
+      "tag": "0010_peaceful_vector",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787748498075,
+      "tag": "0011_messy_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787749000000,
+      "tag": "0012_finance_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787750141144,
+      "tag": "0013_windy_cammi",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787750331786,
+      "tag": "0014_demonic_kabuki",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787750881151,
+      "tag": "0015_tough_vargas",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787773172215,
+      "tag": "0016_dashing_roxanne_simpson",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788330000000,
+      "tag": "0017_royal_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788324000000,
+      "tag": "0018_producer_legal_declaration",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788416400000,
+      "tag": "0019_royal_credit_reserve",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789667690639,
+      "tag": "0020_lame_shadow_king",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789671680990,
+      "tag": "0021_browser-web-push",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789724667725,
+      "tag": "0022_exotic_gladiator",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789724667726,
+      "tag": "0023_expo_push",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789724667727,
+      "tag": "0024_native_call_push",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790513184757,
+      "tag": "0025_messaging_subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790513184758,
+      "tag": "0026_lifetime_free_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790877600000,
+      "tag": "0027_phone_auth_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790877600001,
+      "tag": "0028_offline_account_recovery",
+      "breakpoints": true
+    }
+  ]
+}

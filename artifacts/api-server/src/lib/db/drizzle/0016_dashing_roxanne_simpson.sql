@@ -1,0 +1,1 @@
+ALTER TABLE "dm_messages" ADD COLUMN "expires_at" timestamp;
