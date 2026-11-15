@@ -332,7 +332,7 @@ export function attachSignalingServer(httpServer: Server, sessionMiddleware: Req
   const cleanup = () => {
     if (cleanupRunning) return;
     cleanupRunning = true;
-    void cleanupStaleAuthoritativeCalls().catch(error => {
+    void Promise.resolve(cleanupStaleAuthoritativeCalls()).catch(error => {
       logger.warn({ event: "call_cleanup_failed", diagnosticCode: callFailureDiagnosticCode(error) }, "Call cleanup failed");
     }).finally(() => { cleanupRunning = false; });
   };
