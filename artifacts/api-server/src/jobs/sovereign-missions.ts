@@ -89,7 +89,7 @@ async function fetchActiveCitizens() {
   (b.ai_profile ->> 'auctoritas')::int AS auctoritas,
   b.ai_profile
 FROM archon_sessions b
-      WHERE b.user_id = u.id
+      WHERE b.user_id::text = u.id::text
       ORDER BY b.created_at DESC
       LIMIT 1
     ) ars ON true
