@@ -79,18 +79,18 @@ async function fetchActiveCitizens() {
     LEFT JOIN pulse_posts pp ON pp.username = u.username
     LEFT JOIN LATERAL (
      SELECT
-  (ai_profile ->> 'archetype') AS archetype,
-  (ai_profile ->> 'voluntas')::int AS voluntas,
-  (ai_profile ->> 'resilentia')::int AS resilentia,
-  (ai_profile ->> 'intellectus')::int AS intellectus,
-  (ai_profile ->> 'disciplina')::int AS disciplina,
-  (ai_profile ->> 'societas')::int AS societas,
-  (ai_profile ->> 'abundantia')::int AS abundantia,
-  (ai_profile ->> 'auctoritas')::int AS auctoritas,
-  ai_profile
-FROM archon_sessions 
-      WHERE user_id = u.id
-      ORDER BY created_at DESC
+  (b.ai_profile ->> 'archetype') AS archetype,
+  (b.ai_profile ->> 'voluntas')::int AS voluntas,
+  (b.ai_profile ->> 'resilentia')::int AS resilentia,
+  (b.ai_profile ->> 'intellectus')::int AS intellectus,
+  (b.ai_profile ->> 'disciplina')::int AS disciplina,
+  (b.ai_profile ->> 'societas')::int AS societas,
+  (b.ai_profile ->> 'abundantia')::int AS abundantia,
+  (b.ai_profile ->> 'auctoritas')::int AS auctoritas,
+  b.ai_profile
+FROM archon_sessions b
+      WHERE b.user_id = u.id
+      ORDER BY b.created_at DESC
       LIMIT 1
     ) ars ON true
     WHERE u.last_seen_at > NOW() - INTERVAL '7 days'
