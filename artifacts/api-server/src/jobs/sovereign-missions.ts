@@ -46,7 +46,7 @@ async function fetchActiveCitizens() {
     wins: number;
     posts: number;
     archetype: string | null;
-    voluntas: number | null;
+   ars.voluntas: number | null;
     resilentia: number | null;
     intellectus: number | null;
     disciplina: number | null;
