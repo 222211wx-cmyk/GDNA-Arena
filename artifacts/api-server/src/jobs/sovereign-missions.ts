@@ -38,15 +38,15 @@ export async function ensureMissionsTables(): Promise<void> {
 // ── Fetch active citizens with their DNA + Archon data ───────
 async function fetchActiveCitizens() {
   const { rows } = await pool.query<{
-    id: number;
+    id: number
     username: string;
-    xp: number;
+    xp: number
     balance: string;
-    games_played: number;
-    wins: number;
-    posts: number;
+    games_played: number
+    wins: number
+    posts: number
     archetype: string | null;
-   ars.voluntas: number | null;
+    voluntas: number | null;
     resilentia: number | null;
     intellectus: number | null;
     disciplina: number | null;
