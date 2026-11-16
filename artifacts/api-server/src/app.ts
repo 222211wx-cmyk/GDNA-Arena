@@ -1,4 +1,6 @@
 import express, { type Express } from "express";
+import path from "node:path";
+import fs from "node:fs";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -251,6 +253,17 @@ app.use("/api", (req, _res, next) => {
   next();
 });
 app.use("/api", router);
+// Serve the built web app (artifacts/gdna-arena/dist/public or dist) from the same service.
+const webDir = [process.env.WEB_DIST, "artifacts/gdna-arena/dist/public", "artifacts/gdna-arena/dist"]
+  .filter((d): d is string => Boolean(d))
+  .map((d) => path.resolve(process.cwd(), d))
+  .concat(["../gdna-arena/dist/public", "../gdna-arena/dist"].map((d) => path.resolve(process.cwd(), d)))
+  .find((d) => fs.existsSync(path.join(d, "index.html")));
+if (webDir) {
+  app.use(express.static(webDir));
+  // SPA fallback: after all /api routes; unknown /api paths stay 404.
+  app.get(/^\/(?!api(\/|$)).*/, (_req, res) => res.sendFile(path.join(webDir, "index.html")));
+}
 // Postgres call state is durable, so expiration cannot depend on a process
 // timer surviving a restart. FCM availability is unrelated to this sweep.
 startFirebaseCallExpirationSweep();
