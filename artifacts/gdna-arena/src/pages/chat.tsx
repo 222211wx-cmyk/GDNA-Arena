@@ -29,12 +29,12 @@ import { gdnaCopy, GDNA_PERSONA } from "@/lib/gdna-copy";
 import { GdnaError, type GdnaAskResult, type GdnaSection } from "@/lib/gdna-core";
 import { useGdnaStatus, useGdnaAsk } from "@/hooks/use-gdna";
 import { parseGdnaChatIntent } from "@/lib/gdna-assist";
-import GdnaSectionTabs from "@/components/gdna/GdnaSectionTabs";
-import GdnaUsageMeter from "@/components/gdna/GdnaUsageMeter";
-import GdnaMemoryPanel from "@/components/gdna/GdnaMemoryPanel";
-import GdnaEvolutionPanel from "@/components/gdna/GdnaEvolutionPanel";
-import GdnaReviewDialog from "@/components/gdna/GdnaReviewDialog";
-import { GdnaCitations, GdnaSuggestions } from "@/components/gdna/GdnaCitations";
+import GdnaSectionTabs from "@/components/GdnaSectionTabs";
+import GdnaUsageMeter from "@/components/GdnaUsageMeter";
+import GdnaMemoryPanel from "@/components/GdnaMemoryPanel";
+import GdnaEvolutionPanel from "@/components/GdnaEvolutionPanel";
+import GdnaReviewDialog from "@/components/GdnaReviewDialog";
+import { GdnaCitations, GdnaSuggestions } from "@/components/GdnaCitations";
 
 interface ChatMessage {
   id: string;

@@ -4,8 +4,8 @@ import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Skeleton } from "@workspace/gdna-ds/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@workspace/gdna-ds/components/ui/empty";
-import { CitizenShell } from "@/components/citizen/CitizenShell";
-import CitizenCard from "@/components/citizen/CitizenCard";
+import { CitizenShell } from "@/citizen/CitizenShell";
+import CitizenCard from "@/citizen/CitizenCard";
 import { useCitizenMap, type CitizenProfile } from "@/hooks/use-citizen";
 
 // Approximate normalized (0..100) plot points for major Moroccan cities.

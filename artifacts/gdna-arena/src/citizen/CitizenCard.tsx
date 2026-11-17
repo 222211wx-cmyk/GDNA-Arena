@@ -5,7 +5,7 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@workspace/gdna-ds/components/ui/avatar";
 import { cn } from "@workspace/gdna-ds/lib/utils";
-import { UnifiedMessenger } from "@/components/messenger/UnifiedMessenger";
+import { UnifiedMessenger } from "@/messenger/UnifiedMessenger";
 import { citizenProfileHref, citizenMediaSrc } from "@/lib/citizen";
 import { useFollowCitizen, type CitizenProfile, type CitizenStatus } from "@/hooks/use-citizen";
 

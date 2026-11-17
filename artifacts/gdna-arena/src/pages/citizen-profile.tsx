@@ -19,11 +19,11 @@ import {
 } from "@workspace/gdna-ds/components/ui/select";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@workspace/gdna-ds/components/ui/empty";
 import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
-import { CitizenShell } from "@/components/citizen/CitizenShell";
-import CitizenAssistant from "@/components/citizen/CitizenAssistant";
-import GdnaAssistButton from "@/components/gdna/GdnaAssistButton";
-import { openUnifiedMessenger } from "@/components/messenger/UnifiedMessenger";
-import { CitizenProfileDrawer } from "@/components/citizen/CitizenProfileDrawer";
+import { CitizenShell } from "@/citizen/CitizenShell";
+import CitizenAssistant from "@/citizen/CitizenAssistant";
+import GdnaAssistButton from "@/components/GdnaAssistButton";
+import { openUnifiedMessenger } from "@/messenger/UnifiedMessenger";
+import { CitizenProfileDrawer } from "@/citizen/CitizenProfileDrawer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCaptureBirthDate } from "@/hooks/use-citizen-eligibility";
 import { citizenMediaSrc } from "@/lib/citizen";

@@ -3,14 +3,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { RecoveryPhoneSettings } from "@/components/auth/recovery-phone-settings";
+import { RecoveryPhoneSettings } from "@/auth/recovery-phone-settings";
 import { CardHeader, CardTitle } from "@workspace/gdna-ds/components/ui/card";
 import { useLang } from "@/contexts/LangContext";
 import { task39Text } from "@/i18n/task39";
 import { dashboardLocale, dashboardText, type DashboardCopyKey } from "@/i18n/dashboard-copy";
 import { useEffect, useState } from "react";
 import { Coins, LogOut, Swords, Trophy, Activity, Target, Gift, Wallet, CheckCircle, Clock, BrainCircuit, ArrowRight, Zap, Lock, Crown, ScrollText, Users, ShieldCheck } from "lucide-react";
-import { RecoveryCodeSettings } from "@/components/auth/recovery-code-settings";
+import { RecoveryCodeSettings } from "@/auth/recovery-code-settings";
 
 type DailyArchonDirective = {
   id: number;

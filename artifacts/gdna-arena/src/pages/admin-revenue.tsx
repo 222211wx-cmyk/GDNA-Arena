@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { GOLD, GOLD_A } from "../components/social/social-i18n";
+import { GOLD, GOLD_A } from "../social/social-i18n";
 import { useLang } from "@/contexts/LangContext";
 import { financeT } from "@/i18n/finance-copy";
 

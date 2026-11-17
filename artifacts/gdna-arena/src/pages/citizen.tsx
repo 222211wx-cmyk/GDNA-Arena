@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { useCallContext } from "@/contexts/CallContext";
 import { COMMUNITY_T } from "@/i18n/community-pages";
-import { SOCIAL_T } from "@/components/social/social-i18n";
+import { SOCIAL_T } from "@/social/social-i18n";
 import { localeFor as sharedLocaleFor, surfaceText } from "@/i18n/community-admin-surfaces-copy";
 import { finalLabelText } from "@/i18n/final-labels-copy";
 

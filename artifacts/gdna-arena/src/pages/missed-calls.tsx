@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCallContext } from "@/contexts/CallContext";
 import { useLang } from "@/contexts/LangContext";
 import { getMissedCallsCopy } from "@/i18n/missed-calls-copy";
-import { MissedCallsInbox } from "@/components/messenger/MissedCallsInbox";
+import { MissedCallsInbox } from "@/messenger/MissedCallsInbox";
 
 /**
  * Dedicated missed-calls destination. The Calls tab keeps its compact inbox

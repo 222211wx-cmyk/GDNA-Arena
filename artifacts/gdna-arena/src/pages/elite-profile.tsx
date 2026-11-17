@@ -13,11 +13,11 @@ import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Separator } from "@workspace/gdna-ds/components/ui/separator";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@workspace/gdna-ds/components/ui/empty";
-import { ElitePortrait } from "@/components/elite/ElitePortrait";
-import { EliteSocialRail } from "@/components/elite/EliteSocialRail";
-import { EliteFanChat } from "@/components/elite/EliteFanChat";
+import { ElitePortrait } from "@/elite/ElitePortrait";
+import { EliteSocialRail } from "@/elite/EliteSocialRail";
+import { EliteFanChat } from "@/elite/EliteFanChat";
 import { getEliteProfile, isGuestOfHonor } from "@/lib/elite-profiles";
-import { EliteVipPage } from "@/components/elite/EliteVipPage";
+import { EliteVipPage } from "@/components/EliteVipPage";
 
 export default function EliteProfilePage() {
   const params = useParams();

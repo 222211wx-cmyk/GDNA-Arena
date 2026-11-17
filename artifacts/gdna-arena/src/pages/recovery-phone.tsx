@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { recoveryCopy } from "@/i18n/recovery-copy";
 import { recoveryReturnPath, recoveryRoute } from "@/lib/recovery-links";
-import { RecoveryPhoneSettings } from "@/components/auth/recovery-phone-settings";
+import { RecoveryPhoneSettings } from "@/auth/recovery-phone-settings";
 import { useRecoveryLanguage, useRecoveryMetadata } from "./recover-account";
 
 export default function RecoveryPhone() {

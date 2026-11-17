@@ -16,10 +16,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@workspace/gdna-ds/components/ui/select";
 import { useToast } from "@workspace/gdna-ds/hooks/use-toast";
-import { CitizenShell } from "@/components/citizen/CitizenShell";
-import CitizenAssistant from "@/components/citizen/CitizenAssistant";
-import GdnaAssistButton from "@/components/gdna/GdnaAssistButton";
-import { UnifiedMessenger } from "@/components/messenger/UnifiedMessenger";
+import { CitizenShell } from "@/citizen/CitizenShell";
+import CitizenAssistant from "@/citizen/CitizenAssistant";
+import GdnaAssistButton from "@/components/GdnaAssistButton";
+import { UnifiedMessenger } from "@/messenger/UnifiedMessenger";
 import { citizenProfileHref, citizenMediaSrc } from "@/lib/citizen";
 import { useCitizenMeta } from "@/hooks/use-citizen";
 import {

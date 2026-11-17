@@ -3,7 +3,7 @@ import { Users, ArrowLeft, UserPlus } from "lucide-react";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Skeleton } from "@workspace/gdna-ds/components/ui/skeleton";
 import { CITIZEN_LIGHT_CLASS } from "@/lib/citizen";
-import CitizenCard from "@/components/citizen/CitizenCard";
+import CitizenCard from "@/citizen/CitizenCard";
 import { useCitizenDiscovery } from "@/hooks/use-citizen";
 import { useAuth } from "@/contexts/AuthContext";
 

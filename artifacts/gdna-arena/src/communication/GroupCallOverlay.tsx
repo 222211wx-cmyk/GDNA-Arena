@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { AuthUser } from "@/contexts/AuthContext";
 import type { GroupRemoteTrack, GroupParticipant } from "@/client/hooks/useGroupCall";
 import type { useGroupCall } from "@/client/hooks/useGroupCall";
-import { CallRecordingPanel } from "@/components/communication/CallRecordingPanel";
+import { CallRecordingPanel } from "@/communication/CallRecordingPanel";
 
 type GroupController = ReturnType<typeof useGroupCall>;
 

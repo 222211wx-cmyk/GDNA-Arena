@@ -7,7 +7,7 @@ import { Input } from "@workspace/gdna-ds/components/ui/input";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@workspace/gdna-ds/components/ui/dropdown-menu";
-import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { LanguageSwitcher } from "@/layout/language-switcher";
 import { installText, requestSectionInstall, type InstallSection } from "@/lib/section-install";
 import { SEARCH_ROUTE, SETTINGS_ROUTE, UI_TEXT } from "@/config/platform-directory";
 

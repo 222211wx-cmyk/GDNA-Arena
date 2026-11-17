@@ -1,8 +1,8 @@
 /**
  * LiveTab — Go Live launcher + active streams audience list
  */
-import LiveStoryRecorder from "../LiveStoryRecorder";
-import { useCallContext } from "../../contexts/CallContext";
+import LiveStoryRecorder from "../components/LiveStoryRecorder";
+import { useCallContext } from "../contexts/CallContext";
 import { Radio } from "lucide-react";
 
 interface Props {
