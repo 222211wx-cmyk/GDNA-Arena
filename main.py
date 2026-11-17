@@ -1,4 +1,4 @@
-app.runfrom flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string
 app = Flask(__name__)
 
 EMPLOYEE_NAME = "Ameeq AI"
