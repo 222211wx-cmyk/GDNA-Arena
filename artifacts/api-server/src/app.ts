@@ -1,3 +1,5 @@
+import path from "node:path";
+import { existsSync } from "node:fs";
 import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -225,6 +227,15 @@ app.use("/api", (req, _res, next) => {
   next();
 });
 app.use("/api", router);
+
+// Serve the built GDNA Arena web app at the domain root (SPA fallback for non-API routes).
+const webRoot = process.env.WEB_DIST_DIR || path.resolve(process.cwd(), "artifacts/gdna-arena/dist/public");
+if (existsSync(path.join(webRoot, "index.html"))) {
+  app.use(express.static(webRoot, { index: "index.html", maxAge: "1h", setHeaders: (res, file) => {
+    if (/(sw\.js|\.html)$/.test(file)) res.setHeader("Cache-Control", "no-cache");
+  } }));
+  app.get(/^\/(?!api(\/|$)).*/, (_req, res) => res.sendFile(path.join(webRoot, "index.html")));
+}
 
 // Postgres call state is durable, so expiration cannot depend on a process
 // timer surviving a restart. FCM availability is unrelated to this sweep.
