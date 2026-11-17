@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { useCall } from "@/client/hooks/useCall";
+import { useCall } from "@/hooks/useCall";
 import { useAuth } from "@/contexts/AuthContext";
 import CallOverlay from "@/components/CallOverlay";
 import GlobalCallAlerts from "@/components/GlobalCallAlerts";

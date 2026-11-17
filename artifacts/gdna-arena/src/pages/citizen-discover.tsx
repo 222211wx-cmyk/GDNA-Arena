@@ -14,9 +14,9 @@ import { Switch } from "@workspace/gdna-ds/components/ui/switch";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
 import { Skeleton } from "@workspace/gdna-ds/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@workspace/gdna-ds/components/ui/empty";
-import { CitizenShell } from "@/components/citizen/CitizenShell";
-import CitizenCard from "@/components/citizen/CitizenCard";
-import CitizenAssistant from "@/components/citizen/CitizenAssistant";
+import { CitizenShell } from "@/citizen/CitizenShell";
+import CitizenCard from "@/citizen/CitizenCard";
+import CitizenAssistant from "@/citizen/CitizenAssistant";
 import { useCitizenMeta, useCitizenDiscovery, type CitizenDiscoveryFilters } from "@/hooks/use-citizen";
 
 const ALL = "__all__";

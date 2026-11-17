@@ -5,10 +5,10 @@ import { Toaster } from '@workspace/gdna-ds/components/ui/toaster';
 import { Router as WouterRouter, Switch, Route } from 'wouter';
 import { LanguageProvider } from '@/globalstar/contexts/language-context';
 
-import Home from '@/globalstar/pages/home';
+import Home from '@/pages/home';
 import Ranking from '@/globalstar/pages/ranking';
 import FigureDetail from '@/globalstar/pages/figure-detail';
-import News from '@/globalstar/pages/news';
+import News from '@/pages/news';
 import Traditions from '@/globalstar/pages/traditions';
 import About from '@/globalstar/pages/about';
 import EarningsPage from '@/globalstar/pages/earnings';

@@ -12,7 +12,7 @@ import { useLang } from "@/contexts/LangContext";
 import { offlineRecoveryCopy, offlineRecoveryErrorKind } from "@/i18n/offline-recovery-copy";
 import { recoveryReturnPath } from "@/lib/recovery-links";
 import { announceAccountChange } from "@/lib/account-session-events";
-import { RecoveryWarnings } from "@/components/auth/recovery-code-settings";
+import { RecoveryWarnings } from "@/auth/recovery-code-settings";
 import { useRecoveryLanguage, useRecoveryMetadata } from "./recover-account";
 
 /** Accept pasted codes with spaces/odd case; server remains authoritative. */

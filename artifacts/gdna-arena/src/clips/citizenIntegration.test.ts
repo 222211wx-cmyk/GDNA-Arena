@@ -30,7 +30,7 @@ describe("clip citizen integration", () => {
   });
 
   it("keeps React, messenger and AI behind explicit dynamic imports", () => {
-    const sourceAt = (name: string) => readFileSync(resolve("src/components/clips", name), "utf8");
+    const sourceAt = (name: string) => readFileSync(resolve("src/clips", name), "utf8");
     const actions = sourceAt("./VideoActions.ts");
     expect(actions).toContain('await import("./ClipCitizenPanel")');
     expect(actions).toContain('await import("../messenger/UnifiedMessenger")');
@@ -39,7 +39,7 @@ describe("clip citizen integration", () => {
     expect(panel).toContain('section: "helixly", clipId: options.clipId');
     expect(panel).toContain('disabled={!consent || !prompt.trim() || busy}');
     expect(panel).toContain("Metadata-only assistance");
-    for (const name of ["../../clip-entry.ts", "../../clip-player-entry.ts", "./reelsFeed.ts"]) {
+    for (const name of ["../clip-entry.ts", "../clip-player-entry.ts", "./reelsFeed.ts"]) {
       const source = sourceAt(name);
       expect(source).not.toMatch(/^import .*?(ClipCitizenPanel|UnifiedMessenger|App|react-dom)/m);
     }

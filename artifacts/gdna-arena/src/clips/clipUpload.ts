@@ -88,6 +88,10 @@ async function fileIdentity(file: File, signal: AbortSignal) {
   return Array.from(hash, x => x.toString(16).padStart(2, "0")).join("");
 }
 
+/** Inclusive upload limit documented in CLIP-UPLOAD.md (10 GiB). */
+export const MAX_CLIP_BYTES = 10 * 1024 * 1024 * 1024;
+export const FILE_TOO_LARGE_MESSAGE = "This file is too large to upload.";
+
 /** browser chunks → authenticated server → storage; resume confirmed parts. */
 export async function uploadClip(
   file: File,
@@ -97,6 +101,7 @@ export async function uploadClip(
   options: { expectedOwner: number },
 ): Promise<PublishedClip> {
   signal.throwIfAborted();
+  if (file.size > MAX_CLIP_BYTES) throw new Error(FILE_TOO_LARGE_MESSAGE);
   const owner = await currentUploadOwner(signal);
   if (owner !== options.expectedOwner) {
     throw new Error("Le compte a changé — ce fichier ne sera pas publié avec un autre compte");

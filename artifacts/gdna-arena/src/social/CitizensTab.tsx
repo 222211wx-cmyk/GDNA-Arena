@@ -7,7 +7,7 @@ import { Search, UserPlus, UserCheck } from "lucide-react";
 import { useLocation } from "wouter";
 import Avatar from "./Avatar";
 import { GOLD, GOLD_A, api, useSocialI18n } from "./social-i18n";
-import { useCallContext } from "../../contexts/CallContext";
+import { useCallContext } from "../contexts/CallContext";
 import type { Citizen } from "./social-types";
 
 function CallBtn({ icon, title, onClick, color }: { icon: string; title: string; onClick: () => void; color: string }) {

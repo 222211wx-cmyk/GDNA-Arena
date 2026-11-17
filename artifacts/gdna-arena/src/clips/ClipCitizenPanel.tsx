@@ -7,7 +7,7 @@ import { tokens } from "@workspace/gdna-ds";
 import { openUnifiedMessenger } from "../messenger/UnifiedMessenger";
 import { CitizenProfileDrawer } from "../citizen/CitizenProfileDrawer";
 import { CitizenCardVisual } from "../citizen/CitizenProfileCard";
-import type { CitizenProfile } from "../../hooks/use-citizen";
+import type { CitizenProfile } from "../hooks/use-citizen";
 
 type Options = { mode: "profile" | "message" | "assistant"; clipId: number; peerId: number; peerUsername: string };
 const BASE = import.meta.env.BASE_URL;

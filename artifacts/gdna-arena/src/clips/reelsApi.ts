@@ -2,7 +2,7 @@
 // under BASE and sends credentials so the session cookie scopes engagement,
 // saves, shares, follows, and notifications to the signed-in citizen.
 
-import { fetchSharedClipSession } from "../../lib/account-session-events";
+import { fetchSharedClipSession } from "@/lib/account-session-events";
 
 const BASE = import.meta.env.BASE_URL;
 

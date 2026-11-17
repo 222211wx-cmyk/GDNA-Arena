@@ -11,9 +11,9 @@ import { useLang } from "@/contexts/LangContext";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { installText, requestSectionInstall } from "@/lib/section-install";
 import { dashboardText } from "@/i18n/dashboard-copy";
-import { SOCIAL_T } from "@/components/social/social-i18n";
-import Messenger from "@/components/messenger/Messenger";
-import BusyCallRecovery from "@/components/messenger/BusyCallRecovery";
+import { SOCIAL_T } from "@/social/social-i18n";
+import Messenger from "@/messenger/Messenger";
+import BusyCallRecovery from "@/messenger/BusyCallRecovery";
 import Login from "@/pages/login";
 import { MESSAGES_ENTRY_PATH } from "@/lib/messages-entry";
 

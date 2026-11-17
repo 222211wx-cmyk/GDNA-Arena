@@ -11,7 +11,7 @@ import {
 import { useAuth }        from "@/contexts/AuthContext";
 import { useCallContext } from "@/contexts/CallContext";
 import { useLang }        from "@/contexts/LangContext";
-import { SOCIAL_T } from "@/components/social/social-i18n";
+import { SOCIAL_T } from "@/social/social-i18n";
 import { formatNumber, isArabic, techT } from "@/i18n/tech-surfaces-copy";
 
 interface HonorInfo { title: string; color: string; badge: string }

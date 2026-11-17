@@ -3,9 +3,9 @@ import { motion } from "framer-motion";
 import { Crown, Star, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
-import { ElitePortrait } from "@/components/elite/ElitePortrait";
+import { ElitePortrait } from "@/elite/ElitePortrait";
 import { getEliteCarousel, isGuestOfHonor } from "@/lib/elite-profiles";
-import { GuestOfHonorCard } from "@/components/elite/GuestOfHonorCard";
+import { GuestOfHonorCard } from "@/components/GuestOfHonorCard";
 
 export default function ElitePage() {
   const profiles = getEliteCarousel();

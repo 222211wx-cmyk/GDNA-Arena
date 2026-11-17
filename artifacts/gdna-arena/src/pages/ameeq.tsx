@@ -3,7 +3,7 @@
  * Standalone RTL chat page at /ameeq
  */
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/components/social/social-i18n";
+import { api } from "@/social/social-i18n";
 import { useLang } from "@/contexts/LangContext";
 
 const EMPLOYEE_NAME = "Ameeq AI";

@@ -11,9 +11,9 @@ import {
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { Badge } from "@workspace/gdna-ds/components/ui/badge";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
-import { ElitePortrait } from "@/components/elite/ElitePortrait";
+import { ElitePortrait } from "@/elite/ElitePortrait";
 import { getEliteCarousel, isGuestOfHonor } from "@/lib/elite-profiles";
-import { GuestOfHonorCard } from "@/components/elite/GuestOfHonorCard";
+import { GuestOfHonorCard } from "@/components/GuestOfHonorCard";
 
 /**
  * Homepage Elite carousel — exactly 11 profiles in the required editorial order

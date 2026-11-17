@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLang } from "@/contexts/LangContext";
 import { offlineRecoveryCopy } from "@/i18n/offline-recovery-copy";
 import { recoveryReturnPath, recoveryRoute } from "@/lib/recovery-links";
-import { RecoveryCodeSettings } from "@/components/auth/recovery-code-settings";
+import { RecoveryCodeSettings } from "@/auth/recovery-code-settings";
 import { useRecoveryLanguage, useRecoveryMetadata } from "./recover-account";
 
 export default function RecoveryCodePage() {

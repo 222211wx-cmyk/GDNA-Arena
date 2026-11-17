@@ -6,7 +6,7 @@
 // media pauses; playback URLs and posters load lazily; the feed paginates.
 
 import { reelsIcons } from "./reelsIcons";
-import { registerNavigationLayer } from "../../lib/navigation-layers";
+import { registerNavigationLayer } from "@/lib/navigation-layers";
 import { icons } from "./clipIcons";
 import { mountInboxBadge } from "./inboxBadge";
 import {
@@ -25,7 +25,7 @@ import {
   type NotificationItem,
 } from "./reelsApi";
 import { mountVideoActions, type VideoActionState } from "./VideoActions";
-import { getInstallLang, installText, requestSectionInstall } from "../../lib/section-install";
+import { getInstallLang, installText, requestSectionInstall } from "@/lib/section-install";
 
 const BASE = import.meta.env.BASE_URL;
 const PAGE_SIZE = 5;

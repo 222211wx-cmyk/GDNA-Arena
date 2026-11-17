@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { recoveryCopy } from "@/i18n/recovery-copy";
 import { recoveryErrorText, recoveryRequest, type RecoveryConfig } from "@/lib/phone-recovery";
 import { recoveryReturnPath, recoveryRoute } from "@/lib/recovery-links";
-import { PhoneRecoveryFlow } from "@/components/auth/phone-recovery-flow";
+import { PhoneRecoveryFlow } from "@/auth/phone-recovery-flow";
 import { offlineRecoveryCopy } from "@/i18n/offline-recovery-copy";
 
 export function useRecoveryLanguage() {

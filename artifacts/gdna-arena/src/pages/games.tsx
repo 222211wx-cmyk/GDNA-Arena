@@ -10,7 +10,7 @@ import { useLang } from "@/contexts/LangContext";
 import { useLocation, Link } from "wouter";
 import GameExitButton from "@/components/GameExitButton";
 import GameWarning from "@/components/GameWarning";
-import AgeGate from "@/components/legal/AgeGate";
+import AgeGate from "@/legal/AgeGate";
 import { formatSurfaceNumber } from "@/i18n/locale-surfaces-b-copy";
 import {
   Play,
