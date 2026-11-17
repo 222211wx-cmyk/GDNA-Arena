@@ -1,6 +1,15 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { CATALOGUE } from "./shop";
+
+const GAMES = [
+  { id: "neon-racer", name: "Neon Racer", route: "/games/neon-racer" },
+  { id: "crypto-clash", name: "Crypto Clash", route: "/games/crypto-clash" },
+  { id: "arena-strike", name: "Arena Strike", route: "/games/arena-strike" },
+  { id: "penalty-king", name: "Penalty King", route: "/games/penalty-king" },
+  { id: "globalstar", name: "GlobalStar", route: "/games/globalstar" },
+];
 
 const router = Router();
 
@@ -12,13 +21,19 @@ router.get("/search", async (req, res) => {
   try {
     const q = (req.query.q as string || "").trim();
     if (!q || q.length < 2) {
-      return res.json({ legends: [], citizens: [], posts: [], events: [] });
+      return res.json({ legends: [], citizens: [], posts: [], events: [], clips: [], games: [], shop: [] });
     }
 
     const term = `%${q.toLowerCase()}%`;
     const LIMIT = 6;
 
-    const [legends, citizens, posts, events] = await Promise.all([
+    const needle = q.toLowerCase();
+    const games = GAMES.filter(g => g.name.toLowerCase().includes(needle) || g.id.includes(needle));
+    const shop = CATALOGUE.filter(i => i.name.toLowerCase().includes(needle) || i.name_ar.includes(q) || i.category.includes(needle))
+      .slice(0, LIMIT).map(({ id, name, name_ar, price, emoji }) => ({ id, name, name_ar, price, emoji }));
+    const likeTerm = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+
+    const [legends, citizens, posts, events, clips] = await Promise.all([
       // Legends: search by name, domain, nationality
       db.execute(sql`
         SELECT id, name, domain, nationality, rank, image_url
@@ -61,13 +76,28 @@ router.get("/search", async (req, res) => {
         ORDER BY is_live DESC, event_date DESC
         LIMIT ${LIMIT}
       `),
+
+      // Clips: public, non-frozen, by title or author
+      db.execute(sql`
+        SELECT id, title, username, duration_sec, views
+        FROM clips
+        WHERE is_frozen = FALSE AND object_name IS NOT NULL AND object_name <> ''
+          AND (title ILIKE ${likeTerm} OR username ILIKE ${likeTerm})
+        ORDER BY id DESC
+        LIMIT ${LIMIT}
+      `),
     ]);
+
+    res.setHeader("Cache-Control", "public, max-age=15, stale-while-revalidate=60");
 
     return res.json({
       legends: legends.rows ?? [],
       citizens: citizens.rows ?? [],
       posts: posts.rows ?? [],
       events: events.rows ?? [],
+      clips: clips.rows ?? [],
+      games,
+      shop,
     });
   } catch (err) {
     console.error("[search] error:", err);

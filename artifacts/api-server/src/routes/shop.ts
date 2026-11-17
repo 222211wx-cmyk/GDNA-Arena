@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 
 const router = Router();
 
-const CATALOGUE = [
+export const CATALOGUE = [
   { id: 1, name: "GDNA T-Shirt",         name_ar: "تيشيرت GDNA",         price: 100, category: "clothing",    emoji: "👕" },
   { id: 2, name: "Empire Cup",           name_ar: "كأس الإمبراطورية",     price: 50,  category: "collectible", emoji: "🏆" },
   { id: 3, name: "Arena Cap",            name_ar: "قبعة الأرينا",          price: 80,  category: "clothing",    emoji: "🧢" },

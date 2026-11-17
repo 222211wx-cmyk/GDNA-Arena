@@ -233,6 +233,7 @@ const webRoot = process.env.WEB_DIST_DIR || path.resolve(process.cwd(), "artifac
 if (existsSync(path.join(webRoot, "index.html"))) {
   app.use(express.static(webRoot, { index: "index.html", maxAge: "1h", setHeaders: (res, file) => {
     if (/(sw\.js|\.html)$/.test(file)) res.setHeader("Cache-Control", "no-cache");
+    else if (file.includes(`${path.sep}assets${path.sep}`)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   } }));
   app.get(/^\/(?!api(\/|$)).*/, (_req, res) => res.sendFile(path.join(webRoot, "index.html")));
 }

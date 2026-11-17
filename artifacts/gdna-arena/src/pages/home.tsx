@@ -7,6 +7,8 @@ import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Card, CardContent } from "@workspace/gdna-ds/components/ui/card";
 import { EliteCarousel } from "@/components/elite/EliteCarousel";
 import { PlatformLauncher } from "@/components/home/PlatformLauncher";
+import { GlobalSearch } from "@/components/home/GlobalSearch";
+import { TrustSections } from "@/components/home/TrustSections";
 import HomeCitizenSection from "@/components/citizen/HomeCitizenSection";
 import {
   Crown,
@@ -555,10 +557,13 @@ export default function Home() {
       className="min-h-screen bg-background text-foreground"
       dir={lang === "ar" ? "rtl" : "ltr"}
     >
+      <GlobalSearch />
       <PlatformLauncher />
 
       {/* ── LIVE EVENTS TICKER ─────────────────────────────────────── */}
       <LiveTicker />
+
+      <TrustSections />
 
       {/* ── HERO SECTION ───────────────────────────────────────────── */}
       <section className="relative min-h-[88vh] flex items-center justify-center overflow-hidden">
