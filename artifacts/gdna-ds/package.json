@@ -1,0 +1,19 @@
+{
+  "name": "@workspace/gdna-ds",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./lib/utils": "./src/lib/utils.ts",
+    "./hooks/use-toast": "./src/hooks/use-toast.ts",
+    "./components/ui/*": "./src/components/ui/*.tsx"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "react": "catalog:",
+    "@types/react": "catalog:"
+  }
+}

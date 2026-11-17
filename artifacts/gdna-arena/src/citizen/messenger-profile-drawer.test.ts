@@ -6,7 +6,7 @@ const source = (path: string) => readFileSync(resolve("src", path), "utf8");
 
 describe("messenger citizen profile drawer wiring", () => {
   it("opens the shared right drawer from both room list and active conversation", () => {
-    const messenger = source("components/messenger/Messenger.tsx");
+    const messenger = source("messenger/Messenger.tsx");
     expect(messenger).toContain("<MessengerCitizenDrawer");
     expect(messenger).toContain("setDrawerUsername(peerName)");
     expect(messenger).toContain('data-testid={activeRoom.type === "direct" ? "open-active-citizen-card"');
@@ -15,7 +15,7 @@ describe("messenger citizen profile drawer wiring", () => {
   });
 
   it("keeps matchmaking distinct from follow and labels city location approximate", () => {
-    const drawer = source("components/citizen/CitizenProfileDrawer.tsx");
+    const drawer = source("citizen/CitizenProfileDrawer.tsx");
     expect(drawer).toContain('section="matchmaking"');
     expect(drawer).toContain('triggerLabel="تعارف"');
     expect(drawer).toContain("إحداثيات تقريبية");
@@ -23,7 +23,7 @@ describe("messenger citizen profile drawer wiring", () => {
   });
 
   it("persists owner privacy from the messenger drawer only for the owner", () => {
-    const bridge = source("components/citizen/MessengerCitizenDrawer.tsx");
+    const bridge = source("citizen/MessengerCitizenDrawer.tsx");
     expect(bridge).toContain("useUpdateMyProfile()");
     expect(bridge).toContain("update.mutate(");
     expect(bridge).toContain("query.data?.isSelf ? changeVisibility : undefined");
