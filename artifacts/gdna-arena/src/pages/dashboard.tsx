@@ -370,7 +370,7 @@ interface ArchonDashProfile {
   overallScore: number;
   archetypeDeclaration: string | null;
   dimensions: {
-    volontas: number; resilentia: number; intellectus: number;
+    voluntas: number; resilentia: number; intellectus: number;
     disciplina: number; societas: number; abundantia: number; auctoritas: number;
   };
 }
@@ -387,7 +387,7 @@ function computeFourPillarsDash(d: ArchonDashProfile["dimensions"], overallScore
   const dimVals = Object.values(d);
   return [
     { id: "mens",    latin: "MENS",    symbol: "🧠", color: "#A8E6CF", score: Math.round((d.intellectus + d.auctoritas) / 2) },
-    { id: "vis",     latin: "VIS",     symbol: "⚔️", color: "#C9A84C", score: Math.round((d.volontas + d.disciplina) / 2) },
+    { id: "vis",     latin: "VIS",     symbol: "⚔️", color: "#C9A84C", score: Math.round((d.voluntas + d.disciplina) / 2) },
     { id: "anima",   latin: "ANIMA",   symbol: "🔥", color: "#FF8C42", score: Math.round((d.resilentia + d.societas) / 2) },
     { id: "legatum", latin: "LEGATUM", symbol: "👑", color: "#DDA0DD", score: Math.round((d.abundantia * 0.5) + (overallScore * 0.3) + (Math.min(...dimVals) * 0.2)) },
   ];
@@ -412,12 +412,12 @@ function ArchonIdentityWidget() {
             archonCode: s.archonCode,
             archetype: s.archetype ?? "THE SEEKER",
             overallScore: Math.round(
-              [s.volontas, s.resilentia, s.intellectus, s.disciplina, s.societas, s.abundantia, s.auctoritas]
+              [s.voluntas, s.resilentia, s.intellectus, s.disciplina, s.societas, s.abundantia, s.auctoritas]
                 .reduce((a: number, b: number) => a + b, 0) / 7
             ),
             archetypeDeclaration: s.aiProfile?.archetype_declaration ?? null,
             dimensions: {
-              volontas: s.volontas, resilentia: s.resilentia, intellectus: s.intellectus,
+              voluntas: s.voluntas, resilentia: s.resilentia, intellectus: s.intellectus,
               disciplina: s.disciplina, societas: s.societas, abundantia: s.abundantia, auctoritas: s.auctoritas,
             },
           });

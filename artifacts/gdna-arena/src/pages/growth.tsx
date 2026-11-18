@@ -10,7 +10,7 @@ const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface ArchonDimensions {
-  volontas: number; resilentia: number; intellectus: number;
+  voluntas: number; resilentia: number; intellectus: number;
   disciplina: number; societas: number; abundantia: number; auctoritas: number;
 }
 interface ArchonProfile {
@@ -21,7 +21,7 @@ interface ArchonProfile {
 
 // ── The 7 Archon Dimensions ────────────────────────────────────────────────────
 const DIMENSIONS = [
-  { key: "volontas", latin: "VOLONTAS", labelKey: "growth_dimension_volontas", color: "#C9A84C", glyph: "⚔" },
+  { key: "voluntas", latin: "VOLUNTAS", labelKey: "growth_dimension_voluntas", color: "#C9A84C", glyph: "⚔" },
   { key: "resilentia", latin: "RESILENTIA", labelKey: "growth_dimension_resilentia", color: "#E8C97A", glyph: "🛡" },
   { key: "intellectus", latin: "INTELLECTUS", labelKey: "growth_dimension_intellectus", color: "#A8E6CF", glyph: "👁" },
   { key: "disciplina", latin: "DISCIPLINA", labelKey: "growth_dimension_disciplina", color: "#DDA0DD", glyph: "⚙" },
@@ -33,7 +33,7 @@ const DIMENSIONS = [
 // ── The 7 Initiation Questions ─────────────────────────────────────────────────
 const QUESTIONS = [
   {
-    dim: "VOLONTAS", labelKey: "growth_dimension_volontas", glyph: "⚔",
+    dim: "VOLUNTAS", labelKey: "growth_dimension_voluntas", glyph: "⚔",
     q: "growth_q1", choices: { A: "growth_q1_a", B: "growth_q1_b", C: "growth_q1_c", D: "growth_q1_d" },
   },
   {
@@ -90,7 +90,7 @@ type BootKey = typeof BOOT_KEYS[number];
 
 const ENCODING_KEYS = [
   "growth_encoding_transmitting",
-  "growth_encoding_volontas",
+  "growth_encoding_voluntas",
   "growth_encoding_resilentia",
   "growth_encoding_intellectus",
   "growth_encoding_disciplina",
@@ -269,10 +269,10 @@ export default function Growth() {
             archonCode: s.archonCode,
             archetype: s.archetype ?? "THE SEEKER",
             dimensions: {
-              volontas: s.volontas, resilentia: s.resilentia, intellectus: s.intellectus,
+              voluntas: s.voluntas, resilentia: s.resilentia, intellectus: s.intellectus,
               disciplina: s.disciplina, societas: s.societas, abundantia: s.abundantia, auctoritas: s.auctoritas,
             },
-            overallScore: Math.round([s.volontas, s.resilentia, s.intellectus, s.disciplina, s.societas, s.abundantia, s.auctoritas].reduce((a: number, b: number) => a + b, 0) / 7),
+            overallScore: Math.round([s.voluntas, s.resilentia, s.intellectus, s.disciplina, s.societas, s.abundantia, s.auctoritas].reduce((a: number, b: number) => a + b, 0) / 7),
             aiProfile: (s.aiProfile as Record<string, string>) ?? {},
             session: s,
           });
@@ -921,9 +921,9 @@ export default function Growth() {
                 sub: t("growth_pillar_vis_sub"),
                 symbol: "⚔️",
                 color: "#C9A84C",
-                score: Math.round((d.volontas + d.disciplina) / 2),
+                score: Math.round((d.voluntas + d.disciplina) / 2),
                 dims: [
-                  { label: "VOLONTAS", value: d.volontas },
+                  { label: "VOLUNTAS", value: d.voluntas },
                   { label: "DISCIPLINA", value: d.disciplina },
                 ],
                 challenge: t("growth_pillar_vis_challenge"),

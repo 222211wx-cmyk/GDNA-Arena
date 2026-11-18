@@ -52,7 +52,7 @@ test("a guest can view only the public fields of an initiated Archon profile", a
 
   await client.query(
     `INSERT INTO archon_sessions (
-       user_id, volontas, resilentia, intellectus, disciplina,
+       user_id, voluntas, resilentia, intellectus, disciplina,
        societas, abundantia, auctoritas, archon_code, archetype,
        ai_profile, answers, is_active
      ) VALUES ($1, 80, 70, 90, 60, 50, 40, 75, $2, $3, $4, $5, true)`,

@@ -48,12 +48,12 @@ function generateArchonCode(dims: number[], archetype: string): string {
 const CHOICE_SCORES: Record<string, number> = { A: 90, B: 70, C: 50, D: 30 };
 
 function computeDimensions(answers: Record<string, string>): {
-  volontas: number; resilentia: number; intellectus: number;
+  voluntas: number; resilentia: number; intellectus: number;
   disciplina: number; societas: number; abundantia: number; auctoritas: number;
 } {
   const s = (q: string) => CHOICE_SCORES[answers[q] ?? "C"] ?? 50;
   return {
-    volontas:    s("Q1"),
+    voluntas:    s("Q1"),
     resilentia:  s("Q2"),
     intellectus: s("Q3"),
     disciplina:  s("Q4"),
@@ -79,7 +79,7 @@ router.post("/archon/assess", async (req, res): Promise<void> => {
   }
 
   const dims = computeDimensions(answers);
-  const dimArray = [dims.volontas, dims.resilentia, dims.intellectus,
+  const dimArray = [dims.voluntas, dims.resilentia, dims.intellectus,
                     dims.disciplina, dims.societas, dims.abundantia, dims.auctoritas];
   const overallScore = Math.round(dimArray.reduce((a, b) => a + b, 0) / 7);
 
@@ -96,7 +96,7 @@ You analyze a citizen's psychological profile across 7 imperial dimensions and d
 ${LANG_INSTRUCTION[userLang] ?? LANG_INSTRUCTION.en}
 
 The 7 Dimensions:
-- VOLONTAS (${dims.volontas}/100): Conqueror's Will
+- VOLUNTAS (${dims.voluntas}/100): Conqueror's Will
 - RESILENTIA (${dims.resilentia}/100): Warrior's Resilience
 - INTELLECTUS (${dims.intellectus}/100): Clarity of Vision
 - DISCIPLINA (${dims.disciplina}/100): Imperial Discipline
@@ -106,7 +106,7 @@ The 7 Dimensions:
 
 Archetype Classification Rules:
 - THE SOVEREIGN: overall ≥ 75 — all dimensions balanced and high
-- THE CONQUEROR: VOLONTAS ≥ 80 AND RESILENTIA ≥ 70 — unstoppable force
+- THE CONQUEROR: VOLUNTAS ≥ 80 AND RESILENTIA ≥ 70 — unstoppable force
 - THE VISIONARY: INTELLECTUS ≥ 80 AND AUCTORITAS ≥ 70 — sees what others cannot
 - THE ARCHITECT: DISCIPLINA ≥ 80 AND INTELLECTUS ≥ 70 — builds systems, masters craft
 - THE CATALYST: SOCIETAS ≥ 80 AND ABUNDANTIA ≥ 70 — moves others, creates abundance
@@ -119,7 +119,7 @@ Purpose statement: "${answers["Q7"] ?? ""}"
 Be powerful, precise, and mythopoetic. This is an empire — not a wellness app.`;
 
   const userPrompt = `Overall Archon Score: ${overallScore}/100
-Dimensions: VOLONTAS ${dims.volontas} | RESILENTIA ${dims.resilentia} | INTELLECTUS ${dims.intellectus} | DISCIPLINA ${dims.disciplina} | SOCIETAS ${dims.societas} | ABUNDANTIA ${dims.abundantia} | AUCTORITAS ${dims.auctoritas}
+Dimensions: VOLUNTAS ${dims.voluntas} | RESILENTIA ${dims.resilentia} | INTELLECTUS ${dims.intellectus} | DISCIPLINA ${dims.disciplina} | SOCIETAS ${dims.societas} | ABUNDANTIA ${dims.abundantia} | AUCTORITAS ${dims.auctoritas}
 
 Return this exact JSON structure:
 {
@@ -158,7 +158,7 @@ Return this exact JSON structure:
   } catch {
     req.log?.warn("ARCHON AI unavailable — using computed profile");
     archetype = overallScore >= 75 ? "THE SOVEREIGN"
-      : dims.volontas >= 80 ? "THE CONQUEROR"
+      : dims.voluntas >= 80 ? "THE CONQUEROR"
       : dims.intellectus >= 80 ? "THE VISIONARY"
       : dims.disciplina >= 80 ? "THE ARCHITECT"
       : dims.societas >= 80 ? "THE CATALYST"
@@ -185,7 +185,7 @@ Return this exact JSON structure:
   // Insert new session and return it
   const [newSession] = await db.insert(archonSessionsTable).values({
     userId:      req.session.userId,
-    volontas:    dims.volontas,
+    voluntas:    dims.voluntas,
     resilentia:  dims.resilentia,
     intellectus: dims.intellectus,
     disciplina:  dims.disciplina,
@@ -230,7 +230,7 @@ router.get("/archon/profile/:username", async (req, res): Promise<void> => {
 
   if (!session) { res.status(404).json({ error: "No Archon session" }); return; }
 
-  const dims = [session.volontas, session.resilentia, session.intellectus,
+  const dims = [session.voluntas, session.resilentia, session.intellectus,
                 session.disciplina, session.societas, session.abundantia, session.auctoritas];
   const overallScore = Math.round(dims.reduce((a: number, b: number) => a + b, 0) / 7);
   const fullAiProfile = session.aiProfile as Record<string, string> | null ?? {};
@@ -240,7 +240,7 @@ router.get("/archon/profile/:username", async (req, res): Promise<void> => {
     archonCode:  session.archonCode,
     archetype:   session.archetype,
     dimensions:  {
-      volontas:    session.volontas,
+      voluntas:    session.voluntas,
       resilentia:  session.resilentia,
       intellectus: session.intellectus,
       disciplina:  session.disciplina,
