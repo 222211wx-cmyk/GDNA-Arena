@@ -19,6 +19,7 @@ import { COMMUNITY_T } from "@/i18n/community-pages";
 import { SOCIAL_T } from "@/components/social/social-i18n";
 import { localeFor as sharedLocaleFor, surfaceText } from "@/i18n/community-admin-surfaces-copy";
 import { finalLabelText } from "@/i18n/final-labels-copy";
+import { developerCopy } from "@/i18n/developer-copy";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface HonorInfo { title: string; color: string; badge: string }
@@ -54,6 +55,7 @@ interface ArchonPublicProfile {
   };
   overallScore: number;
   archetypeDeclaration: string | null;
+  developerParticle?: { key: string; label: string; ar: string; fr: string; en: string; value: number } | null;
 }
 
 const ARCHETYPES: Record<string, { color: string; symbol: string; ar: string; de: string }> = {
@@ -466,6 +468,22 @@ function EmpireIdentitySection({ username }: { username: string }) {
             {profile.archonCode}
           </span>
         </div>
+
+        {/* Developer particle (stored in Postgres, only on developer accounts) */}
+        {profile.developerParticle && (
+          <div className="px-4 py-2.5 rounded-xl flex items-center justify-between" data-testid="developer-particle"
+            style={{ background: `${archInfo.color}08`, border: `1px solid ${archInfo.color}25` }}>
+            <span className="text-xs font-mono text-muted-foreground tracking-widest">
+              {developerCopy(lang).particleHead}
+            </span>
+            <span className="font-mono font-black text-sm tracking-widest" style={{ color: archInfo.color }}>
+              {profile.developerParticle.label} · {profile.developerParticle.value}
+              <span className="ms-2 font-bold text-muted-foreground hidden sm:inline">
+                {lang === "ar" ? profile.developerParticle.ar : lang === "fr" ? profile.developerParticle.fr : profile.developerParticle.en}
+              </span>
+            </span>
+          </div>
+        )}
 
         {/* Four Pillars */}
         <div>

@@ -6,11 +6,13 @@ import { apiPath } from "@/lib/network";
 import { useLang } from "@/contexts/LangContext";
 import { AuthApiError, useAuth } from "@/contexts/AuthContext";
 import { authCopy, authErrorText } from "@/i18n/auth-v2-copy";
+import { developerCopy } from "@/i18n/developer-copy";
 import { DobSelect, OtpInput, PhoneField, dobToIso, toE164, useCountdown } from "./fields";
 
 export type AuthView =
   | "login-choice" | "login-email" | "signup-choice" | "signup-email"
-  | "device" | "forgot-phone" | "forgot-code" | "forgot-new" | "phone-verify";
+  | "device" | "forgot-phone" | "forgot-code" | "forgot-new" | "phone-verify"
+  | "dev-signup" | "dev-code";
 
 interface AuthConfig { googleClientId: string | null; googleMock: boolean; sms: boolean; smsReal: boolean }
 
@@ -79,6 +81,7 @@ function GoogleButton({ label, config, onCredential, onUnavailable }: {
 export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initial?: AuthView; onDone: () => void; onClose?: () => void }) {
   const { lang } = useLang();
   const copy = authCopy(lang);
+  const dev = developerCopy(lang);
   const { authV2, refreshUser } = useAuth();
   const [view, setView] = useState<AuthView>(initial);
   const [config, setConfig] = useState<AuthConfig | null>(null);
@@ -90,6 +93,7 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   // so switching language keeps everything the citizen already typed.
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -107,7 +111,7 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
 
   const go = (v: AuthView) => { setView(v); setErrorCode(null); setNotice(null); setCode(""); };
   const phone = toE164(dial, local);
-  const error = errorCode ? authErrorText(copy, errorCode) : null;
+  const error = errorCode ? (dev.errors[errorCode] ?? authErrorText(copy, errorCode)) : null;
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setErrorCode(null);
@@ -159,6 +163,9 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
     else if (view === "device" && challenge) {
       const r = await v2("device/resend", { challengeId: challenge.id });
       setChallenge({ ...challenge, id: r.challengeId }); restart(r.resendIn); setCode(""); void showDevCode(challenge.masked);
+    } else if (view === "dev-code" && challenge) {
+      const r = await v2("developer/resend", { challengeId: challenge.id });
+      setChallenge({ ...challenge, id: r.challengeId }); restart(r.resendIn); setCode(""); void showDevCode(phone);
     } else if (view === "phone-verify") {
       const r = await v2("phone/send", { phone }); setChallenge({ id: r.challengeId, masked: phone }); restart(r.resendIn); setCode(""); void showDevCode(phone);
     }
@@ -170,11 +177,22 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
       setResetToken(r.resetToken); go("forgot-new");
     } else if (view === "device") {
       finish(await authV2("device/verify", { challengeId: challenge.id, code: value, rememberMe: remember }));
+    } else if (view === "dev-code") {
+      // Creates the account (Postgres) and signs in; the user then lands in the real app.
+      await authV2("developer/verify", { challengeId: challenge.id, code: value, rememberMe: true });
+      onDone();
     } else if (view === "phone-verify") {
       await v2("phone/verify", { challengeId: challenge.id, code: value });
       setNotice(copy.phoneVerified); await refreshUser(); onDone();
     }
   });
+  const submitDeveloper = (e: FormEvent) => {
+    e.preventDefault();
+    void run(async () => {
+      const r = await v2("developer/start", { email, username, password, phone });
+      setChallenge({ id: r.challengeId, masked: r.maskedPhone }); restart(r.resendIn); go("dev-code"); void showDevCode(phone);
+    });
+  };
   const saveNewPassword = (e: FormEvent) => {
     e.preventDefault();
     void run(async () => {
@@ -187,10 +205,10 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const row = (children: ReactNode) => <div className="space-y-1">{children}</div>;
   const title = ({
     "login-choice": copy.loginTitle, "login-email": copy.loginTitle, "signup-choice": copy.signupTitle, "signup-email": copy.signupTitle,
-    device: copy.deviceTitle, "forgot-phone": copy.forgotTitle, "forgot-code": copy.codeTitle, "forgot-new": copy.newPasswordTitle, "phone-verify": copy.phoneStepTitle,
+    device: copy.deviceTitle, "dev-signup": dev.title, "dev-code": copy.codeTitle, "forgot-phone": copy.forgotTitle, "forgot-code": copy.codeTitle, "forgot-new": copy.newPasswordTitle, "phone-verify": copy.phoneStepTitle,
   })[view];
   const showBack = view !== initial && view !== "login-choice" && view !== "signup-choice";
-  const backTo: AuthView = view === "signup-email" ? "signup-choice" : view === "forgot-code" || view === "forgot-new" ? "forgot-phone" : "login-choice";
+  const backTo: AuthView = view === "signup-email" || view === "dev-signup" ? "signup-choice" : view === "dev-code" ? "dev-signup" : view === "forgot-code" || view === "forgot-new" ? "forgot-phone" : "login-choice";
 
   const codeBlock = (intro: string) => (
     <div className="space-y-4">
@@ -225,6 +243,7 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
             </>
           ) : (
             <>
+              <Button type="button" variant="outline" className="h-11 w-full" data-testid="developer-signup" onClick={() => go("dev-signup")}>{dev.cta}</Button>
               <p className="text-center text-xs text-muted-foreground">{copy.phoneOptionalHint}</p>
               <Button type="button" variant="ghost" className="w-full" onClick={() => go("login-choice")}>{copy.haveAccount}</Button>
             </>
@@ -262,6 +281,17 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
         </form>
       )}
 
+      {view === "dev-signup" && (
+        <form onSubmit={submitDeveloper} className="space-y-3" data-testid="developer-form">
+          <p className="text-sm text-muted-foreground">{dev.intro}</p>
+          {row(<><Label htmlFor="dev-email">{copy.email}</Label><Input id="dev-email" dir="ltr" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} className="text-left" /></>)}
+          {row(<><Label htmlFor="dev-username">{dev.username}</Label><Input id="dev-username" dir="ltr" autoComplete="username" required minLength={3} maxLength={20} value={username} onChange={e => setUsername(e.target.value)} className="text-left" /></>)}
+          {row(<><Label htmlFor="dev-password">{copy.password}</Label><Input id="dev-password" dir="ltr" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} className="text-left" /></>)}
+          <PhoneField id="dev-phone" dial={dial} local={local} onDial={setDial} onLocal={setLocal} label={copy.phone} codeLabel={copy.countryCode} required />
+          <Button type="submit" className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600" disabled={busy || !phone}>{busy ? copy.working : dev.submit}</Button>
+        </form>
+      )}
+      {view === "dev-code" && codeBlock(dev.codeIntro(challenge?.masked ?? ""))}
       {view === "forgot-code" && codeBlock(copy.codeSentTo(challenge?.masked ?? ""))}
       {view === "device" && codeBlock(copy.deviceBody(challenge?.masked ?? ""))}
       {view === "phone-verify" && codeBlock(copy.phoneStepBody)}

@@ -53,6 +53,39 @@ async function ensureCitizenTablesAdditive(): Promise<void> {
   } catch (err) {
     logger.error({ err }, "ensureCitizenTablesAdditive failed (continuing)");
   }
+  // Each block is independent so one legacy-shaped table cannot block the others.
+  // Authoritative call state (lib/db/drizzle/0020): its absence made the call
+  // cleanup loops fail every 30-60 seconds.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS call_state_documents (
+        path text PRIMARY KEY NOT NULL, data jsonb NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    `);
+  } catch (err) {
+    logger.error({ err }, "ensure call_state_documents failed (continuing)");
+  }
+  // Archon particles (lib/db/src/schema/archon.ts). ADD COLUMN IF NOT EXISTS only: nothing is dropped or renamed.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS archon_sessions (
+        id serial PRIMARY KEY, user_id integer NOT NULL,
+        archon_code text NOT NULL, archetype text, ai_profile jsonb, answers jsonb,
+        is_active boolean NOT NULL DEFAULT true, created_at timestamp DEFAULT now()
+      );
+      ALTER TABLE archon_sessions
+        ADD COLUMN IF NOT EXISTS volontas integer NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS resilentia integer NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS intellectus integer NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS disciplina integer NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS societas integer NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS abundantia integer NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS auctoritas integer NOT NULL DEFAULT 0;
+    `);
+  } catch (err) {
+    logger.error({ err }, "ensure archon_sessions columns failed (continuing)");
+  }
 }
 
 async function prepareDevelopmentDatabase(): Promise<void> {

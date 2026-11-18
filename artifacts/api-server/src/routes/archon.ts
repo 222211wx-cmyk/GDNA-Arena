@@ -3,6 +3,7 @@ import { db, pool } from "@workspace/db";
 import { archonSessionsTable, archonDirectivesTable } from "@workspace/db/schema";
 import { usersTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { getDeveloperParticle } from "../lib/developer-registration";
 import { createOptionalOpenAI, isOpenAIAvailable } from "../lib/openai-client";
 
 const router: IRouter = Router();
@@ -209,7 +210,7 @@ router.get("/archon/profile", async (req, res): Promise<void> => {
     .where(eq(archonSessionsTable.userId, req.session.userId))
     .orderBy(desc(archonSessionsTable.createdAt))
     .limit(1);
-  res.json({ session: session ?? null });
+  res.json({ session: session ?? null, developerParticle: await getDeveloperParticle(req.session.userId).catch(() => null) });
 });
 
 // ── GET /api/archon/profile/:username — public profile lookup ─────────────────
@@ -249,6 +250,7 @@ router.get("/archon/profile/:username", async (req, res): Promise<void> => {
       auctoritas:  session.auctoritas,
     },
     overallScore,
+    developerParticle: await getDeveloperParticle(user.id).catch(() => null),
     // Only expose the archetype declaration — no personal decrees/protocols/missions
     archetypeDeclaration: fullAiProfile.archetype_declaration ?? null,
   });

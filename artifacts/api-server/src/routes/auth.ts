@@ -8,6 +8,7 @@ import { logger } from "../lib/logger";
 import { disconnectSessionSockets, disconnectUserSockets } from "../lib/signaling";
 import { moderateText, hasBlockedKeyword } from "../lib/moderate";
 import { isAdultForGames, normalizeBirthDate } from "../lib/age";
+import { getDeveloperParticle } from "../lib/developer-registration";
 import { deleteAccountClips } from "../lib/clip-account-delete.js";
 import { deleteAccountCitizenSocial } from "../lib/citizen-media-cleanup.js";
 import { ClipUploadError } from "../lib/clip-upload-protocol.js";
@@ -100,6 +101,7 @@ export async function serializeWithProfile(user: typeof usersTable.$inferSelect)
     email: p.email,
     phoneVerified: p.phoneVerified,
     maskedPhone: p.phone ? maskPhone(p.phone) : null,
+    developerParticle: await getDeveloperParticle(user.id).catch(() => null),
   };
 }
 
