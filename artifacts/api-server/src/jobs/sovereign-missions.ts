@@ -46,7 +46,7 @@ async function fetchActiveCitizens() {
     wins: number;
     posts: number;
     archetype: string | null;
-    volontas: number | null;
+    voluntas: number | null;
     resilentia: number | null;
     intellectus: number | null;
     disciplina: number | null;
@@ -65,7 +65,7 @@ async function fetchActiveCitizens() {
       COUNT(DISTINCT CASE WHEN t.amount > 0 THEN t.id END)::int AS wins,
       COUNT(DISTINCT pp.id)::int         AS posts,
       ars.archetype,
-      ars.volontas,
+      ars.voluntas,
       ars.resilentia,
       ars.intellectus,
       ars.disciplina,
@@ -78,7 +78,7 @@ async function fetchActiveCitizens() {
     LEFT JOIN transactions t ON t.user_id = u.id AND t.type = 'game_win'
     LEFT JOIN pulse_posts pp ON pp.username = u.username
     LEFT JOIN LATERAL (
-      SELECT archetype, volontas, resilentia, intellectus,
+      SELECT archetype, voluntas, resilentia, intellectus,
              disciplina, societas, abundantia, auctoritas, ai_profile
       FROM archon_sessions
       WHERE user_id = u.id
@@ -86,7 +86,7 @@ async function fetchActiveCitizens() {
       LIMIT 1
     ) ars ON true
     WHERE u.last_seen_at > NOW() - INTERVAL '7 days'
-    GROUP BY u.id, ars.archetype, ars.volontas, ars.resilentia,
+    GROUP BY u.id, ars.archetype, ars.voluntas, ars.resilentia,
              ars.intellectus, ars.disciplina, ars.societas,
              ars.abundantia, ars.auctoritas, ars.ai_profile
     ORDER BY u.xp DESC
@@ -98,7 +98,7 @@ async function fetchActiveCitizens() {
 function buildCitizenSummary(c: Awaited<ReturnType<typeof fetchActiveCitizens>>[0]): string {
   const winRate = c.games_played > 0 ? Math.round((c.wins / c.games_played) * 100) : 0;
   const dims = [
-    `VOLONTAS:${c.volontas ?? 50}`,
+    `VOLUNTAS:${c.voluntas ?? 50}`,
     `RESILENTIA:${c.resilentia ?? 50}`,
     `INTELLECTUS:${c.intellectus ?? 50}`,
     `DISCIPLINA:${c.disciplina ?? 50}`,
@@ -303,7 +303,8 @@ export function startSovereignMissionsJob(): void {
 
   // Run once at startup with a delay (after tables are ready)
   setTimeout(async () => {
-    await runSovereignMissions();
+    try { await runSovereignMissions(); }
+    catch (e) { console.warn("[MISSIONS] startup run failed (non-fatal):", e); }
   }, 20_000);
 
   // Schedule midnight run

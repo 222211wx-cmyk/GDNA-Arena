@@ -18,6 +18,10 @@ import { getAgoraConfigStatus } from "./lib/agora-config.js";
 import { startFinanceReconciliationJob } from "./jobs/finance-reconciliation";
 import { FINANCE_SIMULATION_MODE } from "./lib/finance-simulation";
 
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection (non-fatal):", reason);
+});
+
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
 const port = Number(rawPort);

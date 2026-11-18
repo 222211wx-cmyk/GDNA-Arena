@@ -147,6 +147,21 @@ export async function migrateLegacyChatUploads(
   legacyDir: string,
   mimeForExt: (ext: string) => string,
 ): Promise<void> {
+  try {
+    if (!process.env.PRIVATE_OBJECT_DIR) {
+      console.warn("Legacy chat upload migration skipped: App Storage not provisioned (PRIVATE_OBJECT_DIR unset)");
+      return;
+    }
+    await migrateLegacyChatUploadsUnsafe(legacyDir, mimeForExt);
+  } catch (e) {
+    console.warn("Legacy chat upload migration aborted (non-fatal):", e);
+  }
+}
+
+async function migrateLegacyChatUploadsUnsafe(
+  legacyDir: string,
+  mimeForExt: (ext: string) => string,
+): Promise<void> {
   const fs = await import("fs");
   const path = await import("path");
   if (!fs.existsSync(legacyDir)) return;

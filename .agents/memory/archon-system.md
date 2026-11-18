@@ -12,7 +12,7 @@ description: Encrypted internal self-development system — the foundation of th
 4. `profile` — Full profile with 4 tabs: DIMENSIONAL PROFILE / FOUR PILLARS / ORACLE INTELLIGENCE / BREATH CALIBRATION
 
 **The 7 Archon Dimensions:**
-- VOLONTAS — إرادة الفاتح (Q1 answer)
+- VOLUNTAS — إرادة الفاتح (Q1 answer)
 - RESILENTIA — صمود المحارب (Q2)
 - INTELLECTUS — وضوح الرؤية (Q3)
 - DISCIPLINA — انضباط الإمبراطور (Q4)
@@ -24,7 +24,7 @@ description: Encrypted internal self-development system — the foundation of th
 
 **The 7 Archetypes (classified by dimension scores):**
 - THE SOVEREIGN — overall ≥ 75
-- THE CONQUEROR — VOLONTAS ≥ 80 AND RESILENTIA ≥ 70
+- THE CONQUEROR — VOLUNTAS ≥ 80 AND RESILENTIA ≥ 70
 - THE VISIONARY — INTELLECTUS ≥ 80 AND AUCTORITAS ≥ 70
 - THE ARCHITECT — DISCIPLINA ≥ 80 AND INTELLECTUS ≥ 70
 - THE CATALYST — SOCIETAS ≥ 80 AND ABUNDANTIA ≥ 70
@@ -44,7 +44,7 @@ Generated deterministically from dimension values + archetype.
 **The Four Pillars (FOUR PILLARS tab — pure frontend, no new API):**
 Computed from the 7 dimensions and displayed as a Growth Engine dashboard:
 - 🧠 MENS (العقل) = avg(INTELLECTUS, AUCTORITAS)
-- ⚔️ VIS (القوة) = avg(VOLONTAS, DISCIPLINA)
+- ⚔️ VIS (القوة) = avg(VOLUNTAS, DISCIPLINA)
 - 🔥 ANIMA (الروح) = avg(RESILENTIA, SOCIETAS)
 - 👑 LEGATUM (الإرث) = ABUNDANTIA*0.5 + overallScore*0.3 + minDim*0.2
 Engine score = avg of 4 pillars. Shows animated column chart, per-pillar daily challenges (Arabic), growth state label, weakest pillar spotlight.

@@ -53,7 +53,7 @@ export const COMMUNITY_SURFACES_COPY = {
   justNow: { en: "just now", fr: "à l’instant", ar: "الآن", es: "ahora mismo" , de: "gerade eben"},
   ago: { en: "{value} ago", fr: "il y a {value}", ar: "منذ {value}", es: "hace {value}" , de: "Vor {value}"},
   sport: { en:"Sport",fr:"Sport",ar:"رياضة",es:"Deporte" , de: "Sport"}, tech:{en:"Technology",fr:"Technologie",ar:"تكنولوجيا",es:"Tecnología", de: "technik"}, music:{en:"Music",fr:"Musique",ar:"موسيقى",es:"Música", de: "Musik"}, business:{en:"Business",fr:"Affaires",ar:"أعمال",es:"Negocios", de: "Geschäft"}, cinema:{en:"Cinema",fr:"Cinéma",ar:"سينما",es:"Cine", de: "Programmkino"}, general:{en:"General",fr:"Général",ar:"عام",es:"General", de: "Allgemeine Konfiguration (Common)"},
-  dimVolontas:{en:"Conqueror’s will",fr:"Volonté du conquérant",ar:"إرادة الفاتح",es:"Voluntad del conquistador", de: "Wille des Eroberers"},
+  dimVoluntas:{en:"Conqueror’s will",fr:"Volonté du conquérant",ar:"إرادة الفاتح",es:"Voluntad del conquistador", de: "Wille des Eroberers"},
   dimResilentia:{en:"Warrior’s resilience",fr:"Résilience du guerrier",ar:"صلابة المحارب",es:"Resiliencia del guerrero", de: "Widerstandsfähigkeit des Kriegers"},
   dimIntellectus:{en:"Clarity of vision",fr:"Clarté de vision",ar:"وضوح الرؤية",es:"Claridad de visión", de: "Baja California Neu!"},
   dimDisciplina:{en:"Imperial discipline",fr:"Discipline impériale",ar:"الانضباط الإمبراطوري",es:"Disciplina imperial", de: "Kaiserliche Disziplin"},

@@ -49,7 +49,7 @@ interface ArchonPublicProfile {
   archonCode: string;
   archetype: string;
   dimensions: {
-    volontas: number; resilentia: number; intellectus: number;
+    voluntas: number; resilentia: number; intellectus: number;
     disciplina: number; societas: number; abundantia: number; auctoritas: number;
   };
   overallScore: number;
@@ -92,7 +92,7 @@ function computeFourPillars(d: ArchonPublicProfile["dimensions"], overallScore: 
     {
       id: "vis",     latin: "VIS",     ar: "قوة التنفيذ",       sub: "Will · Discipline · Action",
       symbol: "⚔️", color: "#C9A84C",
-      score: Math.round((d.volontas + d.disciplina) / 2),
+      score: Math.round((d.voluntas + d.disciplina) / 2),
     },
     {
       id: "anima",   latin: "ANIMA",   ar: "روح المحارب",       sub: "Resilience · Influence · Connection",
@@ -108,7 +108,7 @@ function computeFourPillars(d: ArchonPublicProfile["dimensions"], overallScore: 
 }
 
 const DIMENSIONS: { key: keyof ArchonPublicProfile["dimensions"]; label: string; ar: string }[] = [
-  { key: "volontas",    label: "VOLONTAS",    ar: "إرادة الفاتح" },
+  { key: "voluntas",    label: "VOLUNTAS",    ar: "إرادة الفاتح" },
   { key: "resilentia",  label: "RESILENTIA",  ar: "صلابة المحارب" },
   { key: "intellectus", label: "INTELLECTUS", ar: "وضوح الرؤية" },
   { key: "disciplina",  label: "DISCIPLINA",  ar: "الانضباط الإمبراطوري" },
@@ -118,7 +118,7 @@ const DIMENSIONS: { key: keyof ArchonPublicProfile["dimensions"]; label: string;
 ];
 
 const DIMENSION_COPY = {
-  volontas: "dimVolontas", resilentia: "dimResilentia", intellectus: "dimIntellectus",
+  voluntas: "dimVoluntas", resilentia: "dimResilentia", intellectus: "dimIntellectus",
   disciplina: "dimDisciplina", societas: "dimSocietas", abundantia: "dimAbundantia",
   auctoritas: "dimAuctoritas",
 } as const;
