@@ -5,7 +5,7 @@
   const names = {
     clips: { manifest: "manifest-clips.json", icon: "clips-apple-180.png", title: "ARENA Clips" },
     messages: { manifest: "manifest-messages.json", icon: "messages-apple-180.png", title: "Hm Messages" },
-    default: { manifest: "manifest.json", icon: "lite-icon-192.png", title: "ARENA" },
+    default: { manifest: "manifest.json", icon: "app-icon-192.png", title: "ARENA" },
   };
   const current = () => {
     const pathname = location.pathname;
@@ -56,7 +56,7 @@
     async request(target) {
       if (target !== "clips" && target !== "messages") return "unsupported";
       // The installable document must be the intended section. In particular,
-      // never prompt with the root Lite or the other section's manifest.
+      // never prompt with the root app or the other section's manifest.
       if (current() !== target) {
         location.assign(base + target);
         return "navigating";

@@ -98,17 +98,12 @@
         const rawRoute = location.pathname.slice(base.length) || "/";
         const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
         const isClipRoute = route === "/clip" || route === "/clips" || /^\/clip\/HELX-\d{6}$/.test(route);
-        const isPartnerLite = route === "/partners/operators" || route === "/partners/dashboard";
-        const isLite = route === "/lite" || route.startsWith("/lite/") || isPartnerLite;
-        const ref = new URLSearchParams(location.search).get("ref");
-        const autoLiteRef = ref !== null &&
-          ["inwi", "orange", "itissalat", "*6", "star6"].includes(ref.trim().toLowerCase());
         const connection = navigator.connection;
         let limited = false;
         try { limited = localStorage.getItem("gdna.limitedData") === "true"; } catch {}
         limited = limited || !!connection?.saveData || ["2g", "slow-2g"].includes(connection?.effectiveType) ||
           (typeof connection?.downlink === "number" && connection.downlink < 0.5);
-      if (!isClipRoute && !isLite && !autoLiteRef && !limited) {
+      if (!isClipRoute && !limited) {
         for (const href of ["https://fonts.googleapis.com", "https://fonts.gstatic.com"]) {
           const connection = document.createElement("link");
           connection.rel = "preconnect";

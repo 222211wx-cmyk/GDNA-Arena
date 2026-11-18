@@ -4,9 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:operators": "esbuild src/lib/operator-science.test.ts src/lib/operator-store.test.ts --bundle --platform=node --format=cjs --external:pg --outdir=.operator-tests --out-extension:.js=.cjs && node --test .operator-tests/*.cjs; status=$?; rm -rf .operator-tests; exit $status",
-    "test:lite-media": "esbuild src/lib/lite-media.test.ts --bundle --platform=node --format=cjs --external:pg --external:pino --external:@aws-sdk/* --external:@google-cloud/* --outfile=.lite-media-test.cjs && node --test .lite-media-test.cjs; status=$?; rm -f .lite-media-test.cjs; exit $status",
-    "test:lite": "esbuild src/lib/lite.test.ts --bundle --platform=node --format=cjs --external:pg --external:pino --external:@aws-sdk/* --external:@google-cloud/* --outfile=.lite-test.cjs && node --test .lite-test.cjs; status=$?; rm -f .lite-test.cjs; exit $status",
     "test:gdna": "esbuild src/lib/gdna.test.ts --bundle --platform=node --format=cjs --external:pg --outfile=.gdna-test.cjs && node --test .gdna-test.cjs; status=$?; rm -f .gdna-test.cjs; exit $status",
     "worker:dev": "pnpm run build && pnpm run worker:start",
     "worker:start": "node --enable-source-maps ./dist/media-worker.mjs",
