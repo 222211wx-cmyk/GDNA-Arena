@@ -1,7 +1,7 @@
 import type { Session, SessionData } from "express-session";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const PERSISTENT_SESSION_TTL_MS = 365 * DAY_MS;
+export const PERSISTENT_SESSION_TTL_MS = 30 * DAY_MS;
 export const SHORT_SESSION_TTL_MS = 7 * DAY_MS;
 const LEGACY_REMEMBERED_TTL_MS = 30 * DAY_MS;
 

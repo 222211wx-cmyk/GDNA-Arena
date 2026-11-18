@@ -16,6 +16,7 @@ import { revokeCallPushSession } from "../lib/firebase-call-push";
 import { PhoneRecoveryError, requireRecoveryUser, revokeRecoveryPushBindings } from "../lib/phone-recovery";
 import { authorizeNewSession, lockLiveSession, SessionRevokedError } from "../lib/session-security";
 import { sessionCredentialEpoch } from "../lib/session-policy";
+import { getProfile, maskPhone } from "../lib/auth-store";
 import { completeOfflineRecoveryRevocation } from "../lib/offline-recovery-revocation";
 
 const pool = nullablePool!;
@@ -75,7 +76,7 @@ function canClaimDaily(lastDailyReward: Date | null): boolean {
   );
 }
 
-function serializeUser(user: typeof usersTable.$inferSelect) {
+export function serializeUser(user: typeof usersTable.$inferSelect) {
   return {
     id: user.id,
     username: user.username,
@@ -87,6 +88,18 @@ function serializeUser(user: typeof usersTable.$inferSelect) {
     isAdmin: user.isAdmin === true,
     hasActiveSubscription: user.hasActiveSubscription === true,
     isAdult: isAdultForGames(user.birthDate),
+  };
+}
+
+export async function serializeWithProfile(user: typeof usersTable.$inferSelect) {
+  const p = await getProfile(user.id);
+  return {
+    ...serializeUser(user),
+    displayName: p.displayName ?? user.username,
+    avatarUrl: p.avatarUrl,
+    email: p.email,
+    phoneVerified: p.phoneVerified,
+    maskedPhone: p.phone ? maskPhone(p.phone) : null,
   };
 }
 
@@ -479,7 +492,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     res.status(503).json({ error: "Session temporarily unavailable — please retry" });
     return;
   }
-  res.json(serializeUser(user));
+  res.json(await serializeWithProfile(user).catch(() => serializeUser(user)));
 });
 
 // ── DELETE /api/auth/me — GDPR right to erasure ───────────────
