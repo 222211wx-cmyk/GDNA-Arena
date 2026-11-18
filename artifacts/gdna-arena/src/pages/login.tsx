@@ -16,7 +16,7 @@ import { unlimitedMessagingAccessCopy } from "@/lib/messaging-subscription-copy"
 import { recoveryCopy } from "@/i18n/recovery-copy";
 import { recoveryEnrollmentReturnPath, recoveryRoute } from "@/lib/recovery-links";
 import { MESSAGES_ENTRY_PATH, messagesAuthUrl, messagesReturnPath } from "@/lib/messages-entry";
-import { offlineRecoveryCopy } from "@/i18n/offline-recovery-copy";
+import { AuthFlow } from "@/components/auth/AuthFlow";
 
 const BRAND_STATEMENT =
   "منصة إمبراطورية حديثة - سمارت ودكاء اصطناعي حيوي مستقل ذات نظام داخلي سمارت لتطوير الذات والتنبؤات المستقبلية";
@@ -70,7 +70,7 @@ const DOORS: Door[] = [
 export default function Login({ messagesEntry = false, returnTo }: { messagesEntry?: boolean; returnTo?: string }) {
   const [, setLocation] = useLocation();
   const search = useSearch();
-  const { login, user } = useAuth();
+  const { user } = useAuth();
   const { lang } = useLang();
   const copy = coreCopy(lang);
   const dir = lang === "ar" ? "rtl" : "ltr";
@@ -78,26 +78,7 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
   const destination = returnTo ?? messagesReturnPath(search) ?? recoveryEnrollmentReturnPath(search);
   const messengerLogin = messagesEntry || messagesReturnPath(search) !== null;
   const [mode, setMode] = useState<"choice" | "auth">(messengerLogin || destination !== null ? "auth" : "choice");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setIsLoading(true);
-    try {
-       await login(username.trim(), password, rememberMe);
-      if (destination) setLocation(destination);
-      else setMode("choice");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : copy.authFailed);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const enterDoor = (door: Door) => {
     if (door.adminOnly && !user?.isAdmin) {
@@ -154,93 +135,10 @@ export default function Login({ messagesEntry = false, returnTo }: { messagesEnt
           >
             <Card className="bg-card/50 backdrop-blur-sm border-primary/20 shadow-[0_0_50px_rgba(0,212,255,0.1)]">
               <CardContent className="pt-6">
-                {!messengerLogin && <button
-                  type="button"
-                  onClick={() => { setMode("choice"); setError(""); }}
-                  className="mb-4 inline-flex items-center gap-1 text-xs uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
-                  data-testid="button-back-to-choice"
-                >
-                  <ArrowLeft className="w-3 h-3" />
-                  {copy.back}
-                </button>}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {error && (
-                    <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      {error}
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label htmlFor="username" className="text-xs uppercase tracking-widest text-muted-foreground">
-                      {copy.playerName}
-                    </Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
-                      <Input
-                        id="username"
-                        type="text"
-                        placeholder={copy.usernamePlaceholder}
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
-                        required
-                        autoComplete="username"
-                        data-testid="input-username"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-xs uppercase tracking-widest text-muted-foreground">
-                      {copy.password}
-                    </Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-3 h-5 w-5 text-primary/50" />
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder={copy.passwordPlaceholder}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="pl-10 bg-background/50 border-primary/30 focus-visible:ring-primary/50 focus-visible:border-primary transition-all h-12"
-                        required
-                        autoComplete="current-password"
-                        data-testid="input-password"
-                      />
-                    </div>
-                  </div>
-                  <Link href={recoveryRoute("/recover-account", messagesReturnPath(search), lang)} className="inline-block text-sm text-primary hover:underline" data-testid="link-forgot-password">
-                    {recoveryCopy(lang).forgot}
-                  </Link>
-                  <Link href={recoveryRoute("/recover-with-code", messagesReturnPath(search), lang)} className="ms-4 inline-block text-sm text-primary hover:underline" data-testid="link-recover-with-code">
-                    {offlineRecoveryCopy(lang).link}
-                  </Link>
-                  <label
-                    className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground"
-                    data-testid="checkbox-remember-me"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 accent-primary cursor-pointer"
-                    />
-                    <span>{copy.remember}</span>
-                  </label>
-                  <Button
-                    type="submit"
-                    className="w-full h-12 text-lg font-bold uppercase tracking-wider neon-glow transition-all duration-300"
-                    disabled={isLoading}
-                    data-testid="button-login"
-                  >
-                    {isLoading ? copy.authenticating : copy.signIn}
-                  </Button>
-                  <p className="text-center text-sm text-muted-foreground">
-                    {copy.noAccount}{" "}
-                    <Link href={destination ? messagesAuthUrl("/register", destination) : "/register"} className="text-primary hover:underline font-semibold">
-                      {copy.registerHere}
-                    </Link>
-                  </p>
-                </form>
+                <AuthFlow
+                  initial="login-choice"
+                  onDone={() => { if (destination) setLocation(destination); else setMode("choice"); }}
+                />
               </CardContent>
             </Card>
           </motion.div>

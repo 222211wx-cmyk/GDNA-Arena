@@ -27,6 +27,32 @@ export interface AuthUser {
   canClaimDaily: boolean;
   isAdmin?: boolean;
   isAdult: boolean | null;
+  displayName?: string;
+  avatarUrl?: string | null;
+  email?: string | null;
+  phoneVerified?: boolean;
+  maskedPhone?: string | null;
+}
+
+/** Error carrying a server error code; the UI translates it from the language files. */
+export class AuthApiError extends Error {
+  constructor(readonly code: string) { super(code); }
+}
+
+export type AuthV2Result =
+  | { status: "ok"; user: AuthUser; phoneChallengeId?: string | null }
+  | { status: "device_verification"; challengeId: string; maskedPhone: string; resendIn: number };
+
+const HINT_KEY = "gdna_auth_hint";
+/** Non-sensitive profile snapshot so the header can paint instantly on this device. */
+export function readAuthHint(): { id: number; displayName: string; avatarUrl: string | null } | null {
+  try { return JSON.parse(localStorage.getItem(HINT_KEY) ?? "null"); } catch { return null; }
+}
+function writeAuthHint(user: AuthUser | null) {
+  try {
+    if (user) localStorage.setItem(HINT_KEY, JSON.stringify({ id: user.id, displayName: user.displayName ?? user.username, avatarUrl: user.avatarUrl ?? null }));
+    else localStorage.removeItem(HINT_KEY);
+  } catch { /* storage unavailable */ }
 }
 
 interface AuthContextType {
@@ -40,6 +66,8 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   recoverAccess: (idToken: string, returnTo: string) => Promise<void>;
   recoveryAccessPending: boolean;
+  /** POST to /api/auth/v2/<path>; a finished sign-in updates the session user. */
+  authV2: (path: "login" | "signup" | "google" | "device/verify", body: Record<string, unknown>) => Promise<AuthV2Result>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -70,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const previous = verifiedIdRef.current;
     if (previous !== undefined && previous !== id) queryClient?.clear();
     verifiedIdRef.current = id;
+    writeAuthHint(next);
     setUser(next);
     if (announce && (force || previous !== undefined && previous !== id)) announceAccountChange(id);
   };
@@ -285,6 +314,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = (username: string, password: string, birthDate: string) =>
     mutate(() => performRegister(username, password, birthDate));
   const logout = () => mutate(performLogout);
+  const authV2 = (path: "login" | "signup" | "google" | "device/verify", body: Record<string, unknown>) => {
+    let result!: AuthV2Result;
+    return mutate(async () => {
+      recoveryDestinationRef.current = null;
+      setRecoveryAccessPending(false);
+      const { controller, generation } = beginAuthRequest();
+      let res: Response;
+      try {
+        res = await fetch(apiPath(`/api/auth/v2/${path}`), {
+          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+          body: JSON.stringify(body), signal: controller.signal,
+        });
+      } catch { throw new AuthApiError("NETWORK"); }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new AuthApiError(data.code ?? "SERVER_ERROR");
+      result = data as AuthV2Result;
+      // A new account with a phone to verify stays on screen until that step ends:
+      // accepting the user now would remount the page and lose the open sign-up panel.
+      // The caller finishes with refreshUser(), which accepts the (already signed-in) session.
+      const pendingPhone = path === "signup" && !!data.phoneChallengeId;
+      if (data.status === "ok" && !pendingPhone && generation === authGenerationRef.current) {
+        trackEvent(path === "signup" ? "auth_register_success" : "auth_login_success", { method: path === "google" ? "google" : "email" });
+        acceptUser(validUser(data.user), true, true);
+        externalChangeRef.current = false;
+        setAuthUnavailable(false);
+        setInitialVerified(true);
+        setLoading(false);
+      }
+    }).then(() => result);
+  };
   const recoverAccess = (idToken: string, returnTo: string) => mutate(async () => {
     // Serialize this cookie writer with login/logout and retire any /me request
     // for the old cookie before posting. Wake events queue verification while
@@ -306,7 +365,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // failure with no verified identity, never render guest/login redirects.
   if (!initialVerified) {
     return (
-      <AuthContext.Provider value={{ user, loading, authError, login, register, changePassword, logout, refreshUser, recoverAccess, recoveryAccessPending }}>
+      <AuthContext.Provider value={{ user, loading, authError, login, register, changePassword, logout, refreshUser, recoverAccess, recoveryAccessPending, authV2 }}>
         <div dir={lang === "ar" ? "rtl" : "ltr"} className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground" role="status">
           {loading ? (
             <p>{copy.checking}</p>
@@ -322,7 +381,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, login, register, changePassword, logout, refreshUser, recoverAccess, recoveryAccessPending }}>
+    <AuthContext.Provider value={{ user, loading, authError, login, register, changePassword, logout, refreshUser, recoverAccess, recoveryAccessPending, authV2 }}>
       {authError && (
         <div dir={lang === "ar" ? "rtl" : "ltr"} role="alert" className="flex items-center justify-center gap-3 border-b border-destructive/30 bg-destructive/10 p-3 text-center text-sm text-foreground">
           <span>{authError}</span>

@@ -8,6 +8,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@workspace/gdna-ds/components/ui/dropdown-menu";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { AuthHeaderControls } from "@/components/layout/auth-header-controls";
 import { installText, requestSectionInstall, type InstallSection } from "@/lib/section-install";
 import { SEARCH_ROUTE, SETTINGS_ROUTE, UI_TEXT } from "@/config/platform-directory";
 
@@ -30,15 +31,20 @@ export function Navbar() {
   return (
     <header dir={lang === "ar" ? "rtl" : "ltr"} className="sticky top-0 z-50 border-b border-border bg-background text-foreground">
       <div className="mx-auto flex max-w-2xl flex-col gap-2 px-3 py-2">
-        <div className="text-center">
-          <Link href="/" dir="ltr" data-testid="link-brand-home" aria-label={UI_TEXT.home[lang]}
-            className="inline-flex items-center gap-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md">
-            <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width={44} height={44} className="h-11 w-11 shrink-0" />
-            <span className="flex flex-col items-start leading-none">
-              <span className="text-xl font-black tracking-widest text-primary">ARENA</span>
-              <span className="mt-1 text-xs font-bold tracking-widest text-muted-foreground">QAISYPRO</span>
-            </span>
-          </Link>
+        {/* LTR: logo left, language centre, auth right. RTL: the grid mirrors by itself. */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" data-testid="header-top-row">
+          <div className="justify-self-start">
+            <Link href="/" dir="ltr" data-testid="link-brand-home" aria-label={UI_TEXT.home[lang]}
+              className="inline-flex items-center gap-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md">
+              <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" width={44} height={44} className="h-9 w-9 shrink-0 sm:h-11 sm:w-11" />
+              <span className="hidden flex-col items-start leading-none min-[420px]:flex">
+                <span className="text-lg font-black tracking-widest text-primary sm:text-xl">ARENA</span>
+                <span className="mt-1 text-[10px] font-bold tracking-widest text-muted-foreground sm:text-xs">QAISYPRO</span>
+              </span>
+            </Link>
+          </div>
+          <div className="justify-self-center" data-testid="header-language"><LanguageSwitcher /></div>
+          <div className="justify-self-end"><AuthHeaderControls /></div>
         </div>
         <form role="search" aria-label={UI_TEXT.search[lang]} className="relative w-full"
           onSubmit={event => {
@@ -96,7 +102,6 @@ export function Navbar() {
               <span>{UI_TEXT.settings[lang]}</span>
             </Link>
           </Button>
-          <LanguageSwitcher />
         </nav>
       </div>
       {installHelp && (

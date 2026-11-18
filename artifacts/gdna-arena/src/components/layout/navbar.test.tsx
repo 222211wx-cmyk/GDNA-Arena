@@ -11,6 +11,9 @@ vi.mock("@/contexts/LangContext", () => ({
 vi.mock("./language-switcher", () => ({
   LanguageSwitcher: () => <button>Language</button>,
 }));
+vi.mock("./auth-header-controls", () => ({
+  AuthHeaderControls: () => <button>Auth</button>,
+}));
 afterEach(cleanup);
 
 describe("horizontal platform utilities", () => {
