@@ -26,9 +26,39 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 logger.info(getAgoraConfigStatus(), "Agora environment configuration loaded from process.env");
 logger.info({ financeSimulationMode: FINANCE_SIMULATION_MODE }, "Finance operating mode selected");
 
+// Never let a stray async error in a background job take the whole server down.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection (process kept alive)");
+});
+
+// Additive, idempotent tables the production routes depend on (mirrors
+// lib/db/scripts/push-citizens-additive.mjs). No drops, no alters.
+async function ensureCitizenTablesAdditive(): Promise<void> {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS citizen_profiles (
+        user_id integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        display_name text NOT NULL DEFAULT '', bio text NOT NULL DEFAULT '', city text,
+        interests jsonb NOT NULL DEFAULT '[]', status text NOT NULL DEFAULT 'private',
+        visibility text NOT NULL DEFAULT 'everyone', field_visibility jsonb NOT NULL DEFAULT '{}',
+        avatar_url text, cover_url text, map_discoverable boolean NOT NULL DEFAULT false,
+        ai_consent boolean NOT NULL DEFAULT false, views integer NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS citizen_listings (
+        id serial PRIMARY KEY, user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type text NOT NULL, title text NOT NULL, description text NOT NULL,
+        price numeric(12,2) NOT NULL, city text, created_at timestamptz NOT NULL DEFAULT now()
+      );
+    `);
+  } catch (err) {
+    logger.error({ err }, "ensureCitizenTablesAdditive failed (continuing)");
+  }
+}
+
 async function prepareDevelopmentDatabase(): Promise<void> {
   if (process.env.NODE_ENV === "production") {
-    logger.info("Startup schema DDL skipped: production schema is managed by Publish");
+    await ensureCitizenTablesAdditive();
+    logger.info("Production: full startup DDL skipped; additive citizen tables ensured");
     return;
   }
 

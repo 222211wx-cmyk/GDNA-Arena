@@ -147,6 +147,7 @@ export async function migrateLegacyChatUploads(
   legacyDir: string,
   mimeForExt: (ext: string) => string,
 ): Promise<void> {
+  if (!process.env.PRIVATE_OBJECT_DIR) return; // no bucket configured: nothing to migrate to
   const fs = await import("fs");
   const path = await import("path");
   if (!fs.existsSync(legacyDir)) return;
