@@ -18,6 +18,7 @@ import {
   normalizePhone, trustDevice, userVerifiedPhone,
 } from "../lib/auth-store";
 import { serializeWithProfile } from "./auth";
+import { DEVELOPER_PARTICLE, createBaselineArchonSession, developerSchemaReady } from "../lib/developer-registration";
 
 const pool = nullablePool!;
 const router: IRouter = Router();
@@ -156,6 +157,94 @@ router.post(`${BASE}/signup`, async (req, res) => {
       status: "ok", user: await serializeWithProfile(row.user),
       phoneChallengeId: phoneChallenge?.id ?? null,
     });
+  } catch (e) { fail(req, res, e); }
+});
+
+// ── Developer registration: email + username + password -> SMS code -> account ──
+// Nothing is created until the code is verified. The pending row only holds a bcrypt hash.
+const USERNAME_RE = /^[\p{L}\p{N}_]{3,20}$/u;
+const PENDING_TTL = "30 minutes";
+
+router.post(`${BASE}/developer/start`, async (req, res) => {
+  try {
+    await developerSchemaReady();
+    const email = str(req.body?.email, 254).toLowerCase();
+    const username = str(req.body?.username, 40);
+    const password = req.body?.password;
+    const phone = normalizePhone(req.body?.phone);
+    if (!EMAIL_RE.test(email)) throw new AuthError(400, "EMAIL_INVALID");
+    if (!USERNAME_RE.test(username) || hasBlockedKeyword(username)) throw new AuthError(400, "USERNAME_INVALID");
+    if (!passwordOk(password)) throw new AuthError(400, "PASSWORD_WEAK");
+    if (!phone) throw new AuthError(400, "PHONE_INVALID");
+    // The code must really reach a handset in production; a code only written to the log is useless.
+    if (prod() && !smsIsReal()) throw new AuthError(503, "SMS_UNAVAILABLE");
+
+    const mailTaken = await pool.query(
+      `SELECT 1 FROM users WHERE LOWER(email)=$1 UNION SELECT 1 FROM auth_profiles WHERE LOWER(email)=$1`, [email]);
+    if (mailTaken.rowCount) throw new AuthError(409, "EMAIL_TAKEN");
+    const nameTaken = await pool.query(`SELECT 1 FROM users WHERE LOWER(username)=LOWER($1)`, [username]);
+    if (nameTaken.rowCount) throw new AuthError(409, "USERNAME_TAKEN");
+    if (await findUserIdByVerifiedPhone(phone)) throw new AuthError(409, "PHONE_TAKEN");
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const challenge = await issueOtp("developer-signup", phone, null);
+    await pool.query(`DELETE FROM auth_pending_signups WHERE LOWER(email)=$1 OR created_at < now() - interval '${PENDING_TTL}'`, [email]);
+    await pool.query(
+      `INSERT INTO auth_pending_signups (challenge_id, email, username, password_hash, phone_e164) VALUES ($1,$2,$3,$4,$5)`,
+      [challenge.id, email, username, passwordHash, phone]);
+    res.json({ challengeId: challenge.id, resendIn: challenge.resendIn, maskedPhone: maskPhone(phone) });
+  } catch (e) { fail(req, res, e); }
+});
+
+router.post(`${BASE}/developer/resend`, async (req, res) => {
+  try {
+    await developerSchemaReady();
+    const old = await pool.query(
+      `SELECT * FROM auth_pending_signups WHERE challenge_id=$1 AND created_at > now() - interval '${PENDING_TTL}'`, [str(req.body?.challengeId, 64)]);
+    const p = old.rows[0];
+    if (!p) throw new AuthError(400, "OTP_EXPIRED");
+    const c = await issueOtp("developer-signup", p.phone_e164, null);
+    await pool.query(`UPDATE auth_pending_signups SET challenge_id=$2 WHERE challenge_id=$1`, [p.challenge_id, c.id]);
+    res.json({ challengeId: c.id, resendIn: c.resendIn });
+  } catch (e) { fail(req, res, e); }
+});
+
+router.post(`${BASE}/developer/verify`, async (req, res) => {
+  try {
+    await developerSchemaReady();
+    const challengeId = str(req.body?.challengeId, 64);
+    const rememberMe = req.body?.rememberMe !== false;
+    await checkOtp(challengeId, req.body?.code, "developer-signup");
+    const pending = await pool.query(
+      `SELECT * FROM auth_pending_signups WHERE challenge_id=$1 AND created_at > now() - interval '${PENDING_TTL}'`, [challengeId]);
+    const p = pending.rows[0];
+    if (!p) throw new AuthError(400, "OTP_EXPIRED");
+
+    let userId: number;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const u = await client.query(
+        `INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3) RETURNING id`,
+        [p.username, p.email, p.password_hash]);
+      userId = u.rows[0].id;
+      await client.query(
+        `INSERT INTO auth_profiles (user_id, email, display_name, phone_e164, phone_verified) VALUES ($1,$2,$3,$4,true)`,
+        [userId, p.email, p.username, p.phone_e164]);
+      await client.query(`INSERT INTO citizen_profiles (user_id, display_name) VALUES ($1,$2) ON CONFLICT (user_id) DO NOTHING`, [userId, p.username]);
+      await client.query(
+        `INSERT INTO developer_particles (user_id, particle, value) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [userId, DEVELOPER_PARTICLE.key, DEVELOPER_PARTICLE.value]);
+      await client.query(`DELETE FROM auth_pending_signups WHERE challenge_id=$1`, [challengeId]);
+      await client.query("COMMIT");
+    } catch (e: any) {
+      await client.query("ROLLBACK").catch(() => {});
+      if (e?.code === "23505") throw new AuthError(409, /username/i.test(String(e.constraint ?? e.detail)) ? "USERNAME_TAKEN" : "EMAIL_TAKEN");
+      throw e;
+    } finally { client.release(); }
+
+    await createBaselineArchonSession(userId);
+    await respondLoggedIn(req, res, userId, rememberMe, 201);
   } catch (e) { fail(req, res, e); }
 });
 

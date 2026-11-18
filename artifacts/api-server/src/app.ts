@@ -187,7 +187,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "TOO_MANY_ATTEMPTS", code: "TOO_MANY_ATTEMPTS" },
 });
-app.use(["/api/auth/login", "/api/auth/register", "/api/auth/change-password", "/api/auth/v2/login", "/api/auth/v2/signup", "/api/auth/v2/google", "/api/auth/v2/device/verify", "/api/auth/v2/forgot/verify", "/api/auth/v2/forgot/reset"], authLimiter);
+app.use(["/api/auth/login", "/api/auth/register", "/api/auth/change-password", "/api/auth/v2/login", "/api/auth/v2/signup", "/api/auth/v2/developer/start", "/api/auth/v2/developer/resend", "/api/auth/v2/developer/verify", "/api/auth/v2/google", "/api/auth/v2/device/verify", "/api/auth/v2/forgot/verify", "/api/auth/v2/forgot/reset"], authLimiter);
 
 // AI-powered endpoints are expensive — 30 requests / 5 min per IP.
 const aiLimiter = rateLimit({

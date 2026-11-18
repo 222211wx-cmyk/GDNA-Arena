@@ -188,3 +188,48 @@ test("signup validation returns codes, never mixed-language text", async () => {
   const dup = signupBody(); await new Browser().call("/auth/v2/signup", dup);
   assert.equal((await b.call("/auth/v2/signup", { ...signupBody(), email: dup.email.toUpperCase() })).data.code, "EMAIL_TAKEN");
 });
+
+test("developer registration: code -> account + Particle, persists across logout/login; existing archon columns untouched", async () => {
+  const b = new Browser();
+  const phone = phoneFor();
+  const email = `${uid()}@example.com`;
+  const username = `dev_${uid()}`.slice(0, 16);
+  const password = "correct-horse-1";
+  const start = await b.call("/auth/v2/developer/start", { email, username, password, phone });
+  assert.equal(start.status, 200, JSON.stringify(start.data));
+  // Nothing is created before the code is verified.
+  assert.equal((await (await getDb()).query("SELECT 1 FROM users WHERE LOWER(username)=LOWER($1)", [username])).rowCount, 0);
+  assert.equal((await b.call("/auth/v2/developer/verify", { challengeId: start.data.challengeId, code: "000000" })).status, 400);
+  const code = await lastSms(b, phone);
+  const done = await b.call("/auth/v2/developer/verify", { challengeId: start.data.challengeId, code });
+  assert.equal(done.status, 201, JSON.stringify(done.data));
+  assert.equal(done.data.user.username, username);
+  assert.equal(done.data.user.developerParticle?.key, "fabrica");
+  assert.equal((await b.call("/auth/me")).status, 200);
+
+  const db = await getDb();
+  const uidRow = (await db.query("SELECT id FROM users WHERE username=$1", [username])).rows[0].id;
+  assert.equal((await db.query("SELECT 1 FROM citizen_profiles WHERE user_id=$1", [uidRow])).rowCount, 1);
+  assert.equal((await db.query("SELECT 1 FROM archon_sessions WHERE user_id=$1", [uidRow])).rowCount, 1);
+  assert.equal((await db.query("SELECT value FROM developer_particles WHERE user_id=$1 AND particle='fabrica'", [uidRow])).rows[0].value, 100);
+
+  // Logout, then log in again on the same (now trusted) device: the Particle is read from the database.
+  assert.equal((await b.call("/auth/logout", {})).status, 200);
+  const again = b;
+  const login = await again.call("/auth/v2/login", { identifier: username, password });
+  assert.equal(login.status, 200, JSON.stringify(login.data));
+  assert.equal(login.data.user.developerParticle?.key, "fabrica");
+  const profile = await again.call("/archon/profile");
+  assert.equal(profile.data.developerParticle?.label, "FABRICA");
+  assert.equal(profile.data.session.volontas, 0); // existing particles still served
+  const pub = await new Browser().call(`/archon/profile/${username}`);
+  assert.equal(pub.data.developerParticle?.value, 100);
+  assert.ok("resilentia" in pub.data.dimensions);
+
+  // Duplicates are refused.
+  const dupe = await new Browser().call("/auth/v2/developer/start", { email, username: `x${uid()}`, password, phone: phoneFor() });
+  assert.equal(dupe.status, 409);
+  assert.equal(dupe.data.code, "EMAIL_TAKEN");
+  const bad = await new Browser().call("/auth/v2/developer/start", { email: `${uid()}@example.com`, username: "a b", password, phone: phoneFor() });
+  assert.equal(bad.data.code, "USERNAME_INVALID");
+});
