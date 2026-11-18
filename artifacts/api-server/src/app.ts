@@ -181,13 +181,13 @@ app.use("/api", requireLiveSession);
 // Strict shield on credential endpoints: 10 attempts / 15 min per IP.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: Number(process.env.AUTH_RATE_LIMIT) || 20,
   skipSuccessfulRequests: true, // only FAILED attempts count — legit citizens never locked
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "محاولات كثيرة — انتظر 15 دقيقة ثم أعد المحاولة" },
+  message: { error: "TOO_MANY_ATTEMPTS", code: "TOO_MANY_ATTEMPTS" },
 });
-app.use(["/api/auth/login", "/api/auth/register", "/api/auth/change-password"], authLimiter);
+app.use(["/api/auth/login", "/api/auth/register", "/api/auth/change-password", "/api/auth/v2/login", "/api/auth/v2/signup", "/api/auth/v2/google", "/api/auth/v2/device/verify", "/api/auth/v2/forgot/verify", "/api/auth/v2/forgot/reset"], authLimiter);
 
 // AI-powered endpoints are expensive — 30 requests / 5 min per IP.
 const aiLimiter = rateLimit({
