@@ -249,6 +249,8 @@ export default defineConfig({
     allowedHosts: true,
     fs: { strict: true },
     proxy: {
+      // Local development against a separately running API (API_PROXY=http://localhost:8081).
+      ...(process.env.API_PROXY ? { "/api": { target: process.env.API_PROXY, changeOrigin: false } } : {}),
       "/api/ws": {
         target: "ws://localhost:8080",
         ws: true,

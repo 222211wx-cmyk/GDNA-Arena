@@ -8,6 +8,7 @@ import { isMessagesEntryPath, MESSAGES_ENTRY_PATH, messagesReturnPath } from "@/
 
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LangProvider } from "@/contexts/LangContext";
+import { AuthModalProvider } from "@/components/auth/AuthModal";
 import { LegalProvider } from "@/contexts/LegalContext";
 import { GlobalCallBoundary } from "@/contexts/GlobalCallBoundary";
 import { ConnectivityProvider } from "@/contexts/ConnectivityContext";
@@ -271,7 +272,7 @@ function Router() {
       <ArenaDocumentTitle />
       <div className="sticky top-0 z-50">
       <BackButton />
-      {!isChoiceEntry && !isMessagesEntry && <Navbar />}
+      {!isMessagesEntry && <Navbar />}
       {isMessagesEntry && (
         <header className="border-b border-border bg-background">
           <div className="mx-auto flex max-w-6xl justify-end px-3 py-2">
@@ -303,12 +304,14 @@ function App() {
             <ConnectivityBanner />
             <LegalProvider>
               <AuthProvider>
+                <AuthModalProvider>
                 <GlobalCallBoundary>
                   <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                     <Router />
                   </WouterRouter>
                   <Toaster />
                 </GlobalCallBoundary>
+                </AuthModalProvider>
               </AuthProvider>
             </LegalProvider>
           </ConnectivityProvider>
