@@ -78,7 +78,9 @@ async function fetchActiveCitizens() {
     LEFT JOIN transactions t ON t.user_id = u.id AND t.type = 'game_win'
     LEFT JOIN pulse_posts pp ON pp.username = u.username
     LEFT JOIN LATERAL (
-      SELECT archetype, volontas, resilentia, intellectus,
+      SELECT archetype,
+             COALESCE(to_jsonb(archon_sessions)->>'volontas', to_jsonb(archon_sessions)->>'voluntas')::int AS volontas,
+             resilentia, intellectus,
              disciplina, societas, abundantia, auctoritas, ai_profile
       FROM archon_sessions
       WHERE user_id = u.id
@@ -303,7 +305,7 @@ export function startSovereignMissionsJob(): void {
 
   // Run once at startup with a delay (after tables are ready)
   setTimeout(async () => {
-    await runSovereignMissions();
+    await runSovereignMissions().catch((err) => console.error("[MISSIONS] run failed", err));
   }, 20_000);
 
   // Schedule midnight run
@@ -315,7 +317,7 @@ export function startSovereignMissionsJob(): void {
     const msUntilMidnight = next.getTime() - now.getTime();
     console.log(`[MISSIONS] ⏰ Next run in ${Math.round(msUntilMidnight / 60000)} minutes`);
     setTimeout(async () => {
-      await runSovereignMissions();
+      await runSovereignMissions().catch((err) => console.error("[MISSIONS] run failed", err));
       scheduleNextMidnight(); // reschedule for the following day
     }, msUntilMidnight);
   }
