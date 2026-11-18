@@ -7,7 +7,6 @@ import { runClipCompressionBatch } from "./jobs/clip-compression.js";
 import { runClipThumbnailRetryBatch } from "./jobs/clip-thumbnail-retry.js";
 import { runClipStorageCleanupBatch, abortOneExpiredR2Upload } from "./jobs/clip-storage-cleanup.js";
 import { startClipTempCleanupWorker } from "./lib/clip-temp-cleanup.js";
-import { runLiteMediaBatch } from "./jobs/lite-media.js";
 
 const port = Number(process.env.PORT);
 if (!Number.isInteger(port) || port<=0) throw new Error("Worker PORT is required");
@@ -35,7 +34,6 @@ async function loop() {
         await runClipMediaBatch(controller.signal);
         if (!stopping) await runClipCompressionBatch(controller.signal);
         if (!stopping) await runClipThumbnailRetryBatch(controller.signal);
-        if (!stopping) await runLiteMediaBatch(controller.signal);
         if (!stopping) await runClipStorageCleanupBatch();
         if (!stopping) await abortOneExpiredR2Upload();
       }

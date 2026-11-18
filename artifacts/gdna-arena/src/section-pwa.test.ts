@@ -35,8 +35,8 @@ describe("section install metadata", () => {
     p.dom.window.close();
   });
 
-  it("keeps Lite default and resolves a deployed base path", () => {
-    const p = page("/gdna-arena/lite/messages", "/gdna-arena/");
+  it("keeps the app default and resolves a deployed base path", () => {
+    const p = page("/gdna-arena/dashboard", "/gdna-arena/");
     expect(p.manifest()).toBe("https://example.test/gdna-arena/manifest.json");
     p.dom.window.history.pushState({}, "", "/gdna-arena/clips");
     expect(p.manifest()).toBe("https://example.test/gdna-arena/manifest-clips.json");
@@ -67,8 +67,8 @@ describe("section install metadata", () => {
     p.dom.window.close();
   });
 
-  it("does not capture a Lite install event or reuse another section's event", async () => {
-    const p = page("/lite");
+  it("does not capture a root install event or reuse another section's event", async () => {
+    const p = page("/dashboard");
     const rootEvent = new p.dom.window.Event("beforeinstallprompt", { cancelable: true });
     p.dom.window.dispatchEvent(rootEvent);
     expect(rootEvent.defaultPrevented).toBe(false);
@@ -89,15 +89,15 @@ describe("section install metadata", () => {
     p.dom.window.close();
   });
 
-  it("has distinct stable IDs and full section start URLs without modifying Lite", () => {
+  it("has distinct stable IDs and full section start URLs without modifying the root app manifest", () => {
     const clips = JSON.parse(readFileSync(path.join(publicDir, "manifest-clips.json"), "utf8"));
     const messages = JSON.parse(readFileSync(path.join(publicDir, "manifest-messages.json"), "utf8"));
-    const lite = JSON.parse(readFileSync(path.join(publicDir, "manifest.json"), "utf8"));
+    const root = JSON.parse(readFileSync(path.join(publicDir, "manifest.json"), "utf8"));
     expect([clips.id, messages.id]).toEqual(["./clips", "./messages"]);
     expect([clips.start_url, messages.start_url]).toEqual(["./clips", "./messages"]);
     expect(clips.scope).toBe("./");
     expect(messages.scope).toBe("./");
-    expect(lite.start_url).toBe("./lite");
+    expect(root.start_url).toBe("./");
     for (const data of [clips, messages]) {
       for (const icon of data.icons) expect(readFileSync(path.join(publicDir, icon.src)).subarray(0, 8)
         .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe(true);

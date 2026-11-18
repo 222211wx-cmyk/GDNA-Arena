@@ -6,26 +6,6 @@ self.addEventListener("activate", event => {
     deletion.onsuccess = deletion.onerror = deletion.onblocked = () => resolve();
   }));
 });
-// Worker replays ciphertext only; no plaintext, decryption keys, or API caches.
-self.addEventListener("sync", event => {
-  if (event.tag !== "gdna-lite-outbox") return;
-  event.waitUntil((async () => {
-    const result = await GDNA_LITE_SYNC.drainLiteOutbox({
-      idb: indexedDB, request: fetch.bind(self), base: self.registration.scope,
-      now: () => Date.now(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
-    });
-    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const client of clients) {
-      const url = new URL(client.url);
-      const base = new URL(self.registration.scope).pathname.replace(/\/$/, "");
-      if (url.origin === self.location.origin && (url.pathname === base + "/lite" || url.pathname.startsWith(base + "/lite/"))) {
-        client.postMessage({ type: "gdna-lite-sync", result });
-      }
-    }
-    // Rejection asks the browser to reschedule, without an unbounded worker loop.
-    if (result.retry) throw new Error("Lite outbox has retryable work");
-  })());
-});
 const GDNA_CALL_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const GDNA_CALL_TTL_MS = 30_000;
 

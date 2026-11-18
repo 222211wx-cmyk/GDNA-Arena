@@ -228,6 +228,9 @@ app.use("/api", (req, _res, next) => {
 });
 app.use("/api", router);
 
+// GDNA Lite was removed: send old /lite and partner-programme links to the main site.
+app.get(/^\/(?:lite|partners\/(?:operators|dashboard))(?:\/.*)?$/, (_req, res) => res.redirect(301, "/"));
+
 // Serve the built GDNA Arena web app at the domain root (SPA fallback for non-API routes).
 const webRoot = process.env.WEB_DIST_DIR || path.resolve(process.cwd(), "artifacts/gdna-arena/dist/public");
 if (existsSync(path.join(webRoot, "index.html"))) {

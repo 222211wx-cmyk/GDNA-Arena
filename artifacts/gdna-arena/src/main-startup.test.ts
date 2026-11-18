@@ -7,7 +7,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-it("keeps full messages under Lite conditions and exposes recovery if its module fails", async () => {
+it("keeps full messages under limited-data conditions and exposes recovery if its module fails", async () => {
   vi.resetModules();
   vi.spyOn(console, "error").mockImplementation(() => {});
   localStorage.setItem("gdna.limitedData", "true");

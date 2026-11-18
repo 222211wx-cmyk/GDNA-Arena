@@ -58,7 +58,7 @@ export default function RecoverAccount() {
   const { refreshUser, recoverAccess, recoveryAccessPending, authError, loading } = useAuth();
   const search = useSearch();
   const next = recoveryReturnPath(search);
-  const signIn = next?.startsWith("/lite") ? "/lite/login" : `/login${next ? `?${new URLSearchParams({ next })}` : ""}`;
+  const signIn = `/login${next ? `?${new URLSearchParams({ next })}` : ""}`;
   const [config, setConfig] = useState<RecoveryConfig | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);

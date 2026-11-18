@@ -1,7 +1,6 @@
 import type { PoolClient } from "pg";
 import { ClipUploadError } from "./clip-upload-protocol.js";
 import { retryThumbnailName } from "./clip-storage-names.js";
-import { enqueueLiteMediaDeletion } from "./lite-media-cleanup.js";
 
 /**
  * Called only inside the authenticated account-erasure transaction. Preserve
@@ -29,7 +28,6 @@ export async function deleteAccountClips(client: PoolClient, userId: number): Pr
     if (lock.rows[0]?.acquired !== true) {
       throw new ClipUploadError(409, "A clip is processing; retry account deletion after processing finishes");
     }
-    await enqueueLiteMediaDeletion(client, clip.id);
     const names = [...new Set([
       clip.object_name, clip.upload_object_name, clip.thumbnail_object_name,
       clip.processing_output_object, retryThumbnailName(clip.id, clip.object_name),
