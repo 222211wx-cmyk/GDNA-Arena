@@ -28,7 +28,7 @@ export default function RecoverWithCode() {
   const copy = offlineRecoveryCopy(lang);
   const next = recoveryReturnPath(useSearch());
   const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-  const loginHref = next?.startsWith("/lite") ? `${base}/lite/login` : `${base}/login${next ? `?${new URLSearchParams({ next })}` : ""}`;
+  const loginHref = `${base}/login${next ? `?${new URLSearchParams({ next })}` : ""}`;
   useRecoveryMetadata(copy.recoverTitle, copy.recoverIntro);
 
   const [code, setCode] = useState("");

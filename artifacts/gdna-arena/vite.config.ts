@@ -13,32 +13,6 @@ const port = Number(process.env.PORT || 3000);
 // BASE_PATH: "/" in production (served at root), "/gdna-arena" fallback for local dev
 const basePath = process.env.BASE_PATH || "/";
 
-function isLitePath(pathname: string, base: string): boolean {
-  const relative = pathname.slice(base.length) || "/";
-  return relative === "/lite" ||
-    relative.startsWith("/lite/") ||
-    relative === "/partners/operators" ||
-    relative === "/partners/operators/" ||
-    relative === "/partners/dashboard" ||
-    relative === "/partners/dashboard/";
-}
-
-function liteShell(): Plugin {
-  return {
-    name: "gdna-lite-shell",
-    configureServer(server) {
-      server.middlewares.use((req, _res, next) => {
-        const url = new URL(req.url || "/", "http://localhost");
-        const base = basePath.replace(/\/$/, "");
-        if (isLitePath(url.pathname, base)) {
-          req.url = `${base}/lite.html${url.search}`;
-        }
-        next();
-      });
-    },
-  };
-}
-
 function messagesDotRoute(): Plugin {
   return {
     name: "gdna-messages-dot-route",
@@ -84,7 +58,7 @@ ${pushWorkerSource}`);
       const output = path.resolve(import.meta.dirname, "dist/public");
       type ManifestEntry = { file: string; imports?: string[]; dynamicImports?: string[]; css?: string[]; assets?: string[] };
       const manifest = JSON.parse(readFileSync(path.join(output, ".vite/manifest.json"), "utf8")) as Record<string, ManifestEntry>;
-      const liteFiles = new Set<string>(["index.html", "lite.html", "manifest.json", "favicon.svg", "lite-icon-192.png", "lite-icon-512.png"]);
+      const liteFiles = new Set<string>(["index.html", "manifest.json", "favicon.svg", "lite-icon-192.png", "lite-icon-512.png"]);
       const visited = new Set<string>();
       const visit = (key: string) => {
         if (visited.has(key)) return;
@@ -99,24 +73,6 @@ ${pushWorkerSource}`);
         for (const dependency of entry.imports || []) visit(dependency);
       };
       visit("index.html");
-      visit("lite.html");
-      const liteKey = Object.keys(manifest).find(key => key === "src/lite-entry.ts");
-      if (liteKey) visit(liteKey);
-      // Real static paths work without production rewrite changes. Unknown
-      // /lite/:username routes use the host's existing index.html SPA fallback,
-      // whose tiny bootstrap selects Lite before importing any React code.
-      const liteHtml = readFileSync(path.join(output, "lite.html"), "utf8");
-      for (const route of [
-        "lite",
-        "lite/in",
-        "lite/africa",
-        "lite/brasil",
-        "partners/operators",
-        "partners/dashboard",
-      ]) {
-        mkdirSync(path.join(output, route), { recursive: true });
-        writeFileSync(path.join(output, route, "index.html"), liteHtml);
-      }
       // Section install start URLs must resolve even on static hosts without an
       // SPA rewrite rule. They retain index.html's early per-route metadata.
       const appHtml = readFileSync(path.join(output, "index.html"), "utf8");
@@ -136,12 +92,6 @@ const PRECACHE = ${JSON.stringify(precache)};
 const BASE = ${JSON.stringify(normalizedBase)};
 const OFFLINE_CLIENTS = new Set();
 const isSameOrigin = url => url.origin === self.location.origin;
-const isLiteNavigation = pathname => {
-  const relative = pathname.slice(BASE.length - 1) || "/";
-  return relative === "/lite" || relative.startsWith("/lite/") ||
-    relative === "/partners/operators" || relative === "/partners/operators/" ||
-    relative === "/partners/dashboard" || relative === "/partners/dashboard/";
-};
 const isStaticAsset = request => {
   const pathname = new URL(request.url).pathname;
   return pathname.startsWith(BASE + "assets/") || PRECACHE.includes(pathname);
@@ -180,7 +130,7 @@ self.addEventListener("fetch", event => {
   }
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).then(response => response).catch(async () =>
-       (await caches.match(BASE + (isLiteNavigation(url.pathname) ? "lite.html" : "index.html"))) || Response.error()));
+       (await caches.match(BASE + "index.html")) || Response.error()));
     return;
   }
   if (!isStaticAsset(request)) return;
@@ -205,7 +155,6 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
-    liteShell(),
     messagesDotRoute(),
     pwaServiceWorker(),
     ...(process.env.NODE_ENV !== "production" &&
@@ -233,7 +182,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: path.resolve(import.meta.dirname, "index.html"),
-        lite: path.resolve(import.meta.dirname, "lite.html"),
       },
     },
     outDir: path.resolve(import.meta.dirname, "dist/public"),

@@ -97,7 +97,7 @@ describe("section install metadata", () => {
     expect([clips.start_url, messages.start_url]).toEqual(["./clips", "./messages"]);
     expect(clips.scope).toBe("./");
     expect(messages.scope).toBe("./");
-    expect(lite.start_url).toBe("./lite");
+    expect(lite.start_url).toBe("./");
     for (const data of [clips, messages]) {
       for (const icon of data.icons) expect(readFileSync(path.join(publicDir, icon.src)).subarray(0, 8)
         .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe(true);
