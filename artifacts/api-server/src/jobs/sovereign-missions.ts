@@ -303,7 +303,8 @@ export function startSovereignMissionsJob(): void {
 
   // Run once at startup with a delay (after tables are ready)
   setTimeout(async () => {
-    await runSovereignMissions();
+    try { await runSovereignMissions(); }
+    catch (e) { console.warn("[MISSIONS] startup run failed (non-fatal):", e); }
   }, 20_000);
 
   // Schedule midnight run
