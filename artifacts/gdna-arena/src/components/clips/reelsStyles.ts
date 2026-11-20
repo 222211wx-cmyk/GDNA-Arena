@@ -63,7 +63,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-icon-btn:focus-visible{outline:2px solid ${palette.ring};outline-offset:2px}
   .reels-icon-btn svg{width:26px;height:26px}
   /* Text-only buttons ("Hc", "Retour") grow to fit their label instead of clipping it. */
-  .reels-icon-btn:not(:has(svg)){width:auto;min-width:44px;padding:0 12px;font-size:.9375rem;font-weight:800;white-space:nowrap}
+  .reels-icon-btn:not(:has(svg)){width:auto;min-width:44px;padding:0 12px;font-size:.9375rem;font-weight:800;white-space:nowrap;flex-shrink:0}
   .reels-icon-btn.reels-badge-host{position:relative}
   .reels-viewer-close{position:absolute;left:calc(${space} * 3);top:calc(var(--reels-top-safe) + 68px);z-index:8;background:var(--reels-scrim);height:40px;border-radius:9999px}
   .reels-badge{
@@ -235,7 +235,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
     color:var(--reels-on-media);font-weight:800;font-size:.95rem;text-decoration:none;
   }
   .reels-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-  .reels-author-name{color:var(--reels-on-media);font-weight:700;font-size:1rem;text-decoration:none;text-shadow:0 1px 3px var(--reels-shadow)}
+  .reels-author-name{color:var(--reels-on-media);font-weight:700;font-size:.9375rem;text-decoration:none;text-shadow:0 1px 3px var(--reels-shadow)}
   .reels-author-name:hover{text-decoration:underline}
   .reels-follow-btn{
     margin-inline-start:calc(${space} * 1);
