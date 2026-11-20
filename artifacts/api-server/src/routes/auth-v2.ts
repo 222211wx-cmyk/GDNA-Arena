@@ -13,9 +13,9 @@ import { completeOfflineRecoveryRevocation } from "../lib/offline-recovery-revoc
 import { hasBlockedKeyword } from "../lib/moderate";
 import { getSmsProvider, mockOutbox, smsIsReal } from "../lib/sms";
 import {
-  AuthError, DEVICE_COOKIE, DEVICE_TTL_MS, authSchemaReady, checkOtp, consumeResetToken, decoyChallenge,
-  findUserIdByVerifiedPhone, getProfile, isTrustedDevice, issueOtp, maskPhone, mintResetToken,
-  normalizePhone, trustDevice, userVerifiedPhone,
+  AuthError, DEVICE_COOKIE, DEVICE_TTL_MS, accountDestinations, authSchemaReady, channelOptions, checkOtp,
+  consumeResetToken, decoyChallenge, findUserIdByVerifiedPhone, isTrustedDevice, issueOtp, maskPhone,
+  mintResetToken, normalizePhone, openChallenge, resolveChannel, sendChallengeCode, trustDevice,
 } from "../lib/auth-store";
 import { serializeWithProfile } from "./auth";
 import { DEVELOPER_PARTICLE, createBaselineArchonSession, developerSchemaReady } from "../lib/developer-registration";
@@ -176,8 +176,8 @@ router.post(`${BASE}/developer/start`, async (req, res) => {
     if (!USERNAME_RE.test(username) || hasBlockedKeyword(username)) throw new AuthError(400, "USERNAME_INVALID");
     if (!passwordOk(password)) throw new AuthError(400, "PASSWORD_WEAK");
     if (!phone) throw new AuthError(400, "PHONE_INVALID");
-    // The code must really reach a handset in production; a code only written to the log is useless.
-    if (prod() && !smsIsReal()) throw new AuthError(503, "SMS_UNAVAILABLE");
+    // At least one channel must really deliver in production; the user picks which one on each send.
+    if (!channelOptions({ phone, email }).length) throw new AuthError(503, "CHANNEL_UNAVAILABLE");
 
     const mailTaken = await pool.query(
       `SELECT 1 FROM users WHERE LOWER(email)=$1 UNION SELECT 1 FROM auth_profiles WHERE LOWER(email)=$1`, [email]);
@@ -187,25 +187,51 @@ router.post(`${BASE}/developer/start`, async (req, res) => {
     if (await findUserIdByVerifiedPhone(phone)) throw new AuthError(409, "PHONE_TAKEN");
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const challenge = await issueOtp("developer-signup", phone, null);
+    // No code is sent here: the user chooses SMS, WhatsApp or Email on the next step.
+    const challengeId = await openChallenge("developer-signup", phone, null);
     await pool.query(`DELETE FROM auth_pending_signups WHERE LOWER(email)=$1 OR created_at < now() - interval '${PENDING_TTL}'`, [email]);
     await pool.query(
       `INSERT INTO auth_pending_signups (challenge_id, email, username, password_hash, phone_e164) VALUES ($1,$2,$3,$4,$5)`,
-      [challenge.id, email, username, passwordHash, phone]);
-    res.json({ challengeId: challenge.id, resendIn: challenge.resendIn, maskedPhone: maskPhone(phone) });
+      [challengeId, email, username, passwordHash, phone]);
+    res.json({ challengeId, channels: channelOptions({ phone, email }) });
   } catch (e) { fail(req, res, e); }
 });
 
-router.post(`${BASE}/developer/resend`, async (req, res) => {
+// The user picks the channel on every send. Each send replaces the code on the same challenge.
+async function pendingSignup(challengeId: string) {
+  const r = await pool.query(
+    `SELECT * FROM auth_pending_signups WHERE challenge_id=$1 AND created_at > now() - interval '${PENDING_TTL}'`, [challengeId]);
+  if (!r.rows[0]) throw new AuthError(400, "OTP_EXPIRED");
+  return r.rows[0];
+}
+
+const developerSend = async (req: Request, res: Response) => {
   try {
     await developerSchemaReady();
-    const old = await pool.query(
-      `SELECT * FROM auth_pending_signups WHERE challenge_id=$1 AND created_at > now() - interval '${PENDING_TTL}'`, [str(req.body?.challengeId, 64)]);
-    const p = old.rows[0];
-    if (!p) throw new AuthError(400, "OTP_EXPIRED");
-    const c = await issueOtp("developer-signup", p.phone_e164, null);
-    await pool.query(`UPDATE auth_pending_signups SET challenge_id=$2 WHERE challenge_id=$1`, [p.challenge_id, c.id]);
-    res.json({ challengeId: c.id, resendIn: c.resendIn });
+    const challengeId = str(req.body?.challengeId, 64);
+    const p = await pendingSignup(challengeId);
+    const { channel, destination } = resolveChannel(req.body?.channel, { phone: p.phone_e164, email: p.email });
+    const c = await sendChallengeCode(challengeId, "developer-signup", channel, destination);
+    res.json({ challengeId, channel, resendIn: c.resendIn });
+  } catch (e) { fail(req, res, e); }
+};
+router.post(`${BASE}/developer/send`, developerSend);
+router.post(`${BASE}/developer/resend`, developerSend);
+
+// Grants developer access to the signed-in account. Same login, same account, no new user.
+router.post(`${BASE}/developer/enable`, async (req, res) => {
+  try {
+    await developerSchemaReady();
+    const userId = req.session?.userId;
+    if (!userId) throw new AuthError(401, "UNAUTHENTICATED");
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const row = await pool.query(`SELECT password_hash FROM users WHERE id=$1`, [userId]);
+    const ok = !!row.rows[0] && (await bcrypt.compare(password, row.rows[0].password_hash).catch(() => false));
+    if (!ok) throw new AuthError(401, "INVALID_CREDENTIALS");
+    await pool.query(
+      `INSERT INTO developer_particles (user_id, particle, value) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+      [userId, DEVELOPER_PARTICLE.key, DEVELOPER_PARTICLE.value]);
+    res.json({ status: "ok", developer: true });
   } catch (e) { fail(req, res, e); }
 });
 
@@ -266,10 +292,12 @@ router.post(`${BASE}/login`, async (req, res) => {
     const userId: number = found.rows[0].id;
 
     if (!(await isTrustedDevice(userId, readCookie(req, DEVICE_COOKIE)))) {
-      const phone = await userVerifiedPhone(userId);
-      if (phone && (smsIsReal() || !prod())) {
-        const challenge = await issueOtp("device", phone, userId);
-        res.json({ status: "device_verification", challengeId: challenge.id, maskedPhone: maskPhone(phone), resendIn: challenge.resendIn, rememberMe });
+      // New device: no code is sent yet. The user chooses a channel on /device/send.
+      const dest = await accountDestinations(userId);
+      const channels = channelOptions(dest);
+      if (channels.length) {
+        const challengeId = await openChallenge("device", (dest.phone ?? dest.email)!, userId);
+        res.json({ status: "device_verification", challengeId, channels, rememberMe });
         return;
       }
     }
@@ -277,15 +305,20 @@ router.post(`${BASE}/login`, async (req, res) => {
   } catch (e) { fail(req, res, e); }
 });
 
-// ── New-device SMS verification ──────────────────────────────
-router.post(`${BASE}/device/resend`, async (req, res) => {
+// ── New-device verification: the user picks a channel each time ──
+const deviceSend = async (req: Request, res: Response) => {
   try {
-    const old = await pool.query(`SELECT user_id, phone_e164 FROM auth_otps WHERE id=$1 AND purpose='device'`, [str(req.body?.challengeId, 64)]);
-    if (!old.rows[0]) throw new AuthError(400, "OTP_EXPIRED");
-    const c = await issueOtp("device", old.rows[0].phone_e164, old.rows[0].user_id);
-    res.json({ challengeId: c.id, resendIn: c.resendIn });
+    const challengeId = str(req.body?.challengeId, 64);
+    const old = await pool.query(`SELECT user_id FROM auth_otps WHERE id=$1 AND purpose='device' AND NOT consumed`, [challengeId]);
+    const userId: number | undefined = old.rows[0]?.user_id;
+    if (!userId) throw new AuthError(400, "OTP_EXPIRED");
+    const { channel, destination } = resolveChannel(req.body?.channel, await accountDestinations(userId));
+    const c = await sendChallengeCode(challengeId, "device", channel, destination);
+    res.json({ challengeId, channel, resendIn: c.resendIn });
   } catch (e) { fail(req, res, e); }
-});
+};
+router.post(`${BASE}/device/send`, deviceSend);
+router.post(`${BASE}/device/resend`, deviceSend);
 
 router.post(`${BASE}/device/verify`, async (req, res) => {
   try {

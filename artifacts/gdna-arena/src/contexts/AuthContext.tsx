@@ -42,7 +42,7 @@ export class AuthApiError extends Error {
 
 export type AuthV2Result =
   | { status: "ok"; user: AuthUser; phoneChallengeId?: string | null }
-  | { status: "device_verification"; challengeId: string; maskedPhone: string; resendIn: number };
+  | { status: "device_verification"; challengeId: string; channels: Array<{ channel: "sms" | "whatsapp" | "email"; masked: string }>; rememberMe: boolean };
 
 const HINT_KEY = "gdna_auth_hint";
 /** Non-sensitive profile snapshot so the header can paint instantly on this device. */
