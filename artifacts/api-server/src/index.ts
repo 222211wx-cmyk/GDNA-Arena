@@ -91,6 +91,8 @@ async function ensureCitizenTablesAdditive(): Promise<void> {
 async function prepareDevelopmentDatabase(): Promise<void> {
   if (process.env.NODE_ENV === "production") {
     await ensureCitizenTablesAdditive();
+    await import("./routes/clips").then(m => m.ensureClipLibrarySchema()).catch(err =>
+      logger.error({ err }, "Clips library schema failed (continuing)"));
     logger.info("Production: full startup DDL skipped; additive citizen tables ensured");
     return;
   }

@@ -84,25 +84,8 @@ async function acquireFeedClient(signal?: AbortSignal) {
   }
 }
 
-export async function ensureClipsTables(): Promise<void> {
-  try {
-    await requirePool().query(`
-      CREATE TABLE IF NOT EXISTS clips (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id),
-        username TEXT NOT NULL,
-        title TEXT NOT NULL,
-        object_name TEXT NOT NULL,
-        thumbnail_object_name TEXT,
-        content_type TEXT NOT NULL,
-        size_bytes BIGINT NOT NULL DEFAULT 0,
-        duration_sec INTEGER NOT NULL,
-        views INTEGER NOT NULL DEFAULT 0,
-        earnings NUMERIC(14,4) NOT NULL DEFAULT 0,
-        is_frozen BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_object_name TEXT;
+/** Additive and idempotent: safe to run on every start, including production. */
+const CLIP_LIBRARY_SQL = `
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS category VARCHAR(1) NOT NULL DEFAULT 'B' CHECK (category IN ('A','B','C','D'));
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS matricule VARCHAR(30);
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS media_type VARCHAR(10);
@@ -123,6 +106,45 @@ export async function ensureClipsTables(): Promise<void> {
         ON CONFLICT (category) DO UPDATE SET n = GREATEST(clip_matricule_counters.n, EXCLUDED.n);
       CREATE UNIQUE INDEX IF NOT EXISTS clips_matricule_uidx ON clips (matricule);
       CREATE INDEX IF NOT EXISTS clips_category_idx ON clips (category, id DESC);
+`;
+
+/** Production skips full startup DDL, so the Clips libraries schema is applied on its own. */
+export async function ensureClipLibrarySchema(): Promise<void> {
+  const client = await requirePool().connect();
+  try {
+    // r2_clip_uploads may be missing on a fresh database; the column is only added when it exists.
+    await client.query("SELECT pg_advisory_lock(hashtextextended('clip-library-schema',0))");
+    await client.query(CLIP_LIBRARY_SQL);
+    await client.query(`DO $$ BEGIN
+      IF to_regclass('public.r2_clip_uploads') IS NOT NULL THEN
+        ALTER TABLE r2_clip_uploads ADD COLUMN IF NOT EXISTS category VARCHAR(1) NOT NULL DEFAULT 'B';
+      END IF; END $$;`);
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(hashtextextended('clip-library-schema',0))").catch(() => {});
+    client.release();
+  }
+}
+
+export async function ensureClipsTables(): Promise<void> {
+  try {
+    await requirePool().query(`
+      CREATE TABLE IF NOT EXISTS clips (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        username TEXT NOT NULL,
+        title TEXT NOT NULL,
+        object_name TEXT NOT NULL,
+        thumbnail_object_name TEXT,
+        content_type TEXT NOT NULL,
+        size_bytes BIGINT NOT NULL DEFAULT 0,
+        duration_sec INTEGER NOT NULL,
+        views INTEGER NOT NULL DEFAULT 0,
+        earnings NUMERIC(14,4) NOT NULL DEFAULT 0,
+        is_frozen BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_object_name TEXT;
+      ${CLIP_LIBRARY_SQL}
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_attempts INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
       CREATE INDEX IF NOT EXISTS clips_thumbnail_retry_due_idx
