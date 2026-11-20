@@ -1,108 +1,73 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FILE_TOO_LARGE_MESSAGE, MAX_CLIP_BYTES, uploadClip } from "./clipUpload";
+import { MAX_UPLOAD_BYTES, UPLOAD_CONCURRENCY, uploadClip, validateUploadFile } from "./clipUpload";
 
 afterEach(() => vi.unstubAllGlobals());
 
-type Sent = { url: string; method: string; body: unknown; headers: Record<string, string> };
+if (!Blob.prototype.arrayBuffer) {
+  Blob.prototype.arrayBuffer = function (this: Blob) {
+    return new Promise<ArrayBuffer>((resolve, reject) => {
+      const r = new FileReader(); r.onload = () => resolve(r.result as ArrayBuffer); r.onerror = () => reject(r.error); r.readAsArrayBuffer(this);
+    });
+  };
+}
+const PART = 5 * 1024 * 1024;
+const json = (data: unknown) => new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
 
-function setup({ me = 7, putStatus = 200, hold = false, confirm = { ok: true, clip: { id: 9, code: "HELX-123456", title: "Mon clip" } } } = {}) {
-  const fetches: Array<{ url: string; body: Record<string, unknown> | null }> = [];
-  const puts: Sent[] = [];
-  let xhr: MockXHR | null = null;
+function setup(partCount: number, failPart?: number) {
+  let inFlight = 0, maxInFlight = 0;
+  const puts: string[] = [];
+  const failed = new Set<number>();
   class MockXHR {
-    status = 0;
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    onabort: (() => void) | null = null;
-    upload: { onprogress: ((e: ProgressEvent) => void) | null } = { onprogress: null };
-    headers: Record<string, string> = {};
-    method = ""; url = "";
-    constructor() { xhr = this; }
-    open(method: string, url: string) { this.method = method; this.url = url; }
-    setRequestHeader(name: string, value: string) { this.headers[name] = value; }
+    status = 0; responseText = "{}"; url = "";
+    onload: (() => void) | null = null; onerror: (() => void) | null = null; onloadend: (() => void) | null = null;
+    upload: { onprogress: ((e: { loaded: number }) => void) | null } = { onprogress: null };
+    open(_m: string, url: string) { this.url = url; }
+    setRequestHeader() {}
+    abort() {}
     send(body: Blob) {
-      puts.push({ url: this.url, method: this.method, body, headers: this.headers });
-      this.upload.onprogress?.({ lengthComputable: true, loaded: Math.floor(body.size / 2), total: body.size } as ProgressEvent);
-      if (hold) return;
-      this.status = putStatus;
-      queueMicrotask(() => this.onload?.());
+      const n = Number(this.url.split("/").pop());
+      puts.push(this.url); inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+      setTimeout(() => {
+        inFlight--;
+        if (n === failPart && !failed.has(n)) { failed.add(n); this.onerror?.(); return; }
+        this.upload.onprogress?.({ loaded: body.size });
+        this.status = 200; this.onload?.();
+      }, 5);
     }
-    abort() { this.onabort?.(); }
   }
   vi.stubGlobal("XMLHttpRequest", MockXHR);
-  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-    const body = init?.body ? JSON.parse(String(init.body)) : null;
-    fetches.push({ url, body });
-    const json = (data: unknown) => new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
-    if (url.endsWith("api/auth/me")) return json({ id: me, username: "citizen" });
-    if (url.endsWith("api/clips/presign")) return json({ url: "https://signed.example/put", key: "clips/abc" });
-    if (url.endsWith("api/clips/confirm")) return json(confirm);
-    return new Response("{}", { status: 404 });
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    if (body.action === "initiate") return json({ sessionId: "s1", partSize: PART, partCount });
+    if (body.action === "inspect") return json({ state: "active", parts: [] });
+    return json({ ok: true, clip: { id: 1, code: "HELX-123456", title: "t" } });
   }));
-  return { fetches, puts, xhr: () => xhr };
+  return { puts, max: () => maxInFlight };
 }
+const fileOf = (parts: number) => new File([new Uint8Array(PART * (parts - 1) + 10)], "v.mp4");
 
-const file = () => new File(["0123456789"], "voice.mp4", { type: "video/mp4" });
-
-describe("direct clip transport", () => {
-  it("presigns, PUTs the original File once with real progress, then confirms", async () => {
-    const { fetches, puts } = setup();
-    const original = file();
+describe("parallel chunked upload", () => {
+  it("sends parts 20 at a time and reports real bytes", async () => {
+    const { puts, max } = setup(30);
     const progress = vi.fn();
-    const result = await uploadClip(original, { title: "Mon clip", durationSec: 61 }, new AbortController().signal, progress, { expectedOwner: 7 });
-    expect(fetches.find(f => f.url.endsWith("presign"))!.body).toEqual({
-      filename: "voice.mp4", title: "Mon clip", contentType: "video/mp4", size: 10, durationSec: 61, expectedOwnerId: 7,
-    });
-    expect(puts).toHaveLength(1);
-    expect(puts[0]).toMatchObject({ url: "https://signed.example/put", method: "PUT" });
-    expect(puts[0].body).toBe(original);
-    expect(puts[0].headers).toEqual({ "Content-Type": "video/mp4", "If-None-Match": "*" });
-    expect(progress).toHaveBeenCalledWith(50, 5, 10);
-    expect(fetches.find(f => f.url.endsWith("confirm"))!.body).toEqual({ key: "clips/abc", expectedOwnerId: 7 });
-    expect(result).toMatchObject({ code: "HELX-123456", name: "Mon clip" });
+    await uploadClip(fileOf(30), { title: "Mon clip", durationSec: 61 }, new AbortController().signal, progress);
+    expect(UPLOAD_CONCURRENCY).toBe(20);
+    expect(max()).toBe(20);
+    expect(puts).toHaveLength(30);
+    const last = progress.mock.calls.at(-1)!;
+    expect(last[0]).toBe(100);
+    expect(last[1]).toBe(last[2]);
   });
-
-  it("falls back to application/octet-stream when the browser gives no type", async () => {
-    const { puts, fetches } = setup();
-    await uploadClip(new File(["x"], "a.mkv"), { title: "t", durationSec: null }, new AbortController().signal, () => {}, { expectedOwner: 7 });
-    expect(puts[0].headers["Content-Type"]).toBe("application/octet-stream");
-    expect(fetches.find(f => f.url.endsWith("presign"))!.body!.contentType).toBe("application/octet-stream");
+  it("retries only the failed part", async () => {
+    const { puts } = setup(8, 3);
+    await uploadClip(fileOf(8), { title: "Mon clip", durationSec: 61 }, new AbortController().signal, () => {});
+    expect(puts).toHaveLength(9);
+    expect(puts.filter(u => u.endsWith("/3"))).toHaveLength(2);
   });
-
-  it("refuses to upload for a different authenticated account", async () => {
-    const { puts } = setup({ me: 8 });
-    await expect(uploadClip(file(), { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow(/compte/i);
-    expect(puts).toHaveLength(0);
-  });
-
-  it("cancel aborts the XHR and never confirms", async () => {
-    const { fetches, xhr } = setup({ hold: true });
-    const controller = new AbortController();
-    const pending = uploadClip(file(), { title: "t", durationSec: 61 }, controller.signal, () => {}, { expectedOwner: 7 });
-    await vi.waitFor(() => expect(xhr()).not.toBeNull());
-    controller.abort(new DOMException("Cancelled", "AbortError"));
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(fetches.some(f => f.url.endsWith("confirm"))).toBe(false);
-  });
-
-  it("fails once on PUT error without retrying", async () => {
-    const { puts, fetches } = setup({ putStatus: 403 });
-    await expect(uploadClip(file(), { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow("403");
-    expect(puts).toHaveLength(1);
-    expect(fetches.some(f => f.url.endsWith("confirm"))).toBe(false);
-  });
-
-  it("rejects an unconfirmed receipt", async () => {
-    setup({ confirm: { ok: false } as never });
-    await expect(uploadClip(file(), { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow();
-  });
-
-  it("blocks oversize files with a generic message before any request", async () => {
-    const { fetches } = setup();
-    const big = file();
-    Object.defineProperty(big, "size", { value: MAX_CLIP_BYTES + 1 });
-    await expect(uploadClip(big, { title: "t", durationSec: 61 }, new AbortController().signal, () => {}, { expectedOwner: 7 })).rejects.toThrow(FILE_TOO_LARGE_MESSAGE);
-    expect(fetches).toHaveLength(0);
-    expect(FILE_TOO_LARGE_MESSAGE).not.toMatch(/GiB|\d/);
+  it("accepts only MP4 and ZIP up to 1 GB", () => {
+    expect(validateUploadFile({ name: "a.mp4", size: 1 })).toBeNull();
+    expect(validateUploadFile({ name: "a.zip", size: MAX_UPLOAD_BYTES })).toBeNull();
+    expect(validateUploadFile({ name: "a.mov", size: 1 })).not.toBeNull();
+    expect(validateUploadFile({ name: "a.mp4", size: MAX_UPLOAD_BYTES + 1 })).not.toBeNull();
   });
 });
