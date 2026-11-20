@@ -132,7 +132,20 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // Bottom navigation
   const bottomnav = el("nav", "reels-bottomnav", { "aria-label": "Navigation principale" });
 
-  shell.append(topbar, track, toolsPanel, bottomnav);
+  // Thumb row: publish, search, and grid, centered above the bottom nav.
+  const quickRow = el("div", "reels-quick-row");
+  const quickPublish = el("button", "reels-quick-btn", { type: "button" });
+  quickPublish.textContent = "Publier un clip";
+  quickPublish.addEventListener("click", () => options.onOpenComposer());
+  const quickSearch = el("button", "reels-quick-btn", { type: "button" });
+  quickSearch.textContent = "Rechercher";
+  quickSearch.addEventListener("click", openSearch);
+  const quickGrid = el("button", "reels-quick-btn", { type: "button" });
+  quickGrid.textContent = "Grille";
+  quickGrid.addEventListener("click", () => toggleGrid());
+  quickRow.append(quickPublish, quickSearch, quickGrid);
+
+  shell.append(topbar, track, toolsPanel, quickRow, bottomnav);
   root.replaceChildren(shell);
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -179,7 +192,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     inbox.style.position = "relative";
     inbox.innerHTML = icons.message();
     const inboxLabel = el("span");
-    inboxLabel.textContent = "Inbox";
+    inboxLabel.textContent = "Boîte de réception";
     inbox.append(inboxLabel);
     bottomnav.append(inbox);
     if (identity.status === "authenticated") disposeInbox = mountInboxBadge(inbox);
