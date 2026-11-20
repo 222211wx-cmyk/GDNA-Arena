@@ -119,6 +119,14 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const [pendingChannel, setPendingChannel] = useState<ChannelOption["channel"] | null>(null);
   const [lastChannel, setLastChannel] = useState<ChannelOption["channel"] | null>(null);
   const [success, setSuccess] = useState(false);
+  // The reset link from email lands on /login#reset-token=…; jump straight to the new-password step and drop the token from the URL.
+  useEffect(() => {
+    const m = /#reset-token=([^&]+)/.exec(window.location.hash);
+    if (!m) return;
+    setResetToken(decodeURIComponent(m[1]));
+    setView("forgot-new");
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
   const reg = registrationCopy(lang);
 
   useEffect(() => { v2("config").then(setConfig).catch(() => {}); }, []);
@@ -178,6 +186,10 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const sendForgot = () => run(async () => {
     const r = await v2("forgot/send", { phone });
     setChallenge({ id: r.challengeId, masked: phone }); restart(r.resendIn); go("forgot-code"); void showDevCode(phone);
+  });
+  const sendForgotEmail = () => run(async () => {
+    await v2("forgot/email/send", { email });
+    setNotice(copy.linkSent);
   });
   const resend = () => run(async () => {
     if (view === "forgot-code") await sendForgot();
@@ -344,6 +356,14 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
           <p className="text-sm text-muted-foreground">{copy.forgotIntro}</p>
           <PhoneField id="auth-forgot-phone" dial={dial} local={local} onDial={setDial} onLocal={setLocal} label={copy.phone} codeLabel={copy.countryCode} required />
           <Button type="submit" className="h-11 w-full" disabled={busy || !phone}>{busy ? copy.working : copy.sendCode}</Button>
+        </form>
+      )}
+      {view === "forgot-phone" && (
+        <form onSubmit={e => { e.preventDefault(); void sendForgotEmail(); }} className="space-y-3 border-t pt-3">
+          <p className="text-sm text-muted-foreground">{copy.forgotEmailHint}</p>
+          <Label htmlFor="auth-forgot-email">{copy.email}</Label>
+          <Input id="auth-forgot-email" type="email" dir="ltr" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required />
+          <Button type="submit" variant="outline" className="h-11 w-full" disabled={busy || !email}>{busy ? copy.working : copy.sendLink}</Button>
         </form>
       )}
 
