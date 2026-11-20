@@ -19,6 +19,9 @@ export type FeedClip = {
   processing_status?: string | null;
   views?: number | null;
   created_at?: string | null;
+  category?: "A" | "B" | "C" | "D";
+  matricule?: string | null;
+  media_type?: "audio" | "video" | "image" | null;
   video_url: string;
   thumb: string | null;
   author: FeedAuthor;
@@ -87,13 +90,15 @@ async function sendJson<T>(path: string, method: string, body?: unknown): Promis
 
 /** Fetch a page of the reels feed, newest first. `before` paginates; `q` searches. */
 export async function fetchFeed(
-  opts: { before?: number | null; limit?: number; q?: string },
+  opts: { before?: number | null; limit?: number; q?: string; category?: string; type?: string },
   signal?: AbortSignal,
 ): Promise<FeedResponse> {
   const params = new URLSearchParams();
   if (opts.before != null) params.set("before", String(opts.before));
   params.set("limit", String(Math.min(Math.max(opts.limit ?? 5, 1), 6)));
   if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
+  if (opts.category) params.set("category", opts.category);
+  if (opts.type) params.set("type", opts.type);
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort();
