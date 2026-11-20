@@ -26,8 +26,11 @@ import { validateClipDisplayTitle } from "../lib/clip-title.js";
 import { finalClipReceipt } from "./clips-thumbnail-response.js";
 import { logger } from "../lib/logger.js";
 import { publishClip } from "../lib/clip-publish.js";
+import { checkContent } from "../lib/check-content.js";
+import { ensureGuestSession } from "../lib/guest-session.js";
 
 const router: IRouter = Router();
+router.use(["/upload/presign", "/r2/presign", "/clips/create", "/upload/complete", "/upload/chunk"], ensureGuestSession);
 async function status(sessionId: string, userId: number) {
   const { rows } = await pool.query(
     `SELECT j.state,j.error,c.id,c.title,c.code,c.duration_sec,c.created_at,c.processing_status,c.thumbnail_object_name
@@ -155,7 +158,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     if (current.state === "published" && current.clip_id) {
       const found = await client.query(`SELECT * FROM clips WHERE id=$1 AND user_id=$2`, [current.clip_id, userId]);
       if (!found.rows[0]) { res.status(410).json({ error: "Published clip was removed" }); return; }
-      res.json(finalClipReceipt(found.rows[0])); return;
+      res.json({ ...finalClipReceipt(found.rows[0]), status: "accepté", reason: "" }); return;
     }
     if (current.state !== "active" && current.state !== "completing") {
       res.status(409).json({ error: "R2 upload cannot be completed" }); return;
@@ -203,14 +206,29 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
         head.Metadata?.session !== current.id) {
       throw new ClipUploadError(409, "Completed R2 object failed ownership or size verification");
     }
-    const clip = await publishClip({
-      userId, filename: current.object_name, title: current.original_name,
-      displayTitle: current.display_title ?? undefined, contentType: current.content_type,
-      size: Number(current.size_bytes), sha256: "", deferThumbnail: true, originalReady: true,
-    }, client, async (tx, published) => {
-      await tx.query("UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW() WHERE id=$1", [current.id, published.id]);
-    });
-    res.json(finalClipReceipt(clip));
+    let clip;
+    try {
+      clip = await publishClip({
+        userId, filename: current.object_name, title: current.original_name,
+        displayTitle: current.display_title ?? undefined, contentType: current.content_type,
+        size: Number(current.size_bytes), sha256: "", deferThumbnail: true, originalReady: true,
+      }, client, async (tx, published) => {
+        // Control after publishing: a refusal rolls the clip back before it is visible.
+        const verdict = checkContent({
+          title: current.display_title ?? current.original_name,
+          durationSec: Number(published.duration_sec),
+        });
+        if (verdict.status === "refusé") throw new ContentRefused(verdict.reason);
+        await tx.query("UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW() WHERE id=$1", [current.id, published.id]);
+      });
+    } catch (error) {
+      if (error instanceof ContentRefused) {
+        res.json({ ok: false, status: "refusé", reason: error.message });
+        return;
+      }
+      throw error;
+    }
+    res.json({ ...finalClipReceipt(clip), status: "accepté", reason: "" });
   } finally {
     if (locked) await client.query(
       "SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${row.id}`],
@@ -218,6 +236,8 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     client.release();
   }
 }
+
+class ContentRefused extends Error {}
 
 function uploadFailure(res: Response, error: unknown, userId: number, action: string): void {
   logger.warn({
@@ -431,7 +451,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
       if (row.state === "published" && row.clip_id) {
         const found = await pool.query(`SELECT * FROM clips WHERE id=$1 AND user_id=$2`, [row.clip_id, userId]);
         if (!found.rows[0]) { res.status(410).json({ error: "Published clip was removed" }); return; }
-        res.json({ state: "published", receipt: finalClipReceipt(found.rows[0]) });
+        res.json({ state: "published", receipt: { ...finalClipReceipt(found.rows[0]), status: "accepté", reason: "" } });
         return;
       }
       if (row.state === "aborted") { res.json({ state: "aborted", parts: [] }); return; }

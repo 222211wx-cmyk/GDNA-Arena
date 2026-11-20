@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import type { File } from "@google-cloud/storage";
 import { ClipProbeBusyError, verifiedDuration } from "./clip-duration.js";
+import { checkContent } from "./check-content.js";
 import { clipDurationSeconds, normalizeClipContentType, clipDownloadExtension, isAudioClip, resolveClipUploadType } from "./clip-upload-protocol.js";
 
 async function withLimits(
@@ -221,7 +222,7 @@ for (const [extension, codec] of [
       const input = source(bytes);
       const duration = await verifiedDuration(input.file, "audio");
       assert.ok(duration > 1 && duration < 2, `Unexpected audio duration ${duration}`);
-      assert.throws(() => clipDurationSeconds(duration, extension === "m4a" ? "audio/mp4" : extension === "mp3" ? "audio/mpeg" : `audio/${extension}`));
+      assert.equal(checkContent({ title: "Mon clip", durationSec: duration }).status, "refusé");
       assert.deepEqual(bytes, original);
       assert.ok(input.streams.every(stream => stream.destroyed));
     } finally { rmSync(directory, { recursive: true, force: true }); }
@@ -230,11 +231,11 @@ for (const [extension, codec] of [
 
 test("audio MIME cannot disguise a short video to evade the 60-second video policy", async () => {
   await assert.rejects(verifiedDuration(source(fixture("mp4", 2)).file, "audio"), /INVALID_AUDIO_STREAMS/);
-  assert.throws(() => clipDurationSeconds(59.9, "video/mp4"));
+  assert.equal(checkContent({ title: "Mon clip", durationSec: 29.9 }).status, "refusé");
+  assert.equal(checkContent({ title: "Mon clip", durationSec: 30 }).status, "accepté");
+  assert.equal(checkContent({ title: "aaa", durationSec: 90 }).status, "refusé");
   assert.equal(clipDurationSeconds(60, "video/mp4"), 60);
   assert.equal(clipDurationSeconds(90001, "video/mp4"), 90001);
-  assert.throws(() => clipDurationSeconds(0.1, "audio/wav"), /خاص دقيقة الفوق/);
-  assert.throws(() => clipDurationSeconds(12.9, "audio/ogg"), /خاص دقيقة الفوق/);
   assert.equal(clipDurationSeconds(60, "audio/wav"), 60);
   assert.equal(clipDurationSeconds(90001, "audio/ogg"), 90001);
   for (const duration of [0, -1, NaN, Infinity]) assert.throws(() => clipDurationSeconds(duration, "audio/mp4"));

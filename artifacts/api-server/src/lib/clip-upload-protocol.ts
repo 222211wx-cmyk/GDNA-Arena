@@ -114,6 +114,6 @@ export function validateClipRightsInput(
 }
 export function clipDurationSeconds(seconds: number, contentType: string): number {
   if (!Number.isFinite(seconds) || seconds <= 0) throw new ClipUploadError(400, "مدة الملف غير صالحة");
-  if (seconds < 60) throw new ClipUploadError(400, "المدة الدنيا دقيقة واحدة — بلا حد أقصى للمدة");
+  // The minimum duration is judged after publishing by checkContent().
   return Math.floor(seconds);
 }
