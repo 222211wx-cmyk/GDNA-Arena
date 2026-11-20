@@ -13,7 +13,7 @@ export function clipOverlayCss(palette: Palette, space: string): string {
   .clip-citizen-mini img{width:calc(${space} * 8);height:calc(${space} * 8);object-fit:cover;border-radius:${tokens.radius}}
   .clip-citizen-initials{display:grid;place-items:center;width:calc(${space} * 8);height:calc(${space} * 8);background:${tokens.color.light.secondary};border-radius:${tokens.radius}}
   .clip-citizen-mini button{padding:${space} calc(${space} * 2);background:${tokens.color.light.secondary};color:${tokens.color.light.secondaryForeground};border:1px solid ${tokens.color.light.border};border-radius:${tokens.radius};cursor:pointer}
-  .reels-slide .clip-citizen-mini{position:absolute;left:calc(${space} * 2);right:calc(${space} * 2);bottom:calc(88px + var(--reels-bottom-safe));font-size:.875rem;flex-wrap:wrap;justify-content:center;white-space:nowrap;padding:${space};box-sizing:border-box}
+  .reels-slide .clip-citizen-mini{position:absolute;left:calc(${space} * 2);right:calc(${space} * 2);bottom:calc(var(--reels-dock-h) + 110px);font-size:.875rem;flex-wrap:wrap;justify-content:center;white-space:nowrap;padding:${space};box-sizing:border-box}
   .reels-slide .clip-citizen-mini img,.reels-slide .clip-citizen-initials{width:calc(${space} * 6);height:calc(${space} * 6);flex-shrink:0}
   .reels-slide .clip-citizen-mini button{flex-shrink:0}
   /* The overlay sits inside the media frame so the rail floats over media. */

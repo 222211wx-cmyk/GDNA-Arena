@@ -16,6 +16,10 @@ export function reelsShellCss(palette: Palette, space: string): string {
     overflow:hidden;
     --reels-top-safe:env(safe-area-inset-top,0px);
     --reels-bottom-safe:env(safe-area-inset-bottom,0px);
+    /* Thumb dock, bottom-up: nav bar, then the 3-button row, then overlays. */
+    --reels-nav-h:calc(76px + var(--reels-bottom-safe));
+    --reels-quick-bottom:calc(var(--reels-nav-h) + 12px);
+    --reels-dock-h:calc(var(--reels-quick-bottom) + 44px);
     /* All media-overlay colours derive from DS tokens (no invented palette).
        Text/icons over media are the near-white DS foreground; scrims and glass
        surfaces are color-mix() derivatives of the DS background/foreground so
@@ -162,7 +166,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-center[data-paused="false"] .reels-play:focus-visible{opacity:1;transform:scale(.9)}
   /* Always-visible "Plein écran" pill (icon + label), stays during playback. */
   .reels-fs-pill{
-    position:absolute;bottom:calc(170px + var(--reels-bottom-safe));
+    position:absolute;bottom:calc(var(--reels-dock-h) + 150px);
     gap:calc(${space} * 2);
     padding:calc(${space} * 2) calc(${space} * 4);border-radius:9999px;
     background:var(--reels-glass-strong);
@@ -197,8 +201,8 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-slide .clip-overlay{position:absolute;inset:0;z-index:13;pointer-events:none}
   .reels-slide .clip-overlay button,.reels-slide .clip-overlay a,
   .reels-slide .clip-overlay input,.reels-slide .clip-overlay textarea{pointer-events:auto}
-  .reels-slide .clip-rail{bottom:calc(170px + var(--reels-bottom-safe))}
-  .reels-slide .clip-meta{bottom:calc(230px + var(--reels-bottom-safe));pointer-events:none}
+  .reels-slide .clip-rail{bottom:calc(var(--reels-dock-h) + 16px);right:12px;gap:16px}
+  .reels-slide .clip-meta{bottom:calc(var(--reels-dock-h) + 16px);left:12px;right:72px;pointer-events:none}
   .reels-slide .action-status{
     position:absolute;left:16px;right:72px;bottom:calc(84px + var(--reels-bottom-safe));
     z-index:4;color:var(--reels-on-media);font-size:.8125rem;text-shadow:0 1px 3px var(--reels-shadow);margin:0;
@@ -292,17 +296,34 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-tool-item:disabled{opacity:.5;cursor:not-allowed}
   .reels-tools-close{align-self:flex-end}
 
-  /* ── Bottom navigation (four persistent destinations) ─────────────────── */
+  /* ── Thumb row: Publier un clip / Rechercher / Grille, centered above the nav ── */
+  .reels-quick-row{
+    position:absolute;left:0;right:0;bottom:var(--reels-quick-bottom);z-index:40;
+    display:flex;align-items:center;justify-content:center;gap:12px;
+    padding:0 12px;pointer-events:none;
+  }
+  .reels-quick-btn{
+    pointer-events:auto;flex:0 1 auto;min-width:0;height:44px;padding:0 16px;
+    border:1px solid var(--reels-glass-strong);border-radius:9999px;
+    background:var(--reels-scrim-strong);color:var(--reels-on-media);
+    font-size:.9375rem;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .reels-quick-btn:hover{background:var(--reels-glass-strong)}
+  .reels-quick-btn:focus-visible{outline:2px solid ${palette.ring};outline-offset:2px}
+
+  /* ── Bottom navigation (five persistent destinations) ─────────────────── */
   .reels-bottomnav{
     position:absolute;left:0;right:0;bottom:0;z-index:40;
+    height:var(--reels-nav-h);
     display:flex;align-items:center;justify-content:space-around;
-    padding:calc(${space} * 2) calc(${space} * 2) calc(var(--reels-bottom-safe) + ${space} * 2);
+    padding:8px 4px var(--reels-bottom-safe);
     background:${palette.background};
     border-top:1px solid ${palette.border};
   }
   .reels-nav-item{
     display:flex;flex-direction:column;align-items:center;gap:calc(${space} * 0.5);
-    flex:1;min-width:0;padding:calc(${space} * 1);
+    flex:1;min-width:0;padding:4px 2px;
     background:transparent;border:0;color:${palette.mutedForeground};
     text-decoration:none;font-size:.875rem;line-height:1.2;text-align:center;font-weight:600;cursor:pointer;
     -webkit-tap-highlight-color:transparent;
@@ -444,7 +465,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
   /* ── Desktop: constrain the phone-like column, center it ───────────────── */
   @media (min-width:768px){
     .reels-shell{align-items:stretch}
-    .reels-track{margin-inline:auto}
+    .reels-track{width:100%;margin-inline:auto}
     .reels-slide{max-width:min(520px,calc((100dvh - 120px) * 9 / 16));margin-inline:auto}
     .reels-topbar,.reels-bottomnav{max-width:520px;margin-inline:auto}
     .reels-grid,.reels-search-results{grid-template-columns:repeat(3,1fr);max-width:720px;margin-inline:auto;width:100%}
