@@ -1,9 +1,12 @@
 import type { Session, SessionData } from "express-session";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const PERSISTENT_SESSION_TTL_MS = 30 * DAY_MS;
-export const SHORT_SESSION_TTL_MS = 7 * DAY_MS;
-const LEGACY_REMEMBERED_TTL_MS = 30 * DAY_MS;
+// Browsers cap cookie lifetimes at 400 days. Sessions are rolling (renewed on
+// every request), so a signed-in device stays signed in until the citizen logs
+// out, changes credentials, or stays away longer than this window.
+export const PERSISTENT_SESSION_TTL_MS = 400 * DAY_MS;
+// Short sessions no longer exist: every session uses the persistent lifetime.
+export const SHORT_SESSION_TTL_MS = PERSISTENT_SESSION_TTL_MS;
 
 declare module "express-session" {
   interface SessionData {
@@ -22,23 +25,12 @@ export function sessionCredentialEpoch(session: Partial<SessionData>): number {
     ? session.credentialEpoch! : -1;
 }
 
-/** Only an explicit opt-out selects the existing seven-day rolling policy. */
-export function configureSessionLifetime(session: CitizenSession, rememberMe = true): void {
-  session.rememberMe = rememberMe;
-  session.cookie.maxAge = rememberMe ? PERSISTENT_SESSION_TTL_MS : SHORT_SESSION_TTL_MS;
+/** Every session persists. The rememberMe argument is accepted for callers but ignored. */
+export function configureSessionLifetime(session: CitizenSession, _rememberMe = true): void {
+  session.rememberMe = true;
+  session.cookie.maxAge = PERSISTENT_SESSION_TTL_MS;
 }
 
-export function sessionLifetime(session: CitizenSession): number {
-  if (session.rememberMe === false) return SHORT_SESSION_TTL_MS;
-  if (session.rememberMe === true) return PERSISTENT_SESSION_TTL_MS;
-
-  // Older sessions have no preference marker. Thirty-day cookies were issued
-  // only by remembered login, registration, or password change, so they can be
-  // upgraded safely. Seven-day cookies include explicit opt-outs AND omitted
-  // login preferences: preserve them rather than guessing the citizen's choice.
-  const previousTtl = session.cookie.originalMaxAge;
-  if (previousTtl === LEGACY_REMEMBERED_TTL_MS || previousTtl === PERSISTENT_SESSION_TTL_MS) {
-    return PERSISTENT_SESSION_TTL_MS;
-  }
-  return previousTtl ?? SHORT_SESSION_TTL_MS;
+export function sessionLifetime(_session: CitizenSession): number {
+  return PERSISTENT_SESSION_TTL_MS;
 }
