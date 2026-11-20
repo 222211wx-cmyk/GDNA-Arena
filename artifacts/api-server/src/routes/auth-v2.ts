@@ -318,14 +318,21 @@ router.post(`${BASE}/login`, async (req, res) => {
     const rememberMe = req.body?.rememberMe !== false;
     if (!identifier || !password) throw new AuthError(400, "CREDENTIALS_REQUIRED");
     const lower = identifier.toLowerCase();
+    // One identifier can match more than one account (e.g. a username equal to
+    // another account's email). Check the password against each candidate and
+    // accept the account whose password matches, email matches first.
     const found = await pool.query(
-      `SELECT u.id, u.password_hash FROM users u LEFT JOIN auth_profiles p ON p.user_id = u.id
-       WHERE LOWER(p.email) = $1 OR LOWER(u.email) = $1 OR LOWER(u.username) = $1 ORDER BY u.id LIMIT 2`, [lower]);
-    let ok = false;
-    if (found.rowCount === 1) ok = await bcrypt.compare(password, found.rows[0].password_hash).catch(() => false);
-    else await bcrypt.compare(password, "$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvali").catch(() => false);
-    if (!ok) throw new AuthError(401, "INVALID_CREDENTIALS");
-    const userId: number = found.rows[0].id;
+      `SELECT u.id, u.password_hash, (LOWER(u.email) = $1 OR LOWER(p.email) = $1) AS email_match
+       FROM users u LEFT JOIN auth_profiles p ON p.user_id = u.id
+       WHERE LOWER(p.email) = $1 OR LOWER(u.email) = $1 OR LOWER(u.username) = $1
+       ORDER BY email_match DESC, u.id LIMIT 5`, [lower]);
+    let matched: { id: number } | undefined;
+    if (found.rowCount === 0) await bcrypt.compare(password, "$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvali").catch(() => false);
+    for (const row of found.rows) {
+      if (await bcrypt.compare(password, row.password_hash).catch(() => false)) { matched = row; break; }
+    }
+    if (!matched) throw new AuthError(401, "INVALID_CREDENTIALS");
+    const userId: number = matched.id;
 
     if (!(await isTrustedDevice(userId, readCookie(req, DEVICE_COOKIE)))) {
       // New device: no code is sent yet. The user chooses a channel on /device/send.
