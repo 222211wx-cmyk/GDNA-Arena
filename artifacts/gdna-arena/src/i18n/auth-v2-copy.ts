@@ -11,7 +11,7 @@ export interface AuthCopy {
   forgot: string; noAccount: string; haveAccount: string; close: string; back: string;
   name: string; email: string; emailOrUsername: string; password: string; newPassword: string;
   phone: string; phoneOptionalHint: string; countryCode: string; birthDate: string;
-  remember: string; submitLogin: string; submitSignup: string; working: string;
+  submitLogin: string; submitSignup: string; working: string;
   forgotTitle: string; forgotIntro: string; sendCode: string; codeTitle: string; codeSentTo: (phone: string) => string;
   verify: string; resend: string; resendIn: (s: number) => string; skip: string;
   newPasswordTitle: string; savePassword: string; passwordChanged: string;
@@ -28,7 +28,7 @@ const en: AuthCopy = {
   noAccount: "New here? Sign up", haveAccount: "Already registered? Log in", close: "Close", back: "Back",
   name: "Name", email: "Email", emailOrUsername: "Email or username", password: "Password", newPassword: "New password",
   phone: "Phone number", phoneOptionalHint: "Needed to reset your password by SMS", countryCode: "Country code",
-  birthDate: "Date of birth", remember: "Keep me logged in for 30 days", submitLogin: "Log in", submitSignup: "Create account",
+  birthDate: "Date of birth", submitLogin: "Log in", submitSignup: "Create account",
   working: "Please wait…", forgotTitle: "Reset your password", forgotIntro: "Enter the phone number linked to your account. We will text you a 6-digit code.",
   sendCode: "Send code", codeTitle: "Enter the code", codeSentTo: p => `We sent a 6-digit code to ${p}.`,
   verify: "Verify", resend: "Resend code", resendIn: s => `Resend in ${s}s`, skip: "Skip for now",
@@ -59,7 +59,7 @@ const ar: AuthCopy = {
   noAccount: "جديد هنا؟ أنشئ حساباً", haveAccount: "لديك حساب؟ سجّل الدخول", close: "إغلاق", back: "رجوع",
   name: "الاسم", email: "البريد الإلكتروني", emailOrUsername: "البريد الإلكتروني أو اسم المستخدم", password: "كلمة السر", newPassword: "كلمة سر جديدة",
   phone: "رقم الهاتف", phoneOptionalHint: "مطلوب لاستعادة كلمة السر عبر الرسائل النصية", countryCode: "رمز الدولة",
-  birthDate: "تاريخ الميلاد", remember: "أبقني مسجلاً لمدة 30 يوماً", submitLogin: "تسجيل الدخول", submitSignup: "إنشاء الحساب",
+  birthDate: "تاريخ الميلاد", submitLogin: "تسجيل الدخول", submitSignup: "إنشاء الحساب",
   working: "يرجى الانتظار…", forgotTitle: "استعادة كلمة السر", forgotIntro: "أدخل رقم الهاتف المرتبط بحسابك وسنرسل لك رمزاً من 6 أرقام.",
   sendCode: "إرسال الرمز", codeTitle: "أدخل الرمز", codeSentTo: p => `أرسلنا رمزاً من 6 أرقام إلى ${p}.`,
   verify: "تأكيد", resend: "إعادة إرسال الرمز", resendIn: s => `إعادة الإرسال بعد ${s} ث`, skip: "تخطَّ الآن",
@@ -90,7 +90,7 @@ const fr: AuthCopy = {
   noAccount: "Nouveau ? Inscrivez-vous", haveAccount: "Déjà inscrit ? Connectez-vous", close: "Fermer", back: "Retour",
   name: "Nom", email: "E-mail", emailOrUsername: "E-mail ou nom d'utilisateur", password: "Mot de passe", newPassword: "Nouveau mot de passe",
   phone: "Numéro de téléphone", phoneOptionalHint: "Nécessaire pour réinitialiser votre mot de passe par SMS", countryCode: "Indicatif",
-  birthDate: "Date de naissance", remember: "Rester connecté 30 jours", submitLogin: "Se connecter", submitSignup: "Créer le compte",
+  birthDate: "Date de naissance", submitLogin: "Se connecter", submitSignup: "Créer le compte",
   working: "Veuillez patienter…", forgotTitle: "Réinitialiser le mot de passe", forgotIntro: "Saisissez le numéro lié à votre compte. Nous vous enverrons un code à 6 chiffres par SMS.",
   sendCode: "Envoyer le code", codeTitle: "Saisissez le code", codeSentTo: p => `Nous avons envoyé un code à 6 chiffres au ${p}.`,
   verify: "Vérifier", resend: "Renvoyer le code", resendIn: s => `Renvoyer dans ${s} s`, skip: "Passer",
@@ -121,7 +121,7 @@ const es: AuthCopy = {
   noAccount: "¿Nuevo? Regístrate", haveAccount: "¿Ya tienes cuenta? Inicia sesión", close: "Cerrar", back: "Atrás",
   name: "Nombre", email: "Correo electrónico", emailOrUsername: "Correo o usuario", password: "Contraseña", newPassword: "Nueva contraseña",
   phone: "Número de teléfono", phoneOptionalHint: "Necesario para restablecer la contraseña por SMS", countryCode: "Prefijo",
-  birthDate: "Fecha de nacimiento", remember: "Mantener la sesión 30 días", submitLogin: "Iniciar sesión", submitSignup: "Crear cuenta",
+  birthDate: "Fecha de nacimiento", submitLogin: "Iniciar sesión", submitSignup: "Crear cuenta",
   working: "Espera…", forgotTitle: "Restablecer contraseña", forgotIntro: "Introduce el teléfono de tu cuenta. Te enviaremos un código de 6 dígitos por SMS.",
   sendCode: "Enviar código", codeTitle: "Introduce el código", codeSentTo: p => `Enviamos un código de 6 dígitos a ${p}.`,
   verify: "Verificar", resend: "Reenviar código", resendIn: s => `Reenviar en ${s} s`, skip: "Omitir",
@@ -152,7 +152,7 @@ const de: AuthCopy = {
   noAccount: "Neu hier? Registrieren", haveAccount: "Schon registriert? Anmelden", close: "Schließen", back: "Zurück",
   name: "Name", email: "E-Mail", emailOrUsername: "E-Mail oder Benutzername", password: "Passwort", newPassword: "Neues Passwort",
   phone: "Telefonnummer", phoneOptionalHint: "Nötig, um das Passwort per SMS zurückzusetzen", countryCode: "Vorwahl",
-  birthDate: "Geburtsdatum", remember: "30 Tage angemeldet bleiben", submitLogin: "Anmelden", submitSignup: "Konto erstellen",
+  birthDate: "Geburtsdatum", submitLogin: "Anmelden", submitSignup: "Konto erstellen",
   working: "Bitte warten…", forgotTitle: "Passwort zurücksetzen", forgotIntro: "Gib die Telefonnummer deines Kontos ein. Wir senden dir einen 6-stelligen Code per SMS.",
   sendCode: "Code senden", codeTitle: "Code eingeben", codeSentTo: p => `Wir haben einen 6-stelligen Code an ${p} gesendet.`,
   verify: "Bestätigen", resend: "Code erneut senden", resendIn: s => `Erneut senden in ${s} s`, skip: "Überspringen",

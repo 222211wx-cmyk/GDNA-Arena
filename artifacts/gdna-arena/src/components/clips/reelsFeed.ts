@@ -843,7 +843,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       retry.addEventListener("click", () => void loadPage(true));
       fullState.append(p, retry);
     } else {
-      const p = el("p"); p.textContent = "Impossible de charger les Clips. Vérifiez la connexion.";
+      const p = el("p"); p.textContent = "Les Clips ne sont pas disponibles pour le moment.";
       const retry = el("button", "reels-btn", { type: "button" }); retry.textContent = "Réessayer";
       retry.addEventListener("click", () => void loadPage(true));
       fullState.append(p, retry);

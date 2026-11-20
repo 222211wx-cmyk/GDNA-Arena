@@ -101,7 +101,8 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const [username, setUsername] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(true);
+  // Sessions stay signed in until the user clicks Logout. No 30-day option.
+  const remember = true;
   const [dial, setDial] = useState("+212");
   const [local, setLocal] = useState("");
   const [dob, setDob] = useState({ d: "", m: "", y: "" });
@@ -311,7 +312,6 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
         <form onSubmit={submitLogin} className="space-y-3">
           {row(<><Label htmlFor="auth-identifier">{copy.emailOrUsername}</Label><Input id="auth-identifier" dir="ltr" autoComplete="username" required value={identifier} onChange={e => setIdentifier(e.target.value)} className="text-left" /></>)}
           <PasswordField id="auth-password" label={copy.password} value={password} onChange={setPassword} autoComplete="current-password" required showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />{copy.remember}</label>
           <Button type="submit" className="h-11 w-full" disabled={busy}>{busy ? copy.working : copy.submitLogin}</Button>
           <Button type="button" variant="link" className="w-full" onClick={() => go("forgot-phone")}>{copy.forgot}</Button>
         </form>
@@ -333,7 +333,6 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
           <PhoneField id="auth-phone" dial={dial} local={local} onDial={setDial} onLocal={setLocal} label={copy.phone} codeLabel={copy.countryCode} required={!!config?.channels && !config.channels.includes("email")} />
           <p className="text-xs text-muted-foreground">{copy.phoneOptionalHint}</p>
           <DobSelect value={dob} onChange={setDob} label={copy.birthDate} />
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />{reg.rememberMe}</label>
           <Button type="submit" className="h-12 w-full gap-2 rounded-2xl bg-orange-500 text-white hover:bg-orange-600" disabled={busy}>
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}{busy ? reg.sending : reg.signupCreate}
           </Button>
