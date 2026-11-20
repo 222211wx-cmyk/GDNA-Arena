@@ -16,7 +16,7 @@ export type AuthView =
   | "device" | "forgot-phone" | "forgot-code" | "forgot-new" | "phone-verify"
   | "dev-signup" | "dev-code" | "signup-code";
 
-interface AuthConfig { googleClientId: string | null; googleMock: boolean; sms: boolean; smsReal: boolean }
+interface AuthConfig { googleClientId: string | null; googleMock: boolean; sms: boolean; smsReal: boolean; channels?: string[] }
 
 /** A delivery channel the user can pick each time a code is needed. Never remembered. */
 type ChannelOption = { channel: "sms" | "whatsapp" | "email"; masked: string };
@@ -330,7 +330,7 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
           <PasswordField id="auth-new-password" label={copy.password} value={password} onChange={setPassword} autoComplete="new-password" required minLength={8} showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
           <StrengthMeter score={passwordStrength(password)} labels={reg.strength} label={reg.strengthLabel} />
           <PasswordField id="auth-confirm-password" label={reg.confirmPassword} value={confirm} onChange={setConfirm} autoComplete="new-password" required minLength={8} showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
-          <PhoneField id="auth-phone" dial={dial} local={local} onDial={setDial} onLocal={setLocal} label={copy.phone} codeLabel={copy.countryCode} />
+          <PhoneField id="auth-phone" dial={dial} local={local} onDial={setDial} onLocal={setLocal} label={copy.phone} codeLabel={copy.countryCode} required={!!config?.channels && !config.channels.includes("email")} />
           <p className="text-xs text-muted-foreground">{copy.phoneOptionalHint}</p>
           <DobSelect value={dob} onChange={setDob} label={copy.birthDate} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />{reg.rememberMe}</label>
