@@ -58,8 +58,10 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-icon-btn:hover{background:var(--reels-glass)}
   .reels-icon-btn:focus-visible{outline:2px solid ${palette.ring};outline-offset:2px}
   .reels-icon-btn svg{width:26px;height:26px}
+  /* Text-only buttons ("Hc", "Retour") grow to fit their label instead of clipping it. */
+  .reels-icon-btn:not(:has(svg)){width:auto;min-width:44px;padding:0 12px;font-size:.9375rem;font-weight:800;white-space:nowrap}
   .reels-icon-btn.reels-badge-host{position:relative}
-  .reels-viewer-close{position:absolute;left:calc(${space} * 3);top:calc(var(--reels-top-safe) + 68px);z-index:8;background:var(--reels-scrim)}
+  .reels-viewer-close{position:absolute;left:calc(${space} * 3);top:calc(var(--reels-top-safe) + 68px);z-index:8;background:var(--reels-scrim);height:40px;border-radius:9999px}
   .reels-badge{
     position:absolute;top:6px;right:6px;min-width:18px;height:18px;
     padding:0 5px;border-radius:9999px;
@@ -101,8 +103,8 @@ export function reelsShellCss(palette: Palette, space: string): string {
 
   .reels-media-wrap{
     position:relative;z-index:1;
-    width:100%;height:calc(100% - var(--reels-bottom-safe) - ${space} * 20);max-height:100%;
-    align-self:flex-start;
+    width:100%;height:100%;max-height:100%;
+    align-self:center;
     display:flex;align-items:center;justify-content:center;
   }
   .reels-media-error{
@@ -160,12 +162,12 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-center[data-paused="false"] .reels-play:focus-visible{opacity:1;transform:scale(.9)}
   /* Always-visible "Plein écran" pill (icon + label), stays during playback. */
   .reels-fs-pill{
-    position:absolute;bottom:calc(120px + var(--reels-bottom-safe));
+    position:absolute;bottom:calc(170px + var(--reels-bottom-safe));
     gap:calc(${space} * 2);
     padding:calc(${space} * 2) calc(${space} * 4);border-radius:9999px;
     background:var(--reels-glass-strong);
     backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-    font-size:.8125rem;font-weight:700;
+    font-size:.9375rem;font-weight:700;white-space:nowrap;
     text-shadow:0 1px 3px var(--reels-shadow);
   }
   .reels-fs-pill:hover{background:var(--reels-glass)}
@@ -195,8 +197,8 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-slide .clip-overlay{position:absolute;inset:0;z-index:13;pointer-events:none}
   .reels-slide .clip-overlay button,.reels-slide .clip-overlay a,
   .reels-slide .clip-overlay input,.reels-slide .clip-overlay textarea{pointer-events:auto}
-  .reels-slide .clip-rail{bottom:calc(104px + var(--reels-bottom-safe))}
-  .reels-slide .clip-meta{bottom:calc(104px + var(--reels-bottom-safe));pointer-events:none}
+  .reels-slide .clip-rail{bottom:calc(170px + var(--reels-bottom-safe))}
+  .reels-slide .clip-meta{bottom:calc(230px + var(--reels-bottom-safe));pointer-events:none}
   .reels-slide .action-status{
     position:absolute;left:16px;right:72px;bottom:calc(84px + var(--reels-bottom-safe));
     z-index:4;color:var(--reels-on-media);font-size:.8125rem;text-shadow:0 1px 3px var(--reels-shadow);margin:0;
@@ -229,13 +231,13 @@ export function reelsShellCss(palette: Palette, space: string): string {
     color:var(--reels-on-media);font-weight:800;font-size:.95rem;text-decoration:none;
   }
   .reels-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-  .reels-author-name{color:var(--reels-on-media);font-weight:700;font-size:.95rem;text-decoration:none;text-shadow:0 1px 3px var(--reels-shadow)}
+  .reels-author-name{color:var(--reels-on-media);font-weight:700;font-size:1rem;text-decoration:none;text-shadow:0 1px 3px var(--reels-shadow)}
   .reels-author-name:hover{text-decoration:underline}
   .reels-follow-btn{
     margin-inline-start:calc(${space} * 1);
     padding:calc(${space} * 1) calc(${space} * 3);
     border:1px solid var(--reels-on-media);border-radius:9999px;
-    background:transparent;color:var(--reels-on-media);font-weight:700;font-size:.8125rem;cursor:pointer;
+    background:transparent;color:var(--reels-on-media);font-weight:700;font-size:.9375rem;white-space:nowrap;cursor:pointer;
     -webkit-tap-highlight-color:transparent;
   }
   .reels-follow-btn[data-following="true"]{border-color:var(--reels-glass-strong);color:var(--reels-on-media-dim)}
@@ -302,7 +304,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
     display:flex;flex-direction:column;align-items:center;gap:calc(${space} * 0.5);
     flex:1;min-width:0;padding:calc(${space} * 1);
     background:transparent;border:0;color:${palette.mutedForeground};
-    text-decoration:none;font-size:.625rem;font-weight:600;cursor:pointer;
+    text-decoration:none;font-size:.875rem;line-height:1.2;text-align:center;font-weight:600;cursor:pointer;
     -webkit-tap-highlight-color:transparent;
   }
   .reels-nav-item svg{width:24px;height:24px}
