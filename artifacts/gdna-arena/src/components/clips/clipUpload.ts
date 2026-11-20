@@ -57,8 +57,12 @@ export async function currentUploadOwner(signal?: AbortSignal): Promise<number> 
   return me.id;
 }
 
+// Network drops retry without limit (resume). A server that keeps answering with
+// an error (e.g. 503 storage down) fails visibly after 6 tries instead of
+// sitting at 0% forever.
 async function retry<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   let delay = 1000;
+  let serverFailures = 0;
   for (;;) {
     signal.throwIfAborted();
     try { return await operation(); }
@@ -66,6 +70,7 @@ async function retry<T>(operation: () => Promise<T>, signal: AbortSignal): Promi
       signal.throwIfAborted();
       const status = (error as { status?: number }).status;
       if (status && status < 500 && status !== 408 && status !== 429) throw error;
+      if (status && ++serverFailures >= 6) throw error;
       await new Promise<void>((resolve, reject) => {
         const stop = () => { clearTimeout(timer); reject(abortReason(signal)); };
         const timer = setTimeout(() => { signal.removeEventListener("abort", stop); resolve(); }, delay);
@@ -76,18 +81,39 @@ async function retry<T>(operation: () => Promise<T>, signal: AbortSignal): Promi
   }
 }
 
-// Bounded-memory content identity prevents resuming with different bytes after
-// selecting a file again. Only the identity/request ID is persisted, never media.
+// Resume identity: size + mtime + hash of the first and last 1 MiB. Instant for
+// any file size (no full read before the first byte is sent).
 async function fileIdentity(file: File, signal: AbortSignal) {
-  let hash: Uint8Array<ArrayBuffer> = new Uint8Array(32);
-  for (let offset = 0; offset < file.size; offset += 5 * 1024 * 1024) {
-    signal.throwIfAborted();
-    const chunk = await file.slice(offset, offset + 5 * 1024 * 1024).arrayBuffer();
-    const next = new Uint8Array(hash.length + chunk.byteLength);
-    next.set(hash); next.set(new Uint8Array(chunk), hash.length);
-    hash = new Uint8Array(await crypto.subtle.digest("SHA-256", next));
-  }
-  return Array.from(hash, x => x.toString(16).padStart(2, "0")).join("");
+  signal.throwIfAborted();
+  const edge = 1024 * 1024;
+  const head = await file.slice(0, edge).arrayBuffer();
+  const tail = await file.slice(Math.max(0, file.size - edge)).arrayBuffer();
+  const meta = new TextEncoder().encode(`${file.size}:${file.lastModified}:`);
+  const all = new Uint8Array(meta.length + head.byteLength + tail.byteLength);
+  all.set(meta); all.set(new Uint8Array(head), meta.length); all.set(new Uint8Array(tail), meta.length + head.byteLength);
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", all)), x => x.toString(16).padStart(2, "0")).join("");
+}
+
+/** PUT one chunk with byte-level progress (fetch cannot report upload progress). */
+function putChunk(url: string, body: Blob, signal: AbortSignal, onBytes: (n: number) => void): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = e => onBytes(e.loaded);
+    xhr.onload = () => {
+      let parsed: any = null;
+      try { parsed = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(parsed);
+      else reject(Object.assign(new Error(typeof parsed?.error === "string" ? parsed.error : `تعذر الرفع (${xhr.status})`), { status: xhr.status }));
+    };
+    xhr.onerror = () => reject(new Error("انقطع الاتصال — Connexion interrompue"));
+    const stop = () => { xhr.abort(); reject(abortReason(signal)); };
+    signal.addEventListener("abort", stop, { once: true });
+    xhr.onloadend = () => signal.removeEventListener("abort", stop);
+    xhr.send(body);
+  });
 }
 
 /** browser chunks → authenticated server → storage; resume confirmed parts. */
@@ -140,12 +166,9 @@ export async function uploadClip(
             if (stored) return stored;
           }
           attempted = true;
-          const response = await fetch(`${import.meta.env.BASE_URL}api/upload/chunk/${session.sessionId}/${partNumber}`, {
-            method: "PUT", credentials: "include", signal,
-            headers: { "Content-Type": "application/octet-stream" }, body: file.slice(start, end),
-          });
-          if (!response.ok) throw Object.assign(new Error(await errorMessage(response)), { status: response.status });
-          return response.json();
+          return putChunk(`${import.meta.env.BASE_URL}api/upload/chunk/${session.sessionId}/${partNumber}`,
+            file.slice(start, end), signal,
+            loaded => { const sent = Math.min(file.size, start + loaded); onProgress(sent / file.size * 100, sent, file.size); });
         }, signal);
         parts.set(partNumber, part);
       }

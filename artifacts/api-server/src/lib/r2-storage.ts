@@ -123,6 +123,7 @@ export function isR2Reference(reference: string): boolean {
   return reference.startsWith(R2_PREFIX);
 }
 export function providerSibling(reference: string, filename: string): string {
+  if (reference.startsWith("fs:")) return `fs:clips/derived/${filename}`;
   return isR2Reference(reference)
     ? r2Reference(`clips/derived/${filename}`)
     : filename;
