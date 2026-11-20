@@ -116,6 +116,111 @@ function putChunk(url: string, body: Blob, signal: AbortSignal, onBytes: (n: num
   });
 }
 
+/** Upload policy mirrored from the server (which enforces it). */
+export const MAX_UPLOAD_BYTES = 1_000_000_000;
+export const UPLOAD_CONCURRENCY = 20;
+export const FILE_TOO_LARGE_MESSAGE = "الملف كبير بزاف — Fichier trop volumineux (max 1 Go / 1000 Mo)";
+export const UNSUPPORTED_FILE_MESSAGE = "MP4 أو ZIP فقط — Seuls les fichiers MP4 et ZIP sont acceptés";
+export const isZipFile = (file: { name: string }) => /\.zip$/i.test(file.name);
+export function validateUploadFile(file: { name: string; size: number }): string | null {
+  if (!/\.(mp4|zip)$/i.test(file.name)) return UNSUPPORTED_FILE_MESSAGE;
+  if (file.size > MAX_UPLOAD_BYTES) return FILE_TOO_LARGE_MESSAGE;
+  return null;
+}
+
+type Part = { partNumber: number; etag: string; size: number };
+
+/**
+ * Sends every missing part with up to UPLOAD_CONCURRENCY requests in flight.
+ * A failed part retries on its own (after checking the server did not already
+ * store it); finished parts are never sent again. Progress is real bytes:
+ * confirmed parts plus the bytes the browser has handed over for in-flight ones.
+ */
+async function uploadParts(
+  file: File,
+  session: { sessionId: string; partSize: number; partCount: number },
+  parts: Map<number, Part>,
+  control: (body: Record<string, unknown>) => Promise<any>,
+  outer: AbortSignal,
+  onProgress: ClipUploadProgress,
+) {
+  const stop = new AbortController();
+  const relay = () => stop.abort(abortReason(outer));
+  outer.addEventListener("abort", relay, { once: true });
+  const signal = stop.signal;
+  const rangeOf = (n: number) => {
+    const start = (n - 1) * session.partSize;
+    return [start, Math.min(file.size, start + session.partSize)] as const;
+  };
+  let confirmed = 0;
+  const inFlight = new Map<number, number>();
+  const report = () => {
+    let sent = confirmed;
+    for (const bytes of inFlight.values()) sent += bytes;
+    sent = Math.min(file.size, sent);
+    onProgress(file.size ? sent / file.size * 100 : 100, sent, file.size);
+  };
+  const queue: number[] = [];
+  for (let n = 1; n <= session.partCount; n++) {
+    if (parts.has(n)) { const [s, e] = rangeOf(n); confirmed += e - s; } else queue.push(n);
+  }
+  report();
+  const sendPart = async (partNumber: number) => {
+    const [start, end] = rangeOf(partNumber);
+    let attempted = false;
+    const part = await retry(async () => {
+      if (attempted) {
+        inFlight.set(partNumber, 0); report();
+        const check = await control({ action: "inspect", sessionId: session.sessionId });
+        const stored = check.parts?.find((p: Part) => p.partNumber === partNumber && p.size === end - start);
+        if (stored) return stored;
+      }
+      attempted = true;
+      return putChunk(`${import.meta.env.BASE_URL}api/upload/chunk/${session.sessionId}/${partNumber}`,
+        file.slice(start, end), signal,
+        loaded => { inFlight.set(partNumber, Math.min(loaded, end - start)); report(); });
+    }, signal);
+    inFlight.delete(partNumber);
+    confirmed += end - start;
+    parts.set(partNumber, part);
+    report();
+  };
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < queue.length) {
+      signal.throwIfAborted();
+      await sendPart(queue[cursor++]);
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, queue.length) }, worker));
+  } catch (error) {
+    stop.abort(error);
+    throw error;
+  } finally {
+    outer.removeEventListener("abort", relay);
+  }
+}
+
+/** Poll the server while it extracts an uploaded ZIP into the library. */
+export async function waitForArchive(
+  libraryUrl: string,
+  signal: AbortSignal,
+  onUpdate?: (archive: { state: string; files: { name: string; size: number; kind: string; code?: string; error?: string }[] }) => void,
+) {
+  for (;;) {
+    signal.throwIfAborted();
+    const response = await fetch(`${import.meta.env.BASE_URL}${libraryUrl.replace(/^\//, "")}`,
+      { credentials: "include", cache: "no-store", signal });
+    if (response.ok) {
+      const archive = await response.json();
+      onUpdate?.(archive);
+      if (archive.state === "ready" || archive.state === "failed") return archive;
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
+
 /** browser chunks → authenticated server → storage; resume confirmed parts. */
 export async function uploadClip(
   file: File,
@@ -125,9 +230,11 @@ export async function uploadClip(
   _options?: unknown,
 ): Promise<PublishedClip> {
   signal.throwIfAborted();
+  const invalid = validateUploadFile(file);
+  if (invalid) throw new Error(invalid);
   // No registration: the server opens an anonymous session on first publish.
   const owner = "guest";
-  const contentType = file.type || "application/octet-stream";
+  const contentType = isZipFile(file) ? "application/zip" : "video/mp4";
   const identity = await fileIdentity(file, signal);
   const savedKey = `clips-server-upload:${owner}:${identity}:${encodeURIComponent(metadata.title)}:${encodeURIComponent(file.name)}`;
   let requestId = localStorage.getItem(savedKey);
@@ -153,30 +260,16 @@ export async function uploadClip(
   );
   let body = inspected.receipt;
   if (!body) {
-    for (let partNumber = 1; inspected.state !== "completing" && partNumber <= session.partCount; partNumber++) {
-      const start = (partNumber - 1) * session.partSize;
-      const end = Math.min(file.size, start + session.partSize);
-      if (!parts.has(partNumber)) {
-        let attempted = false;
-        const part = await retry(async () => {
-          if (attempted) {
-            const confirmed = await control({ action: "inspect", sessionId: session.sessionId });
-            const stored = confirmed.parts?.find((p: { partNumber: number; size: number }) =>
-              p.partNumber === partNumber && p.size === end - start);
-            if (stored) return stored;
-          }
-          attempted = true;
-          return putChunk(`${import.meta.env.BASE_URL}api/upload/chunk/${session.sessionId}/${partNumber}`,
-            file.slice(start, end), signal,
-            loaded => { const sent = Math.min(file.size, start + loaded); onProgress(sent / file.size * 100, sent, file.size); });
-        }, signal);
-        parts.set(partNumber, part);
-      }
-      onProgress(end / file.size * 100, end, file.size);
+    if (inspected.state !== "completing") {
+      await uploadParts(file, session, parts, control, signal, onProgress);
     }
     body = await control({ action: "complete", sessionId: session.sessionId });
   }
   signal.throwIfAborted();
+  if (body?.kind === "zip") {
+    localStorage.removeItem(savedKey);
+    return { code: "", name: metadata.title, status: "accepté", reason: "", kind: "zip", libraryUrl: String(body.libraryUrl) };
+  }
   if (body?.status === "refusé") {
     localStorage.removeItem(savedKey);
     trackEvent("clip_upload_success", { outcome: "refused" });

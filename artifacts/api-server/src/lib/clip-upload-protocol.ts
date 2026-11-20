@@ -3,7 +3,7 @@ export const MAX_CLIP_BYTES = Number.POSITIVE_INFINITY;
 export const MAX_NEW_CLIP_BYTES = MAX_CLIP_BYTES;
 export const NEW_CLIP_TOO_LARGE = "Invalid media size";
 export const CLIP_EXT: Record<string, string> = {
-  "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
+  "video/mp4": ".mp4", "application/zip": ".zip", "video/webm": ".webm", "video/quicktime": ".mov",
   "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac",
   "audio/ogg": ".ogg", "audio/wav": ".wav", "audio/webm": ".webm", "audio/flac": ".flac",
   "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif",

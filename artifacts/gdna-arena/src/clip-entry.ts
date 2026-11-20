@@ -4,6 +4,9 @@ mountLightweightBackButton();
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import {
   uploadClip,
+  validateUploadFile,
+  isZipFile,
+  waitForArchive,
   type ClipUploadMetadata,
 } from "./components/clips/clipUpload";
 import { answerQuestion, guideHtml, guideSeen, markGuideSeen } from "./components/clips/guide";
@@ -32,7 +35,7 @@ const style = document.createElement("style");
 style.textContent = ` :root{color-scheme:dark;font-family:${tokens.fontFamily.sans.join(",")};background:${palette.background};color:${palette.foreground}} *{box-sizing:border-box}body{margin:0;background:${palette.background};color:${palette.foreground}} main{padding:calc(${space} * 4);margin:auto;max-width:48rem}header{display:flex;align-items:center;justify-content:space-between} section,form{display:grid;gap:calc(${space} * 3);padding:calc(${space} * 4);margin-block:calc(${space} * 4);background:${palette.card};border:1px solid ${palette.border};border-radius:${tokens.radius}} h1,h2,p{margin-block:calc(${space} * 2)}label{display:grid;gap:calc(${space} * 2)} input,select,button{font:inherit;color:inherit;background:${palette.secondary};border:1px solid ${palette.input};border-radius:${tokens.radius};padding:calc(${space} * 3)} input[type=checkbox],input[type=radio]{inline-size:auto}button{cursor:pointer;background:${palette.primary};color:${palette.primaryForeground};font-weight:700} button.secondary{background:${palette.secondary};color:${palette.secondaryForeground}}button:disabled{opacity:.55;cursor:not-allowed} fieldset{display:grid;gap:calc(${space} * 3);border:1px solid ${palette.border};border-radius:${tokens.radius}} fieldset label{display:flex;align-items:center;gap:calc(${space} * 2)} progress{inline-size:100%;accent-color:${palette.primary}}video,audio{inline-size:100%;max-block-size:60vh;background:${palette.background};display:block} .clip-media-frame{overflow:hidden;position:relative;border-radius:${tokens.radius}} ${clipOverlayCss(palette, space)} .comment-form,.title-edit{display:flex;gap:calc(${space} * 2)}.comment-form input,.title-edit input{min-inline-size:0;flex:1} .copy-link-fallback{inline-size:min(100%,28rem)} .clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}article{overflow:visible} a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important} ${clipsSearchBarCss} ${reelsShellCss(palette as unknown as Record<string, string>, space)} #reels-root main{padding:0;margin:0;max-width:none} #reels-root main > header{display:none} .reels-css-fullscreen{background:${palette.background}} .reels-install-help{position:absolute;z-index:30;top:calc(${space} * 18);inset-inline:calc(${space} * 4);padding:calc(${space} * 3);background:${palette.card};color:${palette.cardForeground};border:1px solid ${palette.border};border-radius:${tokens.radius}} .reels-install-help button{margin-inline-start:calc(${space} * 2)} `;
 document.head.appendChild(style);
 
-root.innerHTML = ` <div id="reels-root" data-testid="clip-shell"></div> <div id="composer" class="reels-composer" role="dialog" aria-label="Publier un clip" aria-modal="true" hidden> <div class="reels-composer-head"> <button id="composer-close" type="button" class="reels-icon-btn" aria-label="Fermer">${reelsIcons.close()}</button> <h2>Publier un clip</h2> </div> <div class="reels-composer-body"> <main dir="rtl"> <form id="upload" data-testid="clip-upload"> <button id="guide-toggle" class="secondary" type="button" aria-controls="guide">؟ لماذا؟ كيف أنشر؟</button> <section id="guide" data-testid="clip-guide" hidden>${guideHtml}</section> <h2>رفع صوت أو فيديو</h2> <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*,image/*" hidden> <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button> <div class="cs-row" style="display:flex;gap:8px"> <label style="flex:1"><span>المكتبة / Bibliothèque</span><select id="clip-category" data-testid="clip-category"><option value="A">A — Grands Producteurs / المنتجين الكبار</option><option value="B" selected>B — Petits Producteurs / المنتجين الصغار</option><option value="C">C — Publicités / إشهارات</option><option value="D">D — Cartes, Guides, Géo, Histoire / خرائط، تاريخ</option></select></label> <label style="flex:1"><span>النوع / Type</span><select id="clip-type" data-testid="clip-type"><option value="video">Video</option><option value="audio">Audio</option><option value="image">Image</option></select></label> </div> <p id="selection" class="muted" role="status" aria-live="polite">اختر ملف صوت أو فيديو</p> <div id="progress-wrap" hidden> <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress> <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p> </div> <label id="display-name-row" for="display-name" hidden> <span>اسم الفيشي</span> <input id="display-name" data-testid="clip-display-name" type="text" dir="auto" autocomplete="off" aria-describedby="display-name-error"> <span id="display-name-error" class="error" role="alert" aria-live="polite"></span> </label> <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
+root.innerHTML = ` <div id="reels-root" data-testid="clip-shell"></div> <div id="composer" class="reels-composer" role="dialog" aria-label="Publier un clip" aria-modal="true" hidden> <div class="reels-composer-head"> <button id="composer-close" type="button" class="reels-icon-btn" aria-label="Fermer">${reelsIcons.close()}</button> <h2>Publier un clip</h2> </div> <div class="reels-composer-body"> <main dir="rtl"> <form id="upload" data-testid="clip-upload"> <button id="guide-toggle" class="secondary" type="button" aria-controls="guide">؟ لماذا؟ كيف أنشر؟</button> <section id="guide" data-testid="clip-guide" hidden>${guideHtml}</section> <h2>رفع صوت أو فيديو</h2> <input id="file" data-testid="clip-file-input" type="file" accept="video/mp4,.mp4,application/zip,.zip" hidden> <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button> <div class="cs-row" style="display:flex;gap:8px"> <label style="flex:1"><span>المكتبة / Bibliothèque</span><select id="clip-category" data-testid="clip-category"><option value="A">A — Grands Producteurs / المنتجين الكبار</option><option value="B" selected>B — Petits Producteurs / المنتجين الصغار</option><option value="C">C — Publicités / إشهارات</option><option value="D">D — Cartes, Guides, Géo, Histoire / خرائط، تاريخ</option></select></label> <label style="flex:1"><span>النوع / Type</span><select id="clip-type" data-testid="clip-type"><option value="video">Video</option><option value="audio">Audio</option><option value="image">Image</option></select></label> </div> <p id="selection" class="muted" role="status" aria-live="polite">اختر ملف صوت أو فيديو</p> <div id="progress-wrap" hidden> <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress> <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p> </div> <label id="display-name-row" for="display-name" hidden> <span>اسم الفيشي</span> <input id="display-name" data-testid="clip-display-name" type="text" dir="auto" autocomplete="off" aria-describedby="display-name-error"> <span id="display-name-error" class="error" role="alert" aria-live="polite"></span> </label> <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
 
 <div> <button id="submit" data-testid="clip-submit" type="submit" disabled>Publier</button> <button id="cancel" class="secondary" type="button" hidden>Annuler</button> </div> <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p> <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div> <p id="verdict" data-testid="clip-verdict" role="status" aria-live="polite" hidden></p> </form> </main> </div> </div>`;
 
@@ -63,11 +66,6 @@ const composerClose = element<HTMLButtonElement>("composer-close");
 const categorySelect = element<HTMLSelectElement>("clip-category");
 const typeSelect = element<HTMLSelectElement>("clip-type");
 const searchBar = mountClipsSearchBar(root);
-const ACCEPT_BY_TYPE: Record<string, string> = { video: "video/*", audio: "audio/*", image: "image/*" };
-const isImageFile = (file: File) => file.type.startsWith("image/");
-typeSelect.addEventListener("change", () => {
-  input.accept = ACCEPT_BY_TYPE[typeSelect.value] ?? "video/*,audio/*,image/*";
-});
 const mutableControls = Array.from(
   form.querySelectorAll<HTMLInputElement | HTMLButtonElement>(
     "input, #choose-file",
@@ -177,10 +175,12 @@ export function finalizePublication(published: PublishedClip) {
   }
   code.dir = "ltr";
   receipt.append(name, code);
-  const link = document.createElement("a");
-  link.href = `${BASE}clip/${published.code}`;
-  link.textContent = "فتح الملف";
-  receipt.append(link);
+  if (published.code) {
+    const link = document.createElement("a");
+    link.href = `${BASE}clip/${published.code}`;
+    link.textContent = "فتح الملف";
+    receipt.append(link);
+  }
   receipt.hidden = false;
 }
 
@@ -203,6 +203,12 @@ chooseFile.addEventListener("click", () => input.click());
 input.addEventListener("change", async () => {
   const selected = input.files?.[0];
   if (!selected) return;
+  const invalid = validateUploadFile(selected);
+  if (invalid) {
+    input.value = "";
+    uploadError.textContent = invalid;
+    return;
+  }
   durationController?.abort();
   const probing = new AbortController();
   durationController = probing;
@@ -229,7 +235,7 @@ input.addEventListener("change", async () => {
   cancel.hidden = false;
   const kind = selected.type.split("/")[0];
   if (["video", "audio", "image"].includes(kind)) typeSelect.value = kind;
-  const probe = (isImageFile(selected) ? Promise.resolve(null as number | null) : readClipDuration(selected, probing.signal))
+  const probe = (isZipFile(selected) ? Promise.resolve(null as number | null) : readClipDuration(selected, probing.signal))
     .then((duration) => {
       if (probing.signal.aborted || cachedFile !== selected) return null;
       selectedDuration = duration;
@@ -355,6 +361,18 @@ form.addEventListener("submit", async (event) => {
       reportUploadProgress,
     );
     markGuideSeen();
+    if (published.kind === "zip") {
+      status.textContent = "ZIP: استخراج الملفات في الخادم — extraction en cours…";
+      const archive = await waitForArchive(String(published.libraryUrl), operation.signal, (a) => {
+        status.textContent = `ZIP: ${a.state} — ${a.files.length}`;
+      });
+      if (archive.state === "failed") throw new Error(archive.error ?? "تعذر استخراج الملف");
+      finalizePublication({ ...published, code: "", name: title });
+      const clips = archive.files.filter((f: { kind: string; code?: string }) => f.kind === "clip" && f.code).length;
+      status.textContent = `ZIP: ${archive.files.length} fichiers extraits, ${clips} vidéos dans la bibliothèque`;
+      setTimeout(reloadFeedAfterPublish, 1800);
+      return;
+    }
     if (published.status === "refusé") {
       showVerdict("refusé", String(published.reason ?? ""));
       status.textContent = "";

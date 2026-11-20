@@ -29,7 +29,9 @@ import { logger } from "../lib/logger.js";
 import { publishClip } from "../lib/clip-publish.js";
 import { checkContent } from "../lib/check-content.js";
 import { ensureGuestSession } from "../lib/guest-session.js";
-import { fsFile, fsReference, fsRoot, uploadPartsDir } from "../lib/fs-storage.js";
+import { fsFile, fsPath, fsReference, fsRoot, uploadPartsDir } from "../lib/fs-storage.js";
+import { MAX_UPLOAD_BYTES, UPLOAD_PART_BYTES, allowedUploadType, isZipType } from "../lib/upload-policy.js";
+import { extractZip } from "../lib/zip-extract.js";
 import { promises as fsp, createReadStream as fsRead, createWriteStream as fsWrite } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -63,7 +65,80 @@ async function assembleFs(row: { id: string; object_name: string; size_bytes: st
   })(), out);
 }
 
+/** ZIP uploads: extracted in the background under STORAGE_PATH/library/<user>/<session>. */
+type ZipRow = { id: string; user_id: number; object_name: string; original_name: string; category?: string };
+const extracting = new Set<string>();
+const libraryDir = (userId: number, sessionId: string) => path.join(fsRoot()!, "library", String(userId), sessionId);
+const manifestPath = (userId: number, sessionId: string) => path.join(libraryDir(userId, sessionId), ".manifest.json");
+async function readManifest(userId: number, sessionId: string) {
+  try { return JSON.parse(await fsp.readFile(manifestPath(userId, sessionId), "utf8")); } catch { return null; }
+}
+function startZipExtraction(row: ZipRow): void {
+  if (extracting.has(row.id)) return;
+  extracting.add(row.id);
+  void (async () => {
+    const dir = libraryDir(row.user_id, row.id);
+    const write = (value: Record<string, unknown>) =>
+      fsp.writeFile(manifestPath(row.user_id, row.id), JSON.stringify(value));
+    try {
+      await fsp.rm(dir, { recursive: true, force: true });
+      await fsp.mkdir(dir, { recursive: true });
+      await write({ state: "extracting", name: row.original_name, files: [] });
+      const extracted = await extractZip(fsPath(row.object_name), dir);
+      const files: Record<string, unknown>[] = [];
+      for (const file of extracted) {
+        if (!/\.mp4$/i.test(file.name)) { files.push({ name: file.name, size: file.size, kind: "file" }); continue; }
+        // MP4s inside the archive become library clips, probed here in the background.
+        const key = `clips/original/${row.user_id}/${randomUUID()}.mp4`;
+        try {
+          await fsp.mkdir(path.dirname(fsPath(fsReference(key))), { recursive: true });
+          await fsp.rename(path.join(dir, file.name), fsPath(fsReference(key)));
+          const clip = await publishClip({
+            userId: row.user_id, filename: fsReference(key), title: path.posix.basename(file.name),
+            category: row.category, contentType: "video/mp4", size: file.size, sha256: "",
+            deferThumbnail: true, originalReady: true,
+          });
+          files.push({ name: file.name, size: file.size, kind: "clip", code: clip.code, id: clip.id });
+        } catch (error) {
+          await fsp.rm(fsPath(fsReference(key)), { force: true }).catch(() => {});
+          files.push({ name: file.name, size: file.size, kind: "clip", error: error instanceof Error ? error.message : "Rejected" });
+        }
+      }
+      await write({ state: "ready", name: row.original_name, files });
+      await fsp.rm(fsPath(row.object_name), { force: true });
+    } catch (error) {
+      logger.warn({ sessionId: row.id, err: error }, "[upload] zip extraction failed");
+      await write({ state: "failed", name: row.original_name, files: [], error: "Archive could not be extracted" }).catch(() => {});
+    } finally { extracting.delete(row.id); }
+  })();
+}
+
 const router: IRouter = Router();
+router.get("/upload/library", async (req, res) => {
+  const userId = auth(req, res);
+  if (!userId || !fsRoot()) { if (userId) res.json({ archives: [] }); return; }
+  const base = path.join(fsRoot()!, "library", String(userId));
+  const ids = await fsp.readdir(base).catch(() => [] as string[]);
+  const archives = [];
+  for (const id of ids) {
+    const manifest = UUID.test(id) ? await readManifest(userId, id) : null;
+    if (manifest) archives.push({ sessionId: id, ...manifest });
+  }
+  res.set("Cache-Control", "no-store").json({ archives });
+});
+router.get("/upload/library/:sessionId", async (req, res) => {
+  const userId = auth(req, res);
+  if (!userId) return;
+  const row = await uploadRow(String(req.params.sessionId).toLowerCase(), userId);
+  if (!row || !fsRoot() || !isZipType(row.content_type)) { res.status(404).json({ error: "Archive not found" }); return; }
+  const manifest = await readManifest(userId, row.id);
+  // A restart can interrupt extraction; the zip is only removed after success.
+  if ((!manifest || manifest.state === "extracting") && row.state === "published" && !extracting.has(row.id)) {
+    const zipPresent = await fsp.stat(fsPath(row.object_name)).then(() => true, () => false);
+    if (zipPresent) startZipExtraction({ ...row, original_name: row.original_name });
+  }
+  res.set("Cache-Control", "no-store").json({ sessionId: row.id, ...(manifest ?? { state: "extracting", files: [] }) });
+});
 router.use(["/upload/presign", "/r2/presign", "/clips/create", "/upload/complete", "/upload/chunk"], ensureGuestSession);
 async function status(sessionId: string, userId: number) {
   const { rows } = await pool.query(
@@ -86,7 +161,7 @@ router.get("/upload/status/:sessionId", async (req,res) => {
   if (!result) { res.status(404).json({error:"Upload session not found"}); return; }
   res.json(result);
 });
-const PART_BYTES = 5 * 1024 * 1024;
+const PART_BYTES = UPLOAD_PART_BYTES;
 const partBytes = (size: number) => Math.max(PART_BYTES, Math.ceil(size / 9000));
 async function listAllParts(bucket: string, key: string, uploadId: string) {
   const parts: import("@aws-sdk/client-s3").Part[] = [];
@@ -190,6 +265,10 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     }
     const accepted = await status(current.id,userId);
     if (accepted) { res.status(202).json(accepted); return; }
+    const zipReply = { kind: "zip", sessionId: current.id, libraryUrl: `/api/upload/library/${current.id}` };
+    if (isZipType(current.content_type) && current.state === "published") {
+      res.status(202).json({ ...zipReply, state: "extracting" }); return;
+    }
     if (current.state === "published" && current.clip_id) {
       const found = await client.query(`SELECT * FROM clips WHERE id=$1 AND user_id=$2`, [current.clip_id, userId]);
       if (!found.rows[0]) { res.status(410).json({ error: "Published clip was removed" }); return; }
@@ -248,6 +327,15 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
         head.Metadata?.session !== current.id) {
       throw new ClipUploadError(409, "Completed R2 object failed ownership or size verification");
     }
+    }
+    if (fsMode && isZipType(current.content_type)) {
+      // Extraction and per-file probing happen after this response.
+      await client.query("UPDATE r2_clip_uploads SET state='published',updated_at=NOW() WHERE id=$1", [current.id]);
+      await fsp.rm(uploadPartsDir(current.id), { recursive: true, force: true }).catch(() => {});
+      startZipExtraction({ id: current.id, user_id: userId, object_name: current.object_name,
+        original_name: current.original_name, category: current.category });
+      res.status(202).json({ ...zipReply, state: "extracting" });
+      return;
     }
     let clip;
     try {
@@ -312,10 +400,10 @@ router.put("/upload/chunk/:sessionId/:partNumber", async (req, res) => {
   if (!config && !fsRoot()) { res.status(503).json({ error: "Storage is unavailable" }); return; }
   const id = String(req.params.sessionId);
   if (!UUID.test(id)) { res.status(404).end(); return; }
-  const client = await pool.connect();
+  // No session lock and no connection held while the body streams: chunks of
+  // one upload arrive in parallel and each writes its own part file.
   try {
-    await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${id}`]);
-    const loaded = await client.query<UploadRow>(
+    const loaded = await pool.query<UploadRow>(
       "SELECT * FROM r2_clip_uploads WHERE id=$1 AND user_id=$2", [id, userId],
     );
     const row = loaded.rows[0];
@@ -331,7 +419,7 @@ router.put("/upload/chunk/:sessionId/:partNumber", async (req, res) => {
     if (Number(req.headers["content-length"]) !== expected) {
       res.status(409).json({ error: "Chunk length does not match the upload manifest" }); return;
     }
-    await client.query("UPDATE r2_clip_uploads SET expires_at='infinity',updated_at=NOW() WHERE id=$1", [id]);
+    await pool.query("UPDATE r2_clip_uploads SET expires_at='infinity',updated_at=NOW() WHERE id=$1", [id]);
     const controller = new AbortController();
     const abort = () => controller.abort();
     req.once("aborted", abort);
@@ -358,10 +446,6 @@ router.put("/upload/chunk/:sessionId/:partNumber", async (req, res) => {
       res.json({ partNumber: number, etag: result.ETag, size: expected });
     } finally { req.removeListener("aborted", abort); }
   } catch (error) { uploadFailure(res, error, userId, "server-chunk"); }
-  finally {
-    await client.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [`r2-upload:${id}`]).catch(() => {});
-    client.release();
-  }
 });
 
 router.post(["/clips/create","/upload/complete"], async (req, res): Promise<void> => {
@@ -395,7 +479,12 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
       // unknown hint; publishClip still probes the completed object and enforces
       // the real duration before creating a clip row.
       const duration = req.body?.durationSec === null ? 0 : Number(req.body?.durationSec);
-      const contentType = resolveClipUploadType(String(req.body?.contentType ?? ""), originalName);
+      const contentType = allowedUploadType(originalName);
+      if (size && size > MAX_UPLOAD_BYTES) {
+        res.status(413).json({ error: "File too large: maximum 1 GB (1000 MB)" }); return;
+      }
+      if (!contentType) { res.status(415).json({ error: "Only MP4 and ZIP files are accepted" }); return; }
+      if (isZipType(contentType) && !fsRoot()) { res.status(503).json({ error: "Storage is unavailable" }); return; }
       const requestId = String(req.body?.requestId ?? "").toLowerCase();
       if (!UUID.test(requestId) || !originalName || !size || !contentType ||
           !Number.isFinite(duration) || duration < 0) {
@@ -423,7 +512,8 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
       }
       const id = randomUUID();
       const key = `clips/original/${userId}/${id}${clipDownloadExtension(contentType)}`;
-      const created = config ? await r2Client().send(new CreateMultipartUploadCommand({
+      const useFs = isZipType(contentType) || !config;
+      const created = !useFs && config ? await r2Client().send(new CreateMultipartUploadCommand({
         Bucket: config.bucket,
         Key: key,
         ContentType: contentType,
@@ -431,7 +521,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
         Metadata: { owner: String(userId), session: id },
       })) : { UploadId: "fs" };
       if (!created.UploadId) throw new Error("R2 did not return a multipart upload ID");
-      const objectRef = config ? r2Reference(key) : fsReference(key);
+      const objectRef = useFs ? fsReference(key) : r2Reference(key);
       try {
         await pool.query(
           `INSERT INTO r2_clip_uploads
@@ -442,7 +532,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
              displayTitle, contentType, size, duration, category],
         );
       } catch (error) {
-        if (config) await r2Client().send(new AbortMultipartUploadCommand({
+        if (!useFs && config) await r2Client().send(new AbortMultipartUploadCommand({
           Bucket: config.bucket, Key: key, UploadId: created.UploadId!,
         })).catch(() => {});
         if ((error as { code?: string }).code === "23505") {
