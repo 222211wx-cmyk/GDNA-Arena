@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { pool } from "@workspace/db";
 import { clipFile } from "./clip-storage.js";
 import { clipWithThumbnail } from "../routes/clips-thumbnail-response.js";
-import { ClipUploadError, normalizeClipContentType, clipDurationSeconds, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "./clip-upload-protocol.js";
+import { ClipUploadError, normalizeClipContentType, clipDurationSeconds, clipMediaType, looksLikeImage, parseClipCategory, type ClipCategory, MAX_NEW_CLIP_BYTES, NEW_CLIP_TOO_LARGE } from "./clip-upload-protocol.js";
 import { verifiedDuration, ClipProbeBusyError } from "./clip-duration.js";
 
 export { clipFile } from "./clip-storage.js";
@@ -15,12 +15,23 @@ export interface PublishClipInput {
   /** Direct original-file uploads never enter the transcoding queue. */
   originalReady?: boolean;
   signal?: AbortSignal;
+  /** Library A | B | C | D. Defaults to B. */
+  category?: ClipCategory | string;
   userId: number; filename: string; title: string; contentType: string; size: number; sha256: string;
   /** Explicit publication name. `title` remains the original upload filename. */
   displayTitle?: string;
   // Accepted for compatibility with older clients, never used to gate publication.
   purpose?: unknown; originalReference?: unknown; rightsHolderName?: unknown;
   rightsHolderRole?: unknown; isOriginalFootage?: unknown; deferThumbnail?: boolean;
+}
+
+/** GDNA-CLIPS-<category>-<0001>. Counter row is locked and rolled back with the publish transaction. */
+export async function makeMatricule(client: ClipDatabaseClient, category: ClipCategory): Promise<string> {
+  const { rows } = await client.query(
+    `INSERT INTO clip_matricule_counters (category, n) VALUES ($1, 1)
+     ON CONFLICT (category) DO UPDATE SET n = clip_matricule_counters.n + 1 RETURNING n`, [category],
+  );
+  return `GDNA-CLIPS-${category}-${String(rows[0].n).padStart(4, "0")}`;
 }
 
 export function clipName(filename: string): string {
@@ -49,13 +60,24 @@ export async function publishClip(
   const displayTitle = validateClipDisplayTitle(input.displayTitle);
   const [metadata] = await clipFile(input.filename).getMetadata();
   if (Number(metadata.size) !== input.size) throw new ClipUploadError(409, "Stored media size does not match");
-  let verifiedSeconds: number;
-  try { verifiedSeconds = await verifiedDuration(clipFile(input.filename), "media", input.signal); }
-  catch (error) {
-    if (error instanceof ClipProbeBusyError) throw new ClipUploadError(503, "Media verification is busy; retry shortly");
-    throw new ClipUploadError(400, "تعذّر التحقق من الملف الصوتي أو الفيديو — الملف غير صالح أو غير مدعوم");
+  const category = parseClipCategory(input.category);
+  const mediaType = clipMediaType(contentType);
+  let duration = 0; // images have no duration
+  if (mediaType === "image") {
+    const chunks: Buffer[] = [];
+    try {
+      for await (const chunk of clipFile(input.filename).createReadStream({ start: 0, end: 11 })) chunks.push(Buffer.from(chunk));
+    } catch { throw new ClipUploadError(400, "تعذّر التحقق من الصورة — Image illisible"); }
+    if (!looksLikeImage(contentType, Buffer.concat(chunks))) throw new ClipUploadError(400, "الملف ليس صورة صالحة — Image invalide");
+  } else {
+    let verifiedSeconds: number;
+    try { verifiedSeconds = await verifiedDuration(clipFile(input.filename), "media", input.signal); }
+    catch (error) {
+      if (error instanceof ClipProbeBusyError) throw new ClipUploadError(503, "Media verification is busy; retry shortly");
+      throw new ClipUploadError(400, "تعذّر التحقق من الملف الصوتي أو الفيديو — الملف غير صالح أو غير مدعوم");
+    }
+    duration = clipDurationSeconds(verifiedSeconds, contentType);
   }
-  const duration = clipDurationSeconds(verifiedSeconds, contentType);
   // Explicit names are not filenames: dots and slashes are meaningful and
   // must survive unchanged. Legacy callers still derive a name from `title`.
   const name = displayTitle ?? clipName(input.title);
@@ -72,18 +94,21 @@ export async function publishClip(
     const processingStatus = input.originalReady ? "ready" : "queued";
     // ON CONFLICT keeps collisions non-fatal within the transaction. No code
     // supplied by a client is trusted. The namespace has one million entries.
+    const matricule = await makeMatricule(client, category);
     for (let attempt = 0; attempt < 32; attempt++) {
       const code = `HELX-${String(randomInt(1_000_000)).padStart(6, "0")}`;
       const { rows } = await client.query(
         `INSERT INTO clips
            (user_id, username, title, object_name, upload_object_name, content_type,
-            size_bytes, duration_sec, code, processing_status, original_name)
-         VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10)
+            size_bytes, duration_sec, code, processing_status, original_name,
+            category, matricule, media_type, thumbnail_object_name)
+         VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          ON CONFLICT (code) DO NOTHING
          RETURNING id, title, content_type, duration_sec, code, created_at,
-                   thumbnail_object_name, processing_status`,
+                   thumbnail_object_name, processing_status, category, matricule, media_type`,
         [input.userId, users[0].username, name, input.filename, contentType,
-          input.size, duration, code, processingStatus, input.title.split(/[\\/]/).pop() || input.title],
+          input.size, duration, code, processingStatus, input.title.split(/[\\/]/).pop() || input.title,
+          category, matricule, mediaType, mediaType === "image" ? input.filename : null],
       );
       if (!rows[0]) continue;
       if (beforeCommit) await beforeCommit(client, rows[0]);

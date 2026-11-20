@@ -8,8 +8,8 @@ export const MAX_CLIPS_FEED_LIMIT = 10;
 export const CLIPS_FEED_DEADLINE_MS = 1_200;
 
 export type ClipsFeedQuery =
-  | { ok: true; before: number | null; limit: number; q: string }
-  | { ok: false; parameter: "before" | "limit" | "q" };
+  | { ok: true; before: number | null; limit: number; q: string; category?: string; type?: string }
+  | { ok: false; parameter: "before" | "limit" | "q" | "category" | "type" };
 
 function parsePositiveSafeInteger(raw: unknown): number | null {
   if (typeof raw !== "string" || !/^[1-9]\d*$/.test(raw)) return null;
@@ -21,6 +21,8 @@ export function parseClipsFeedQuery(query: {
   before?: unknown;
   limit?: unknown;
   q?: unknown;
+  category?: unknown;
+  type?: unknown;
 }): ClipsFeedQuery {
   let before: number | null = null;
   if (query.before !== undefined) {
@@ -45,7 +47,16 @@ export function parseClipsFeedQuery(query: {
     q = query.q.trim();
   }
 
-  return { ok: true, before, limit, q };
+  const extra: { category?: string; type?: string } = {};
+  if (query.category !== undefined && query.category !== "") {
+    if (typeof query.category !== "string" || !/^[A-Da-d]$/.test(query.category)) return { ok: false, parameter: "category" };
+    extra.category = query.category.toUpperCase();
+  }
+  if (query.type !== undefined && query.type !== "") {
+    if (typeof query.type !== "string" || !["audio", "video", "image"].includes(query.type)) return { ok: false, parameter: "type" };
+    extra.type = query.type;
+  }
+  return { ok: true, before, limit, q, ...extra };
 }
 
 export function clipsFeedPage<T extends { id: number }>(
@@ -75,6 +86,7 @@ export function createClipsFeedHandler(deps: {
     signal?: AbortSignal,
     q?: string,
     viewerId?: number | null,
+    filters?: { category?: string; type?: string },
   ): Promise<FeedRow[]>;
   logFailure(error: unknown): void;
   deadlineMs?: number;
@@ -99,7 +111,8 @@ export function createClipsFeedHandler(deps: {
       try {
         const viewerId = (req.session as { userId?: number } | undefined)?.userId ?? null;
         rows = await Promise.race([
-          deps.loadRows(query.before, query.limit, controller.signal, query.q, viewerId),
+          deps.loadRows(query.before, query.limit, controller.signal, query.q, viewerId,
+            { category: query.category, type: query.type }),
           deadline,
         ]);
       } finally {
