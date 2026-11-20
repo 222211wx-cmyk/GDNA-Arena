@@ -282,7 +282,7 @@ router.get("/clips/feed", createClipsFeedHandler({
       client.release();
     }
   },
-  logFailure: err => logger.error({ err }, "[clips] feed failed"),
+  logFailure: err => logger.error({ err }, `[clips] feed failed: ${err instanceof Error ? err.message : String(err)}`),
 }));
 
 // ─── PATCH /clips/:id — owner may retitle their own clip ──────────────────────
