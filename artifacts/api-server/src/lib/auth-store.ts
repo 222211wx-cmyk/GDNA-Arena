@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { pool as nullablePool } from "@workspace/db";
 import { getSmsProvider } from "./sms";
+import { OtpChannel, channelEnabled, deliverOtp, isOtpChannel } from "./otp-channels";
 
 const pool = nullablePool!;
 
@@ -51,6 +52,7 @@ export const authSchemaReady: Promise<void> = pool.query(`
     created_at  timestamptz NOT NULL DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS auth_otps_phone_idx ON auth_otps (phone_e164, purpose, created_at);
+  ALTER TABLE auth_otps ADD COLUMN IF NOT EXISTS channel text, ADD COLUMN IF NOT EXISTS destination text, ADD COLUMN IF NOT EXISTS sent_at timestamptz;
 `).then(() => undefined);
 
 const secret = () => process.env.SESSION_SECRET ?? "gdna-arena-dev-secret";
@@ -120,8 +122,8 @@ export async function issueOtp(purpose: string, phone: string, userId: number | 
   const id = randomBytes(16).toString("hex");
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   await pool.query(
-    `INSERT INTO auth_otps (id, purpose, user_id, phone_e164, code_hash, expires_at)
-     VALUES ($1,$2,$3,$4,$5, now() + ($6 || ' milliseconds')::interval)`,
+    `INSERT INTO auth_otps (id, purpose, user_id, phone_e164, code_hash, expires_at, sent_at)
+     VALUES ($1,$2,$3,$4,$5, now() + ($6 || ' milliseconds')::interval, now())`,
     [id, purpose, userId, phone, hmac(`${id}:${code}`), String(OTP_TTL_MS)],
   );
   if (deliver) {
@@ -129,6 +131,73 @@ export async function issueOtp(purpose: string, phone: string, userId: number | 
     catch { throw new AuthError(502, "SMS_FAILED"); }
   }
   return { id, resendIn: OTP_RESEND_MS / 1000 };
+}
+
+/** Opens a challenge with no code sent yet. The user picks a channel later via sendChallengeCode. */
+export async function openChallenge(purpose: string, key: string, userId: number | null): Promise<string> {
+  const id = randomBytes(16).toString("hex");
+  await pool.query(
+    `INSERT INTO auth_otps (id, purpose, user_id, phone_e164, code_hash, expires_at)
+     VALUES ($1,$2,$3,$4,'-', now() + ($5 || ' milliseconds')::interval)`,
+    [id, purpose, userId, key, String(OTP_TTL_MS)],
+  );
+  return id;
+}
+
+/**
+ * Generates a fresh code and sends it over the channel the user picked right now.
+ * Each send replaces the previous code. Resends are at least OTP_RESEND_MS apart.
+ */
+export async function sendChallengeCode(id: string, purpose: string, channel: OtpChannel, destination: string): Promise<{ resendIn: number }> {
+  const r = await pool.query(`SELECT * FROM auth_otps WHERE id = $1 AND purpose = $2`, [id, purpose]);
+  const row = r.rows[0];
+  if (!row || row.consumed || new Date(row.expires_at).getTime() < Date.now()) throw new AuthError(400, "OTP_EXPIRED");
+  if (!channelEnabled(channel)) throw new AuthError(503, "CHANNEL_UNAVAILABLE");
+  if (row.sent_at && Date.now() - new Date(row.sent_at).getTime() < OTP_RESEND_MS) throw new AuthError(429, "OTP_TOO_SOON");
+  if (!row.sent_at) {
+    const sent = await pool.query(
+      `SELECT count(*)::int AS n FROM auth_otps WHERE phone_e164 = $1 AND purpose = $2 AND sent_at > now() - interval '1 hour'`,
+      [row.phone_e164, purpose]);
+    if (sent.rows[0].n >= OTP_MAX_PER_HOUR) throw new AuthError(429, "OTP_LIMIT");
+  }
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  await pool.query(
+    `UPDATE auth_otps SET code_hash = $2, channel = $3, destination = $4, sent_at = now() WHERE id = $1`,
+    [id, hmac(`${id}:${code}`), channel, destination],
+  );
+  try { await deliverOtp(channel, destination, code); }
+  catch { throw new AuthError(502, "DELIVERY_FAILED"); }
+  return { resendIn: OTP_RESEND_MS / 1000 };
+}
+
+/** Contact details for an account, taken from the server only. The client never sends an address. */
+export async function accountDestinations(userId: number): Promise<{ phone: string | null; email: string | null }> {
+  const p = await getProfile(userId);
+  return { phone: p.phone, email: p.email };
+}
+
+export function maskEmail(email: string): string {
+  const [name, domain] = email.split("@");
+  return `${name.slice(0, 1)}${"•".repeat(Math.max(name.length - 1, 2))}@${domain ?? ""}`;
+}
+
+/** The channels this account can receive a code on right now. */
+export function channelOptions(dest: { phone: string | null; email: string | null }): Array<{ channel: OtpChannel; masked: string }> {
+  const out: Array<{ channel: OtpChannel; masked: string }> = [];
+  if (dest.phone) {
+    if (channelEnabled("sms")) out.push({ channel: "sms", masked: maskPhone(dest.phone) });
+    if (channelEnabled("whatsapp")) out.push({ channel: "whatsapp", masked: maskPhone(dest.phone) });
+  }
+  if (dest.email && channelEnabled("email")) out.push({ channel: "email", masked: maskEmail(dest.email) });
+  return out;
+}
+
+/** Where a chosen channel delivers. Throws when the account has no address for it. */
+export function resolveChannel(channel: unknown, dest: { phone: string | null; email: string | null }): { channel: OtpChannel; destination: string } {
+  if (!isOtpChannel(channel)) throw new AuthError(400, "CHANNEL_INVALID");
+  const destination = channel === "email" ? dest.email : dest.phone;
+  if (!destination) throw new AuthError(400, "CHANNEL_INVALID");
+  return { channel, destination };
 }
 
 /** A decoy challenge id for unknown phones, so forgot-password never reveals who is registered. */
@@ -140,7 +209,7 @@ export async function checkOtp(id: unknown, code: unknown, purpose: string): Pro
   if (typeof id !== "string" || typeof code !== "string" || !/^\d{6}$/.test(code)) throw new AuthError(400, "OTP_INVALID");
   const r = await pool.query(`SELECT * FROM auth_otps WHERE id = $1 AND purpose = $2`, [id, purpose]);
   const row = r.rows[0];
-  if (!row || row.consumed || new Date(row.expires_at).getTime() < Date.now()) throw new AuthError(400, "OTP_EXPIRED");
+  if (!row || row.consumed || !row.sent_at || new Date(row.expires_at).getTime() < Date.now()) throw new AuthError(400, "OTP_EXPIRED");
   if (row.attempts >= OTP_MAX_ATTEMPTS) throw new AuthError(429, "OTP_ATTEMPTS");
   await pool.query(`UPDATE auth_otps SET attempts = attempts + 1 WHERE id = $1`, [id]);
   if (!safeEq(row.code_hash, hmac(`${id}:${code}`))) throw new AuthError(400, "OTP_INVALID");

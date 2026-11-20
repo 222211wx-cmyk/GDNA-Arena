@@ -16,6 +16,10 @@ export type AuthView =
 
 interface AuthConfig { googleClientId: string | null; googleMock: boolean; sms: boolean; smsReal: boolean }
 
+/** A delivery channel the user can pick each time a code is needed. Never remembered. */
+type ChannelOption = { channel: "sms" | "whatsapp" | "email"; masked: string };
+const CHANNEL_LABEL: Record<ChannelOption["channel"], string> = { sms: "SMS", whatsapp: "WhatsApp", email: "Email" };
+
 async function v2(path: string, body?: unknown) {
   let res: Response;
   try {
@@ -105,6 +109,8 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
+  const [options, setOptions] = useState<ChannelOption[]>([]);
+  const [sent, setSent] = useState(false);
   const [left, restart] = useCountdown(0);
 
   useEffect(() => { v2("config").then(setConfig).catch(() => {}); }, []);
@@ -129,10 +135,10 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
 
   const finish = (r: Awaited<ReturnType<typeof authV2>>, signup = false) => {
     if (r.status === "device_verification") {
-      setChallenge({ id: r.challengeId, masked: r.maskedPhone });
-      restart(r.resendIn);
+      // No code is sent yet: the user picks a channel on the chooser.
+      setChallenge({ id: r.challengeId, masked: "" });
+      setOptions(r.channels); setSent(false); restart(0);
       go("device");
-      void showDevCode(r.maskedPhone);
       return;
     }
     if (signup && r.phoneChallengeId) {
@@ -160,15 +166,17 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   });
   const resend = () => run(async () => {
     if (view === "forgot-code") await sendForgot();
-    else if (view === "device" && challenge) {
-      const r = await v2("device/resend", { challengeId: challenge.id });
-      setChallenge({ ...challenge, id: r.challengeId }); restart(r.resendIn); setCode(""); void showDevCode(challenge.masked);
-    } else if (view === "dev-code" && challenge) {
-      const r = await v2("developer/resend", { challengeId: challenge.id });
-      setChallenge({ ...challenge, id: r.challengeId }); restart(r.resendIn); setCode(""); void showDevCode(phone);
-    } else if (view === "phone-verify") {
+    else if (view === "phone-verify") {
       const r = await v2("phone/send", { phone }); setChallenge({ id: r.challengeId, masked: phone }); restart(r.resendIn); setCode(""); void showDevCode(phone);
     }
+  });
+  // Sends a fresh code over the channel the user just picked.
+  const sendVia = (channel: ChannelOption["channel"]) => run(async () => {
+    if (!challenge) return;
+    const path = view === "device" ? "device/send" : "developer/send";
+    const r = await v2(path, { challengeId: challenge.id, channel });
+    setChallenge({ id: r.challengeId, masked: options.find(o => o.channel === channel)?.masked ?? challenge.masked }); restart(r.resendIn); setCode(""); setSent(true);
+    if (view === "dev-code") void showDevCode(phone);
   });
   const verifyCode = (value = code) => run(async () => {
     if (!challenge || value.length !== 6) return;
@@ -190,7 +198,7 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
     e.preventDefault();
     void run(async () => {
       const r = await v2("developer/start", { email, username, password, phone });
-      setChallenge({ id: r.challengeId, masked: r.maskedPhone }); restart(r.resendIn); go("dev-code"); void showDevCode(phone);
+      setChallenge({ id: r.challengeId, masked: phone }); setOptions(r.channels); setSent(false); restart(0); go("dev-code");
     });
   };
   const saveNewPassword = (e: FormEvent) => {
@@ -210,13 +218,24 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const showBack = view !== initial && view !== "login-choice" && view !== "signup-choice";
   const backTo: AuthView = view === "signup-email" || view === "dev-signup" ? "signup-choice" : view === "dev-code" ? "dev-signup" : view === "forgot-code" || view === "forgot-new" ? "forgot-phone" : "login-choice";
 
+  const chooser = (intro: string) => (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">{intro}</p>
+      {options.map(o => (
+        <Button key={o.channel} type="button" variant="outline" className="h-11 w-full" disabled={busy} onClick={() => void sendVia(o.channel)} data-testid={`channel-${o.channel}`}>
+          {CHANNEL_LABEL[o.channel]} · <span dir="ltr">{o.masked}</span>
+        </Button>
+      ))}
+    </div>
+  );
+
   const codeBlock = (intro: string) => (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">{intro}</p>
       <OtpInput value={code} onChange={setCode} onComplete={v => void verifyCode(v)} />
       {devCode && <p className="rounded-md bg-muted p-2 text-center text-sm" data-testid="dev-code"><span>{copy.devCode}: </span><b dir="ltr" className="tracking-widest">{devCode}</b></p>}
       <Button type="button" className="h-11 w-full" disabled={busy || code.length !== 6} onClick={() => void verifyCode()}>{busy ? copy.working : copy.verify}</Button>
-      <Button type="button" variant="ghost" className="w-full" disabled={left > 0 || busy} onClick={() => void resend()} data-testid="resend">
+      <Button type="button" variant="ghost" className="w-full" disabled={left > 0 || busy} onClick={() => (view === "device" || view === "dev-code") ? (setSent(false), setCode("")) : void resend()} data-testid="resend">
         {left > 0 ? copy.resendIn(left) : copy.resend}
       </Button>
       {view === "phone-verify" && <Button type="button" variant="ghost" className="w-full" data-testid="skip-phone" onClick={() => void refreshUser().then(onDone)}>{copy.skip}</Button>}
@@ -291,9 +310,9 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
           <Button type="submit" className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600" disabled={busy || !phone}>{busy ? copy.working : dev.submit}</Button>
         </form>
       )}
-      {view === "dev-code" && codeBlock(dev.codeIntro(challenge?.masked ?? ""))}
+      {view === "dev-code" && (sent ? codeBlock(dev.codeIntro(challenge?.masked ?? "")) : chooser("Choose how to receive your code."))}
       {view === "forgot-code" && codeBlock(copy.codeSentTo(challenge?.masked ?? ""))}
-      {view === "device" && codeBlock(copy.deviceBody(challenge?.masked ?? ""))}
+      {view === "device" && (sent ? codeBlock(copy.deviceBody(challenge?.masked ?? "")) : chooser("Choose how to receive your code."))}
       {view === "phone-verify" && codeBlock(copy.phoneStepBody)}
 
       {view === "forgot-new" && (
