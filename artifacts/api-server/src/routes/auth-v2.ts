@@ -1,4 +1,4 @@
-import { OTP_CHANNELS, channelEnabled } from "../lib/otp-channels";
+import { OTP_CHANNELS, channelEnabled, sendResetEmail } from "../lib/otp-channels";
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcrypt";
 import { randomBytes } from "node:crypto";
@@ -440,6 +440,25 @@ router.post(`${BASE}/forgot/send`, async (req, res) => {
     // Unknown numbers get an identical response so the endpoint cannot be used to look up members.
     const c = userId ? await issueOtp("forgot", phone, userId) : decoyChallenge();
     res.json({ challengeId: c.id, resendIn: c.resendIn });
+  } catch (e) { fail(req, res, e); }
+});
+
+// Email reset: emails a link that carries a one-time token in the URL hash (never in a query string or logs).
+// The response is the same whether or not the address belongs to a member.
+router.post(`${BASE}/forgot/email/send`, async (req, res) => {
+  try {
+    const email = str(req.body?.email, 254).toLowerCase();
+    if (!EMAIL_RE.test(email)) throw new AuthError(400, "EMAIL_INVALID");
+    if (!process.env.RESEND_API_KEY || !process.env.MAIL_FROM) throw new AuthError(503, "CHANNEL_UNAVAILABLE");
+    const found = await pool.query<{ user_id: number }>(
+      `SELECT user_id FROM auth_profiles WHERE LOWER(email)=$1 AND user_id IS NOT NULL ORDER BY user_id LIMIT 1`, [email]);
+    const userId = found.rows[0]?.user_id;
+    if (userId) {
+      const token = await mintResetToken(userId, email);
+      const base = (process.env.APP_PUBLIC_URL || "https://www.gdnaarena.app").replace(/\/$/, "");
+      await sendResetEmail(email, `${base}/login#reset-token=${token}`);
+    }
+    res.json({ ok: true });
   } catch (e) { fail(req, res, e); }
 });
 

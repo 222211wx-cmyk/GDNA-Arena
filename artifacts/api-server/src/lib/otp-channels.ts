@@ -69,3 +69,20 @@ export async function deliverOtp(channel: OtpChannel, destination: string, code:
   if (mockOutbox.length > 50) mockOutbox.shift();
   logger.warn({ channel, to: destination }, `[OTP:mock:${channel}] ${text}`);
 }
+
+/** Emails a password-reset link. Returns false when email is not configured (nothing is sent). */
+export async function sendResetEmail(to: string, link: string): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY || !process.env.MAIL_FROM) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: process.env.MAIL_FROM, to: [to],
+      subject: "GDNA Arena password reset",
+      text: `Reset your GDNA Arena password with this link (valid 15 minutes):\n${link}\n\nIf you did not ask for this, ignore this email.`,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`Reset email failed (${res.status})`);
+  return true;
+}

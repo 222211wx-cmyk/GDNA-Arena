@@ -128,13 +128,14 @@ export function PasswordField({ id, label, value, onChange, autoComplete, requir
   return (
     <div className="space-y-1">
       <label htmlFor={id} className="text-sm font-medium">{label}</label>
-      <div className="relative">
+      {/* The eye sits outside the input, after it in the flow: right in LTR (French), left in RTL (Arabic). */}
+      <div className="flex items-center gap-2">
         <input id={id} dir="ltr" type={shown ? "text" : "password"} autoComplete={autoComplete} required={required} minLength={minLength}
           value={value} onChange={e => onChange(e.target.value)} data-testid={`${id}-input`}
-          className={`${field} w-full pe-11 text-left`} />
+          className={`${field} min-w-0 flex-1 text-left`} />
         <button type="button" onClick={() => setShown(s => !s)} aria-label={shown ? hideLabel : showLabel} aria-pressed={shown}
           data-testid={`${id}-eye`} title={shown ? hideLabel : showLabel}
-          className="absolute inset-y-0 end-0 flex w-11 items-center justify-center rounded-e-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {shown ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
         </button>
       </div>
