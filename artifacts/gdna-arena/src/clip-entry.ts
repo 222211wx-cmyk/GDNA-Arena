@@ -3,15 +3,10 @@ import { mountLightweightBackButton } from "./lib/lightweight-back-button";
 mountLightweightBackButton();
 import { createLightweightCallBoundary } from "./lib/lightweight-call-boundary";
 import {
-  announceAccountChange,
-  fetchSharedClipSession,
-  subscribeAccountChanges,
-  subscribeSessionWake,
-} from "./lib/account-session-events";
-import {
   uploadClip,
   type ClipUploadMetadata,
 } from "./components/clips/clipUpload";
+import { answerQuestion, guideHtml, guideSeen, markGuideSeen } from "./components/clips/guide";
 import { readClipDuration } from "./components/clips/readClipDuration";
 import { clipOverlayCss } from "./components/clips/clipOverlayStyles";
 import { reelsShellCss } from "./components/clips/reelsStyles";
@@ -36,23 +31,16 @@ const style = document.createElement("style");
 style.textContent = ` :root{color-scheme:dark;font-family:${tokens.fontFamily.sans.join(",")};background:${palette.background};color:${palette.foreground}} *{box-sizing:border-box}body{margin:0;background:${palette.background};color:${palette.foreground}} main{padding:calc(${space} * 4);margin:auto;max-width:48rem}header{display:flex;align-items:center;justify-content:space-between} section,form{display:grid;gap:calc(${space} * 3);padding:calc(${space} * 4);margin-block:calc(${space} * 4);background:${palette.card};border:1px solid ${palette.border};border-radius:${tokens.radius}} h1,h2,p{margin-block:calc(${space} * 2)}label{display:grid;gap:calc(${space} * 2)} input,select,button{font:inherit;color:inherit;background:${palette.secondary};border:1px solid ${palette.input};border-radius:${tokens.radius};padding:calc(${space} * 3)} input[type=checkbox],input[type=radio]{inline-size:auto}button{cursor:pointer;background:${palette.primary};color:${palette.primaryForeground};font-weight:700} button.secondary{background:${palette.secondary};color:${palette.secondaryForeground}}button:disabled{opacity:.55;cursor:not-allowed} fieldset{display:grid;gap:calc(${space} * 3);border:1px solid ${palette.border};border-radius:${tokens.radius}} fieldset label{display:flex;align-items:center;gap:calc(${space} * 2)} progress{inline-size:100%;accent-color:${palette.primary}}video,audio{inline-size:100%;max-block-size:60vh;background:${palette.background};display:block} .clip-media-frame{overflow:hidden;position:relative;border-radius:${tokens.radius}} ${clipOverlayCss(palette, space)} .comment-form,.title-edit{display:flex;gap:calc(${space} * 2)}.comment-form input,.title-edit input{min-inline-size:0;flex:1} .copy-link-fallback{inline-size:min(100%,28rem)} .clip-zoomed{transform:scale(1.35);transform-origin:center;position:relative;z-index:2}article{overflow:visible} a{color:${palette.primary}}.muted{color:${palette.mutedForeground}}.error{color:${palette.destructive}}[hidden]{display:none!important} ${reelsShellCss(palette as unknown as Record<string, string>, space)} #reels-root main{padding:0;margin:0;max-width:none} #reels-root main > header{display:none} .reels-css-fullscreen{background:${palette.background}} .reels-install-help{position:absolute;z-index:30;top:calc(${space} * 18);inset-inline:calc(${space} * 4);padding:calc(${space} * 3);background:${palette.card};color:${palette.cardForeground};border:1px solid ${palette.border};border-radius:${tokens.radius}} .reels-install-help button{margin-inline-start:calc(${space} * 2)} `;
 document.head.appendChild(style);
 
-root.innerHTML = ` <div id="reels-root" data-testid="clip-shell"></div> <div id="composer" class="reels-composer" role="dialog" aria-label="Publier un clip" aria-modal="true" hidden> <div class="reels-composer-head"> <button id="composer-close" type="button" class="reels-icon-btn" aria-label="Fermer">${reelsIcons.close()}</button> <h2>Publier un clip</h2> </div> <div class="reels-composer-body"> <main dir="rtl"> <div id="auth" class="muted" aria-live="polite">جارٍ التحقق من تسجيل الدخول…</div> <form id="upload" data-testid="clip-upload"> <h2>رفع صوت أو فيديو</h2> <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden> <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button> <p id="selection" class="muted" role="status" aria-live="polite">اختر ملف صوت أو فيديو</p> <div id="progress-wrap" hidden> <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress> <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p> </div> <label id="display-name-row" for="display-name" hidden> <span>اسم الفيشي</span> <input id="display-name" data-testid="clip-display-name" type="text" dir="auto" autocomplete="off" aria-describedby="display-name-error"> <span id="display-name-error" class="error" role="alert" aria-live="polite"></span> </label> <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
+root.innerHTML = ` <div id="reels-root" data-testid="clip-shell"></div> <div id="composer" class="reels-composer" role="dialog" aria-label="Publier un clip" aria-modal="true" hidden> <div class="reels-composer-head"> <button id="composer-close" type="button" class="reels-icon-btn" aria-label="Fermer">${reelsIcons.close()}</button> <h2>Publier un clip</h2> </div> <div class="reels-composer-body"> <main dir="rtl"> <form id="upload" data-testid="clip-upload"> <button id="guide-toggle" class="secondary" type="button" aria-controls="guide">؟ لماذا؟ كيف أنشر؟</button> <section id="guide" data-testid="clip-guide" hidden>${guideHtml}</section> <h2>رفع صوت أو فيديو</h2> <input id="file" data-testid="clip-file-input" type="file" accept="video/*,audio/*" hidden> <button id="choose-file" class="secondary" type="button" aria-controls="file" aria-describedby="selection duration-status">Choisir un fichier — فيديو / أوديو</button> <p id="selection" class="muted" role="status" aria-live="polite">اختر ملف صوت أو فيديو</p> <div id="progress-wrap" hidden> <progress id="progress" data-testid="clip-progress" max="100" value="0"></progress> <p id="upload-status" data-testid="clip-status" role="status" aria-live="polite"></p> </div> <label id="display-name-row" for="display-name" hidden> <span>اسم الفيشي</span> <input id="display-name" data-testid="clip-display-name" type="text" dir="auto" autocomplete="off" aria-describedby="display-name-error"> <span id="display-name-error" class="error" role="alert" aria-live="polite"></span> </label> <p id="duration-status" data-testid="clip-duration" class="muted" role="status" aria-live="polite"></p>
 
-<label><span>شنو بغيتي تنشر؟</span><select id="clip-publish-type"><option value="clip">كليب</option><option value="ad-citizen">إشهار مواطن</option><option value="ad-product">إشهار منتوج</option></select></label>
-
-<label style="display:flex;gap:8px;align-items:flex-start"><input id="clip-own" type="checkbox"><span>هاد المحتوى ديالي، ماشي ديال الغير</span></label>
-<label style="display:flex;gap:8px;align-items:flex-start"><input id="clip-device" type="checkbox"><span>مسجل من جهازي أنا</span></label>
-<label style="display:flex;gap:8px;align-items:flex-start"><input id="clip-info-correct" type="checkbox"><span>معلوماتي الشخصية صحيحة و بغيت ننشر</span></label>
-<label style="display:flex;gap:8px;align-items:flex-start"><input id="clip-terms" type="checkbox"><span>أوافق على شروط النشر: محتوى ديالي، مسجل بجهازي، ماشي تافه، ماشي مسروق، فيه وقت و صورة، المدة 30 ثانية أو أكثر بلا سقف، 3 كليبات، مسموح أصوات / تعاليق / أغاني بشرط الوقت ما يعادلش الوقت الأصلي</span></label>
-<label><span>الوقت الأصلي ديال الصوت / الأغنية (0 إلا ما كاينش)</span><input id="clip-original-duration" type="number" min="0" value="0"></label>
-
-<p class="muted" style="font-size:0.85rem">🔒 العلبة السوداء: الاسم الحقيقي و الملف الأصلي ما كيبانوش. البرطاج و جميع الميزات محلولين. المواطن كيتفرج فكلشي، و بين الكليبات كيدوز إشهار.</p>
-<div> <button id="submit" data-testid="clip-submit" type="submit" disabled>نشر</button> <button id="cancel" class="secondary" type="button" hidden>Annuler</button> </div> <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p> <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div> </form> </main> </div> </div>`;
+<div> <button id="submit" data-testid="clip-submit" type="submit" disabled>Publier</button> <button id="cancel" class="secondary" type="button" hidden>Annuler</button> </div> <p id="upload-error" data-testid="clip-error" class="error" role="alert" aria-live="assertive"></p> <div id="receipt" data-testid="clip-receipt" role="status" aria-live="polite" hidden></div> <p id="verdict" data-testid="clip-verdict" role="status" aria-live="polite" hidden></p> </form> </main> </div> </div>`;
 
 const calls = createLightweightCallBoundary(root);
 const element = <T extends HTMLElement>(id: string) =>
   document.getElementById(id) as T;
-const auth = element<HTMLDivElement>("auth");
+const verdict = element<HTMLParagraphElement>("verdict");
+const guide = element<HTMLElement>("guide");
+const guideToggle = element<HTMLButtonElement>("guide-toggle");
 const form = element<HTMLFormElement>("upload");
 const input = element<HTMLInputElement>("file");
 const chooseFile = element<HTMLButtonElement>("choose-file");
@@ -83,8 +71,6 @@ let durationProbe: Promise<number | null> | null = null;
 let uploadController: AbortController | null = null;
 let selectedFileKey: string | null = null;
 let submissionPending = false;
-let uploadOwner: number | null = null;
-let accountReloading = false;
 if (window.isSecureContext && "serviceWorker" in navigator) {
   void navigator.serviceWorker
     .register(`${BASE}sw.js`, { scope: BASE, updateViaCache: "none" })
@@ -138,8 +124,6 @@ function displayNameValidationError() {
 }
 function updateSubmitState() {
   submit.disabled =
-    accountReloading ||
-    uploadOwner === null ||
     Boolean(uploadController) ||
     !cachedFile;
 }
@@ -294,19 +278,26 @@ function reportUploadProgress(
   submit.textContent = `Téléversement ${displayPercent}%…`;
   status.textContent = `${formatBytes(uploaded)} من ${formatBytes(total)} — ${displayPercent}%`;
 }
+function showVerdict(kind: "accepté" | "refusé", reason: string) {
+  verdict.hidden = false;
+  verdict.className = kind === "accepté" ? "" : "error";
+  verdict.textContent =
+    kind === "accepté"
+      ? "مقبول ✅ / Accepté"
+      : `غير مقبول ❌ / Refusé — ${reason}`;
+}
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const file = cachedFile;
   if (
     !file ||
-    uploadOwner === null ||
-    accountReloading ||
     uploadController ||
     submissionPending
   )
     return;
   submissionPending = true;
   uploadError.textContent = "";
+  verdict.hidden = true;
   displayNameError.textContent = "";
   displayName.setAttribute("aria-invalid", "false");
   const title = normalizedDisplayName();
@@ -318,7 +309,6 @@ form.addEventListener("submit", async (event) => {
     submissionPending = false;
     return;
   }
-  const owner = uploadOwner;
   const operation = new AbortController();
   uploadController = operation;
   mutableControls.forEach((control) => {
@@ -337,90 +327,26 @@ form.addEventListener("submit", async (event) => {
     operation.signal.throwIfAborted();
     if (cachedFile !== file) return;
 
-    // ── شروط النشر ديال المواطن ──
-    const fail = (msg: string) => {
-      uploadError.textContent = msg;
-      submissionPending = false;
-      uploadController = null;
-      mutableControls.forEach((c) => (c.disabled = false));
-      updateSubmitState();
-      submit.textContent = "نشر";
-    };
-
-    // 1. المدة: 30 و لفوق
-    if (duration !== null && duration < MIN_CLIP_DURATION_SEC) {
-      fail(`الكليب خاصو يكون ${MIN_CLIP_DURATION_SEC} ثانية أو أكثر`);
-      return;
-    }
-
-    // 2. ديالي ماشي ديال الغير
-    const own = document.getElementById("clip-own") as HTMLInputElement | null;
-    if (!own?.checked) {
-      fail("خاص المحتوى يكون ديالك، ماشي ديال الغير");
-      return;
-    }
-
-    // 3. مسجل من جهازي
-    const device = document.getElementById(
-      "clip-device",
-    ) as HTMLInputElement | null;
-    if (!device?.checked) {
-      fail("خاص يكون مسجل من جهازك نتا");
-      return;
-    }
-
-    // 4. معلومات شخصية صحيحة
-    const infoCorrect = document.getElementById(
-      "clip-info-correct",
-    ) as HTMLInputElement | null;
-    if (!infoCorrect?.checked) {
-      fail("خاصك تأكد معلوماتك الشخصية صحيحة");
-      return;
-    }
-
-    // 5. شروط النشر
-    const terms = document.getElementById(
-      "clip-terms",
-    ) as HTMLInputElement | null;
-    if (!terms?.checked) {
-      fail("خاصك توافق على شروط النشر");
-      return;
-    }
-
-    // 6. أصوات / تعاليق / أغاني: الوقت ما يعادلش الأصلي
-    const originalDuration = Number(
-      (document.getElementById("clip-original-duration") as HTMLInputElement)
-        ?.value || 0,
-    );
-    if (
-      originalDuration > 0 &&
-      duration !== null &&
-      Math.floor(duration) === Math.floor(originalDuration)
-    ) {
-      fail("الوقت كيعادل الوقت الأصلي - بدل الوقت شوية");
-      return;
-    }
-
-    const publishType =
-      (document.getElementById("clip-publish-type") as HTMLSelectElement)
-        ?.value || "clip";
     const metadata: ClipUploadMetadata = {
       title,
       durationSec: duration,
-      publishType,
-      isAd: publishType !== "clip",
-    } as any;
+    };
 
     const published = await uploadClip(
       file,
       metadata,
       operation.signal,
       reportUploadProgress,
-      { expectedOwner: owner },
     );
-    if (uploadOwner !== owner) return;
+    markGuideSeen();
+    if (published.status === "refusé") {
+      showVerdict("refusé", published.reason);
+      status.textContent = "";
+      return;
+    }
     finalizePublication({ ...published, name: title });
-    reloadFeedAfterPublish();
+    showVerdict("accepté", "");
+    setTimeout(reloadFeedAfterPublish, 1800);
   } catch (error) {
     const cancelled = operation.signal.aborted;
     uploadError.textContent = cancelled
@@ -436,7 +362,7 @@ form.addEventListener("submit", async (event) => {
       control.disabled = false;
     });
     updateSubmitState();
-    submit.textContent = "نشر";
+    submit.textContent = "Publier";
     cancel.hidden = true;
   }
 });
@@ -447,6 +373,7 @@ function openComposer() {
   lastFocusBeforeComposer = document.activeElement as HTMLElement;
   reels?.pause();
   composer.hidden = false;
+  if (!guideSeen()) setGuide(true); // first visit only; never repeated
   (chooseFile ?? composerClose).focus();
 }
 function closeComposer() {
@@ -487,112 +414,16 @@ function reloadFeedAfterPublish() {
   closeComposer();
   mountReelsFeed();
 }
-let authFlight: Promise<void> | null = null;
-let authGeneration = 0;
-let verifiedAccount: number | null | undefined;
-function reloadForAccountChange() {
-  if (accountReloading) return;
-  accountReloading = true;
-  ++authGeneration;
-  uploadController?.abort();
-  durationController?.abort();
-  uploadOwner = null;
-  form.hidden = true;
-  calls.setAccount(null);
-  reels?.destroy();
-  window.location.reload();
+function setGuide(open: boolean) {
+  guide.hidden = !open;
+  if (open) markGuideSeen();
 }
-function acceptAccount(id: number | null): boolean {
-  if (verifiedAccount !== undefined && verifiedAccount !== id) {
-    announceAccountChange(id);
-    reloadForAccountChange();
-    return false;
-  }
-  verifiedAccount = id;
-  return true;
-}
-function clearComposerIdentity() {
-  uploadController?.abort();
-  durationController?.abort();
-  uploadOwner = null;
-  cachedFile = null;
-  selectedDuration = null;
-  selectedFileKey = null;
-  input.value = "";
-  displayName.value = "";
-  receipt.replaceChildren();
-  receipt.hidden = true;
-  form.hidden = true;
-  calls.setAccount(null);
-  updateSubmitState();
-}
-async function verifyAuth() {
-  const generation = authGeneration;
-  try {
-    const response = await fetchSharedClipSession();
-    if (accountReloading || generation !== authGeneration) return;
-    if (response.status === 401) {
-      // التفراج عام: المواطن كيتفرج بلا دخول، النشر كيحتاج دخول + معلومات صحيحة
-      uploadOwner = null;
-      verifiedAccount = null;
-      auth.innerHTML = `<span>كتفرج كضيف - </span><a href="${BASE}login">سجل الدخول باش تنشر</a>`;
-      updateSubmitState();
-      return;
-    }
-    if (!response.ok)
-      throw new Error(
-        `Session verification unavailable (${response.status}) — Réessayer`,
-      );
-    const me = await response.json();
-    if (accountReloading || generation !== authGeneration) return;
-    if (
-      !me ||
-      !Number.isSafeInteger(me.id) ||
-      me.id <= 0 ||
-      typeof me.username !== "string"
-    ) {
-      throw new Error("Réponse de session invalide — Réessayer");
-    }
-    if (!acceptAccount(me.id)) return;
-    {
-      calls.setAccount(me.id);
-      uploadOwner = me.id;
-    }
-    auth.textContent = "يمكنك رفع ملفك الآن";
-    form.hidden = false;
-  } catch (error) {
-    if (accountReloading || generation !== authGeneration) return;
-    auth.replaceChildren();
-    const message = document.createElement("span");
-    message.textContent =
-      error instanceof Error
-        ? error.message
-        : "تعذر التحقق من الجلسة — حاول مجدداً";
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.textContent = "Réessayer — إعادة المحاولة";
-    retry.onclick = () => void loadAuth();
-    auth.append(message, retry);
-  }
-}
-function loadAuth(): Promise<void> {
-  if (authFlight) return authFlight;
-  const flight = verifyAuth().finally(() => {
-    if (authFlight === flight) authFlight = null;
-  });
-  authFlight = flight;
-  return flight;
-}
-const stopAccountEvents = subscribeAccountChanges(reloadForAccountChange);
-const stopSessionWake = subscribeSessionWake(() => void loadAuth());
-window.addEventListener("pagehide", (event) => {
-  if (!event.persisted) {
-    stopAccountEvents();
-    stopSessionWake();
-  }
+guideToggle.addEventListener("click", () => setGuide(guide.hidden));
+document.getElementById("guide-ask")?.addEventListener("click", () => {
+  const q = (document.getElementById("guide-question") as HTMLInputElement).value;
+  (document.getElementById("guide-answer") as HTMLElement).textContent = answerQuestion(q);
 });
 document.body.dataset.clipReady = "true";
 mountReelsFeed();
 if (window.location.pathname.replace(/\/$/, "").endsWith("/publish"))
   openComposer();
-void loadAuth();

@@ -94,20 +94,18 @@ export async function uploadClip(
   metadata: ClipUploadMetadata,
   signal: AbortSignal,
   onProgress: ClipUploadProgress,
-  options: { expectedOwner: number },
+  _options?: unknown,
 ): Promise<PublishedClip> {
   signal.throwIfAborted();
-  const owner = await currentUploadOwner(signal);
-  if (owner !== options.expectedOwner) {
-    throw new Error("Le compte a changé — ce fichier ne sera pas publié avec un autre compte");
-  }
+  // No registration: the server opens an anonymous session on first publish.
+  const owner = "guest";
   const contentType = file.type || "application/octet-stream";
   const identity = await fileIdentity(file, signal);
   const savedKey = `clips-server-upload:${owner}:${identity}:${encodeURIComponent(metadata.title)}:${encodeURIComponent(file.name)}`;
   let requestId = localStorage.getItem(savedKey);
   if (!requestId) { requestId = crypto.randomUUID(); localStorage.setItem(savedKey, requestId); }
   const control = (body: Record<string, unknown>) =>
-    retry(() => postJson(CONTROL_API(), { ...body, expectedOwnerId: owner }, signal), signal);
+    retry(() => postJson(CONTROL_API(), { ...body }, signal), signal);
   const session = await control({
     action: "initiate", requestId,
     filename: file.name,
@@ -115,7 +113,6 @@ export async function uploadClip(
     contentType,
     size: file.size,
     durationSec: metadata.durationSec,
-    expectedOwnerId: owner,
   });
   if (typeof session?.sessionId !== "string" || !Number.isSafeInteger(session.partSize) || session.partSize <= 0) {
     throw new Error("تعذر بدء الرفع — حاول مجدداً");
@@ -154,6 +151,11 @@ export async function uploadClip(
     body = await control({ action: "complete", sessionId: session.sessionId });
   }
   signal.throwIfAborted();
+  if (body?.status === "refusé") {
+    localStorage.removeItem(savedKey);
+    trackEvent("clip_upload_success", { outcome: "refused" });
+    return { code: "", name: metadata.title, status: "refusé", reason: String(body.reason ?? "") };
+  }
   const clip = body?.clip && typeof body.clip === "object" ? body.clip : null;
   const code = body?.code ?? clip?.code;
   if (body?.ok === false || !clip || typeof code !== "string" || !/^HELX-\d{6}$/.test(code)) {
@@ -161,5 +163,5 @@ export async function uploadClip(
   }
   trackEvent("clip_upload_success", { outcome: "published" });
   localStorage.removeItem(savedKey);
-  return { ...clip, code, name: clip.title ?? body.name ?? clip.name ?? metadata.title };
+  return { ...clip, status: "accepté", reason: "", code, name: clip.title ?? body.name ?? clip.name ?? metadata.title };
 }
