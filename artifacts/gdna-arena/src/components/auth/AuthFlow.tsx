@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowLeftRight, Check, Loader2, RefreshCw } from "lucide-react";
+import { EMAIL_SHAPE, passwordStrength, registrationCopy } from "@/i18n/registration-copy";
 import { Button } from "@workspace/gdna-ds/components/ui/button";
 import { Input } from "@workspace/gdna-ds/components/ui/input";
 import { Label } from "@workspace/gdna-ds/components/ui/label";
@@ -7,18 +9,17 @@ import { useLang } from "@/contexts/LangContext";
 import { AuthApiError, useAuth } from "@/contexts/AuthContext";
 import { authCopy, authErrorText } from "@/i18n/auth-v2-copy";
 import { developerCopy } from "@/i18n/developer-copy";
-import { DobSelect, OtpInput, PhoneField, dobToIso, toE164, useCountdown } from "./fields";
+import { ChannelButtons, DobSelect, OtpInput, PasswordField, PhoneField, StrengthMeter, dobToIso, toE164, useCountdown } from "./fields";
 
 export type AuthView =
   | "login-choice" | "login-email" | "signup-choice" | "signup-email"
   | "device" | "forgot-phone" | "forgot-code" | "forgot-new" | "phone-verify"
-  | "dev-signup" | "dev-code";
+  | "dev-signup" | "dev-code" | "signup-code";
 
 interface AuthConfig { googleClientId: string | null; googleMock: boolean; sms: boolean; smsReal: boolean }
 
 /** A delivery channel the user can pick each time a code is needed. Never remembered. */
 type ChannelOption = { channel: "sms" | "whatsapp" | "email"; masked: string };
-const CHANNEL_LABEL: Record<ChannelOption["channel"], string> = { sms: "SMS", whatsapp: "WhatsApp", email: "Email" };
 
 async function v2(path: string, body?: unknown) {
   let res: Response;
@@ -112,12 +113,19 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const [options, setOptions] = useState<ChannelOption[]>([]);
   const [sent, setSent] = useState(false);
   const [left, restart] = useCountdown(0);
+  const [confirm, setConfirm] = useState("");
+  const [emailErr, setEmailErr] = useState(false);
+  const [pendingChannel, setPendingChannel] = useState<ChannelOption["channel"] | null>(null);
+  const [lastChannel, setLastChannel] = useState<ChannelOption["channel"] | null>(null);
+  const [success, setSuccess] = useState(false);
+  const reg = registrationCopy(lang);
 
   useEffect(() => { v2("config").then(setConfig).catch(() => {}); }, []);
 
   const go = (v: AuthView) => { setView(v); setErrorCode(null); setNotice(null); setCode(""); };
   const phone = toE164(dial, local);
-  const error = errorCode ? (dev.errors[errorCode] ?? authErrorText(copy, errorCode)) : null;
+  const error = errorCode === "PASSWORD_MISMATCH" ? reg.passwordMismatch
+    : errorCode ? (reg.errorsExtra[errorCode] ?? dev.errors[errorCode] ?? authErrorText(copy, errorCode)) : null;
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setErrorCode(null);
@@ -152,11 +160,17 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   };
 
   const submitLogin = (e: FormEvent) => { e.preventDefault(); void run(async () => finish(await authV2("login", { identifier, password, rememberMe: remember }))); };
+  // Nothing is created here: the server holds the sign-up until the citizen proves the code.
   const submitSignup = (e: FormEvent) => {
     e.preventDefault();
-    void run(async () => finish(await authV2("signup", {
-      name, email, password, phone: phone || undefined, birthDate: dobToIso(dob), rememberMe: remember,
-    }), true));
+    if (!EMAIL_SHAPE.test(email.trim())) { setEmailErr(true); return; }
+    if (password !== confirm) { setErrorCode("PASSWORD_MISMATCH"); return; }
+    void run(async () => {
+      const r = await v2("signup", {
+        name, email, password, phone: phone || undefined, birthDate: dobToIso(dob), rememberMe: remember,
+      });
+      setChallenge({ id: r.challengeId, masked: "" }); setOptions(r.channels); setSent(false); restart(0); go("signup-code");
+    });
   };
   const google = (credential: string) => void run(async () => finish(await authV2("google", { credential, rememberMe: true })));
 
@@ -171,13 +185,21 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
     }
   });
   // Sends a fresh code over the channel the user just picked.
-  const sendVia = (channel: ChannelOption["channel"]) => run(async () => {
-    if (!challenge) return;
-    const path = view === "device" ? "device/send" : "developer/send";
-    const r = await v2(path, { challengeId: challenge.id, channel });
-    setChallenge({ id: r.challengeId, masked: options.find(o => o.channel === channel)?.masked ?? challenge.masked }); restart(r.resendIn); setCode(""); setSent(true);
-    if (view === "dev-code") void showDevCode(phone);
-  });
+  const sendVia = (channel: ChannelOption["channel"]) => {
+    setPendingChannel(channel); setLastChannel(channel);
+    return run(async () => {
+      if (!challenge) return;
+      const path = view === "device" ? "device/send" : view === "signup-code" ? "signup/send" : "developer/send";
+      const r = await v2(path, { challengeId: challenge.id, channel });
+      setChallenge({ id: r.challengeId, masked: options.find(o => o.channel === channel)?.masked ?? challenge.masked }); restart(r.resendIn); setCode(""); setSent(true);
+      if (view === "dev-code") void showDevCode(phone);
+    }).finally(() => setPendingChannel(null));
+  };
+  // Resend uses the channel the citizen picked for this code; "Change channel" goes back to the chooser.
+  const resendCode = () => {
+    if (view === "forgot-code" || view === "phone-verify") void resend();
+    else if (lastChannel) void sendVia(lastChannel);
+  };
   const verifyCode = (value = code) => run(async () => {
     if (!challenge || value.length !== 6) return;
     if (view === "forgot-code") {
@@ -189,6 +211,11 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
       // Creates the account (Postgres) and signs in; the user then lands in the real app.
       await authV2("developer/verify", { challengeId: challenge.id, code: value, rememberMe: true });
       onDone();
+    } else if (view === "signup-code") {
+      // Creates the account only now, after the code is proven. Then the session is set.
+      await v2("signup/verify", { challengeId: challenge.id, code: value, rememberMe: remember });
+      setSuccess(true); await refreshUser();
+      window.setTimeout(onDone, 1100);
     } else if (view === "phone-verify") {
       await v2("phone/verify", { challengeId: challenge.id, code: value });
       setNotice(copy.phoneVerified); await refreshUser(); onDone();
@@ -213,19 +240,20 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
   const row = (children: ReactNode) => <div className="space-y-1">{children}</div>;
   const title = ({
     "login-choice": copy.loginTitle, "login-email": copy.loginTitle, "signup-choice": copy.signupTitle, "signup-email": copy.signupTitle,
-    device: copy.deviceTitle, "dev-signup": dev.title, "dev-code": copy.codeTitle, "forgot-phone": copy.forgotTitle, "forgot-code": copy.codeTitle, "forgot-new": copy.newPasswordTitle, "phone-verify": copy.phoneStepTitle,
+    device: copy.deviceTitle, "signup-code": reg.codeTitle, "dev-signup": dev.title, "dev-code": copy.codeTitle, "forgot-phone": copy.forgotTitle, "forgot-code": copy.codeTitle, "forgot-new": copy.newPasswordTitle, "phone-verify": copy.phoneStepTitle,
   })[view];
   const showBack = view !== initial && view !== "login-choice" && view !== "signup-choice";
-  const backTo: AuthView = view === "signup-email" || view === "dev-signup" ? "signup-choice" : view === "dev-code" ? "dev-signup" : view === "forgot-code" || view === "forgot-new" ? "forgot-phone" : "login-choice";
+  const backTo: AuthView = view === "signup-email" || view === "dev-signup" ? "signup-choice" : view === "signup-code" ? "signup-email" : view === "dev-code" ? "dev-signup" : view === "forgot-code" || view === "forgot-new" ? "forgot-phone" : "login-choice";
 
-  const chooser = (intro: string) => (
+  const chooser = () => (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{intro}</p>
-      {options.map(o => (
-        <Button key={o.channel} type="button" variant="outline" className="h-11 w-full" disabled={busy} onClick={() => void sendVia(o.channel)} data-testid={`channel-${o.channel}`}>
-          {CHANNEL_LABEL[o.channel]} · <span dir="ltr">{o.masked}</span>
-        </Button>
-      ))}
+      <div className="space-y-1">
+        <p className="text-base font-semibold">{reg.chooseChannelTitle}</p>
+        <p className="text-sm text-muted-foreground">{reg.chooseChannelBody}</p>
+      </div>
+      {options.length === 0
+        ? <p role="alert" className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{reg.noChannels}</p>
+        : <ChannelButtons options={options} labels={{ sms: reg.channelSms, whatsapp: reg.channelWhatsApp, email: reg.channelEmail }} busyChannel={pendingChannel} disabled={busy} onPick={c => void sendVia(c)} />}
     </div>
   );
 
@@ -234,10 +262,19 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
       <p className="text-sm text-muted-foreground">{intro}</p>
       <OtpInput value={code} onChange={setCode} onComplete={v => void verifyCode(v)} />
       {devCode && <p className="rounded-md bg-muted p-2 text-center text-sm" data-testid="dev-code"><span>{copy.devCode}: </span><b dir="ltr" className="tracking-widest">{devCode}</b></p>}
-      <Button type="button" className="h-11 w-full" disabled={busy || code.length !== 6} onClick={() => void verifyCode()}>{busy ? copy.working : copy.verify}</Button>
-      <Button type="button" variant="ghost" className="w-full" disabled={left > 0 || busy} onClick={() => (view === "device" || view === "dev-code") ? (setSent(false), setCode("")) : void resend()} data-testid="resend">
-        {left > 0 ? copy.resendIn(left) : copy.resend}
+      <Button type="button" className="h-12 w-full gap-2 rounded-2xl" disabled={busy || code.length !== 6} onClick={() => void verifyCode()} data-testid="verify-code">
+        {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}{busy ? reg.verifying : copy.verify}
       </Button>
+      <div className="flex items-center justify-between gap-2">
+        <Button type="button" variant="ghost" size="sm" className="gap-1.5 rounded-full" disabled={left > 0 || busy} onClick={resendCode} data-testid="resend">
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />{left > 0 ? reg.resendIn(left) : reg.resend}
+        </Button>
+        {options.length > 0 && (
+          <Button type="button" variant="ghost" size="sm" className="gap-1.5 rounded-full" disabled={busy} onClick={() => { setSent(false); setCode(""); }} data-testid="change-channel">
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />{reg.changeChannel}
+          </Button>
+        )}
+      </div>
       {view === "phone-verify" && <Button type="button" variant="ghost" className="w-full" data-testid="skip-phone" onClick={() => void refreshUser().then(onDone)}>{copy.skip}</Button>}
     </div>
   );
@@ -273,7 +310,7 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
       {view === "login-email" && (
         <form onSubmit={submitLogin} className="space-y-3">
           {row(<><Label htmlFor="auth-identifier">{copy.emailOrUsername}</Label><Input id="auth-identifier" dir="ltr" autoComplete="username" required value={identifier} onChange={e => setIdentifier(e.target.value)} className="text-left" /></>)}
-          {row(<><Label htmlFor="auth-password">{copy.password}</Label><Input id="auth-password" dir="ltr" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} className="text-left" /></>)}
+          <PasswordField id="auth-password" label={copy.password} value={password} onChange={setPassword} autoComplete="current-password" required showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />{copy.remember}</label>
           <Button type="submit" className="h-11 w-full" disabled={busy}>{busy ? copy.working : copy.submitLogin}</Button>
           <Button type="button" variant="link" className="w-full" onClick={() => go("forgot-phone")}>{copy.forgot}</Button>
@@ -283,12 +320,23 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
       {view === "signup-email" && (
         <form onSubmit={submitSignup} className="space-y-3">
           {row(<><Label htmlFor="auth-name">{copy.name}</Label><Input id="auth-name" autoComplete="name" required value={name} onChange={e => setName(e.target.value)} /></>)}
-          {row(<><Label htmlFor="auth-email">{copy.email}</Label><Input id="auth-email" dir="ltr" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} className="text-left" /></>)}
-          {row(<><Label htmlFor="auth-new-password">{copy.password}</Label><Input id="auth-new-password" dir="ltr" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} className="text-left" /></>)}
+          <div className="space-y-1">
+            <Label htmlFor="auth-email">{copy.email}</Label>
+            <Input id="auth-email" dir="ltr" type="email" autoComplete="email" required value={email} aria-invalid={emailErr} aria-describedby={emailErr ? "auth-email-error" : undefined} data-testid="auth-email-input"
+              onChange={e => { setEmail(e.target.value); if (emailErr && EMAIL_SHAPE.test(e.target.value.trim())) setEmailErr(false); }}
+              onBlur={() => setEmailErr(email.trim() !== "" && !EMAIL_SHAPE.test(email.trim()))} className="text-left" />
+            {emailErr && <p id="auth-email-error" role="alert" data-testid="email-error" className="text-xs text-destructive">{reg.emailInvalid}</p>}
+          </div>
+          <PasswordField id="auth-new-password" label={copy.password} value={password} onChange={setPassword} autoComplete="new-password" required minLength={8} showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
+          <StrengthMeter score={passwordStrength(password)} labels={reg.strength} label={reg.strengthLabel} />
+          <PasswordField id="auth-confirm-password" label={reg.confirmPassword} value={confirm} onChange={setConfirm} autoComplete="new-password" required minLength={8} showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
           <PhoneField id="auth-phone" dial={dial} local={local} onDial={setDial} onLocal={setLocal} label={copy.phone} codeLabel={copy.countryCode} />
           <p className="text-xs text-muted-foreground">{copy.phoneOptionalHint}</p>
           <DobSelect value={dob} onChange={setDob} label={copy.birthDate} />
-          <Button type="submit" className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600" disabled={busy}>{busy ? copy.working : copy.submitSignup}</Button>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />{reg.rememberMe}</label>
+          <Button type="submit" className="h-12 w-full gap-2 rounded-2xl bg-orange-500 text-white hover:bg-orange-600" disabled={busy}>
+            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}{busy ? reg.sending : reg.signupCreate}
+          </Button>
         </form>
       )}
 
@@ -305,19 +353,25 @@ export function AuthFlow({ initial = "login-choice", onDone, onClose }: { initia
           <p className="text-sm text-muted-foreground">{dev.intro}</p>
           {row(<><Label htmlFor="dev-email">{copy.email}</Label><Input id="dev-email" dir="ltr" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} className="text-left" /></>)}
           {row(<><Label htmlFor="dev-username">{dev.username}</Label><Input id="dev-username" dir="ltr" autoComplete="username" required minLength={3} maxLength={20} value={username} onChange={e => setUsername(e.target.value)} className="text-left" /></>)}
-          {row(<><Label htmlFor="dev-password">{copy.password}</Label><Input id="dev-password" dir="ltr" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} className="text-left" /></>)}
+          <PasswordField id="dev-password" label={copy.password} value={password} onChange={setPassword} autoComplete="new-password" required minLength={8} showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
           <PhoneField id="dev-phone" dial={dial} local={local} onDial={setDial} onLocal={setLocal} label={copy.phone} codeLabel={copy.countryCode} required />
           <Button type="submit" className="h-11 w-full bg-orange-500 text-white hover:bg-orange-600" disabled={busy || !phone}>{busy ? copy.working : dev.submit}</Button>
         </form>
       )}
-      {view === "dev-code" && (sent ? codeBlock(dev.codeIntro(challenge?.masked ?? "")) : chooser("Choose how to receive your code."))}
+      {view === "dev-code" && (sent ? codeBlock(dev.codeIntro(challenge?.masked ?? "")) : chooser())}
       {view === "forgot-code" && codeBlock(copy.codeSentTo(challenge?.masked ?? ""))}
-      {view === "device" && (sent ? codeBlock(copy.deviceBody(challenge?.masked ?? "")) : chooser("Choose how to receive your code."))}
+      {view === "device" && (sent ? codeBlock(copy.deviceBody(challenge?.masked ?? "")) : chooser())}
       {view === "phone-verify" && codeBlock(copy.phoneStepBody)}
+      {view === "signup-code" && (success ? (
+        <div className="flex flex-col items-center gap-3 py-6 text-center" data-testid="signup-success" role="status">
+          <span className="flex h-16 w-16 animate-bounce items-center justify-center rounded-full bg-emerald-500 text-white"><Check className="h-8 w-8" aria-hidden="true" /></span>
+          <p className="text-base font-semibold">{reg.signupSuccess}</p>
+        </div>
+      ) : sent ? codeBlock(reg.codeBody(challenge?.masked ?? "")) : chooser())}
 
       {view === "forgot-new" && (
         <form onSubmit={saveNewPassword} className="space-y-3">
-          {row(<><Label htmlFor="auth-reset-password">{copy.newPassword}</Label><Input id="auth-reset-password" dir="ltr" type="password" autoComplete="new-password" minLength={8} required value={newPassword} onChange={e => setNewPassword(e.target.value)} className="text-left" /></>)}
+          <PasswordField id="auth-reset-password" label={copy.newPassword} value={newPassword} onChange={setNewPassword} autoComplete="new-password" required minLength={8} showLabel={reg.showPassword} hideLabel={reg.hidePassword} />
           <Button type="submit" className="h-11 w-full" disabled={busy}>{busy ? copy.working : copy.savePassword}</Button>
         </form>
       )}

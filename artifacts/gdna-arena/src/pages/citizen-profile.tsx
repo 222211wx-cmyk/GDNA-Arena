@@ -25,6 +25,7 @@ import GdnaAssistButton from "@/components/gdna/GdnaAssistButton";
 import { openUnifiedMessenger } from "@/components/messenger/UnifiedMessenger";
 import { CitizenProfileDrawer } from "@/components/citizen/CitizenProfileDrawer";
 import { useAuth } from "@/contexts/AuthContext";
+import { EnableDeveloperCard } from "@/components/auth/enable-developer-card";
 import { useCaptureBirthDate } from "@/hooks/use-citizen-eligibility";
 import { citizenMediaSrc } from "@/lib/citizen";
 import {
@@ -454,6 +455,8 @@ function OwnProfile({ profile }: { profile: CitizenProfile }) {
           </CardContent>
         </Card>
       )}
+
+      <EnableDeveloperCard />
 
       {/* Consent */}
       <Card className="border bg-card">

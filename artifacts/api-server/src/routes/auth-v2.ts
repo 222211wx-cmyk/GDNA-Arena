@@ -1,3 +1,4 @@
+import { OTP_CHANNELS, channelEnabled } from "../lib/otp-channels";
 import { Router, type IRouter, type Request, type Response } from "express";
 import bcrypt from "bcrypt";
 import { randomBytes } from "node:crypto";
@@ -101,62 +102,97 @@ router.get(`${BASE}/config`, (_req, res) => {
     sms: getSmsProvider() !== null,
     smsProvider: getSmsProvider()?.name ?? null,
     smsReal: smsIsReal(),
+    // Only channels that can really deliver. WhatsApp and Email appear once their keys are set.
+    channels: OTP_CHANNELS.filter(channelEnabled),
   });
 });
 
-// ── Sign up with email ───────────────────────────────────────
+// ── Sign up with email: the account is created only after a code is verified ──
+// The user picks SMS, WhatsApp or Email on every send. Nothing is remembered.
 router.post(`${BASE}/signup`, async (req, res) => {
   try {
+    await developerSchemaReady();
     const name = str(req.body?.name, 40);
     const email = str(req.body?.email, 254).toLowerCase();
     const password = req.body?.password;
     const phoneRaw = str(req.body?.phone, 30);
     const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
     const birthDate = normalizeBirthDate(req.body?.birthDate);
-    const rememberMe = req.body?.rememberMe !== false;
     if (name.length < 2) throw new AuthError(400, "NAME_INVALID");
     if (!EMAIL_RE.test(email)) throw new AuthError(400, "EMAIL_INVALID");
     if (!passwordOk(password)) throw new AuthError(400, "PASSWORD_WEAK");
     if (phoneRaw && !phone) throw new AuthError(400, "PHONE_INVALID");
     if (!birthDate) throw new AuthError(400, "BIRTHDATE_INVALID");
     if (hasBlockedKeyword(name)) throw new AuthError(400, "NAME_INVALID");
+    if (!channelOptions({ phone, email }).length) throw new AuthError(503, "CHANNEL_UNAVAILABLE");
 
     const taken = await pool.query(
       `SELECT 1 FROM users WHERE LOWER(email)=$1 UNION SELECT 1 FROM auth_profiles WHERE LOWER(email)=$1`, [email]);
     if (taken.rowCount) throw new AuthError(409, "EMAIL_TAKEN");
 
-    const username = await uniqueUsername(name);
     const passwordHash = await bcrypt.hash(password, 10);
+    const challengeId = await openChallenge("signup", phone ?? email, null);
+    await pool.query(`DELETE FROM auth_pending_citizens WHERE LOWER(email)=$1 OR created_at < now() - interval '${PENDING_TTL}'`, [email]);
+    await pool.query(
+      `INSERT INTO auth_pending_citizens (challenge_id, email, display_name, password_hash, phone_e164, birth_date) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [challengeId, email, name, passwordHash, phone, birthDate]);
+    res.json({ challengeId, channels: channelOptions({ phone, email }) });
+  } catch (e) { fail(req, res, e); }
+});
+
+async function pendingCitizen(challengeId: string) {
+  const r = await pool.query(
+    `SELECT * FROM auth_pending_citizens WHERE challenge_id=$1 AND created_at > now() - interval '${PENDING_TTL}'`, [challengeId]);
+  if (!r.rows[0]) throw new AuthError(400, "OTP_EXPIRED");
+  return r.rows[0];
+}
+
+const signupSend = async (req: Request, res: Response) => {
+  try {
+    await developerSchemaReady();
+    const challengeId = str(req.body?.challengeId, 64);
+    const p = await pendingCitizen(challengeId);
+    const { channel, destination } = resolveChannel(req.body?.channel, { phone: p.phone_e164, email: p.email });
+    const c = await sendChallengeCode(challengeId, "signup", channel, destination);
+    res.json({ challengeId, channel, resendIn: c.resendIn });
+  } catch (e) { fail(req, res, e); }
+};
+router.post(`${BASE}/signup/send`, signupSend);
+router.post(`${BASE}/signup/resend`, signupSend);
+
+router.post(`${BASE}/signup/verify`, async (req, res) => {
+  try {
+    await developerSchemaReady();
+    const challengeId = str(req.body?.challengeId, 64);
+    const rememberMe = req.body?.rememberMe !== false;
+    const p = await pendingCitizen(challengeId);
+    const ch = await pool.query(`SELECT channel FROM auth_otps WHERE id=$1`, [challengeId]);
+    const channel: string | null = ch.rows[0]?.channel ?? null;
+    await checkOtp(challengeId, req.body?.code, "signup");
+    // The phone is verified only when the code arrived on it (SMS or WhatsApp).
+    const phoneVerified = !!p.phone_e164 && channel !== "email";
+    const username = await uniqueUsername(p.display_name);
+
     let userId: number;
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       const u = await client.query(
         `INSERT INTO users (username, email, password_hash, birth_date) VALUES ($1,$2,$3,$4) RETURNING id`,
-        [username, email, passwordHash, birthDate]);
+        [username, p.email, p.password_hash, p.birth_date]);
       userId = u.rows[0].id;
       await client.query(
-        `INSERT INTO auth_profiles (user_id, email, display_name, phone_e164, phone_verified) VALUES ($1,$2,$3,$4,false)`,
-        [userId, email, name, phone]);
+        `INSERT INTO auth_profiles (user_id, email, display_name, phone_e164, phone_verified) VALUES ($1,$2,$3,$4,$5)`,
+        [userId, p.email, p.display_name, p.phone_e164, phoneVerified]);
+      await client.query(`DELETE FROM auth_pending_citizens WHERE challenge_id=$1`, [challengeId]);
       await client.query("COMMIT");
     } catch (e: any) {
       await client.query("ROLLBACK").catch(() => {});
-      if (e?.code === "23505") throw new AuthError(409, "EMAIL_TAKEN");
+      if (e?.code === "23505") throw new AuthError(409, /username/i.test(String(e.constraint ?? e.detail)) ? "USERNAME_TAKEN" : "EMAIL_TAKEN");
       throw e;
     } finally { client.release(); }
 
-    // The phone is only trusted for recovery after its owner proves it with a code.
-    let phoneChallenge: { id: string; resendIn: number } | null = null;
-    if (phone && getSmsProvider()) {
-      phoneChallenge = await issueOtp("phone-verify", phone, userId).catch(() => null);
-    }
-    const row = await loadUser(userId);
-    await startSession(req, res, userId, row.credentialEpoch, rememberMe);
-    setDeviceCookie(res, await trustDevice(userId, readCookie(req, DEVICE_COOKIE), deviceLabel(req)));
-    res.status(201).json({
-      status: "ok", user: await serializeWithProfile(row.user),
-      phoneChallengeId: phoneChallenge?.id ?? null,
-    });
+    await respondLoggedIn(req, res, userId, rememberMe, 201);
   } catch (e) { fail(req, res, e); }
 });
 

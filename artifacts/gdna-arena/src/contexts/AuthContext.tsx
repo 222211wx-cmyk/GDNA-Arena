@@ -68,7 +68,7 @@ interface AuthContextType {
   recoverAccess: (idToken: string, returnTo: string) => Promise<void>;
   recoveryAccessPending: boolean;
   /** POST to /api/auth/v2/<path>; a finished sign-in updates the session user. */
-  authV2: (path: "login" | "signup" | "google" | "device/verify" | "developer/verify", body: Record<string, unknown>) => Promise<AuthV2Result>;
+  authV2: (path: "login" | "signup" | "signup/verify" | "google" | "device/verify" | "developer/verify", body: Record<string, unknown>) => Promise<AuthV2Result>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -315,7 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = (username: string, password: string, birthDate: string) =>
     mutate(() => performRegister(username, password, birthDate));
   const logout = () => mutate(performLogout);
-  const authV2 = (path: "login" | "signup" | "google" | "device/verify" | "developer/verify", body: Record<string, unknown>) => {
+  const authV2 = (path: "login" | "signup" | "signup/verify" | "google" | "device/verify" | "developer/verify", body: Record<string, unknown>) => {
     let result!: AuthV2Result;
     return mutate(async () => {
       recoveryDestinationRef.current = null;

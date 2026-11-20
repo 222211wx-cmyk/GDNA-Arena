@@ -53,6 +53,16 @@ export const authSchemaReady: Promise<void> = pool.query(`
   );
   CREATE INDEX IF NOT EXISTS auth_otps_phone_idx ON auth_otps (phone_e164, purpose, created_at);
   ALTER TABLE auth_otps ADD COLUMN IF NOT EXISTS channel text, ADD COLUMN IF NOT EXISTS destination text, ADD COLUMN IF NOT EXISTS sent_at timestamptz;
+  CREATE TABLE IF NOT EXISTS auth_pending_citizens (
+    challenge_id  text PRIMARY KEY,
+    email         text NOT NULL,
+    display_name  text NOT NULL,
+    password_hash text NOT NULL,
+    phone_e164    text,
+    birth_date    text NOT NULL,
+    created_at    timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS auth_pending_citizens_email_idx ON auth_pending_citizens (LOWER(email));
 `).then(() => undefined);
 
 const secret = () => process.env.SESSION_SECRET ?? "gdna-arena-dev-secret";
