@@ -86,6 +86,23 @@ async function acquireFeedClient(signal?: AbortSignal) {
 
 /** Additive and idempotent: safe to run on every start, including production. */
 const CLIP_LIBRARY_SQL = `
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS code TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS original_name TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS upload_object_name TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS processing_status TEXT NOT NULL DEFAULT 'ready';
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS processing_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS processing_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS processing_output_object TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS processing_secondary_object TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS secondary_object_name TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS optimization_pending BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS gross_revenue NUMERIC(14,4) NOT NULL DEFAULT 0;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS platform_revenue NUMERIC(14,4) NOT NULL DEFAULT 0;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS is_original_footage BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+      UPDATE clips SET code = 'HELX-' || lpad(id::text, 6, '0') WHERE code IS NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS clips_code_unique ON clips (code);
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS category VARCHAR(1) NOT NULL DEFAULT 'B' CHECK (category IN ('A','B','C','D'));
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS matricule VARCHAR(30);
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS media_type VARCHAR(10);
