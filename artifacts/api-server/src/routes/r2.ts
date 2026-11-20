@@ -29,6 +29,39 @@ import { logger } from "../lib/logger.js";
 import { publishClip } from "../lib/clip-publish.js";
 import { checkContent } from "../lib/check-content.js";
 import { ensureGuestSession } from "../lib/guest-session.js";
+import { fsFile, fsReference, fsRoot, uploadPartsDir } from "../lib/fs-storage.js";
+import { promises as fsp, createReadStream as fsRead, createWriteStream as fsWrite } from "node:fs";
+import { pipeline } from "node:stream/promises";
+import path from "node:path";
+
+const isFsObject = (name: string) => name.startsWith("fs:");
+async function fsParts(sessionId: string) {
+  const dir = uploadPartsDir(sessionId);
+  const names = await fsp.readdir(dir).catch(() => [] as string[]);
+  const parts: { partNumber: number; etag: string; size: number }[] = [];
+  for (const name of names) {
+    const match = /^(\d+)\.part$/.exec(name);
+    if (match) parts.push({ partNumber: Number(match[1]), etag: "fs", size: (await fsp.stat(path.join(dir, name))).size });
+  }
+  return parts.sort((a, b) => a.partNumber - b.partNumber);
+}
+/** Join verified parts into the final object (atomic rename), then drop the parts. */
+async function assembleFs(row: { id: string; object_name: string; size_bytes: string }, chunkBytes: number) {
+  const target = fsFile(row.object_name);
+  const size = Number(row.size_bytes);
+  const existing = await target.getMetadata().then(([m]) => Number(m.size), () => -1);
+  if (existing === size) return;
+  const count = Math.ceil(size / chunkBytes);
+  const parts = await fsParts(row.id);
+  const ok = parts.length === count && parts.every((p, i) =>
+    p.partNumber === i + 1 && p.size === (i === count - 1 ? size - i * chunkBytes : chunkBytes));
+  if (!ok) throw new ClipUploadError(409, "Stored parts do not match the authorized upload");
+  const out = target.createWriteStream();
+  const dir = uploadPartsDir(row.id);
+  await pipeline((async function* () {
+    for (const p of parts) for await (const chunk of fsRead(path.join(dir, `${p.partNumber}.part`))) yield chunk;
+  })(), out);
+}
 
 const router: IRouter = Router();
 router.use(["/upload/presign", "/r2/presign", "/clips/create", "/upload/complete", "/upload/chunk"], ensureGuestSession);
@@ -120,7 +153,7 @@ async function uploadRow(id: string, userId: number): Promise<UploadRow | null> 
   return rows[0] ?? null;
 }
 
-type R2Config = NonNullable<ReturnType<typeof r2Config>>;
+type R2Config = NonNullable<ReturnType<typeof r2Config>> | null;
 
 async function completeUpload(req: Request, res: Response, userId: number, config: R2Config): Promise<void> {
   if (["objectUrl", "publicUrl", "url"].some(field =>
@@ -167,7 +200,9 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     }
     const chunkBytes = partBytes(Number(current.size_bytes));
     const expectedParts = Math.ceil(Number(current.size_bytes) / chunkBytes);
-    const listed = await listAllParts(config.bucket,key,current.multipart_upload_id).catch(error => {
+    const fsMode = isFsObject(current.object_name);
+    if (!fsMode && !config) { res.status(503).json({ error: "Storage is not configured" }); return; }
+    const listed = fsMode ? null : await listAllParts(config!.bucket,key,current.multipart_upload_id).catch(error => {
       if ((error as { name?: string }).name === "NoSuchUpload" && current.state === "completing") return null;
       throw error;
     });
@@ -189,9 +224,10 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
       `UPDATE r2_clip_uploads SET state='completing',updated_at=NOW() WHERE id=$1`, [current.id],
     );
     try {
-      if (listed)
+      if (fsMode) await assembleFs(current, chunkBytes);
+      else if (listed)
       await r2Client().send(new CompleteMultipartUploadCommand({
-        Bucket: config.bucket,
+        Bucket: config!.bucket,
         Key: key,
         UploadId: current.multipart_upload_id,
         MultipartUpload: { Parts: parts as { PartNumber: number; ETag: string }[] },
@@ -201,12 +237,17 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
       // A lost Complete acknowledgement consumes the multipart upload. HEAD
       // below is the authoritative idempotence check before publication.
     }
-    const head = await r2Client().send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+    if (fsMode) {
+      const [meta] = await fsFile(current.object_name).getMetadata();
+      if (Number(meta.size) !== Number(current.size_bytes)) throw new ClipUploadError(409, "Completed object failed size verification");
+    } else {
+    const head = await r2Client().send(new HeadObjectCommand({ Bucket: config!.bucket, Key: key }));
     if (Number(head.ContentLength) !== Number(current.size_bytes) ||
         head.ContentType !== current.content_type ||
         head.Metadata?.owner !== String(userId) ||
         head.Metadata?.session !== current.id) {
       throw new ClipUploadError(409, "Completed R2 object failed ownership or size verification");
+    }
     }
     let clip;
     try {
@@ -231,6 +272,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
       }
       throw error;
     }
+    if (fsMode) await fsp.rm(uploadPartsDir(current.id), { recursive: true, force: true }).catch(() => {});
     res.json({ ...finalClipReceipt(clip), status: "accepté", reason: "" });
   } finally {
     if (locked) await client.query(
@@ -267,7 +309,7 @@ router.put("/upload/chunk/:sessionId/:partNumber", async (req, res) => {
   const userId = auth(req, res);
   if (!userId) return;
   const config = r2Config();
-  if (!config) { res.status(503).json({ error: "Storage is unavailable" }); return; }
+  if (!config && !fsRoot()) { res.status(503).json({ error: "Storage is unavailable" }); return; }
   const id = String(req.params.sessionId);
   if (!UUID.test(id)) { res.status(404).end(); return; }
   const client = await pool.connect();
@@ -277,7 +319,8 @@ router.put("/upload/chunk/:sessionId/:partNumber", async (req, res) => {
       "SELECT * FROM r2_clip_uploads WHERE id=$1 AND user_id=$2", [id, userId],
     );
     const row = loaded.rows[0];
-    if (!row || row.state !== "active" || row.multipart_upload_id === "direct-put") {
+    if (!row || row.state !== "active" || row.multipart_upload_id === "direct-put" ||
+        (!isFsObject(row.object_name) && !config)) {
       res.status(409).json({ error: "Upload session is not active" }); return;
     }
     const number = integer(req.params.partNumber);
@@ -292,9 +335,23 @@ router.put("/upload/chunk/:sessionId/:partNumber", async (req, res) => {
     const controller = new AbortController();
     const abort = () => controller.abort();
     req.once("aborted", abort);
+    if (isFsObject(row.object_name)) {
+      // Write to a temp name, rename when the full chunk arrived: a dropped
+      // connection never leaves a partial part that looks complete.
+      const dir = uploadPartsDir(id);
+      await fsp.mkdir(dir, { recursive: true });
+      const tmp = path.join(dir, `${number}.${randomUUID()}.tmp`);
+      try {
+        await pipeline(req, fsWrite(tmp));
+        if ((await fsp.stat(tmp)).size !== expected) throw new ClipUploadError(400, "Upload interrupted");
+        await fsp.rename(tmp, path.join(dir, `${number}.part`));
+      } catch (error) { await fsp.rm(tmp, { force: true }); throw error; }
+      res.json({ partNumber: number, etag: "fs", size: expected });
+      return;
+    }
     try {
       const result = await r2Client().send(new UploadPartCommand({
-        Bucket: config.bucket, Key: row.object_name.slice(3),
+        Bucket: config!.bucket, Key: row.object_name.slice(3),
         UploadId: row.multipart_upload_id, PartNumber: number,
         ContentLength: expected, Body: req,
       }), { abortSignal: controller.signal });
@@ -311,7 +368,7 @@ router.post(["/clips/create","/upload/complete"], async (req, res): Promise<void
   const userId = auth(req, res);
   if (!userId) return;
   const config = r2Config();
-  if (!config) { res.status(503).json({ error: "R2 storage is not configured" }); return; }
+  if (!config && !fsRoot()) { res.status(503).json({ error: "Storage is not configured" }); return; }
   try {
     await completeUpload(req, res, userId, config);
   } catch (error) {
@@ -323,7 +380,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
   const userId = auth(req, res);
   if (!userId) return;
   const config = r2Config();
-  if (!config) { res.status(503).json({ error: "R2 storage is not configured" }); return; }
+  if (!config && !fsRoot()) { res.status(503).json({ error: "Storage is not configured" }); return; }
   const action = req.body?.action;
   res.set("Cache-Control", "no-store");
   try {
@@ -366,26 +423,27 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
       }
       const id = randomUUID();
       const key = `clips/original/${userId}/${id}${clipDownloadExtension(contentType)}`;
-      const created = await r2Client().send(new CreateMultipartUploadCommand({
+      const created = config ? await r2Client().send(new CreateMultipartUploadCommand({
         Bucket: config.bucket,
         Key: key,
         ContentType: contentType,
         CacheControl: "private, max-age=3600",
         Metadata: { owner: String(userId), session: id },
-      }));
+      })) : { UploadId: "fs" };
       if (!created.UploadId) throw new Error("R2 did not return a multipart upload ID");
+      const objectRef = config ? r2Reference(key) : fsReference(key);
       try {
         await pool.query(
           `INSERT INTO r2_clip_uploads
               (id,user_id,request_id,object_name,multipart_upload_id,original_name,display_title,
                content_type,size_bytes,duration_sec,expires_at,category)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'infinity',$11)`,
-          [id, userId, requestId, r2Reference(key), created.UploadId, originalName,
+          [id, userId, requestId, objectRef, created.UploadId, originalName,
              displayTitle, contentType, size, duration, category],
         );
       } catch (error) {
-        await r2Client().send(new AbortMultipartUploadCommand({
-          Bucket: config.bucket, Key: key, UploadId: created.UploadId,
+        if (config) await r2Client().send(new AbortMultipartUploadCommand({
+          Bucket: config.bucket, Key: key, UploadId: created.UploadId!,
         })).catch(() => {});
         if ((error as { code?: string }).code === "23505") {
           const raced = await pool.query<UploadRow>(
@@ -461,6 +519,8 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
       if (row.state === "aborted") { res.json({ state: "aborted", parts: [] }); return; }
       const accepted = await status(row.id,userId);
       if (accepted) { res.json(accepted); return; }
+      if (isFsObject(row.object_name)) { res.json({ state: row.state, parts: await fsParts(row.id) }); return; }
+      if (!config) { res.status(503).json({ error: "Storage is not configured" }); return; }
       const listed = await listAllParts(config.bucket,key,row.multipart_upload_id).catch(error => {
         if ((error as { name?: string }).name === "NoSuchUpload") return null;
         throw error;
@@ -484,8 +544,9 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
         await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${row.id}`]);
         const current = await uploadRow(row.id, userId);
         if (!current || !["active","completing"].includes(current.state) || await status(row.id,userId)) { res.status(409).json({ error: "Upload is already accepted" }); return; }
-        await r2Client().send(new AbortMultipartUploadCommand({
-          Bucket: config.bucket, Key: key, UploadId: row.multipart_upload_id,
+        if (isFsObject(row.object_name)) await fsp.rm(uploadPartsDir(row.id), { recursive: true, force: true });
+        else await r2Client().send(new AbortMultipartUploadCommand({
+          Bucket: config!.bucket, Key: key, UploadId: row.multipart_upload_id,
         })).catch(error => {
           if ((error as { name?: string }).name !== "NoSuchUpload") throw error;
         });

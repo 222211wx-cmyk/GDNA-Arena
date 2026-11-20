@@ -26,7 +26,7 @@ export interface PlaybackClip {
 /** Public clips only; the lookup dependency must exclude frozen/deleted rows. */
 export function createClipPlaybackRouter(deps: {
   find(code: string, viewerId: number | null): Promise<PlaybackClip | null>;
-  sign(filename: string): Promise<{ url: string; urlExpiresAt: string }>;
+  sign(filename: string, request?: typeof fetch, clipId?: number): Promise<{ url: string; urlExpiresAt: string }>;
   log(error: unknown): void;
 }): IRouter {
   const router = Router();
@@ -39,7 +39,7 @@ export function createClipPlaybackRouter(deps: {
       const row = await deps.find(code, viewerId);
       if (!row) { res.status(404).json({ error: "Clip not found" }); return; }
       const ready = row.processing_status === "ready" || row.processing_status === "unchanged";
-      const playback = ready ? await deps.sign(row.object_name) : null;
+      const playback = ready ? await deps.sign(row.object_name, undefined, row.id) : null;
       res.json({
         clip: {
           id: row.id, code: row.code, name: row.title, originalName: row.original_name,

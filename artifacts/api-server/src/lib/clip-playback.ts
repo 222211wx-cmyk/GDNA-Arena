@@ -1,5 +1,6 @@
 import { clipFile } from "./clip-storage.js";
 import { isR2Reference, signR2Get } from "./r2-storage.js";
+import { isFsReference } from "./fs-storage.js";
 
 // Long enough for a 24-hour recording. This is an expiring public-playback
 // capability, not a CDN configuration or a value to persist in the database.
@@ -9,7 +10,13 @@ export const CLIP_PLAYBACK_TTL_MS = 26 * 60 * 60 * 1000;
 export async function signClipPlayback(
   filename: string,
   request: typeof fetch = fetch,
+  clipId?: number,
 ): Promise<{ url: string; urlExpiresAt: string }> {
+  if (isFsReference(filename)) {
+    if (!clipId) throw new Error("Clip id required for local playback");
+    // Served by GET /api/clips/stream/:id (byte ranges, no expiry).
+    return { url: `/api/clips/stream/${clipId}`, urlExpiresAt: new Date(Date.now() + CLIP_PLAYBACK_TTL_MS).toISOString() };
+  }
   if (isR2Reference(filename)) {
     const seconds = Math.floor(CLIP_PLAYBACK_TTL_MS / 1000);
     return {

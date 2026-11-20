@@ -1,4 +1,6 @@
 FROM node:22-slim
+# ffprobe/ffmpeg verify duration and make thumbnails for every uploaded clip.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@10
 WORKDIR /app
 COPY . .
