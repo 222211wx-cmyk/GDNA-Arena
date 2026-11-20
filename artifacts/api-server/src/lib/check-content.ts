@@ -13,12 +13,12 @@ const TRIVIAL_TITLES = new Set([
   "asdf", "hello", "salut", "تجربة", "فيديو", "كليب", "تست",
 ]);
 
-export function checkContent(input: { title: string; durationSec: number | null }): ContentCheck {
+export function checkContent(input: { title: string; durationSec: number | null; mediaType?: string }): ContentCheck {
   const title = input.title.trim();
   const letters = [...title].filter(c => /[\p{L}]/u.test(c));
   const refuse = (reason: string): ContentCheck => ({ status: "refusé", reason });
 
-  if (input.durationSec !== null && input.durationSec < MIN_CONTENT_SECONDS) {
+  if (input.mediaType !== "image" && input.durationSec !== null && input.durationSec < MIN_CONTENT_SECONDS) {
     return refuse(`Trop court — ${MIN_CONTENT_SECONDS} secondes minimum / قصير بزاف، 30 ثانية أو أكثر`);
   }
   if (letters.length < 3 || new Set(letters.map(c => c.toLowerCase())).size < 2 ||

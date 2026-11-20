@@ -267,6 +267,15 @@ export function renderClipPlayer(code: string) {
         if (clip.processingStatus === "failed") {
           throw new Error("فشل تجهيز الكليب. على صاحب الملف إعادة رفعه.");
         }
+        if (clip.url && clip.contentType.startsWith("image/")) {
+          const image = document.createElement("img");
+          image.src = clip.url;
+          image.alt = clip.name || clip.code;
+          image.style.cssText = "max-width:100%;max-height:70vh;display:block;margin:auto";
+          mediaRoot.replaceChildren(image);
+          status.textContent = "";
+          return;
+        }
         if (clip.url) {
           const media = document.createElement(clip.contentType.startsWith("audio/") ? "audio" : "video");
           media.controls = true;

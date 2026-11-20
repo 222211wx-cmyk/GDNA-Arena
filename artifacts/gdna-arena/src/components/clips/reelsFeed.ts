@@ -375,6 +375,8 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     }
 
     function loadPlayback() {
+      // Images have nothing to play: the poster is the content.
+      if (clip.media_type === "image" || clip.content_type?.startsWith("image/")) return;
       slides.forEach(other => { if (other.id !== clip.id) other.deactivate(); });
       if (playbackRequested) {
         if (video && !video.isConnected) {

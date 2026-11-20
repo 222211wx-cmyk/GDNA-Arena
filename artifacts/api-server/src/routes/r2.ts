@@ -21,6 +21,7 @@ import {
   clipDownloadExtension,
   resolveClipUploadType,
   ClipUploadError,
+  parseClipCategory,
 } from "../lib/clip-upload-protocol.js";
 import { validateClipDisplayTitle } from "../lib/clip-title.js";
 import { finalClipReceipt } from "./clips-thumbnail-response.js";
@@ -80,6 +81,7 @@ type UploadRow = {
   multipart_upload_id: string;
   original_name: string;
   display_title: string | null;
+  category?: string;
   content_type: string;
   size_bytes: string;
   duration_sec: number;
@@ -138,7 +140,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     await client.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [`r2-upload:${row.id}`]);
     locked = true;
     const currentResult = await client.query<UploadRow>(
-      `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,content_type,
+      `SELECT id,user_id,object_name,multipart_upload_id,original_name,display_title,category,content_type,
               size_bytes,duration_sec,state,clip_id,expires_at
        FROM r2_clip_uploads WHERE id=$1 AND user_id=$2`, [row.id, userId],
     );
@@ -210,13 +212,14 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     try {
       clip = await publishClip({
         userId, filename: current.object_name, title: current.original_name,
-        displayTitle: current.display_title ?? undefined, contentType: current.content_type,
+        displayTitle: current.display_title ?? undefined, category: current.category, contentType: current.content_type,
         size: Number(current.size_bytes), sha256: "", deferThumbnail: true, originalReady: true,
       }, client, async (tx, published) => {
         // Control after publishing: a refusal rolls the clip back before it is visible.
         const verdict = checkContent({
           title: current.display_title ?? current.original_name,
           durationSec: Number(published.duration_sec),
+          mediaType: published.media_type,
         });
         if (verdict.status === "refusé") throw new ContentRefused(verdict.reason);
         await tx.query("UPDATE r2_clip_uploads SET state='published',clip_id=$2,updated_at=NOW() WHERE id=$1", [current.id, published.id]);
@@ -330,6 +333,7 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
         Object.prototype.hasOwnProperty.call(req.body ?? {}, "title") ? req.body.title : undefined,
       ) ?? null;
       const size = integer(req.body?.size);
+      const category = parseClipCategory(req.body?.category);
       // Browsers cannot always read container metadata. Null is a deliberate
       // unknown hint; publishClip still probes the completed object and enforces
       // the real duration before creating a clip row.
@@ -374,10 +378,10 @@ router.post(["/r2/presign","/upload/presign"], async (req, res): Promise<void> =
         await pool.query(
           `INSERT INTO r2_clip_uploads
               (id,user_id,request_id,object_name,multipart_upload_id,original_name,display_title,
-               content_type,size_bytes,duration_sec,expires_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'infinity')`,
+               content_type,size_bytes,duration_sec,expires_at,category)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'infinity',$11)`,
           [id, userId, requestId, r2Reference(key), created.UploadId, originalName,
-             displayTitle, contentType, size, duration],
+             displayTitle, contentType, size, duration, category],
         );
       } catch (error) {
         await r2Client().send(new AbortMultipartUploadCommand({
