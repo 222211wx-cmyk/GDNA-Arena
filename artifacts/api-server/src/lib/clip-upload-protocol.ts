@@ -6,7 +6,32 @@ export const CLIP_EXT: Record<string, string> = {
   "video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
   "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac",
   "audio/ogg": ".ogg", "audio/wav": ".wav", "audio/webm": ".webm", "audio/flac": ".flac",
+  "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif",
 };
+export const CLIP_CATEGORIES = ["A", "B", "C", "D"] as const;
+export type ClipCategory = (typeof CLIP_CATEGORIES)[number];
+export type ClipMediaType = "audio" | "video" | "image";
+export function parseClipCategory(value: unknown): ClipCategory {
+  if (value === undefined || value === null || value === "") return "B";
+  const v = String(value).trim().toUpperCase();
+  if ((CLIP_CATEGORIES as readonly string[]).includes(v)) return v as ClipCategory;
+  throw new ClipUploadError(400, "category must be A, B, C or D");
+}
+export function clipMediaType(contentType: string): ClipMediaType {
+  const kind = contentType.split("/", 1)[0];
+  return kind === "image" ? "image" : kind === "audio" ? "audio" : "video";
+}
+/** Magic-byte check so a non-image cannot be published under an image type. */
+export function looksLikeImage(contentType: string, head: Buffer): boolean {
+  const ascii = (a: number, b: number) => head.subarray(a, b).toString("latin1");
+  switch (contentType) {
+    case "image/jpeg": return head[0] === 0xff && head[1] === 0xd8;
+    case "image/png": return head.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    case "image/gif": return ascii(0, 3) === "GIF";
+    case "image/webp": return ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP";
+    default: return false;
+  }
+}
 const CLIP_MIME_ALIASES: Record<string, string> = {
   "audio/mp3": "audio/mpeg", "audio/x-mp3": "audio/mpeg", "audio/mpeg3": "audio/mpeg",
   "audio/x-mpeg-3": "audio/mpeg", "audio/m4a": "audio/mp4", "audio/x-m4a": "audio/mp4",
@@ -18,7 +43,7 @@ const CLIP_MIME_ALIASES: Record<string, string> = {
 export function normalizeClipContentType(value: string): string | null {
   const raw = value.split(";", 1)[0].trim().toLowerCase();
   const normalized = Object.hasOwn(CLIP_MIME_ALIASES, raw) ? CLIP_MIME_ALIASES[raw] : raw;
-  return /^(audio|video)\/[a-z0-9.+-]+$/.test(normalized) ? normalized : null;
+  return /^(audio|video|image)\/[a-z0-9.+-]+$/.test(normalized) ? normalized : null;
 }
 const CLIP_EXTENSION_TYPES: Record<string, string> = {
   mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac",
@@ -28,6 +53,7 @@ const CLIP_EXTENSION_TYPES: Record<string, string> = {
   mkv: "video/x-matroska", avi: "video/x-msvideo", mpg: "video/mpeg", mpeg: "video/mpeg",
   ts: "video/mp2t", m2ts: "video/mp2t", wmv: "video/x-ms-wmv", flv: "video/x-flv",
   wma: "audio/x-ms-wma", aiff: "audio/aiff", aif: "audio/aiff", ac3: "audio/ac3",
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif",
   "3gp": "video/3gpp", "3g2": "video/3gpp2", mka: "audio/x-matroska",
 };
 /** Only mobile-provider empty/generic MIME may fall back to a strict extension. */

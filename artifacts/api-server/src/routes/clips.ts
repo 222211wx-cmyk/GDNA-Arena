@@ -103,6 +103,26 @@ export async function ensureClipsTables(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_object_name TEXT;
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS category VARCHAR(1) NOT NULL DEFAULT 'B' CHECK (category IN ('A','B','C','D'));
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS matricule VARCHAR(30);
+      ALTER TABLE clips ADD COLUMN IF NOT EXISTS media_type VARCHAR(10);
+      UPDATE clips SET media_type = CASE WHEN content_type LIKE 'image/%' THEN 'image'
+        WHEN content_type LIKE 'audio/%' THEN 'audio' ELSE 'video' END WHERE media_type IS NULL;
+      CREATE TABLE IF NOT EXISTS clip_matricule_counters (
+        category VARCHAR(1) PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0
+      );
+      UPDATE clips c SET matricule = 'GDNA-CLIPS-' || c.category || '-' || lpad((r.rn + r.base)::text, 4, '0')
+        FROM (SELECT x.id, row_number() OVER (PARTITION BY x.category ORDER BY x.id) AS rn,
+                     COALESCE((SELECT MAX(substring(y.matricule from '[0-9]+$')::int) FROM clips y
+                               WHERE y.category = x.category AND y.matricule IS NOT NULL), 0) AS base
+              FROM clips x WHERE x.matricule IS NULL) r
+        WHERE c.id = r.id;
+      INSERT INTO clip_matricule_counters (category, n)
+        SELECT category, MAX(substring(matricule from '[0-9]+$')::int) FROM clips
+        WHERE matricule IS NOT NULL GROUP BY category
+        ON CONFLICT (category) DO UPDATE SET n = GREATEST(clip_matricule_counters.n, EXCLUDED.n);
+      CREATE UNIQUE INDEX IF NOT EXISTS clips_matricule_uidx ON clips (matricule);
+      CREATE INDEX IF NOT EXISTS clips_category_idx ON clips (category, id DESC);
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_attempts INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE clips ADD COLUMN IF NOT EXISTS thumbnail_retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
       CREATE INDEX IF NOT EXISTS clips_thumbnail_retry_due_idx
@@ -151,6 +171,7 @@ export async function ensureClipsTables(): Promise<void> {
         content_type TEXT NOT NULL,
         size_bytes BIGINT NOT NULL CHECK (size_bytes > 0),
         duration_sec DOUBLE PRECISION NOT NULL CHECK (duration_sec >= 0),
+        category VARCHAR(1) NOT NULL DEFAULT 'B',
         state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','completing','published','aborted')),
         clip_id INTEGER REFERENCES clips(id) ON DELETE SET NULL,
         expires_at TIMESTAMPTZ NOT NULL,
@@ -158,6 +179,7 @@ export async function ensureClipsTables(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE(user_id, request_id)
       );
+      ALTER TABLE r2_clip_uploads ADD COLUMN IF NOT EXISTS category VARCHAR(1) NOT NULL DEFAULT 'B';
       CREATE INDEX IF NOT EXISTS r2_clip_uploads_expiry_idx
         ON r2_clip_uploads (expires_at) WHERE state IN ('active','completing');
       INSERT INTO monetization_settings (content_type, rate, unit)
@@ -191,7 +213,7 @@ async function isAdmin(userId: number): Promise<boolean> {
 
 // ─── GET /clips/feed — Reels feed, newest first ──────────────────────────────
 router.get("/clips/feed", createClipsFeedHandler({
-  async loadRows(before, limit, signal, q = "", viewerId = null) {
+  async loadRows(before, limit, signal, q = "", viewerId = null, filters = {}) {
     const client = await acquireFeedClient(signal);
     try {
       // The handler deadline may fire while waiting for a saturated pool. In that
@@ -201,10 +223,10 @@ router.get("/clips/feed", createClipsFeedHandler({
       await client.query("SET LOCAL statement_timeout = '750ms'");
       await client.query("SET LOCAL lock_timeout = '250ms'");
       const escapedSearch = q.replace(/[\\%_]/g, character => `\\${character}`);
-      const params = [viewerId, `%${escapedSearch}%`, before, limit + 1];
+      const params = [viewerId, `%${escapedSearch}%`, before, limit + 1, filters.category ?? null, filters.type ?? null];
       const { rows } = await client.query(
         `SELECT c.id, c.user_id, c.username, c.title, c.content_type, c.duration_sec, c.code, c.processing_status,
-                c.views, c.created_at, c.thumbnail_object_name,
+                c.views, c.created_at, c.thumbnail_object_name, c.category, c.matricule, c.media_type,
                 json_build_object(
                   'id', c.user_id,
                   'username', c.username,
@@ -216,7 +238,10 @@ router.get("/clips/feed", createClipsFeedHandler({
          FROM clips c JOIN users u ON u.id=c.user_id
          WHERE c.is_frozen = FALSE AND c.object_name IS NOT NULL AND c.object_name <> ''
            AND ($2::text = '%%' OR c.title ILIKE $2 ESCAPE '\'
-             OR c.code ILIKE $2 ESCAPE '\' OR c.username ILIKE $2 ESCAPE '\')
+             OR c.code ILIKE $2 ESCAPE '\' OR c.username ILIKE $2 ESCAPE '\'
+             OR c.matricule ILIKE $2 ESCAPE '\')
+           AND ($5::text IS NULL OR c.category = $5)
+           AND ($6::text IS NULL OR c.media_type = $6)
            AND ($3::integer IS NULL OR c.id < $3)
          ORDER BY c.id DESC LIMIT $4`, params,
       );
@@ -533,16 +558,42 @@ router.delete("/clips/:id", async (req, res): Promise<void> => {
 });
 
 // Scoped to a visible clip, not an arbitrary storage path.
+// ─── GET /clips/library/:category/:matricule — producer page, no login ───────
+router.get("/clips/library/:category/:matricule", async (req, res): Promise<void> => {
+  try {
+    const category = String(req.params.category).toUpperCase();
+    const matricule = String(req.params.matricule).toUpperCase();
+    const m = /^GDNA-CLIPS-([A-D])-\d{4,}$/.exec(matricule);
+    if (!/^[A-D]$/.test(category) || !m || m[1] !== category) { res.status(400).json({ error: "Invalid matricule" }); return; }
+    const pool = requirePool();
+    const found = await pool.query(
+      `SELECT c.id, c.user_id, c.username FROM clips c WHERE c.matricule=$1 AND c.is_frozen=FALSE`, [matricule]);
+    if (!found.rows[0]) { res.status(404).json({ error: "Matricule introuvable — المصفوفة غير موجودة" }); return; }
+    const owner = found.rows[0];
+    const works = await pool.query(
+      `SELECT id, title, code, matricule, category, media_type, content_type, duration_sec, views, created_at,
+              thumbnail_object_name
+         FROM clips WHERE user_id=$1 AND is_frozen=FALSE AND object_name <> ''
+         ORDER BY id DESC LIMIT 60`, [owner.user_id]);
+    res.json({
+      producer: { id: owner.user_id, username: owner.username },
+      matricule, category, selectedId: owner.id,
+      works: works.rows.map(row => clipWithThumbnail(row)),
+    });
+  } catch (e) { logger.error({ err: e }, "[clips] library failed"); if (!res.headersSent) res.status(500).json({ error: "Library unavailable" }); }
+});
+
 router.get("/clips/thumbnail/:id", async (req, res): Promise<void> => {
   try {
     const id = parseClipId(req.params.id);
     if (!id) { res.status(400).end(); return; }
     const { rows } = await requirePool().query(
-      `SELECT thumbnail_object_name FROM clips WHERE id=$1 AND is_frozen=FALSE`, [id],
+      `SELECT thumbnail_object_name, content_type FROM clips WHERE id=$1 AND is_frozen=FALSE`, [id],
     );
     const name = rows[0]?.thumbnail_object_name;
     if (!name) { res.status(404).end(); return; }
-    res.setHeader("Content-Type", name.endsWith(".webp") ? "image/webp" : "image/jpeg");
+    const imageType = typeof rows[0].content_type === "string" && rows[0].content_type.startsWith("image/") ? rows[0].content_type : null;
+    res.setHeader("Content-Type", imageType ?? (name.endsWith(".webp") ? "image/webp" : "image/jpeg"));
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "private, max-age=3600");
     const stream = clipFile(name).createReadStream();

@@ -97,7 +97,7 @@
         const base = "%BASE_URL%".replace(/\/$/, "");
         const rawRoute = location.pathname.slice(base.length) || "/";
         const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
-        const isClipRoute = route === "/clip" || route === "/clips" || /^\/clip\/HELX-\d{6}$/.test(route);
+        const isClipRoute = route === "/clip" || route === "/clips" || /^\/clips\/[A-Da-d](?:\/|$)/.test(route) || /^\/clip\/HELX-\d{6}$/.test(route);
         const isPartnerLite = route === "/partners/operators" || route === "/partners/dashboard";
         const isLite = route === "/lite" || route.startsWith("/lite/") || isPartnerLite;
         const ref = new URLSearchParams(location.search).get("ref");

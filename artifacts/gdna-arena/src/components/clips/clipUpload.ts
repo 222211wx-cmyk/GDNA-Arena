@@ -7,6 +7,8 @@ export type ClipUploadMetadata = {
   title: string;
   /** Untrusted hint only. Null means the browser could not read media metadata. */
   durationSec: number | null;
+  /** Library A | B | C | D (default B). */
+  category?: string;
 };
 
 /** Progress counts only storage-acknowledged bytes. */
@@ -113,6 +115,7 @@ export async function uploadClip(
     contentType,
     size: file.size,
     durationSec: metadata.durationSec,
+    category: metadata.category ?? "B",
   });
   if (typeof session?.sessionId !== "string" || !Number.isSafeInteger(session.partSize) || session.partSize <= 0) {
     throw new Error("تعذر بدء الرفع — حاول مجدداً");
