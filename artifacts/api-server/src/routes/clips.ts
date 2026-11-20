@@ -125,6 +125,93 @@ const CLIP_LIBRARY_SQL = `
       CREATE INDEX IF NOT EXISTS clips_category_idx ON clips (category, id DESC);
 `;
 
+/** Tables the feed, likes, uploads and media jobs read. All additive; production never ran the full DDL. */
+const CLIP_SUPPORT_SQL = `
+      CREATE TABLE IF NOT EXISTS clip_views (
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        viewer_ip TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clip_id, viewer_ip)
+      );
+      CREATE TABLE IF NOT EXISTS clip_likes (
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clip_id, user_id)
+      );
+      CREATE TABLE IF NOT EXISTS clip_comments (
+        id SERIAL PRIMARY KEY,
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS clip_comments_clip_created_idx ON clip_comments (clip_id, created_at, id);
+      CREATE TABLE IF NOT EXISTS clip_bookmarks (
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clip_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS clip_bookmarks_user_idx ON clip_bookmarks (user_id);
+      CREATE TABLE IF NOT EXISTS clip_shares (
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clip_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS clip_shares_user_idx ON clip_shares (user_id);
+      CREATE TABLE IF NOT EXISTS clip_storage_cleanup (
+        object_name TEXT PRIMARY KEY,
+        clip_id INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS clip_storage_cleanup_due_idx ON clip_storage_cleanup (retry_at, object_name);
+      CREATE TABLE IF NOT EXISTS r2_clip_uploads (
+        id UUID PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        request_id UUID NOT NULL,
+        object_name TEXT NOT NULL UNIQUE,
+        multipart_upload_id TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        display_title TEXT,
+        content_type TEXT NOT NULL,
+        size_bytes BIGINT NOT NULL CHECK (size_bytes > 0),
+        duration_sec DOUBLE PRECISION NOT NULL CHECK (duration_sec >= 0),
+        category VARCHAR(1) NOT NULL DEFAULT 'B',
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','completing','published','aborted')),
+        clip_id INTEGER REFERENCES clips(id) ON DELETE SET NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, request_id)
+      );
+      CREATE INDEX IF NOT EXISTS r2_clip_uploads_expiry_idx
+        ON r2_clip_uploads (expires_at) WHERE state IN ('active','completing');
+      CREATE TABLE IF NOT EXISTS clip_media_jobs (
+        session_id UUID PRIMARY KEY REFERENCES r2_clip_uploads(id) ON DELETE CASCADE,
+        state TEXT NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        token UUID, error TEXT, output_object TEXT,
+        retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS clip_media_jobs_claim_idx ON clip_media_jobs (retry_at, session_id)
+        WHERE state IN ('queued','processing');
+      CREATE TABLE IF NOT EXISTS clip_lite_media (
+        clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        retry_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        source_object TEXT, output_object TEXT, mirror_object TEXT, sha256 TEXT,
+        size_bytes INTEGER, mime TEXT, duration_sec DOUBLE PRECISION,
+        mirror_verified_at TIMESTAMPTZ, error TEXT,
+        PRIMARY KEY (clip_id, kind)
+      );
+      CREATE INDEX IF NOT EXISTS clip_lite_media_due ON clip_lite_media (retry_at, clip_id);
+`;
+
 /** Production skips full startup DDL, so the Clips libraries schema is applied on its own. */
 export async function ensureClipLibrarySchema(): Promise<void> {
   const client = await requirePool().connect();
@@ -132,6 +219,7 @@ export async function ensureClipLibrarySchema(): Promise<void> {
     // r2_clip_uploads may be missing on a fresh database; the column is only added when it exists.
     await client.query("SELECT pg_advisory_lock(hashtextextended('clip-library-schema',0))");
     await client.query(CLIP_LIBRARY_SQL);
+    await client.query(CLIP_SUPPORT_SQL);
     await client.query(`DO $$ BEGIN
       IF to_regclass('public.r2_clip_uploads') IS NOT NULL THEN
         ALTER TABLE r2_clip_uploads ADD COLUMN IF NOT EXISTS category VARCHAR(1) NOT NULL DEFAULT 'B';
