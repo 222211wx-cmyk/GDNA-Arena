@@ -12,7 +12,7 @@ export interface AuthCopy {
   name: string; email: string; emailOrUsername: string; password: string; newPassword: string;
   phone: string; phoneOptionalHint: string; countryCode: string; birthDate: string;
   submitLogin: string; submitSignup: string; working: string;
-  forgotTitle: string; forgotIntro: string; sendCode: string; codeTitle: string; codeSentTo: (phone: string) => string;
+  forgotTitle: string; forgotIntro: string; forgotEmailHint: string; sendLink: string; linkSent: string; sendCode: string; codeTitle: string; codeSentTo: (phone: string) => string;
   verify: string; resend: string; resendIn: (s: number) => string; skip: string;
   newPasswordTitle: string; savePassword: string; passwordChanged: string;
   deviceTitle: string; deviceBody: (phone: string) => string; deviceTrusted: string;
@@ -29,7 +29,7 @@ const en: AuthCopy = {
   name: "Name", email: "Email", emailOrUsername: "Email or username", password: "Password", newPassword: "New password",
   phone: "Phone number", phoneOptionalHint: "Needed to reset your password by SMS", countryCode: "Country code",
   birthDate: "Date of birth", submitLogin: "Log in", submitSignup: "Create account",
-  working: "Please wait…", forgotTitle: "Reset your password", forgotIntro: "Enter the phone number linked to your account. We will text you a 6-digit code.",
+  working: "Please wait…", forgotTitle: "Reset your password", forgotEmailHint: "Or get a reset link by email.", sendLink: "Email me a reset link", linkSent: "If an account uses this email, a reset link is on its way. Check your inbox.", forgotIntro: "Enter the phone number linked to your account. We will text you a 6-digit code.",
   sendCode: "Send code", codeTitle: "Enter the code", codeSentTo: p => `We sent a 6-digit code to ${p}.`,
   verify: "Verify", resend: "Resend code", resendIn: s => `Resend in ${s}s`, skip: "Skip for now",
   newPasswordTitle: "Choose a new password", savePassword: "Save password", passwordChanged: "Password changed. Log in with your new password.",
@@ -60,7 +60,7 @@ const ar: AuthCopy = {
   name: "الاسم", email: "البريد الإلكتروني", emailOrUsername: "البريد الإلكتروني أو اسم المستخدم", password: "كلمة السر", newPassword: "كلمة سر جديدة",
   phone: "رقم الهاتف", phoneOptionalHint: "مطلوب لاستعادة كلمة السر عبر الرسائل النصية", countryCode: "رمز الدولة",
   birthDate: "تاريخ الميلاد", submitLogin: "تسجيل الدخول", submitSignup: "إنشاء الحساب",
-  working: "يرجى الانتظار…", forgotTitle: "استعادة كلمة السر", forgotIntro: "أدخل رقم الهاتف المرتبط بحسابك وسنرسل لك رمزاً من 6 أرقام.",
+  working: "يرجى الانتظار…", forgotTitle: "استعادة كلمة السر", forgotEmailHint: "أو احصل على رابط الاستعادة عبر البريد.", sendLink: "أرسل لي رابط الاستعادة", linkSent: "إذا كان هذا البريد مرتبطاً بحساب، فالرابط في طريقه إليك. تحقق من بريدك.", forgotIntro: "أدخل رقم الهاتف المرتبط بحسابك وسنرسل لك رمزاً من 6 أرقام.",
   sendCode: "إرسال الرمز", codeTitle: "أدخل الرمز", codeSentTo: p => `أرسلنا رمزاً من 6 أرقام إلى ${p}.`,
   verify: "تأكيد", resend: "إعادة إرسال الرمز", resendIn: s => `إعادة الإرسال بعد ${s} ث`, skip: "تخطَّ الآن",
   newPasswordTitle: "اختر كلمة سر جديدة", savePassword: "حفظ كلمة السر", passwordChanged: "تم تغيير كلمة السر. سجّل الدخول بكلمة السر الجديدة.",
@@ -91,7 +91,7 @@ const fr: AuthCopy = {
   name: "Nom", email: "E-mail", emailOrUsername: "E-mail ou nom d'utilisateur", password: "Mot de passe", newPassword: "Nouveau mot de passe",
   phone: "Numéro de téléphone", phoneOptionalHint: "Nécessaire pour réinitialiser votre mot de passe par SMS", countryCode: "Indicatif",
   birthDate: "Date de naissance", submitLogin: "Se connecter", submitSignup: "Créer le compte",
-  working: "Veuillez patienter…", forgotTitle: "Réinitialiser le mot de passe", forgotIntro: "Saisissez le numéro lié à votre compte. Nous vous enverrons un code à 6 chiffres par SMS.",
+  working: "Veuillez patienter…", forgotTitle: "Réinitialiser le mot de passe", forgotEmailHint: "Ou recevez un lien de réinitialisation par e-mail.", sendLink: "M'envoyer un lien par e-mail", linkSent: "Si un compte utilise cet e-mail, un lien de réinitialisation vient d'être envoyé. Vérifiez votre boîte de réception.", forgotIntro: "Saisissez le numéro lié à votre compte. Nous vous enverrons un code à 6 chiffres par SMS.",
   sendCode: "Envoyer le code", codeTitle: "Saisissez le code", codeSentTo: p => `Nous avons envoyé un code à 6 chiffres au ${p}.`,
   verify: "Vérifier", resend: "Renvoyer le code", resendIn: s => `Renvoyer dans ${s} s`, skip: "Passer",
   newPasswordTitle: "Choisissez un nouveau mot de passe", savePassword: "Enregistrer", passwordChanged: "Mot de passe modifié. Connectez-vous avec le nouveau.",
@@ -122,7 +122,7 @@ const es: AuthCopy = {
   name: "Nombre", email: "Correo electrónico", emailOrUsername: "Correo o usuario", password: "Contraseña", newPassword: "Nueva contraseña",
   phone: "Número de teléfono", phoneOptionalHint: "Necesario para restablecer la contraseña por SMS", countryCode: "Prefijo",
   birthDate: "Fecha de nacimiento", submitLogin: "Iniciar sesión", submitSignup: "Crear cuenta",
-  working: "Espera…", forgotTitle: "Restablecer contraseña", forgotIntro: "Introduce el teléfono de tu cuenta. Te enviaremos un código de 6 dígitos por SMS.",
+  working: "Espera…", forgotTitle: "Restablecer contraseña", forgotEmailHint: "O recibe un enlace de restablecimiento por correo.", sendLink: "Enviarme un enlace por correo", linkSent: "Si una cuenta usa este correo, te llegará un enlace para restablecerla. Revisa tu bandeja.", forgotIntro: "Introduce el teléfono de tu cuenta. Te enviaremos un código de 6 dígitos por SMS.",
   sendCode: "Enviar código", codeTitle: "Introduce el código", codeSentTo: p => `Enviamos un código de 6 dígitos a ${p}.`,
   verify: "Verificar", resend: "Reenviar código", resendIn: s => `Reenviar en ${s} s`, skip: "Omitir",
   newPasswordTitle: "Elige una nueva contraseña", savePassword: "Guardar", passwordChanged: "Contraseña cambiada. Inicia sesión con la nueva.",
@@ -153,7 +153,7 @@ const de: AuthCopy = {
   name: "Name", email: "E-Mail", emailOrUsername: "E-Mail oder Benutzername", password: "Passwort", newPassword: "Neues Passwort",
   phone: "Telefonnummer", phoneOptionalHint: "Nötig, um das Passwort per SMS zurückzusetzen", countryCode: "Vorwahl",
   birthDate: "Geburtsdatum", submitLogin: "Anmelden", submitSignup: "Konto erstellen",
-  working: "Bitte warten…", forgotTitle: "Passwort zurücksetzen", forgotIntro: "Gib die Telefonnummer deines Kontos ein. Wir senden dir einen 6-stelligen Code per SMS.",
+  working: "Bitte warten…", forgotTitle: "Passwort zurücksetzen", forgotEmailHint: "Oder lass dir einen Link per E-Mail schicken.", sendLink: "Link per E-Mail senden", linkSent: "Wenn ein Konto diese E-Mail nutzt, ist ein Link zum Zurücksetzen unterwegs. Prüfe dein Postfach.", forgotIntro: "Gib die Telefonnummer deines Kontos ein. Wir senden dir einen 6-stelligen Code per SMS.",
   sendCode: "Code senden", codeTitle: "Code eingeben", codeSentTo: p => `Wir haben einen 6-stelligen Code an ${p} gesendet.`,
   verify: "Bestätigen", resend: "Code erneut senden", resendIn: s => `Erneut senden in ${s} s`, skip: "Überspringen",
   newPasswordTitle: "Neues Passwort wählen", savePassword: "Speichern", passwordChanged: "Passwort geändert. Melde dich mit dem neuen Passwort an.",
