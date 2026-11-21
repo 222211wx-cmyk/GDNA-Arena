@@ -89,7 +89,7 @@ describe("critical Clips navigation", () => {
   });
   it("does not request private inbox counts for anonymous viewers", async () => {
     controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
-    await vi.waitFor(() => expect(document.querySelector('[data-nav="profile"]')?.getAttribute("href")).toBe("/login"));
+    await vi.waitFor(() => expect(document.querySelector('[data-nav="profile"]')?.getAttribute("href")).toBe("/profil"));
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/messages/unread-count"))).toBe(false);
   });
 
@@ -107,10 +107,10 @@ describe("critical Clips navigation", () => {
     controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
     const labels = [...document.querySelectorAll(".reels-bottomnav .reels-nav-item > span:last-child")]
       .map(node => node.textContent);
-    expect(labels).toEqual(["Accueil", "Clips", "Recherche", "Inbox", "Profil"]);
-    expect(document.querySelector('[data-nav="inbox"]')?.getAttribute("href")).toBe("/messages");
-    expect(document.querySelector('.reels-topbar-left a[href="/"]')).not.toBeNull();
-    expect(document.querySelector(".reels-title")?.textContent).toBe("GDNA Arena");
+    expect(labels).toEqual(["Accueil", "Clips", "Boîte", "Profil"]);
+    expect(document.querySelector('.reels-bottomnav [data-nav="publish"]')).not.toBeNull();
+    expect(document.querySelector('[data-nav="inbox"]')?.getAttribute("href")).toBe("/boite");
+    expect(document.querySelector(".reels-title")?.textContent).toBe("Reels");
   });
 
   it("honors view=grid on boot even for an empty feed", async () => {

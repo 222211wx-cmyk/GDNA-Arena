@@ -7,7 +7,7 @@
 
 import { reelsIcons } from "./reelsIcons";
 import { registerNavigationLayer } from "../../lib/navigation-layers";
-import { icons } from "./clipIcons";
+import { buildTabbar } from "./reelsTabbar";
 import { mountInboxBadge } from "./inboxBadge";
 import {
   fetchEngagement,
@@ -29,13 +29,6 @@ import { getInstallLang, installText, requestSectionInstall } from "../../lib/se
 
 const BASE = import.meta.env.BASE_URL;
 const PAGE_SIZE = 5;
-
-type NavRoute = { key: string; label: string; href: string; icon: (active: boolean) => string };
-
-const NAV_ROUTES: NavRoute[] = [
-  { key: "home", label: "Accueil", href: `${BASE}`, icon: reelsIcons.navHome },
-  { key: "reels", label: "Clips", href: `${BASE}clips`, icon: reelsIcons.navReels },
-];
 
 type MountReelsOptions = {
   /** Called when the camera button is pressed — opens the existing upload composer. */
@@ -99,28 +92,14 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // Top bar
   const topbar = el("div", "reels-topbar");
   const topLeft = el("div", "reels-topbar-left");
-  const homeLink = el("a", "reels-icon-btn", { href: BASE, "aria-label": "Retour à l’accueil" });
-  homeLink.innerHTML = reelsIcons.back();
   const title = el("h1", "reels-title");
-  title.textContent = "GDNA Arena";
-  topLeft.append(homeLink);
+  title.textContent = "Reels";
+  const menuBtn = iconButton("Menu", reelsIcons.hamburger());
+  topLeft.append(menuBtn);
   const topRight = el("div", "reels-topbar-right");
-  const installBtn = iconButton(installText(getInstallLang(), "clipsButton"), "Hc");
-  installBtn.dataset.testid = "install-clips";
-  installBtn.addEventListener("click", () => {
-    void requestSectionInstall("clips").then(message => {
-      const help = el("div", "reels-install-help", { role: "status" });
-      help.textContent = message;
-      const close = iconButton(installText(getInstallLang(), "dismiss"), "×");
-      close.addEventListener("click", () => help.remove());
-      help.append(close);
-      shell.querySelector(".reels-install-help")?.remove();
-      shell.append(help);
-    });
-  });
   const searchBtn = iconButton("Rechercher", reelsIcons.search());
-  const moreBtn = iconButton("Menu", reelsIcons.hamburger());
-  topRight.append(installBtn, searchBtn, moreBtn);
+  const moreBtn = iconButton("Plus d’actions", reelsIcons.more());
+  topRight.append(searchBtn, moreBtn);
   topbar.append(topLeft, title, topRight);
 
   // Feed track
@@ -132,20 +111,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // Bottom navigation
   const bottomnav = el("nav", "reels-bottomnav", { "aria-label": "Navigation principale" });
 
-  // Thumb row: publish, search, and grid, centered above the bottom nav.
-  const quickRow = el("div", "reels-quick-row");
-  const quickPublish = el("button", "reels-quick-btn", { type: "button" });
-  quickPublish.textContent = "Publier un clip";
-  quickPublish.addEventListener("click", () => options.onOpenComposer());
-  const quickSearch = el("button", "reels-quick-btn", { type: "button" });
-  quickSearch.textContent = "Rechercher";
-  quickSearch.addEventListener("click", openSearch);
-  const quickGrid = el("button", "reels-quick-btn", { type: "button" });
-  quickGrid.textContent = "Grille";
-  quickGrid.addEventListener("click", () => toggleGrid());
-  quickRow.append(quickPublish, quickSearch, quickGrid);
-
-  shell.append(topbar, track, toolsPanel, quickRow, bottomnav);
+  shell.append(topbar, track, toolsPanel, bottomnav);
   root.replaceChildren(shell);
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -171,42 +137,9 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   let disposeInbox: (() => void) | undefined;
   function renderBottomNav() {
     disposeInbox?.();
-    bottomnav.replaceChildren();
-    for (const route of NAV_ROUTES) {
-      const active = route.key === "reels";
-      const link = el("a", "reels-nav-item", { href: route.href, "data-active": String(active), "data-nav": route.key });
-      link.innerHTML = route.icon(active);
-      const label = el("span");
-      label.textContent = route.label;
-      link.append(label);
-      bottomnav.append(link);
-    }
-    const search = el("button", "reels-nav-item", { type: "button", "data-nav": "search", "aria-label": "Recherche" });
-    search.innerHTML = reelsIcons.navSearch(false);
-    const searchLabel = el("span");
-    searchLabel.textContent = "Recherche";
-    search.append(searchLabel);
-    search.addEventListener("click", openSearch);
-    bottomnav.append(search);
-    const inbox = el("a", "reels-nav-item", { href: `${BASE}messages`, "data-nav": "inbox", "aria-label": "Inbox" }) as HTMLAnchorElement;
-    inbox.style.position = "relative";
-    inbox.innerHTML = icons.message();
-    const inboxLabel = el("span");
-    inboxLabel.textContent = "Boîte de réception";
-    inbox.append(inboxLabel);
-    bottomnav.append(inbox);
-    if (identity.status === "authenticated") disposeInbox = mountInboxBadge(inbox);
-    // Profile
-    const profileHref = identity.status === "authenticated" && identity.username
-      ? `${BASE}u/${encodeURIComponent(identity.username)}`
-      : `${BASE}login`;
-    const profile = el("a", "reels-nav-item", { href: profileHref, "data-nav": "profile", "aria-label": "Profil" });
-    const av = avatarNode("reels-nav-avatar", identity.status === "authenticated" ? identity.avatarUrl : null,
-      identity.status === "authenticated" && identity.username ? identity.username : "?");
-    const pLabel = el("span");
-    pLabel.textContent = "Profil";
-    profile.append(av, pLabel);
-    bottomnav.append(profile);
+    const built = buildTabbar("home", () => options.onOpenComposer());
+    bottomnav.replaceChildren(...built.nav.children);
+    if (identity.status === "authenticated") disposeInbox = mountInboxBadge(built.inbox as HTMLAnchorElement);
     // Notifications remain available from the menu; retain an inert host so the
     // existing notification loader can update independently of the Inbox badge.
     bellItem = el("button");
@@ -548,6 +481,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       const nameLink = el("a", "reels-author-name", { href: avHref });
       nameLink.textContent = clip.author.username;
 
+      nameLink.textContent = `@${clip.author.username}`;
       authorRow.append(avLink, nameLink);
 
       // Suivre (follow) — hidden for the owner; wired to the follow endpoint.
@@ -563,7 +497,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
           }).catch(() => {});
         }
         followBtn.addEventListener("click", async () => {
-          if (identity.status !== "authenticated") { window.location.assign(`${BASE}login`); return; }
+          if (identity.status !== "authenticated") { window.location.assign(`${BASE}profil`); return; }
           followBtn.disabled = true;
           const wasFollowing = followBtn.dataset.following === "true";
           try {
@@ -589,9 +523,39 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         if (caption.scrollHeight - caption.clientHeight < 4) toggle.remove();
       });
 
+      // Music line: label + spinning disc (original audio of the clip's author).
+      const musicRow = el("div", "reels-music");
+      const musicName = el("span", "reels-music-name");
+      musicName.textContent = `🎵 Son original · ${clip.author.username}`;
+      const disc = el("span", "reels-disc", { "aria-hidden": "true" });
+      musicRow.append(musicName, disc);
+
+      // Rail profile: avatar with a red + that follows the author.
+      const rail = slide.querySelector(".clip-rail");
+      if (rail && !rail.querySelector(".reels-rail-profile")) {
+        const railProfile = el("div", "reels-rail-profile");
+        const railAvatar = el("a", "reels-rail-avatar", { href: avHref, "aria-label": `Profil de ${clip.author.username}` });
+        if (clip.author.avatarUrl) {
+          const img = el("img", undefined, { alt: "", loading: "lazy" }) as HTMLImageElement;
+          img.src = clip.author.avatarUrl;
+          railAvatar.append(img);
+        } else {
+          railAvatar.textContent = initials(clip.author.username);
+        }
+        railProfile.append(railAvatar);
+        if (!isOwner) {
+          const railFollow = el("button", "reels-rail-follow", { type: "button", "aria-label": `Suivre ${clip.author.username}` });
+          railFollow.textContent = "+";
+          railFollow.addEventListener("click", () => authorRow.querySelector<HTMLButtonElement>(".reels-follow-btn")?.click());
+          railProfile.append(railFollow);
+        }
+        rail.prepend(railProfile);
+      }
+
       defaultTitle?.remove();
       defaultAudio?.remove();
       meta.prepend(authorRow);
+      meta.append(musicRow);
       meta.append(caption);
       if (toggle.isConnected === false) meta.append(toggle);
     }
@@ -864,6 +828,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     playbackIntentVersion++;
     gridOpen = open ?? !gridOpen;
     if (gridOpen) {
+      shell.dataset.fromGrid = "false";
       slides.forEach(slide => slide.deactivate());
       void buildGrid();
       requestAnimationFrame(() => { if (gridView) gridView.scrollTop = gridScrollTop; });
@@ -992,6 +957,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       io?.observe(selected.element);
     }
     toggleGrid(false);
+    shell.dataset.fromGrid = "true";
     const handle = slides.find(s => s.id === clipId);
     if (handle) {
       handle.element.scrollIntoView({ behavior: "auto", block: "start" });
@@ -1195,7 +1161,19 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
         if (status) status.textContent = "Seul le propriétaire peut modifier le titre.";
       }
     });
-    toolsPanel.append(gridToggleBtn, fsTool, uploadTool, friendsTool, shopTool, notificationsTool, editTool);
+    const installTool = makeTool(installText(getInstallLang(), "clipsButton"), () => {
+      void requestSectionInstall("clips").then(message => {
+        const help = el("div", "reels-install-help", { role: "status" });
+        help.textContent = message;
+        const closeHelp = iconButton(installText(getInstallLang(), "dismiss"), "×");
+        closeHelp.addEventListener("click", () => help.remove());
+        help.append(closeHelp);
+        shell.querySelector(".reels-install-help")?.remove();
+        shell.append(help);
+      });
+    });
+    installTool.dataset.testid = "install-clips";
+    toolsPanel.append(gridToggleBtn, fsTool, uploadTool, friendsTool, shopTool, notificationsTool, editTool, installTool);
     close.addEventListener("click", () => setTools(false));
     toolsPanel.addEventListener("keydown", event => { if (event.key === "Escape") setTools(false); });
   }
@@ -1314,7 +1292,13 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   // ── Top-bar wiring ───────────────────────────────────────────────────────
   searchBtn.addEventListener("click", openSearch);
-  moreBtn.addEventListener("click", () => setTools(true));
+  menuBtn.addEventListener("click", () => setTools(true));
+  // "…" opens the active clip's own menu (copy link, message, zoom, edit, delete).
+  moreBtn.addEventListener("click", event => {
+    event.stopPropagation();
+    const active = slides.find(s => s.id === activeSlideId);
+    active?.element.querySelector<HTMLButtonElement>('.clip-menu-wrap [aria-haspopup="menu"]')?.click();
+  });
 
   // Pause active media when the tab is hidden; resume the active slide when visible.
   const onVisibility = () => {
