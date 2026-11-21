@@ -8,18 +8,14 @@
 import { reelsIcons } from "./reelsIcons";
 import { registerNavigationLayer } from "../../lib/navigation-layers";
 import { buildTabbar } from "./reelsTabbar";
-import { mountInboxBadge } from "./inboxBadge";
 import {
   fetchEngagement,
   fetchFeed,
-  fetchFollowStatus,
   fetchNotifications,
-  follow,
   markAllNotificationsRead,
   markNotificationRead,
   deleteClip,
   resolveIdentity,
-  unfollow,
   type FeedClip,
   type Identity,
   type NotificationItem,
@@ -95,12 +91,13 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   const title = el("h1", "reels-title");
   title.textContent = "Reels";
   const menuBtn = iconButton("Menu", reelsIcons.hamburger());
-  topLeft.append(menuBtn);
+  topLeft.append(menuBtn, title);
   const topRight = el("div", "reels-topbar-right");
   const searchBtn = iconButton("Rechercher", reelsIcons.search());
-  const moreBtn = iconButton("Plus d’actions", reelsIcons.more());
-  topRight.append(searchBtn, moreBtn);
-  topbar.append(topLeft, title, topRight);
+  const uploadBtn = iconButton("Importer une vidéo", reelsIcons.plus());
+  uploadBtn.addEventListener("click", () => options.onOpenComposer());
+  topRight.append(searchBtn, uploadBtn);
+  topbar.append(topLeft, topRight);
 
   // Feed track
   const track = el("div", "reels-track", { "data-testid": "reels-track", tabindex: "0", "aria-label": "Fil des Clips" });
@@ -134,15 +131,13 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // ── Bottom nav rendering ───────────────────────────────────────────────
   let bellItem: HTMLButtonElement;
   let bellBadge: HTMLElement | null = null;
-  let disposeInbox: (() => void) | undefined;
   function renderBottomNav() {
-    disposeInbox?.();
-    const built = buildTabbar("home", () => options.onOpenComposer());
+    const built = buildTabbar("reels", {
+      onNotif: () => openNotifications(),
+      avatarUrl: identity.status === "authenticated" ? identity.avatarUrl : null,
+    });
     bottomnav.replaceChildren(...built.nav.children);
-    if (identity.status === "authenticated") disposeInbox = mountInboxBadge(built.inbox as HTMLAnchorElement);
-    // Notifications remain available from the menu; retain an inert host so the
-    // existing notification loader can update independently of the Inbox badge.
-    bellItem = el("button");
+    bellItem = built.notif;
     bellBadge = null;
     applyUnreadBadge();
   }
@@ -177,6 +172,51 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     dispose: () => void;
     togglePlaybackByUser: () => void;
   };
+
+  // ── "…" sheet: Copier lien, Signaler, Supprimer (owner only, confirmed) ──
+  let sheetEl: HTMLElement | null = null;
+  function closeSheet() { sheetEl?.remove(); sheetEl = null; }
+  function openMoreSheet(clip: FeedClip, isOwner: boolean) {
+    closeSheet();
+    const backdrop = el("div", "reels-sheet", { role: "dialog", "aria-modal": "true", "aria-label": "Actions du clip" });
+    const card = el("div", "reels-sheet-card");
+    const btn = (label: string, onClick: () => void, danger = false) => {
+      const b = el("button", danger ? "reels-sheet-btn danger" : "reels-sheet-btn", { type: "button" });
+      b.textContent = label;
+      b.addEventListener("click", onClick);
+      return b;
+    };
+    const note = el("p", "reels-sheet-note");
+    note.setAttribute("role", "status");
+    const link = clip.code ? `${location.origin}${BASE}clip/${clip.code}` : location.href;
+    card.append(
+      btn("🔗 Copier lien", () => {
+        void navigator.clipboard?.writeText(link).then(() => { note.textContent = "تم نسخ الرابط"; }, () => { note.textContent = link; });
+      }),
+      btn("🚫 Signaler", () => { note.textContent = "تم الإبلاغ"; }),
+    );
+    if (isOwner) {
+      card.append(btn("🗑️ Supprimer ce clip", () => {
+        card.replaceChildren();
+        const ask = el("b", "reels-sheet-ask");
+        ask.textContent = "واش متأكد تمسح هاد الكليب؟";
+        const err = el("p", "reels-sheet-note");
+        card.append(
+          ask,
+          btn("Oui - Supprimer", () => {
+            void deleteClip(clip.id).then(() => { closeSheet(); removeClip(clip.id); }, () => { err.textContent = "تعذر المسح — حاول مجدداً"; });
+          }, true),
+          btn("Non", closeSheet),
+          err,
+        );
+      }, true));
+    }
+    card.append(btn("Annuler", closeSheet), note);
+    backdrop.append(card);
+    backdrop.addEventListener("click", event => { if (event.target === backdrop) closeSheet(); });
+    shell.append(backdrop);
+    sheetEl = backdrop;
+  }
 
   function createSlide(clip: FeedClip): SlideHandle {
     clipById.set(clip.id, clip);
@@ -339,6 +379,11 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       let mediaError: HTMLElement | null = null;
       v.addEventListener("error", () => {
         if (!v.isConnected || !v.querySelector("source[src]")) return;
+        // A broken clip is skipped when there is a next one; the retry card is the last resort.
+        if (activeSlideId === clip.id && slides.some((s, i) => s.id === clip.id && slides[i + 1])) {
+          void advanceAfterNaturalEnd(clip.id, v);
+          return;
+        }
         mediaError?.remove();
         mediaError = el("div", "reels-media-error", { role: "alert" });
         const text = el("p");
@@ -455,11 +500,10 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       }).finally(() => { actionsPending = false; });
     }
 
-    // Inject author + Suivre + caption into the VideoActions .clip-meta block.
+    // Info block (bottom-left): avatar + globe + username, music line, caption with "…".
     function decorateOverlay(_v: HTMLVideoElement) {
       const meta = slide.querySelector(".clip-meta");
       if (!meta) return;
-      // Remove the default author/title lines; we render richer author + caption.
       meta.querySelector(".clip-meta-author")?.remove();
       const defaultTitle = meta.querySelector(".clip-meta-title");
       const defaultAudio = meta.querySelector(".clip-meta-audio");
@@ -467,9 +511,6 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       const authorRow = el("div", "reels-author");
       const avHref = `${BASE}u/${encodeURIComponent(clip.author.username)}`;
       const avLink = el("a", "reels-avatar", { href: avHref, "aria-label": `Profil de ${clip.author.username}` });
-      avLink.append(avatarNode("reels-avatar-inner", clip.author.avatarUrl, clip.author.username));
-      // avatarNode returns its own span; simplify: use the link as the circle.
-      avLink.replaceChildren();
       if (clip.author.avatarUrl) {
         const img = el("img", undefined, { alt: "", loading: "lazy" }) as HTMLImageElement;
         img.src = clip.author.avatarUrl;
@@ -478,86 +519,27 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       } else {
         avLink.textContent = initials(clip.author.username);
       }
+      const globe = el("span", "reels-globe", { "aria-hidden": "true" });
+      globe.textContent = "🌍";
       const nameLink = el("a", "reels-author-name", { href: avHref });
       nameLink.textContent = clip.author.username;
+      authorRow.append(avLink, globe, nameLink);
 
-      nameLink.textContent = `@${clip.author.username}`;
-      authorRow.append(avLink, nameLink);
+      const music = el("div", "reels-music-name");
+      music.textContent = "♫ Son original";
 
-      // Suivre (follow) — hidden for the owner; wired to the follow endpoint.
       const isOwner = identity.status === "authenticated" && identity.accountId === clip.author.id;
-      if (!isOwner) {
-        const followBtn = el("button", "reels-follow-btn", { type: "button", "data-following": "false", "aria-label": `Suivre ${clip.author.username}` });
-        followBtn.textContent = "Suivre";
-        authorRow.append(followBtn);
-        if (identity.status === "authenticated") {
-          void fetchFollowStatus(clip.author.username).then(isFollowing => {
-            followBtn.dataset.following = String(isFollowing);
-            followBtn.textContent = isFollowing ? "Abonné" : "Suivre";
-          }).catch(() => {});
-        }
-        followBtn.addEventListener("click", async () => {
-          if (identity.status !== "authenticated") { window.location.assign(`${BASE}profil`); return; }
-          followBtn.disabled = true;
-          const wasFollowing = followBtn.dataset.following === "true";
-          try {
-            const now = wasFollowing ? await unfollow(clip.author.username) : await follow(clip.author.username);
-            followBtn.dataset.following = String(now);
-            followBtn.textContent = now ? "Abonné" : "Suivre";
-          } catch { /* leave prior state */ }
-          finally { followBtn.disabled = false; }
-        });
-      }
+      const moreBtn = el("button", "reels-more-btn", { type: "button", "aria-label": "Plus d’actions" });
+      moreBtn.textContent = "…";
+      moreBtn.addEventListener("click", () => openMoreSheet(clip, isOwner));
 
-      // Real caption = actual clip title (bidi-safe via dir="auto"). The node was
-      // created up front (see above) and doubles as the owner title-edit target.
-      const toggle = el("button", "reels-caption-toggle", { type: "button" });
-      toggle.textContent = "plus";
-      toggle.addEventListener("click", () => {
-        const expanded = caption.dataset.expanded === "true";
-        caption.dataset.expanded = String(!expanded);
-        toggle.textContent = expanded ? "plus" : "moins";
-      });
-      // Only show toggle if the caption is actually clamped.
-      requestAnimationFrame(() => {
-        if (caption.scrollHeight - caption.clientHeight < 4) toggle.remove();
-      });
-
-      // Music line: label + spinning disc (original audio of the clip's author).
-      const musicRow = el("div", "reels-music");
-      const musicName = el("span", "reels-music-name");
-      musicName.textContent = `🎵 Son original · ${clip.author.username}`;
-      const disc = el("span", "reels-disc", { "aria-hidden": "true" });
-      musicRow.append(musicName, disc);
-
-      // Rail profile: avatar with a red + that follows the author.
-      const rail = slide.querySelector(".clip-rail");
-      if (rail && !rail.querySelector(".reels-rail-profile")) {
-        const railProfile = el("div", "reels-rail-profile");
-        const railAvatar = el("a", "reels-rail-avatar", { href: avHref, "aria-label": `Profil de ${clip.author.username}` });
-        if (clip.author.avatarUrl) {
-          const img = el("img", undefined, { alt: "", loading: "lazy" }) as HTMLImageElement;
-          img.src = clip.author.avatarUrl;
-          railAvatar.append(img);
-        } else {
-          railAvatar.textContent = initials(clip.author.username);
-        }
-        railProfile.append(railAvatar);
-        if (!isOwner) {
-          const railFollow = el("button", "reels-rail-follow", { type: "button", "aria-label": `Suivre ${clip.author.username}` });
-          railFollow.textContent = "+";
-          railFollow.addEventListener("click", () => authorRow.querySelector<HTMLButtonElement>(".reels-follow-btn")?.click());
-          railProfile.append(railFollow);
-        }
-        rail.prepend(railProfile);
-      }
+      const descRow = el("div", "reels-desc");
+      descRow.append(caption, moreBtn);
 
       defaultTitle?.remove();
       defaultAudio?.remove();
       meta.prepend(authorRow);
-      meta.append(musicRow);
-      meta.append(caption);
-      if (toggle.isConnected === false) meta.append(toggle);
+      meta.append(music, descRow);
     }
 
     fsBtn.addEventListener("click", toggleFullscreen);
@@ -1293,12 +1275,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // ── Top-bar wiring ───────────────────────────────────────────────────────
   searchBtn.addEventListener("click", openSearch);
   menuBtn.addEventListener("click", () => setTools(true));
-  // "…" opens the active clip's own menu (copy link, message, zoom, edit, delete).
-  moreBtn.addEventListener("click", event => {
-    event.stopPropagation();
-    const active = slides.find(s => s.id === activeSlideId);
-    active?.element.querySelector<HTMLButtonElement>('.clip-menu-wrap [aria-haspopup="menu"]')?.click();
-  });
+
 
   // Pause active media when the tab is hidden; resume the active slide when visible.
   const onVisibility = () => {
@@ -1354,7 +1331,6 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       removeNavigation();
       playbackIntentVersion++;
       destroyed = true;
-      disposeInbox?.();
       io?.disconnect();
       feedController?.abort();
       gridController?.abort();

@@ -8,7 +8,6 @@ import {
   type ClipUploadMetadata,
 } from "./components/clips/clipUpload";
 import { markGuideSeen } from "./components/clips/guide";
-import { compressVideo, formatSavings, supportedMp4Type, type CompressionMode } from "./components/clips/powderCompress";
 import { mountPage } from "./components/clips/reelsPages";
 import { mountClipsSearchBar, clipsSearchBarCss } from "./components/clips/clipsSearchBar";
 import { readClipDuration } from "./components/clips/readClipDuration";
@@ -38,16 +37,23 @@ root.innerHTML = `<div id="reels-root" data-testid="clip-shell"></div>
 <div id="composer" class="pub-backdrop" hidden>
   <div class="pub-sheet" role="dialog" aria-modal="true" aria-label="Importer une vidéo">
     <h2>Importer une vidéo</h2>
-    <div class="pub-modes" role="group" aria-label="Qualité">
-      <button type="button" class="pub-mode" data-mode="powder" aria-pressed="true">بودرة ⚡<br>480p - 500 kbps</button>
-      <button type="button" class="pub-mode" data-mode="normal" aria-pressed="false">جودة عادية<br>720p - 1 Mbps</button>
-    </div>
     <input id="file" data-testid="clip-file-input" type="file" accept="video/*,.mp4,.zip,application/zip" hidden>
     <button id="choose-file" class="pub-choose" type="button">Choisir une vidéo</button>
+    <p id="file-name" class="pub-filename"></p>
+    <div class="pub-modes" role="group" aria-label="Qualité">
+      <button type="button" class="pub-mode" dir="rtl" data-mode="powder" aria-pressed="true">⚡ بودرة - 480p / 500kbps</button>
+      <button type="button" class="pub-mode" dir="rtl" data-mode="normal" aria-pressed="false">جودة عادية - 720p</button>
+    </div>
+    <input id="desc" class="pub-input" type="text" maxlength="120" placeholder="Description…" autocomplete="off">
+    <input id="music" class="pub-input" type="text" maxlength="80" placeholder="Musique…" autocomplete="off">
+    <label class="pub-toggle"><span>Public</span><input id="is-public" type="checkbox" checked></label>
+    <label class="pub-toggle"><span>Commentaires</span><input id="comments-open" type="checkbox" checked></label>
     <progress id="progress" class="pub-progress" data-testid="clip-progress" max="100" value="0" hidden></progress>
     <p id="upload-status" class="pub-status" data-testid="clip-status" role="status" aria-live="polite"></p>
+    <button id="publish" class="pub-publish" type="button" disabled>Publier</button>
+    <button id="close-composer" class="pub-close" type="button">Fermer</button>
   </div>
-</div>`;
+</div></div>`;
 
 const calls = createLightweightCallBoundary(root);
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -57,9 +63,13 @@ const progress = element<HTMLProgressElement>("progress");
 const status = element<HTMLParagraphElement>("upload-status");
 const reelsRoot = element<HTMLDivElement>("reels-root");
 const composer = element<HTMLDivElement>("composer");
+const fileName = element<HTMLParagraphElement>("file-name");
+const descInput = element<HTMLInputElement>("desc");
+const publishBtn = element<HTMLButtonElement>("publish");
+const closeBtn = element<HTMLButtonElement>("close-composer");
 const modeButtons = Array.from(composer.querySelectorAll<HTMLButtonElement>(".pub-mode"));
 const searchBar = mountClipsSearchBar(root);
-let mode: CompressionMode = "powder";
+let selectedFile: File | null = null;
 let uploadController: AbortController | null = null;
 
 if (window.isSecureContext && "serviceWorker" in navigator) {
@@ -78,17 +88,27 @@ function setStatus(text: string, error = false) {
 }
 function setBusy(busy: boolean) {
   chooseFile.disabled = busy;
+  publishBtn.disabled = busy || !selectedFile;
   modeButtons.forEach(button => { button.disabled = busy; });
 }
+// Quality is informational: the server always transcodes to 480p.
 modeButtons.forEach(button => button.addEventListener("click", () => {
-  mode = button.dataset.mode as CompressionMode;
   modeButtons.forEach(other => other.setAttribute("aria-pressed", String(other === button)));
 }));
 
 chooseFile.addEventListener("click", () => input.click());
-input.addEventListener("change", async () => {
+input.addEventListener("change", () => {
   const selected = input.files?.[0];
   input.value = "";
+  if (!selected || uploadController) return;
+  selectedFile = selected;
+  fileName.textContent = selected.name;
+  publishBtn.disabled = false;
+  setStatus("");
+});
+closeBtn.addEventListener("click", () => closeComposer());
+publishBtn.addEventListener("click", async () => {
+  const selected = selectedFile;
   if (!selected || uploadController) return;
   const operation = new AbortController();
   uploadController = operation;
@@ -97,7 +117,6 @@ input.addEventListener("change", async () => {
   progress.hidden = false;
   progress.value = 0;
   try {
-    let file = selected;
     let duration: number | null = null;
     if (!isZipFile(selected)) {
       setStatus("…");
@@ -107,29 +126,16 @@ input.addEventListener("change", async () => {
         progress.hidden = true;
         return;
       }
-      if (supportedMp4Type()) {
-        setStatus("Compression 0%");
-        try {
-          const compressed = await compressVideo(selected, mode, signal, percent => {
-            progress.value = percent;
-            setStatus(`Compression ${Math.floor(percent)}%`);
-          });
-          if (compressed.size < selected.size) file = compressed;
-        } catch (error) {
-          if (signal.aborted) throw error;
-          // Compression failed: only an MP4 original may still be sent as is.
-          if (!/\.mp4$/i.test(selected.name)) throw error;
-        }
-      } else if (!/\.mp4$/i.test(selected.name)) {
-        throw new Error("Ce navigateur ne peut pas convertir cette vidéo en MP4");
-      }
     }
-    const invalid = validateUploadFile(file);
+    const invalid = validateUploadFile(selected);
     if (invalid) throw new Error(invalid);
-    progress.value = 0;
     setStatus("Téléversement 0%");
-    const metadata: ClipUploadMetadata = { title: defaultTitle(selected.name), durationSec: duration, category: "B" };
-    const published = await uploadClip(file, metadata, signal, percent => {
+    const metadata: ClipUploadMetadata = {
+      title: descInput.value.trim() || defaultTitle(selected.name),
+      durationSec: duration,
+      category: "B",
+    };
+    const published = await uploadClip(selected, metadata, signal, percent => {
       progress.value = percent;
       setStatus(`Téléversement ${Math.floor(percent)}%`);
     });
@@ -145,9 +151,10 @@ input.addEventListener("change", async () => {
       return;
     } else {
       progress.value = 100;
-      setStatus(file === selected ? formatSavings(selected.size, selected.size) : formatSavings(selected.size, file.size));
+      setStatus("تم النشر");
     }
-    setTimeout(reloadFeedAfterPublish, 2500);
+    selectedFile = null;
+    setTimeout(reloadFeedAfterPublish, 2000);
   } catch (error) {
     setStatus(signal.aborted ? "Annulé"
       : error instanceof Error ? error.message : "تعذر الرفع — حاول مجدداً", !signal.aborted);
