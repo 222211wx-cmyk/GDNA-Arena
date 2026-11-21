@@ -108,6 +108,16 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   topRight.append(searchBtn, moreBtn);
   topbar.append(topLeft, topRight);
 
+  // Browser history buttons (Retour / Devant): phone-only, pinned top-left above the header.
+  const histNav = el("div", "reels-histnav");
+  const histBack = iconButton("Retour", reelsIcons.back(), "reels-hist-btn");
+  histBack.dataset.testid = "reels-hist-back";
+  histBack.addEventListener("click", () => window.history.back());
+  const histForward = iconButton("Devant", reelsIcons.forward(), "reels-hist-btn");
+  histForward.dataset.testid = "reels-hist-forward";
+  histForward.addEventListener("click", () => window.history.forward());
+  histNav.append(histBack, histForward);
+
   // Feed track
   const track = el("div", "reels-track", { "data-testid": "reels-track", tabindex: "0", "aria-label": "Fil des Clips" });
 
@@ -117,7 +127,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // Bottom navigation
   const bottomnav = el("nav", "reels-bottomnav", { "aria-label": "Navigation principale" });
 
-  shell.append(topbar, track, toolsPanel, bottomnav);
+  shell.append(topbar, track, toolsPanel, bottomnav, histNav);
   root.replaceChildren(shell);
 
   // ── State ──────────────────────────────────────────────────────────────

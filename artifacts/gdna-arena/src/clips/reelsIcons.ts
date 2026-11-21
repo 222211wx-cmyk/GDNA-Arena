@@ -23,6 +23,8 @@ export const reelsIcons = {
     svg('<path d="M6 6l12 12"/><path d="M18 6 6 18"/>'),
   back: () =>
     svg('<path d="M15 5l-7 7 7 7"/>'),
+  forward: () =>
+    svg('<path d="M9 5l7 7-7 7"/>'),
   // Center-of-frame fullscreen toggle ("Plein écran").
   fullscreen: (active = false) =>
     active
