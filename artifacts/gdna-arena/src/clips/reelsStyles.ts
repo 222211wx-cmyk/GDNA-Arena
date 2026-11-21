@@ -435,21 +435,39 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-composer-head h2{margin:0;font-size:1.1rem;font-weight:800}
   .reels-composer-body{padding:calc(${space} * 4);max-width:40rem;width:100%;margin:0 auto}
 
-  /* ── Phone only (<768px): 120px header, two rows (icons, then title). Desktop untouched ── */
+  /* ── Phone only (<768px): Reels reference geometry. Desktop untouched ──
+     header 52 | top buttons 28px at top 76 (24px under header) | rail right 12,
+     bottom 160, item 62 (icon 30, count 16, gap 18) | bottom nav 64 (icon 28) */
   @media (max-width:767px){
-    .reels-shell{--reels-header-h:clamp(96px,14.2dvh,120px)}
-    .reels-topbar{
-      height:var(--reels-header-h);flex-wrap:wrap;align-content:flex-start;
-      padding-top:var(--reels-top-safe);row-gap:0;
-    }
+    .reels-shell{--reels-header-h:52px;--reels-btn-top:calc(var(--reels-top-safe) + 76px)}
+    .reels-topbar{height:var(--reels-header-h);justify-content:flex-start;align-items:center}
+    .reels-title{font-size:clamp(24px,calc((100vw - 32px) / 5.7),40px);line-height:52px;margin:0}
     .reels-topbar-left{display:contents}
-    .reels-topbar-left > .reels-icon-btn{order:1}
-    .reels-topbar-right{order:2;gap:clamp(4px,2vw,18px)}
-    .reels-title{order:3;flex:0 0 100%;font-size:clamp(32px,calc((100vw - 32px) / 5.7),120px);line-height:1.05}
-    .reels-viewer-close{top:calc(var(--reels-top-safe) + var(--reels-header-h) + 8px);z-index:42}
-    .reels-fs-pill{bottom:auto;top:calc(var(--reels-top-safe) + var(--reels-header-h) + 8px);right:16px;z-index:3;min-height:44px}
+    .reels-topbar-left > .reels-icon-btn{position:absolute;left:16px;top:var(--reels-btn-top)}
+    .reels-topbar-right{position:absolute;right:16px;top:var(--reels-btn-top);gap:24px}
+    .reels-topbar .reels-icon-btn{width:28px;height:28px;position:absolute}
+    .reels-topbar-right .reels-icon-btn{position:relative}
+    .reels-topbar .reels-icon-btn svg{width:28px;height:28px}
+    .reels-topbar .reels-icon-btn::after{content:"";position:absolute;inset:-8px}
+    .reels-viewer-close{top:calc(var(--reels-btn-top) + 28px + 8px);z-index:42}
+    .reels-fs-pill{bottom:auto;top:calc(var(--reels-btn-top) + 28px + 8px);right:16px;z-index:3;min-height:44px}
     .reels-follow-btn{min-height:44px;padding-inline:calc(${space} * 4)}
     .reels-tools-panel{z-index:50}
+    .reels-slide .clip-rail{right:12px;bottom:calc(160px + var(--reels-bottom-safe));gap:18px}
+    .reels-slide .clip-meta{bottom:calc(80px + var(--reels-bottom-safe));right:84px}
+    .reels-slide .clip-rail > .clip-rail-btn,.reels-slide .clip-rail > div > .clip-rail-btn{
+      height:62px;width:48px;justify-content:center;gap:2px;position:relative;
+    }
+    .reels-slide .clip-rail-btn::after{content:"";position:absolute;inset:0 -6px}
+    .reels-slide .clip-rail-label{display:none}
+    .reels-slide .clip-rail-icon{width:30px;height:30px}
+    .reels-slide .clip-rail-icon svg{width:30px;height:30px}
+    .reels-slide .clip-rail-count{font-size:16px;line-height:16px}
+    .reels-bottomnav{height:64px;box-sizing:border-box}
+    .reels-nav-item{height:64px}
+    .reels-nav-item svg{width:28px;height:28px}
+    .reels-nav-avatar{width:28px;height:28px}
+    .reels-grid-view{padding-top:calc(var(--reels-top-safe) + 52px);padding-bottom:calc(var(--reels-bottom-safe) + 64px)}
   }
 
   /* ── Desktop: constrain the phone-like column, center it ───────────────── */
