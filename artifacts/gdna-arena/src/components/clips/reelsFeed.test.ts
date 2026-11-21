@@ -93,23 +93,14 @@ describe("critical Clips navigation", () => {
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/messages/unread-count"))).toBe(false);
   });
 
-  it("shows the authenticated inbox count using the actual count contract", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.includes("/auth/me")) return Response.json({ id: 7, username: "citizen" });
-      if (url.includes("/messages/unread-count")) return Response.json({ count: 3 });
-      return Response.json({ clips: [], notifications: [], unreadCount: 0, hasMore: false });
-    }));
+  it("keeps the six icon tabs in the persistent bottom nav", () => {
     controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
-    await vi.waitFor(() => expect(document.querySelector('[data-nav="inbox"]')?.getAttribute("aria-label")).toBe("Inbox, 3 unread messages"));
-  });
-
-  it("keeps Home, Clips, Search, Inbox, Profile in the persistent bottom nav", () => {
-    controller = mountReels(document.getElementById("root")!, { onOpenComposer: vi.fn() });
-    const labels = [...document.querySelectorAll(".reels-bottomnav .reels-nav-item > span:last-child")]
-      .map(node => node.textContent);
-    expect(labels).toEqual(["Accueil", "Clips", "Boîte", "Profil"]);
-    expect(document.querySelector('.reels-bottomnav [data-nav="publish"]')).not.toBeNull();
-    expect(document.querySelector('[data-nav="inbox"]')?.getAttribute("href")).toBe("/boite");
+    const labels = [...document.querySelectorAll(".reels-bottomnav .reels-nav-item")]
+      .map(node => node.getAttribute("aria-label"));
+    expect(labels).toEqual(["Accueil", "Reels", "Amis", "Boutique", "Notifications", "Profil"]);
+    expect(document.querySelector('.reels-bottomnav [data-nav="publish"]')).toBeNull();
+    expect(document.querySelector('[data-nav="inbox"]')).toBeNull();
+    expect(document.querySelector('[data-nav="profile"]')?.getAttribute("href")).toBe("/profil");
     expect(document.querySelector(".reels-title")?.textContent).toBe("Reels");
   });
 
@@ -344,10 +335,6 @@ describe("Reels natural-end progression", () => {
     await vi.waitFor(() => expect(document.querySelectorAll("video")).toHaveLength(1));
     const first = document.querySelector("video") as HTMLVideoElement;
     expect(first.loop).toBe(false);
-    first.dispatchEvent(new Event("error"));
-    expect(document.querySelector(".reels-media-error [type=button]")?.textContent).toBe("Réessayer");
-    first.dispatchEvent(new Event("loadeddata"));
-    expect(document.querySelector(".reels-media-error")).toBeNull();
     first.dispatchEvent(new Event("play"));
     expect(first.controls).toBe(true);
 

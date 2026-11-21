@@ -473,7 +473,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
 
   /* ══ Facebook-Reels spec (390x844): black / yellow / white ═══════════════ */
   .reels-shell{background:#000;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
-    --reels-nav-h:calc(56px + var(--reels-bottom-safe))}
+    --reels-nav-h:calc(62px + var(--reels-bottom-safe))}
   .reels-slide,.reels-bg-fallback{background:#000}
   .reels-slide{position:relative}
   /* Video fills the screen. */
@@ -485,13 +485,14 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-viewer-close{display:none}
   .reels-shell[data-from-grid="true"] .reels-viewer-close{display:inline-flex}
   .reels-slide .clip-rail-label{display:none}
-  .reels-slide .clip-rail-btn[aria-label^="Enregistr"] .clip-rail-count{display:none}
   .reels-slide .clip-citizen-mini{display:none}
 
   .reels-topbar{height:48px;padding:var(--reels-top-safe) 12px 0;box-sizing:content-box;
     background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);gap:0}
   .reels-topbar-left,.reels-topbar-right{gap:0}
-  .reels-topbar > .reels-title{font-size:16px;font-weight:700;color:#fff}
+  .reels-topbar-left{gap:12px}
+  .reels-topbar-right{gap:16px}
+  .reels-topbar .reels-title{font-size:28px;font-weight:800;color:#fff;line-height:1}
   .reels-icon-btn svg{width:26px;height:26px}
 
   /* Right rail: profile, like, comment, share, save. */
@@ -499,43 +500,39 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-slide .clip-rail .clip-rail-btn{min-width:56px;min-height:56px;justify-content:center;background:transparent;gap:2px}
   .reels-slide .clip-rail-icon,.reels-slide .clip-rail-icon svg{width:28px;height:28px}
   .reels-slide .clip-rail-count,.reels-slide .clip-rail-label{font-size:13px;font-weight:600;color:#fff}
-  .reels-slide .clip-menu-wrap{position:static}
-  .reels-slide .clip-menu-wrap > .clip-rail-btn{display:none}
-  .reels-slide .clip-menu{position:fixed;right:12px;top:calc(var(--reels-top-safe) + 52px);bottom:auto}
-  .reels-rail-profile{position:relative;width:32px;height:44px;display:flex;justify-content:center}
-  .reels-rail-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;border:1.5px solid #fff;background:#222;
-    display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;text-decoration:none}
-  .reels-rail-avatar img{width:100%;height:100%;object-fit:cover}
-  .reels-rail-follow{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:20px;height:20px;border-radius:50%;
-    border:0;padding:0;background:#ff2b4a;color:#fff;font-size:15px;font-weight:700;line-height:20px;cursor:pointer}
-
+  .reels-slide .clip-menu-wrap{display:none}
   /* Bottom-left info block. */
   .reels-slide .clip-meta{position:absolute;left:12px;bottom:80px;right:auto;width:280px;max-width:280px;gap:8px;color:#fff;
     text-shadow:0 1px 3px #000}
   .reels-author{margin:0;gap:8px}
   .reels-avatar{width:36px;height:36px;border:1.5px solid #fff}
   .reels-author-name{font-size:14px;font-weight:700;color:#fff}
-  .reels-follow-btn{background:#fff;color:#000;border:0;font-size:12px;font-weight:700;padding:4px 12px;text-shadow:none}
-  .reels-follow-btn[data-following="true"]{background:rgba(255,255,255,.25);color:#fff}
   .reels-music{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .reels-music-name{font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .reels-disc{flex:none;width:32px;height:32px;border-radius:50%;border:8px solid #222;
-    background:radial-gradient(circle,#fff 0 3px,#555 4px);animation:reels-disc-spin 4s linear infinite}
-  @keyframes reels-disc-spin{to{transform:rotate(360deg)}}
-  @media (prefers-reduced-motion:reduce){.reels-disc{animation:none}}
+  .reels-globe{font-size:14px;line-height:1}
+  .reels-desc{display:flex;gap:8px;align-items:flex-end;font-size:14px;line-height:1.45}
+  .reels-desc .reels-caption{flex:1;min-width:0;margin:0}
+  .reels-more-btn{flex:none;background:none;border:0;color:#fff;font-size:22px;font-weight:700;line-height:1;cursor:pointer;padding:0 4px;text-shadow:0 1px 3px #000}
+  .reels-sheet{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
+  .reels-sheet-card{width:100%;max-width:390px;background:#1a1a1a;color:#fff;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
+  .reels-sheet-btn{width:100%;padding:14px;border:0;border-radius:12px;background:#2a2a2a;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  .reels-sheet-btn.danger{background:#e41e3f}
+  .reels-sheet-ask{text-align:center;font-size:15px;padding:4px 0}
+  .reels-sheet-note{margin:0;min-height:1.2em;text-align:center;font-size:13px;color:#ddd}
   .reels-caption{font-size:14px;color:#fff;text-shadow:0 1px 3px #000}
   .reels-caption-toggle{color:#fff}
 
   /* Bottom tab bar. */
-  .reels-bottomnav{height:var(--reels-nav-h);background:#000;border-top:1px solid #222;padding:0 4px var(--reels-bottom-safe);
+  .reels-bottomnav{height:var(--reels-nav-h);background:#0a0a0a;border-top:1px solid rgba(255,255,255,.12);padding:0 4px var(--reels-bottom-safe);
     justify-content:space-around;align-items:center}
-  .reels-nav-item{min-width:56px;min-height:56px;flex:1;justify-content:center;gap:2px;font-size:10px;font-weight:500;color:#aaa}
-  .reels-nav-item svg{width:26px;height:26px}
+  .reels-nav-item{flex:none;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;background:none;border:0;
+    display:flex;align-items:center;justify-content:center;color:#9a9a9a;cursor:pointer;position:relative}
+  .reels-nav-item svg{width:28px;height:28px}
   .reels-nav-item[data-active="true"]{color:#fff}
-  .reels-nav-plus{flex:none;width:56px;height:56px;border-radius:50%;background:#000;color:#fff;border:2px solid #fff;
-    display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
-  .reels-nav-plus svg{width:28px;height:28px}
-  .reels-nav-plus:focus-visible{outline:2px solid #FFD400;outline-offset:2px}
+  .reels-nav-item .reels-badge{top:2px;right:2px;min-width:20px;height:20px;line-height:16px;background:#e41e3f;border:2px solid #0a0a0a;box-shadow:none;font-size:11px;font-weight:700}
+  .reels-nav-item[data-nav="reels"][data-active="true"] svg path{stroke:#000}
+  .reels-nav-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;border:1.5px solid #666}
+  .reels-nav-item[data-active="true"] .reels-nav-avatar{border-color:#fff}
 
   /* /profil and /boite pages share the shell. */
   .reels-page{position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:16px;
@@ -556,7 +553,16 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .pub-modes{display:flex;gap:8px}
   .pub-mode{flex:1 1 50%;min-width:0;padding:12px 8px;border-radius:12px;border:2px solid #333;background:#000;color:#fff;
     font-size:13px;font-weight:700;line-height:1.35;cursor:pointer}
-  .pub-mode[aria-pressed="true"]{border-color:#FFD400;color:#FFD400}
+  .pub-mode[aria-pressed="true"]{border-color:#FFD400;background:#FFD400;color:#000}
+  .pub-mode[data-mode="normal"][aria-pressed="true"]{background:#222;color:#fff;border-color:#fff}
+  .pub-filename{margin:0;font-size:13px;color:#ccc;text-align:center;word-break:break-all}
+  .pub-filename:empty{display:none}
+  .pub-input{width:100%;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;font-size:14px}
+  .pub-toggle{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#fff}
+  .pub-toggle input{width:20px;height:20px;accent-color:#ff2d55}
+  .pub-publish{width:100%;padding:14px;border:0;border-radius:12px;background:#ff2d55;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+  .pub-publish:disabled{opacity:.5;cursor:not-allowed}
+  .pub-close{width:100%;padding:12px;border:0;border-radius:12px;background:#222;color:#fff;font-size:14px;cursor:pointer}
   .pub-mode:disabled{opacity:.5;cursor:not-allowed}
   .pub-choose{width:100%;height:52px;border:0;border-radius:12px;background:#FFD400;color:#000;font-size:16px;font-weight:700;cursor:pointer}
   .pub-choose:disabled{opacity:.55;cursor:not-allowed}

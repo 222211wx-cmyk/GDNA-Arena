@@ -13,13 +13,13 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string,
   return n;
 }
 
-export function mountPage(root: HTMLElement, kind: "profil" | "boite", onPublish: () => void) {
+export function mountPage(root: HTMLElement, kind: "profil" | "boite", _onPublish: () => void = () => {}) {
   const shell = node("div", "reels-shell");
   shell.dataset.testid = `${kind}-page`;
   const topbar = node("div", "reels-topbar");
   topbar.append(node("span"), node("h1", "reels-title", kind === "profil" ? "Profil" : "Boîte"), node("span"));
   const page = node("div", "reels-page");
-  const { nav } = buildTabbar(kind === "profil" ? "profile" : "inbox", onPublish);
+  const { nav } = buildTabbar(kind === "profil" ? "profile" : null, { onNotif: () => location.assign(`${BASE}cli`) });
   shell.append(topbar, page, nav);
   root.replaceChildren(shell);
 
