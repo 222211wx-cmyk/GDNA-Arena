@@ -43,7 +43,7 @@ export function clipOverlayCss(palette: Palette, space: string): string {
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap:20px;
+    gap:24px;
     pointer-events:auto;
   }
 
@@ -62,9 +62,9 @@ export function clipOverlayCss(palette: Palette, space: string): string {
     filter:drop-shadow(0 1px 3px rgba(0,0,0,.7));
     -webkit-tap-highlight-color:transparent;
   }
-  .clip-rail-icon{display:inline-flex;width:28px;height:28px}
-  .clip-rail-icon svg{width:28px;height:28px}
-  .clip-rail-count{font-size:.75rem;font-weight:700;color:#ffffff}
+  .clip-rail-icon{display:inline-flex;width:48px;height:48px;align-items:center;justify-content:center}
+  .clip-rail-icon svg{width:48px;height:48px}
+  .clip-rail-count{font-size:24px;font-weight:700;color:#ffffff}
   /* Icons stay white per spec; the filled (vs outline) glyph indicates the
      active state — active never switches to gold. */
   .clip-rail-btn,.clip-rail-btn.active{color:#ffffff}
@@ -162,7 +162,7 @@ export function clipOverlayCss(palette: Palette, space: string): string {
 
   /* Keep the exact requested 16 / 80 / 20 rail geometry on mobile too. */
   @media (max-width:768px){
-    .clip-rail{right:16px;bottom:80px;gap:20px}
+    .clip-rail{right:16px;bottom:80px;gap:24px}
     .clip-meta{left:16px;bottom:80px;right:72px}
   }
   `;

@@ -109,8 +109,8 @@ describe("critical Clips navigation", () => {
       .map(node => node.textContent);
     expect(labels).toEqual(["Accueil", "Clips", "Recherche", "Inbox", "Profil"]);
     expect(document.querySelector('[data-nav="inbox"]')?.getAttribute("href")).toBe("/messages");
-    expect(document.querySelector('.reels-topbar-left a[href="/"]')).not.toBeNull();
-    expect(document.querySelector(".reels-title")?.textContent).toBe("GDNA Arena");
+    expect(document.querySelector(".reels-topbar-left .reels-icon-btn")).not.toBeNull();
+    expect(document.querySelector(".reels-title")?.textContent).toBe("Arena-CLips");
   });
 
   it("honors view=grid on boot even for an empty feed", async () => {

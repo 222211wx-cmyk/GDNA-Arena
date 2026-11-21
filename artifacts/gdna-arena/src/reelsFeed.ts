@@ -25,7 +25,6 @@ import {
   type NotificationItem,
 } from "./reelsApi";
 import { mountVideoActions, type VideoActionState } from "./VideoActions";
-import { getInstallLang, installText, requestSectionInstall } from "../../lib/section-install";
 
 const BASE = import.meta.env.BASE_URL;
 const PAGE_SIZE = 5;
@@ -99,29 +98,15 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
   // Top bar
   const topbar = el("div", "reels-topbar");
   const topLeft = el("div", "reels-topbar-left");
-  const homeLink = el("a", "reels-icon-btn", { href: BASE, "aria-label": "Retour à l’accueil" });
-  homeLink.innerHTML = reelsIcons.back();
   const title = el("h1", "reels-title");
-  title.textContent = "GDNA Arena";
-  topLeft.append(homeLink);
+  title.textContent = "Arena-CLips";
   const topRight = el("div", "reels-topbar-right");
-  const installBtn = iconButton(installText(getInstallLang(), "clipsButton"), "Hc");
-  installBtn.dataset.testid = "install-clips";
-  installBtn.addEventListener("click", () => {
-    void requestSectionInstall("clips").then(message => {
-      const help = el("div", "reels-install-help", { role: "status" });
-      help.textContent = message;
-      const close = iconButton(installText(getInstallLang(), "dismiss"), "×");
-      close.addEventListener("click", () => help.remove());
-      help.append(close);
-      shell.querySelector(".reels-install-help")?.remove();
-      shell.append(help);
-    });
-  });
+  const menuBtn = iconButton("Menu", reelsIcons.hamburger());
   const searchBtn = iconButton("Rechercher", reelsIcons.search());
-  const moreBtn = iconButton("Menu", reelsIcons.hamburger());
-  topRight.append(installBtn, searchBtn, moreBtn);
-  topbar.append(topLeft, title, topRight);
+  const moreBtn = iconButton("Plus", reelsIcons.more());
+  topLeft.append(menuBtn, title);
+  topRight.append(searchBtn, moreBtn);
+  topbar.append(topLeft, topRight);
 
   // Feed track
   const track = el("div", "reels-track", { "data-testid": "reels-track", tabindex: "0", "aria-label": "Fil des Clips" });

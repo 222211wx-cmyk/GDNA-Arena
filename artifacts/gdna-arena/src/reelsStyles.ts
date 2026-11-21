@@ -35,29 +35,25 @@ export function reelsShellCss(palette: Palette, space: string): string {
   /* ── Top bar ──────────────────────────────────────────────────────────── */
   .reels-topbar{
     position:absolute;left:0;right:0;top:0;z-index:41;
-    display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;
-    gap:calc(${space} * 2);
-    padding:calc(var(--reels-top-safe) + ${space} * 3) calc(${space} * 3) calc(${space} * 3);
+    display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:space-between;
+    height:64px;padding:0 16px;padding-top:var(--reels-top-safe);box-sizing:content-box;
     background:linear-gradient(to bottom, var(--reels-scrim-strong), transparent);
-    pointer-events:none;
+    pointer-events:none;direction:ltr;
   }
-  .reels-topbar-left,.reels-topbar-right{min-width:0}
-  .reels-topbar-right{justify-content:flex-end}
-  .reels-topbar > .reels-title{position:static;min-width:0;text-align:center;font-size:clamp(.875rem,4vw,1.4rem);white-space:nowrap}
   .reels-topbar > *{pointer-events:auto}
-  .reels-topbar-left{display:flex;align-items:center;gap:calc(${space} * 3)}
-  .reels-title{font-size:1.4rem;font-weight:900;letter-spacing:-.01em;color:var(--reels-on-media);margin:0}
-  .reels-topbar-right{display:flex;align-items:center;gap:${space}}
+  .reels-topbar-left{display:flex;align-items:center;gap:12px;min-width:0;flex:none}
+  .reels-topbar-right{display:flex;align-items:center;gap:18px;flex:none}
+  .reels-title{font-size:50px;font-weight:700;line-height:1;white-space:nowrap;letter-spacing:-.01em;color:var(--reels-on-media);margin:0}
   .reels-icon-btn{
-    display:inline-flex;align-items:center;justify-content:center;
-    width:44px;height:44px;padding:0;margin:0;border:0;border-radius:9999px;
+    display:inline-flex;align-items:center;justify-content:center;flex:none;
+    width:48px;height:48px;padding:0;margin:0;border:0;border-radius:9999px;
     background:transparent;color:var(--reels-on-media);cursor:pointer;
     filter:drop-shadow(0 1px 3px var(--reels-shadow));
     -webkit-tap-highlight-color:transparent;
   }
   .reels-icon-btn:hover{background:var(--reels-glass)}
   .reels-icon-btn:focus-visible{outline:2px solid ${palette.ring};outline-offset:2px}
-  .reels-icon-btn svg{width:26px;height:26px}
+  .reels-icon-btn svg{width:45px;height:45px}
   .reels-icon-btn.reels-badge-host{position:relative}
   .reels-viewer-close{position:absolute;left:calc(${space} * 3);top:calc(var(--reels-top-safe) + 68px);z-index:8;background:var(--reels-scrim)}
   .reels-badge{
@@ -101,7 +97,7 @@ export function reelsShellCss(palette: Palette, space: string): string {
 
   .reels-media-wrap{
     position:relative;z-index:1;
-    width:100%;height:calc(100% - var(--reels-bottom-safe) - ${space} * 20);max-height:100%;
+    width:100vw;height:100dvh;max-height:none;
     align-self:flex-start;
     display:flex;align-items:center;justify-content:center;
   }
@@ -112,16 +108,16 @@ export function reelsShellCss(palette: Palette, space: string): string {
   }
   .reels-slide video{
     pointer-events:auto !important;position:relative;z-index:1;
-    display:block;width:100%;height:auto;
-    max-height:100%;object-fit:contain;background:transparent;
+    display:block;width:100vw;height:100dvh;
+    max-height:none;object-fit:cover;background:transparent;
   }
   /* Portrait / square clips fill; landscape clips stay contained with the
      blurred background showing above and below (letterbox). */
-  .reels-slide[data-orient="portrait"] video{width:100%;height:100%;object-fit:cover}
+  .reels-slide[data-orient="portrait"] video{width:100vw;height:100dvh;object-fit:cover}
 
   .reels-poster{
     position:absolute;inset:0;z-index:0;
-    width:100%;height:100%;object-fit:contain;
+    width:100%;height:100%;object-fit:cover;
     background:transparent;pointer-events:none;
   }
 
@@ -294,23 +290,23 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-bottomnav{
     position:absolute;left:0;right:0;bottom:0;z-index:40;
     display:flex;align-items:center;justify-content:space-around;
-    padding:calc(${space} * 2) calc(${space} * 2) calc(var(--reels-bottom-safe) + ${space} * 2);
+    height:72px;padding:0 8px;padding-bottom:var(--reels-bottom-safe);box-sizing:content-box;
     background:${palette.background};
     border-top:1px solid ${palette.border};
   }
   .reels-nav-item{
-    display:flex;flex-direction:column;align-items:center;gap:calc(${space} * 0.5);
-    flex:1;min-width:0;padding:calc(${space} * 1);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    flex:1;min-width:0;height:72px;padding:0;
     background:transparent;border:0;color:${palette.mutedForeground};
-    text-decoration:none;font-size:.625rem;font-weight:600;cursor:pointer;
+    text-decoration:none;font-size:12px;font-weight:600;cursor:pointer;
     -webkit-tap-highlight-color:transparent;
   }
-  .reels-nav-item svg{width:24px;height:24px}
+  .reels-nav-item svg{width:32px;height:32px}
   .reels-nav-item[data-active="true"]{color:${palette.foreground}}
   .reels-nav-item:focus-visible{outline:2px solid ${palette.ring};outline-offset:-2px;border-radius:${space}}
   .reels-nav-item.reels-badge-host{position:relative}
   .reels-nav-avatar{
-    width:24px;height:24px;border-radius:9999px;overflow:hidden;flex:none;
+    width:32px;height:32px;border-radius:9999px;overflow:hidden;flex:none;
     background:${palette.secondary};border:1px solid ${palette.border};
     display:flex;align-items:center;justify-content:center;font-size:.6875rem;font-weight:800;color:${palette.foreground};
   }
@@ -443,8 +439,8 @@ export function reelsShellCss(palette: Palette, space: string): string {
   @media (min-width:768px){
     .reels-shell{align-items:stretch}
     .reels-track{margin-inline:auto}
-    .reels-slide{max-width:min(520px,calc((100dvh - 120px) * 9 / 16));margin-inline:auto}
-    .reels-topbar,.reels-bottomnav{max-width:520px;margin-inline:auto}
+    .reels-slide{max-width:100vw}
+    .reels-topbar,.reels-bottomnav{max-width:none}
     .reels-grid,.reels-search-results{grid-template-columns:repeat(3,1fr);max-width:720px;margin-inline:auto;width:100%}
   }
   `;
