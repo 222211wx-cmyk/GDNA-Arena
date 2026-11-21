@@ -435,14 +435,6 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-composer-head h2{margin:0;font-size:1.1rem;font-weight:800}
   .reels-composer-body{padding:calc(${space} * 4);max-width:40rem;width:100%;margin:0 auto}
 
-  /* ── Phone only (<768px): header scales with viewport, up to 120px. Desktop untouched ── */
-  @media (max-width:767px){
-    .reels-topbar{height:clamp(64px,calc(100dvh * .15),150px)}
-    .reels-title{font-size:clamp(40px,26vw,120px)}
-    .reels-topbar-left{min-width:0;flex:1 1 auto;overflow:hidden}
-    .reels-topbar-right{gap:clamp(4px,2vw,18px)}
-  }
-
   /* ── Desktop: constrain the phone-like column, center it ───────────────── */
   @media (min-width:768px){
     .reels-shell{align-items:stretch}

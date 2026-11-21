@@ -435,12 +435,21 @@ export function reelsShellCss(palette: Palette, space: string): string {
   .reels-composer-head h2{margin:0;font-size:1.1rem;font-weight:800}
   .reels-composer-body{padding:calc(${space} * 4);max-width:40rem;width:100%;margin:0 auto}
 
-  /* ── Phone only (<768px): header scales with viewport, up to 120px. Desktop untouched ── */
+  /* ── Phone only (<768px): 120px header, two rows (icons, then title). Desktop untouched ── */
   @media (max-width:767px){
-    .reels-topbar{height:clamp(64px,calc(100dvh * .15),150px)}
-    .reels-title{font-size:clamp(40px,26vw,120px)}
-    .reels-topbar-left{min-width:0;flex:1 1 auto;overflow:hidden}
-    .reels-topbar-right{gap:clamp(4px,2vw,18px)}
+    .reels-shell{--reels-header-h:clamp(96px,14.2dvh,120px)}
+    .reels-topbar{
+      height:var(--reels-header-h);flex-wrap:wrap;align-content:flex-start;
+      padding-top:var(--reels-top-safe);row-gap:0;
+    }
+    .reels-topbar-left{display:contents}
+    .reels-topbar-left > .reels-icon-btn{order:1}
+    .reels-topbar-right{order:2;gap:clamp(4px,2vw,18px)}
+    .reels-title{order:3;flex:0 0 100%;font-size:clamp(32px,calc((100vw - 32px) / 5.7),120px);line-height:1.05}
+    .reels-viewer-close{top:calc(var(--reels-top-safe) + var(--reels-header-h) + 8px);z-index:42}
+    .reels-fs-pill{bottom:auto;top:calc(var(--reels-top-safe) + var(--reels-header-h) + 8px);right:16px;z-index:3;min-height:44px}
+    .reels-follow-btn{min-height:44px;padding-inline:calc(${space} * 4)}
+    .reels-tools-panel{z-index:50}
   }
 
   /* ── Desktop: constrain the phone-like column, center it ───────────────── */
