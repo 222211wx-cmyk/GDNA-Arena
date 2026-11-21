@@ -46,6 +46,12 @@ export const reelsIcons = {
     svg('<path d="M4 7h16l-1 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1Z"/><path d="M8.5 7a3.5 3.5 0 0 1 7 0"/>', { filled: active, size: 24 }),
   navBell: (active = false) =>
     svg('<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 20a2 2 0 0 0 4 0"/>', { filled: active, size: 24 }),
+  navUser: (active = false) =>
+    svg('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>', { filled: active, size: 24 }),
+  navInbox: (active = false) =>
+    svg('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>', { filled: active, size: 24 }),
+  plus: () =>
+    svg('<path d="M12 5v14"/><path d="M5 12h14"/>', { size: 28, stroke: 2.4 }),
   navSearch: (active = false) =>
     svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>', { filled: active, size: 24 }),
 };

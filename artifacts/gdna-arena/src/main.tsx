@@ -4,7 +4,7 @@ const rawRoute = window.location.pathname.slice(base.length) || "/";
 const route = rawRoute.length > 1 ? rawRoute.replace(/\/+$/, "") : rawRoute;
 const clipCode = route.match(/^\/clip\/(HELX-\d{6})$/)?.[1] ?? route.match(/^\/clips\/([1-9]\d*)$/)?.[1];
 const isLibraryRoute = /^\/clips\/[A-Da-d](?:\/GDNA-CLIPS-[A-Da-d]-\d{4,})?$/i.test(route);
-const isClipRoute = route === "/clip" || route === "/clips" || route === "/publish";
+const isClipRoute = ["/cli", "/clip", "/clips", "/profil", "/boite", "/publier", "/publish"].includes(route);
 
 function showClipStartupError() {
   showStartupError("تعذر تشغيل صفحة الكليبز. تحقق من الاتصال وحاول مجدداً.", "clip");
