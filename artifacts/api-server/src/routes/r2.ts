@@ -50,7 +50,7 @@ router.get("/upload/status/:sessionId", async (req,res) => {
   res.json(result);
 });
 const PART_BYTES = 5 * 1024 * 1024;
-const partBytes = (size: number) => Math.max(PART_BYTES, Math.ceil(size / 9000));
+export const partBytes = (size: number) => Math.max(PART_BYTES, Math.ceil(size / 9000));
 async function listAllParts(bucket: string, key: string, uploadId: string) {
   const parts: import("@aws-sdk/client-s3").Part[] = [];
   let marker: string | undefined;
@@ -68,7 +68,7 @@ async function listAllParts(bucket: string, key: string, uploadId: string) {
 // mint a fresh capability for the same part; never require restarting a session.
 const URL_TTL_SECONDS = 60 * 60;
 const SESSION_TTL_HOURS = 48;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type UploadRow = {
   id: string;
@@ -85,7 +85,7 @@ type UploadRow = {
   expires_at: Date;
 };
 
-function auth(req: any, res: any): number | null {
+export function auth(req: any, res: any): number | null {
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Authentication required" }); return null; }
   if (req.body?.expectedOwnerId !== undefined && req.body.expectedOwnerId !== userId) {
@@ -94,7 +94,7 @@ function auth(req: any, res: any): number | null {
   return userId;
 }
 
-function integer(value: unknown): number | null {
+export function integer(value: unknown): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
@@ -117,7 +117,10 @@ async function uploadRow(id: string, userId: number): Promise<UploadRow | null> 
 
 type R2Config = NonNullable<ReturnType<typeof r2Config>>;
 
-async function completeUpload(req: Request, res: Response, userId: number, config: R2Config): Promise<void> {
+export async function completeUpload(
+  req: Request, res: Response, userId: number, config: R2Config,
+  partSizeFor: (size: number) => number = partBytes,
+): Promise<void> {
   if (["objectUrl", "publicUrl", "url"].some(field =>
     Object.prototype.hasOwnProperty.call(req.body ?? {}, field))) {
     throw new ClipUploadError(400, "Object URLs are not accepted; the upload session identifies the R2 object");
@@ -160,7 +163,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
     if (current.state !== "active" && current.state !== "completing") {
       res.status(409).json({ error: "R2 upload cannot be completed" }); return;
     }
-    const chunkBytes = partBytes(Number(current.size_bytes));
+    const chunkBytes = partSizeFor(Number(current.size_bytes));
     const expectedParts = Math.ceil(Number(current.size_bytes) / chunkBytes);
     const listed = await listAllParts(config.bucket,key,current.multipart_upload_id).catch(error => {
       if ((error as { name?: string }).name === "NoSuchUpload" && current.state === "completing") return null;
@@ -219,7 +222,7 @@ async function completeUpload(req: Request, res: Response, userId: number, confi
   }
 }
 
-function uploadFailure(res: Response, error: unknown, userId: number, action: string): void {
+export function uploadFailure(res: Response, error: unknown, userId: number, action: string): void {
   logger.warn({
     errorName: error instanceof Error ? error.name : "UnknownError",
     status: error instanceof ClipUploadError ? error.status :
