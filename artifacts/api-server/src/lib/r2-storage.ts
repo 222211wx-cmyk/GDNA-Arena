@@ -364,12 +364,18 @@ export function r2File(reference: string): ClipStorageFile {
 export async function signR2Get(
   reference: string,
   expiresInSeconds: number,
+  options: { contentDisposition?: string; contentType?: string } = {},
 ): Promise<string> {
   const config = r2Config();
   if (!config) throw r2ConfigurationError();
   return getSignedUrl(
     r2Client(),
-    new GetObjectCommand({ Bucket: config.bucket, Key: r2Key(reference) }),
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: r2Key(reference),
+      ResponseContentDisposition: options.contentDisposition,
+      ResponseContentType: options.contentType,
+    }),
     { expiresIn: expiresInSeconds },
   );
 }
