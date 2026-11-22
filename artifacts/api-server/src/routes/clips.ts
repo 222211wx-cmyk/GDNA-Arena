@@ -6,6 +6,7 @@ import { createClipsFeedHandler } from "./clips-feed.js";
 import { clipWithThumbnail } from "./clips-thumbnail-response.js";
 import { createClipPlaybackRouter, publicAvatarUrl } from "./clips-playback.js";
 import { signClipPlayback } from "../lib/clips-playback.js";
+import { isR2Reference, signR2Get } from "../lib/r2-storage.js";
 import { clipByteRange } from "../lib/clips-byte-range.js";
 import { runClipStorageCleanupBatch } from "../jobs/clips-storage-cleanup.js";
 const clipCompressionLock = (id: number) => `clip-compression:${id}`;
@@ -576,7 +577,16 @@ router.get(["/clips/stream/:id", "/clips/stream/:id/video.mp4"], async (req, res
     const etag = `"clip-${id}-${size}"`;
     res.setHeader("ETag", etag);
     if (req.query.download === "1") {
-      res.setHeader("Content-Disposition", `attachment; filename="clip-${id}${clipDownloadExtension(clip.content_type)}"`);
+      const disposition = `attachment; filename="clip-${id}${clipDownloadExtension(clip.content_type)}"`;
+      res.setHeader("Content-Disposition", disposition);
+      // Downloads go straight from R2 (CDN speed) instead of proxying every byte through this server.
+      if (req.method === "GET" && isR2Reference(clip.object_name)) {
+        try {
+          const url = await signR2Get(clip.object_name, 900, { contentDisposition: disposition, contentType: clip.content_type });
+          res.setHeader("Cache-Control", "private, no-store");
+          res.redirect(302, url); return;
+        } catch (e) { logger.warn({ err: e }, "[clips] signed download failed; proxying"); }
+      }
     }
     const range = req.headers.range;
     let bytes: { start: number; end: number } | undefined;
