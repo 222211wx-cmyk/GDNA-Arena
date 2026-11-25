@@ -32,6 +32,7 @@ await new Promise<void>(r => s3.listen(0, "127.0.0.1", r));
 process.env.R2_ENDPOINT = `http://127.0.0.1:${(s3.address() as any).port}`;
 process.env.R2_BUCKET_NAME = "t"; process.env.R2_ACCESS_KEY_ID = "k"; process.env.R2_SECRET_ACCESS_KEY = "s";
 
+process.env.DATABASE_URL ??= "postgres://x:x@127.0.0.1:1/x"; // pool is lazy; never connected in this test
 const { default: router } = await import("../src/qaisypro/router.js");
 const app = express();
 app.use((req: any, _r, n) => { req.session = req.headers["x-user"] ? { userId: Number(req.headers["x-user"]) } : {}; n(); });

@@ -29,7 +29,8 @@
     "test:integration:citizens-list": "node --test tests/citizens-list.integration.test.mjs",
     "test:integration:rooms-order": "node --test tests/messages-rooms-order.integration.test.mjs",
     "test:qaisypro": "esbuild tests/qaisypro-resume.test.ts --bundle --platform=node --format=esm --external:@aws-sdk/* --external:express --external:pg --external:pino --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=.qaisypro-test.mjs && AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED node .qaisypro-test.mjs; s=$?; rm -f .qaisypro-test.mjs; exit $s",
-    "test:qaisypro:extract": "esbuild tests/qaisypro-extract.test.ts --bundle --platform=node --format=esm --external:@aws-sdk/* --external:express --external:pg --external:pino --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=.qx-test.mjs && AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED node .qx-test.mjs; s=$?; rm -f .qx-test.mjs; exit $s"
+    "test:qaisypro:extract": "esbuild tests/qaisypro-extract.test.ts --bundle --platform=node --format=esm --external:@aws-sdk/* --external:express --external:pg --external:pino --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=.qx-test.mjs && AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED node .qx-test.mjs; s=$?; rm -f .qx-test.mjs; exit $s",
+    "test:qaisypro:assault3": "esbuild tests/qaisypro-assault3.test.ts --bundle --platform=node --format=esm --external:@aws-sdk/* --external:express --external:pg --external:pino --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" --outfile=.qa3-test.mjs && node .qa3-test.mjs; s=$?; rm -f .qa3-test.mjs; exit $s"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1135.0",

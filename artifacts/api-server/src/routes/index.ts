@@ -59,6 +59,7 @@ import liteRouter from "./lite";
 import operatorsRouter from "./operators";
 import authOfflineRecoveryRouter from "./auth-offline-recovery";
 import qaisyproRouter from "../qaisypro/router";
+import qaisyproV1Router from "../qaisypro/v1";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -121,5 +122,6 @@ router.use(searchRouter);
 router.use(messagingSubscriptionsRouter);
 router.use(citizenProfilesRouter);
 router.use(qaisyproRouter);
+router.use(qaisyproV1Router);
 
 export default router;
