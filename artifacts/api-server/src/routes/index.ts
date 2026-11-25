@@ -58,6 +58,7 @@ import gdnaRouter from "./gdna";
 import liteRouter from "./lite";
 import operatorsRouter from "./operators";
 import authOfflineRecoveryRouter from "./auth-offline-recovery";
+import qaisyproRouter from "../qaisypro/router";
 
 const router: IRouter = Router();
 router.use(healthRouter);
@@ -119,5 +120,6 @@ router.use(smartRouter);
 router.use(searchRouter);
 router.use(messagingSubscriptionsRouter);
 router.use(citizenProfilesRouter);
+router.use(qaisyproRouter);
 
 export default router;
