@@ -2,12 +2,20 @@ import { Router, raw, json, type IRouter } from "express";
 import { CLIENT_JS } from "./client.js";
 import { jobs, startExtract } from "./extract.js";
 import { r2Config } from "../lib/r2-storage.js";
+import { apiKeyFrom } from "./apikey.js";
+import { distribute, listConnectors } from "../connectors/index.js";
+import { failoverState, startFailover } from "./failover.js";
+import { r2Source } from "./source.js";
+import { snapshot } from "./stats.js";
+import { pool } from "../lib/db";
 import {
   CHUNK_BYTES, HttpError, completeSession, loadSession, openSession, progress, putChunk, stats, type Session,
 } from "./upload-core.js";
 
 const router: IRouter = Router();
-const uid = (req: any) => req.session?.userId ?? null;
+// Principal: a logged-in citizen (GDN-SMART session) or an API-key client. Sessions never cross principals.
+const uid = (req: any) => req.session?.userId ?? (apiKeyFrom(req) ? `key:${apiKeyFrom(req)!.name}` : null);
+startFailover(); // no-op unless QAISYPRO_SERVERS is set
 
 async function owned(req: any, id: string): Promise<Session> {
   const s = /^[0-9a-f]{32}$/.test(id) ? await loadSession(id) : null;
@@ -69,6 +77,32 @@ router.get("/qaisypro/extract/:jobId", guard(async (req, res) => {
   if (!job || String(job.userId) !== String(uid(req))) throw new HttpError(404, "job not found");
   res.json(job);
 }));
+// Operator-only: an API key, or a logged-in admin. Connectors spend the owner's credentials (GitHub, Railway...), so
+// ordinary citizens never reach them even though they may upload.
+const operator = (fn: (req: any, res: any) => Promise<unknown>) => guard(async (req, res) => {
+  if (!apiKeyFrom(req)) {
+    const { rows } = await pool!.query(`SELECT is_admin FROM users WHERE id = $1`, [req.session.userId]);
+    if (!rows[0]?.is_admin) throw new HttpError(403, "Admin access required");
+  }
+  return fn(req, res);
+});
+// One click, many destinations: POST {sessionId, targets:["r2","github",...], path?} (path = a file extracted from that session).
+router.post("/qaisypro/distribute", json(), operator(async (req, res) => {
+  const s = await owned(req, String(req.body?.sessionId));
+  if (!s.completedAt) throw new HttpError(409, "upload not complete yet");
+  const targets: string[] = Array.isArray(req.body?.targets) ? [...new Set<string>(req.body.targets.map(String))] : [];
+  if (!targets.length) throw new HttpError(400, "targets required");
+  let key = s.key, name = s.fileName;
+  if (req.body?.path) {
+    const rel = String(req.body.path).split("/").filter((x) => x && x !== ".." && x !== ".").join("/");
+    key = `qaisypro/extracted/${s.id}/${rel}`; name = rel.split("/").pop()!;
+  }
+  const results = await distribute(await r2Source(key, name), targets, req.body?.options ?? {});
+  res.json({ ok: results.every((r: any) => r.ok), results });
+}));
+router.get("/qaisypro/connectors", operator(async (_req, res) => { res.json({ connectors: listConnectors() }); }));
+router.get("/qaisypro/stats", operator(async (_req, res) => { res.json(snapshot()); }));
+router.get("/qaisypro/servers", operator(async (_req, res) => { res.json(failoverState()); }));
 router.get("/qaisypro/client.js", (_req, res) => { res.type("text/javascript").send(CLIENT_JS); });
 router.get("/qaisypro/health", (_req, res) => { res.json({ ok: true, chunkBytes: CHUNK_BYTES, r2: Boolean(r2Config()) }); });
 
