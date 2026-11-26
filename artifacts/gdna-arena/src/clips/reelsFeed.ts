@@ -1184,6 +1184,112 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     if (open) toolsPanel.querySelector<HTMLElement>("button")?.focus();
   }
 
+  // ── Settings panel (native DOM, persisted in localStorage) ───────────────
+  const SETTINGS_KEY = "arena-clips:settings";
+  const SETTINGS_SECTIONS: Array<{ title: string; items: Array<{ key: string; label: string; toggle?: boolean }> }> = [
+    { title: "LANGUE & COMPTE", items: [
+      { key: "langues", label: "Langues" }, { key: "compte", label: "Mon Compte" }, { key: "notifications", label: "Notifications" } ] },
+    { title: "VIDÉO", items: [
+      { key: "filtres", label: "Filtres" }, { key: "reglage-video", label: "Réglage Vidéo" }, { key: "cut", label: "Cut" },
+      { key: "camera", label: "Caméra" }, { key: "importer", label: "Importer" } ] },
+    { title: "AUDIO STUDIO", items: [
+      { key: "supprimer-audio", label: "Supprimer Audio Original", toggle: true },
+      { key: "musique-liste", label: "Musique : Liste" }, { key: "musique-paste", label: "Musique : Paste" },
+      { key: "musique-recherche", label: "Musique : Recherche" },
+      { key: "commentaire-vocal", label: "Commentaire Vocal" }, { key: "effets", label: "Effets" },
+      { key: "sync-ai", label: "Sync AI", toggle: true } ] },
+    { title: "VIDÉO ACTUELLE", items: [
+      { key: "enregistrer", label: "Enregistrer" }, { key: "partager", label: "Partager" },
+      { key: "copier-lien", label: "Copier Lien" }, { key: "modifier", label: "Modifier" }, { key: "supprimer", label: "Supprimer" } ] },
+    { title: "PLATEFORME", items: [
+      { key: "coins-xp", label: "Coins & XP" }, { key: "challenges", label: "Clip Challenges" },
+      { key: "tagging", label: "Arena Tagging" }, { key: "aide", label: "Aide" } ] },
+  ];
+  function loadSettings(): Record<string, unknown> {
+    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; } catch { return {}; }
+  }
+  function saveSettings(data: Record<string, unknown>) {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+  }
+  let settingsPanel: HTMLElement | null = null;
+  function openSettingsPanel() {
+    if (settingsPanel) return;
+    const data = loadSettings();
+    const panel = document.createElement("aside");
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Settings");
+    panel.dataset.testid = "reels-settings-panel";
+    panel.style.cssText = "position:fixed;top:0;right:0;width:320px;max-width:100%;height:100%;overflow-y:auto;z-index:9999;background:white;color:#111;font:14px system-ui,sans-serif;box-shadow:-4px 0 24px rgba(0,0,0,.4)";
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:14px 16px;position:sticky;top:0;background:white;border-bottom:1px solid #eee";
+    const title = document.createElement("strong");
+    title.textContent = "⚙️ SETTINGS";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.textContent = "X";
+    closeBtn.setAttribute("aria-label", "Fermer");
+    closeBtn.style.cssText = "border:0;background:none;font-size:18px;cursor:pointer;padding:4px 8px";
+    const close = () => { panel.remove(); settingsPanel = null; };
+    closeBtn.addEventListener("click", close);
+    head.append(title, closeBtn);
+    panel.append(head);
+    const note = document.createElement("div");
+    note.style.cssText = "padding:6px 16px;color:#b45309;min-height:18px;font-size:12px";
+    const say = (text: string) => { note.textContent = text; };
+    const activeClipId = () => activeSlideId;
+    const act = async (key: string) => {
+      const id = activeClipId();
+      const url = id != null ? `${window.location.origin}/clips/${id}` : "";
+      if (key === "copier-lien") {
+        if (!url) return say("Aucun clip actif");
+        try { await navigator.clipboard.writeText(url); say("Lien copié"); } catch { say(url); }
+      } else if (key === "partager") {
+        if (!url) return say("Aucun clip actif");
+        if (navigator.share) { try { await navigator.share({ url }); } catch { /* cancelled */ } } else say(url);
+      } else if (key === "importer") { window.location.assign("/publish"); }
+      else if (key === "musique-recherche") { close(); openSearch(); }
+      else if (["enregistrer", "modifier", "supprimer"].includes(key)) {
+        // Delegate to the active clip's own menu so existing permissions apply.
+        if (id == null) return say("Aucun clip actif");
+        close();
+        slides.find(s => s.id === id)?.element.querySelector<HTMLButtonElement>('.clip-menu-wrap [aria-haspopup="menu"]')?.click();
+      } else say("Option enregistrée");
+    };
+    for (const section of SETTINGS_SECTIONS) {
+      const h = document.createElement("h3");
+      h.textContent = section.title;
+      h.style.cssText = "margin:0;padding:14px 16px 6px;font-size:12px;letter-spacing:.08em;color:#666";
+      panel.append(h);
+      for (const item of section.items) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.key = item.key;
+        b.style.cssText = "display:flex;justify-content:space-between;width:100%;padding:12px 16px;border:0;background:none;text-align:left;font:inherit;cursor:pointer;border-bottom:1px solid #f3f3f3";
+        const label = document.createElement("span");
+        label.textContent = item.label;
+        b.append(label);
+        if (item.toggle) {
+          const state = document.createElement("span");
+          const paint = () => { state.textContent = data[item.key] ? "ON" : "OFF"; };
+          paint();
+          b.append(state);
+          b.addEventListener("click", () => { data[item.key] = !data[item.key]; paint(); saveSettings(data); });
+        } else {
+          b.addEventListener("click", () => {
+            data[item.key] = Date.now();
+            saveSettings(data);
+            void act(item.key);
+          });
+        }
+        panel.append(b);
+      }
+    }
+    panel.append(note);
+    settingsPanel = panel;
+    document.body.append(panel);
+    closeBtn.focus();
+  }
+
   // ── Directional horizontal gesture lock (does not steal video gestures) ──
   // The SAME handler is attached to both the feed track and the tools panel so a
   // swipe-right that STARTS on the open panel can still close it (the panel is a
@@ -1294,7 +1400,8 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
 
   // ── Top-bar wiring ───────────────────────────────────────────────────────
   searchBtn.addEventListener("click", openSearch);
-  moreBtn.addEventListener("click", () => setTools(true));
+  // "…" always opens the Settings panel, independent of the active slide.
+  moreBtn.addEventListener("click", event => { event.stopPropagation(); openSettingsPanel(); });
 
   // Pause active media when the tab is hidden; resume the active slide when visible.
   const onVisibility = () => {
@@ -1358,6 +1465,7 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVisibility);
       slides.forEach(s => { s.deactivate(); s.dispose(); });
+      settingsPanel?.remove();
       shell.remove();
     },
   };
