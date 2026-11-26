@@ -1184,46 +1184,49 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     if (open) toolsPanel.querySelector<HTMLElement>("button")?.focus();
   }
 
-  // ── Settings panel (native DOM, persisted in localStorage) ───────────────
-  const SETTINGS_KEY = "arena-clips:settings";
-  const SETTINGS_SECTIONS: Array<{ title: string; items: Array<{ key: string; label: string; toggle?: boolean }> }> = [
-    { title: "LANGUE & COMPTE", items: [
-      { key: "langues", label: "Langues" }, { key: "compte", label: "Mon Compte" }, { key: "notifications", label: "Notifications" } ] },
-    { title: "VIDÉO", items: [
-      { key: "filtres", label: "Filtres" }, { key: "reglage-video", label: "Réglage Vidéo" }, { key: "cut", label: "Cut" },
-      { key: "camera", label: "Caméra" }, { key: "importer", label: "Importer" } ] },
-    { title: "AUDIO STUDIO", items: [
-      { key: "supprimer-audio", label: "Supprimer Audio Original", toggle: true },
-      { key: "musique-liste", label: "Musique : Liste" }, { key: "musique-paste", label: "Musique : Paste" },
-      { key: "musique-recherche", label: "Musique : Recherche" },
-      { key: "commentaire-vocal", label: "Commentaire Vocal" }, { key: "effets", label: "Effets" },
-      { key: "sync-ai", label: "Sync AI", toggle: true } ] },
-    { title: "VIDÉO ACTUELLE", items: [
-      { key: "enregistrer", label: "Enregistrer" }, { key: "partager", label: "Partager" },
-      { key: "copier-lien", label: "Copier Lien" }, { key: "modifier", label: "Modifier" }, { key: "supprimer", label: "Supprimer" } ] },
-    { title: "PLATEFORME", items: [
-      { key: "coins-xp", label: "Coins & XP" }, { key: "challenges", label: "Clip Challenges" },
-      { key: "tagging", label: "Arena Tagging" }, { key: "aide", label: "Aide" } ] },
-  ];
-  function loadSettings(): Record<string, unknown> {
-    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; } catch { return {}; }
+  // ── "…" menu (native DOM, persisted in localStorage) ─────────────────────
+  type MenuState = {
+    zoom: number; brightness: number; contrast: number; saturation: number; filter: string;
+    muteOriginal: boolean; music: string; voice: boolean; quality: string; lang: string; notifications: boolean;
+  };
+  const MENU_KEY = "arena-clips:more-menu";
+  const MENU_DEFAULTS: MenuState = {
+    zoom: 1, brightness: 100, contrast: 100, saturation: 100, filter: "none",
+    muteOriginal: false, music: "", voice: false, quality: "auto", lang: "fr", notifications: true,
+  };
+  const FILTERS: Record<string, string> = {
+    none: "", noir: "grayscale(1)", sepia: "sepia(.8)", vif: "saturate(1.6) contrast(1.1)", froid: "hue-rotate(190deg) saturate(1.2)",
+  };
+  function loadMenuState(): MenuState {
+    try { return { ...MENU_DEFAULTS, ...(JSON.parse(localStorage.getItem(MENU_KEY) || "{}") || {}) }; } catch { return { ...MENU_DEFAULTS }; }
   }
-  function saveSettings(data: Record<string, unknown>) {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+  const menuState: MenuState = loadMenuState();
+  function saveMenuState() {
+    try { localStorage.setItem(MENU_KEY, JSON.stringify(menuState)); } catch { /* storage unavailable */ }
+  }
+  function activeVideo(): HTMLVideoElement | null {
+    return slides.find(s => s.id === activeSlideId)?.element.querySelector("video") ?? null;
+  }
+  function applyVideoFx() {
+    const v = activeVideo();
+    if (!v) return;
+    v.style.transform = menuState.zoom === 1 ? "" : `scale(${menuState.zoom})`;
+    const f = `brightness(${menuState.brightness}%) contrast(${menuState.contrast}%) saturate(${menuState.saturation}%) ${FILTERS[menuState.filter] ?? ""}`;
+    v.style.filter = f.trim() === "brightness(100%) contrast(100%) saturate(100%)" ? "" : f;
+    v.muted = menuState.muteOriginal || v.muted;
   }
   let settingsPanel: HTMLElement | null = null;
   function openSettingsPanel() {
     if (settingsPanel) return;
-    const data = loadSettings();
     const panel = document.createElement("aside");
     panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Settings");
-    panel.dataset.testid = "reels-settings-panel";
-    panel.style.cssText = "position:fixed;top:0;right:0;width:320px;max-width:100%;height:100%;overflow-y:auto;z-index:9999;background:white;color:#111;font:14px system-ui,sans-serif;box-shadow:-4px 0 24px rgba(0,0,0,.4)";
+    panel.setAttribute("aria-label", "Menu");
+    panel.dataset.testid = "reels-more-menu";
+    panel.style.cssText = "position:fixed;top:0;right:0;width:320px;max-width:100%;height:100%;overflow-y:auto;z-index:9999;background:white;color:#111;font:15px system-ui,sans-serif;box-shadow:-4px 0 24px rgba(0,0,0,.4)";
     const head = document.createElement("div");
-    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:14px 16px;position:sticky;top:0;background:white;border-bottom:1px solid #eee";
+    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:14px 16px;position:sticky;top:0;background:white;border-bottom:1px solid #eee;z-index:1";
     const title = document.createElement("strong");
-    title.textContent = "⚙️ SETTINGS";
+    title.textContent = "Options";
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.textContent = "X";
@@ -1234,59 +1237,143 @@ export function mountReels(root: HTMLElement, options: MountReelsOptions): Reels
     head.append(title, closeBtn);
     panel.append(head);
     const note = document.createElement("div");
-    note.style.cssText = "padding:6px 16px;color:#b45309;min-height:18px;font-size:12px";
+    note.style.cssText = "padding:8px 16px;color:#b45309;min-height:18px;font-size:12px;position:sticky;bottom:0;background:white";
     const say = (text: string) => { note.textContent = text; };
-    const activeClipId = () => activeSlideId;
-    const act = async (key: string) => {
-      const id = activeClipId();
-      const url = id != null ? `${window.location.origin}/clips/${id}` : "";
-      if (key === "copier-lien") {
-        if (!url) return say("Aucun clip actif");
-        try { await navigator.clipboard.writeText(url); say("Lien copié"); } catch { say(url); }
-      } else if (key === "partager") {
-        if (!url) return say("Aucun clip actif");
-        if (navigator.share) { try { await navigator.share({ url }); } catch { /* cancelled */ } } else say(url);
-      } else if (key === "importer") { window.location.assign("/publish"); }
-      else if (key === "musique-recherche") { close(); openSearch(); }
-      else if (["enregistrer", "modifier", "supprimer"].includes(key)) {
-        // Delegate to the active clip's own menu so existing permissions apply.
-        if (id == null) return say("Aucun clip actif");
-        close();
-        slides.find(s => s.id === id)?.element.querySelector<HTMLButtonElement>('.clip-menu-wrap [aria-haspopup="menu"]')?.click();
-      } else say("Option enregistrée");
+    const clipUrl = () => (activeSlideId == null ? "" : `${window.location.origin}/clips/${activeSlideId}`);
+    // Click one of the active clip's own controls so permissions and API calls stay in one place.
+    const clipControl = (...labels: string[]): boolean => {
+      const root = slides.find(s => s.id === activeSlideId)?.element;
+      const el = root && Array.from(root.querySelectorAll<HTMLButtonElement>("button[aria-label]")).find(b => labels.includes(b.getAttribute("aria-label") || ""));
+      if (!el) return false;
+      el.click();
+      return true;
     };
-    for (const section of SETTINGS_SECTIONS) {
-      const h = document.createElement("h3");
-      h.textContent = section.title;
-      h.style.cssText = "margin:0;padding:14px 16px 6px;font-size:12px;letter-spacing:.08em;color:#666";
-      panel.append(h);
-      for (const item of section.items) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.dataset.key = item.key;
-        b.style.cssText = "display:flex;justify-content:space-between;width:100%;padding:12px 16px;border:0;background:none;text-align:left;font:inherit;cursor:pointer;border-bottom:1px solid #f3f3f3";
-        const label = document.createElement("span");
-        label.textContent = item.label;
-        b.append(label);
-        if (item.toggle) {
-          const state = document.createElement("span");
-          const paint = () => { state.textContent = data[item.key] ? "ON" : "OFF"; };
-          paint();
-          b.append(state);
-          b.addEventListener("click", () => { data[item.key] = !data[item.key]; paint(); saveSettings(data); });
-        } else {
-          b.addEventListener("click", () => {
-            data[item.key] = Date.now();
-            saveSettings(data);
-            void act(item.key);
-          });
-        }
-        panel.append(b);
-      }
-    }
+    const rowStyle = "display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:13px 16px;border:0;background:none;text-align:left;font:inherit;cursor:pointer;border-bottom:1px solid #f1f1f1;color:#111";
+    const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, css = "") => { const e = document.createElement(tag); if (css) e.style.cssText = css; return e; };
+    const smallBtn = (text: string, fn: () => void) => { const b = mk("button", "min-width:40px;padding:6px 10px;border:1px solid #ccc;border-radius:8px;background:#fafafa;font:inherit;cursor:pointer;color:#111"); b.type = "button"; b.textContent = text; b.addEventListener("click", fn); return b; };
+
+    const row = (emoji: string, label: string, onClick: () => void, opts: { danger?: boolean; hint?: () => string } = {}) => {
+      const b = mk("button", rowStyle + (opts.danger ? ";color:#d00000;font-weight:700" : ""));
+      b.type = "button";
+      b.dataset.key = label;
+      const l = mk("span"); l.textContent = `${emoji} ${label}`;
+      b.append(l);
+      if (opts.hint) { const h = mk("span", "font-size:12px;color:#777"); h.textContent = opts.hint(); b.append(h); }
+      b.addEventListener("click", onClick);
+      panel.append(b);
+      return b;
+    };
+    // Expandable row: tapping toggles an inline area filled by `build`.
+    const group = (emoji: string, label: string, build: (area: HTMLElement) => void) => {
+      const area = mk("div", "padding:8px 16px 12px;background:#fafafa;border-bottom:1px solid #f1f1f1;display:flex;flex-direction:column;gap:10px");
+      area.hidden = true;
+      build(area);
+      const b = row(emoji, label, () => { area.hidden = !area.hidden; });
+      panel.append(area);
+      void b;
+    };
+    const toggleRow = (area: HTMLElement, label: string, key: "muteOriginal" | "voice" | "notifications") => {
+      const b = mk("button", "display:flex;justify-content:space-between;width:100%;padding:8px 0;border:0;background:none;font:inherit;cursor:pointer;color:#111");
+      b.type = "button";
+      const s = mk("b");
+      const paint = () => { s.textContent = menuState[key] ? "ON" : "OFF"; };
+      const l = mk("span"); l.textContent = label;
+      b.append(l, s); paint();
+      b.addEventListener("click", () => { menuState[key] = !menuState[key]; if (key === "muteOriginal") { const v = activeVideo(); if (v) v.muted = menuState.muteOriginal; } paint(); saveMenuState(); });
+      area.append(b);
+    };
+    const choices = (area: HTMLElement, options: string[], get: () => string, set: (v: string) => void) => {
+      const wrap = mk("div", "display:flex;flex-wrap:wrap;gap:6px");
+      const paint = () => wrap.querySelectorAll("button").forEach(b => { b.style.background = b.dataset.v === get() ? "#fbbf24" : "#fafafa"; });
+      for (const o of options) { const b = smallBtn(o, () => { set(o); saveMenuState(); paint(); }); b.dataset.v = o; wrap.append(b); }
+      paint();
+      area.append(wrap);
+    };
+    const slider = (area: HTMLElement, label: string, key: "brightness" | "contrast" | "saturation") => {
+      const w = mk("label", "display:flex;flex-direction:column;gap:2px;font-size:13px");
+      const t = mk("span"); const paint = () => { t.textContent = `${label} : ${menuState[key]}%`; }; paint();
+      const r = mk("input"); r.type = "range"; r.min = "50"; r.max = "150"; r.value = String(menuState[key]);
+      r.addEventListener("input", () => { menuState[key] = Number(r.value); paint(); saveMenuState(); applyVideoFx(); });
+      w.append(t, r); area.append(w);
+    };
+
+    // 1. Supprimer (first, red)
+    row("🗑️", "Supprimer", () => {
+      if (activeSlideId == null) return say("Aucun clip actif");
+      if (!clipControl("Delete clip")) { const own = slides.find(s => s.id === activeSlideId)?.element.querySelector<HTMLButtonElement>('.clip-menu-wrap [aria-haspopup="menu"]'); if (own) { close(); own.click(); return; } return say("Suppression indisponible : connexion requise ou clip d’un autre créateur"); }
+      close();
+    }, { danger: true });
+    // 2-4
+    row("💾", "Enregistrer", () => { if (!clipControl("Enregistrer", "Enregistré")) say("Aucun clip actif"); });
+    row("🔗", "Copier lien", async () => {
+      const url = clipUrl(); if (!url) return say("Aucun clip actif");
+      try { await navigator.clipboard.writeText(url); say("Lien copié"); } catch { say(url); }
+    });
+    row("📤", "Partager", async () => {
+      const url = clipUrl(); if (!url) return say("Aucun clip actif");
+      if (navigator.share) { try { await navigator.share({ url }); } catch { /* cancelled */ } } else if (!clipControl("Partage")) say(url);
+    });
+    // 5. Zoom
+    group("🔍", "Zoom", area => {
+      const line = mk("div", "display:flex;align-items:center;gap:10px");
+      const val = mk("b"); const paint = () => { val.textContent = `${Math.round(menuState.zoom * 100)}%`; }; paint();
+      const step = (d: number) => { menuState.zoom = Math.min(3, Math.max(1, Math.round((menuState.zoom + d) * 10) / 10)); paint(); saveMenuState(); applyVideoFx(); };
+      line.append(smallBtn("−", () => step(-0.1)), val, smallBtn("+", () => step(0.1)), smallBtn("Réinit.", () => { menuState.zoom = 1; paint(); saveMenuState(); applyVideoFx(); }));
+      area.append(line);
+    });
+    // 6. Éclairage
+    group("💡", "Éclairage", area => {
+      slider(area, "Luminosité", "brightness"); slider(area, "Contraste", "contrast"); slider(area, "Saturation", "saturation");
+    });
+    // 7. Filtres / Accessoires
+    group("🎨", "Filtres / Accessoires", area => {
+      choices(area, Object.keys(FILTERS), () => menuState.filter, v => { menuState.filter = v; applyVideoFx(); });
+    });
+    // 8. Audio
+    group("🎵", "Audio", area => {
+      toggleRow(area, "Supprimer Audio Original", "muteOriginal");
+      const m = mk("input", "padding:8px;border:1px solid #ccc;border-radius:8px;font:inherit"); m.type = "text"; m.placeholder = "Musique (titre ou lien)"; m.value = menuState.music;
+      m.addEventListener("change", () => { menuState.music = m.value.trim(); saveMenuState(); say("Musique enregistrée"); });
+      area.append(m);
+      toggleRow(area, "Commentaire Vocal", "voice");
+    });
+    // 9. Réglage Vidéo
+    group("⚙️", "Réglage Vidéo", area => {
+      const q = mk("div", "font-size:13px;color:#555"); q.textContent = "Qualité"; area.append(q);
+      choices(area, ["auto", "480p", "720p", "1080p"], () => menuState.quality, v => { menuState.quality = v; });
+      const cut = smallBtn("Cut : ouvrir l’éditeur de titre", () => { if (!clipControl("Edit title")) say("Cut indisponible pour ce clip"); else close(); });
+      area.append(cut);
+    });
+    // 10-12
+    group("🌐", "Langue", area => {
+      choices(area, ["fr", "en", "ar"], () => menuState.lang, v => { menuState.lang = v; document.documentElement.lang = v; document.documentElement.dir = v === "ar" ? "rtl" : "ltr"; });
+    });
+    group("🔔", "Notifications", area => toggleRow(area, "Recevoir les notifications", "notifications"));
+    row("👤", "Compte", () => { window.location.assign("/profil"); });
+    // 13. Signaler
+    row("🚩", "Signaler", () => {
+      if (activeSlideId == null) return say("Aucun clip actif");
+      const reason = window.prompt("Motif du signalement ?");
+      if (!reason) return;
+      try {
+        const k = "arena-clips:reports";
+        const list = JSON.parse(localStorage.getItem(k) || "[]") as unknown[];
+        list.push({ clip: activeSlideId, reason, at: Date.now() });
+        localStorage.setItem(k, JSON.stringify(list));
+      } catch { /* storage unavailable */ }
+      say("Signalement enregistré");
+    });
+    // 14. Aide
+    group("🆘", "Aide", area => {
+      const t = mk("div", "font-size:13px;line-height:1.5;color:#333");
+      t.textContent = "Appuyez sur … pour ouvrir ce menu. Zoom, éclairage et filtres s’appliquent au clip affiché. Les réglages sont conservés sur cet appareil.";
+      area.append(t);
+    });
+
     panel.append(note);
     settingsPanel = panel;
     document.body.append(panel);
+    applyVideoFx();
     closeBtn.focus();
   }
 
